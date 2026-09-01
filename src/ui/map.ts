@@ -69,7 +69,11 @@ export class SurveyMap {
   }
 
   /** cheap redraw of the visible window, throttled while open */
-  refresh(terrain: Terrain, px: number, py: number, time: number, revealRow: number, deepArray: boolean): void {
+  refresh(
+    terrain: Terrain, px: number, py: number, time: number,
+    revealRow: number, deepArray: boolean,
+    arrestors: { x: number; y: number }[] = [],
+  ): void {
     if (!this.visible || time - this.lastDraw < 0.35) return;
     this.lastDraw = time;
     (this.wrap.querySelector('#survey-world') as HTMLElement).textContent = ' — ' + ACTIVE.name;
@@ -126,6 +130,14 @@ export class SurveyMap {
       g.fillStyle = '#ff9a3c';
       g.fillRect(PAD_X0, 0, PAD_X1 - PAD_X0 + 1, 1);
     }
+    // deployed arrestors: your own infrastructure, marked
+    for (const a of arrestors) {
+      const ay = Math.round(-a.y) - y0;
+      if (ay < 0 || ay >= rows) continue;
+      g.fillStyle = '#3ce6c8';
+      g.fillRect(Math.round(a.x) - 1, ay, 3, 1);
+    }
+
     // you are here — a crosshair at close zoom, a dot at column scale
     const cy = row - y0;
     if (cy >= 0 && cy < rows) {

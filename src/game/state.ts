@@ -21,6 +21,7 @@ export interface WorldSave {
   podY: number;
   looted: number[];   // wreck indexes salvaged
   bestRow: number;    // deepest row reached here — the survey map's reveal line
+  arrestors: { x: number; y: number }[];  // deployed landing pads, per world
 }
 
 export class GameState {
@@ -58,6 +59,8 @@ export class GameState {
   charges = 0;
   /** carved stones recovered — the codex toward the Lamplighters' message */
   glyphs = 0;
+  /** arrestors in the hold, not yet deployed */
+  arrestors = 0;
   activeWorld = 'veil3';
   worlds: Record<string, WorldSave> = {};
 
@@ -146,18 +149,23 @@ export class GameState {
     this.flares = 0;
     this.charges = 0;
     this.glyphs = 0;
+    this.arrestors = 0;
     this.activeWorld = 'veil3';
     this.worlds = {};
   }
 
   // ---- persistence ----
-  save(terrain: Terrain, podX: number, podY: number, looted: Set<number>): void {
+  save(
+    terrain: Terrain, podX: number, podY: number,
+    looted: Set<number>, arrestors: { x: number; y: number }[] = [],
+  ): void {
     this.worlds[this.activeWorld] = {
       seed: terrain.seed,
       dug: [...terrain.dug],
       podX, podY,
       looted: [...looted],
       bestRow: this.worldBestRow,
+      arrestors: arrestors.map(a => ({ x: a.x, y: a.y })),
     };
     this.persist();
   }
@@ -194,6 +202,7 @@ export class GameState {
         flares: this.flares,
         charges: this.charges,
         glyphs: this.glyphs,
+        arrestors: this.arrestors,
         activeWorld: this.activeWorld,
         worlds: this.worlds,
       }));
@@ -237,6 +246,7 @@ export class GameState {
         this.flares = d.flares ?? 0;
         this.charges = d.charges ?? 0;
         this.glyphs = d.glyphs ?? 0;
+        this.arrestors = d.arrestors ?? 0;
         this.activeWorld = d.activeWorld ?? 'veil3';
         this.worlds = d.worlds ?? {};
         return true;
@@ -254,7 +264,10 @@ export class GameState {
         // v1 milestones were stratum names; keep only the shape that still matters
         if (d.ended) this.endedWorlds.add('veil3');
         this.activeWorld = 'veil3';
-        this.worlds.veil3 = { seed: d.seed, dug: d.dug, podX: d.podX, podY: d.podY, looted: [], bestRow: Math.round((d.bestDepthM ?? 0) / 2) };
+        this.worlds.veil3 = {
+          seed: d.seed, dug: d.dug, podX: d.podX, podY: d.podY,
+          looted: [], bestRow: Math.round((d.bestDepthM ?? 0) / 2), arrestors: [],
+        };
         try { localStorage.removeItem(SAVE_KEY_V1); } catch { /* ignore */ }
         this.persist();
         return true;

@@ -232,6 +232,13 @@ export class AudioEngine {
     this.tone(587, 1.8, 0.035, 'sine', 200);
   }
 
+  /** an arrestor absorbs a fall: a pneumatic catch, not an impact */
+  arrested(): void {
+    this.noise(0.34, 0.13, 900, 120);
+    this.tone(196, 0.2, 0.09, 'sine');
+    this.tone(392, 0.32, 0.05, 'sine', 80);
+  }
+
   flare(): void { this.noise(0.5, 0.09, 5000, 700); this.tone(520, 0.25, 0.05, 'triangle'); }
   chargePlaced(): void { this.tone(880, 0.06, 0.06, 'square'); this.tone(660, 0.08, 0.05, 'square', 90); }
 

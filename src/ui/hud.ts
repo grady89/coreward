@@ -30,6 +30,7 @@ export class Hud {
   private kitEl!: HTMLElement;
   private kitFlares!: HTMLElement;
   private kitCharges!: HTMLElement;
+  private kitArrestors!: HTMLElement;
   private moneyEl!: HTMLElement;
   private depthEl!: HTMLElement;
   private stratumEl!: HTMLElement;
@@ -65,7 +66,7 @@ export class Hud {
         </div>
         <div id="fps"></div>
         <div id="lamp-pip"><span class="pip-dot"></span>LAMP OFF · F</div>
-        <div id="kit"><span id="kit-flares"></span><span id="kit-charges"></span></div>
+        <div id="kit"><span id="kit-flares"></span><span id="kit-charges"></span><span id="kit-arrestors"></span></div>
         <div id="hud-contract">
           <div class="ct-title"><span id="ct-name"></span><span id="ct-reward"></span></div>
           <div class="c-bar"><div class="c-bar-fill" id="ct-fill" style="width:0%"></div></div>
@@ -113,6 +114,7 @@ export class Hud {
     this.kitEl = $('#kit');
     this.kitFlares = $('#kit-flares');
     this.kitCharges = $('#kit-charges');
+    this.kitArrestors = $('#kit-arrestors');
     this.applyWorld();
   }
 
@@ -134,10 +136,11 @@ export class Hud {
     this.contractEl.classList.toggle('pushed', on);
   }
 
-  setConsumables(flares: number, charges: number): void {
-    this.kitEl.classList.toggle('on', flares > 0 || charges > 0);
+  setConsumables(flares: number, charges: number, arrestors = 0): void {
+    this.kitEl.classList.toggle('on', flares > 0 || charges > 0 || arrestors > 0);
     this.kitFlares.textContent = flares > 0 ? `✦ FLARE ×${flares} · Q` : '';
     this.kitCharges.textContent = charges > 0 ? `◈ CHARGE ×${charges} · G` : '';
+    this.kitArrestors.textContent = arrestors > 0 ? `▬ ARRESTOR ×${arrestors} · B` : '';
   }
 
   setLamp(on: boolean): void {

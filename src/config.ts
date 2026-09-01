@@ -171,6 +171,12 @@ export const MAX_CHARGES_HELD = 6;
 
 /** carved stones needed before the Lamplighters' message resolves */
 export const GLYPHS_TO_TRANSLATE = 9;
+
+// ---- arrestors: deployable landing pads for your own shafts ----
+export const ARRESTOR_PRICE = 900;
+export const MAX_ARRESTORS = 4;
+export const ARRESTOR_CATCH_X = 1.5;   // tiles: generous, missing your own pad is miserable
+export const ARRESTOR_CATCH_Y = 1.2;
 export const DASH_SPEED = 20;
 export const DASH_COOLDOWN = 2.2;
 

@@ -29,6 +29,8 @@ export interface PodEvents {
   onVeinlight(fuel: number): void;
   onGlyph(x: number, y: number): void;
   onRuinSighted(): void;
+  /** an arrestor absorbed a fall that would otherwise have hurt */
+  onArrested(impact: number): void;
 }
 
 interface Drilling { x: number; y: number; dir: DrillDir; progress: number; hardness: number; }
@@ -153,6 +155,12 @@ export class PodController {
     this.strandedCheck(time);
     st.fuelSpent += Math.max(0, fuelBefore - st.fuel);
   }
+
+  /**
+   * Set each frame by the game: -1, or the index of an arrestor positioned to
+   * catch the pod right now. Landing on one cancels fall damage outright.
+   */
+  arrestorCatch = -1;
 
   /** damage from a creature — routed so death/fx behave identically */
   hurtFromThreat(amount: number, cause: string): void {
@@ -322,7 +330,10 @@ export class PodController {
           this.py = -r + HH + EPS;
           this.vy = 0;
           this.grounded = true;
-          if (!wasGrounded && fallSpeed > FALL_SAFE) {
+          if (!wasGrounded && this.arrestorCatch >= 0 && fallSpeed > 4) {
+            // the pad takes it — no damage at any speed
+            this.ev.onArrested(fallSpeed);
+          } else if (!wasGrounded && fallSpeed > FALL_SAFE) {
             const dmg = (fallSpeed - FALL_SAFE) * FALL_DMG;
             this.applyDamage(dmg, 'a hard landing');
             this.ev.onLanded(fallSpeed);

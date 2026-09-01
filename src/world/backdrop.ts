@@ -100,6 +100,23 @@ function createSkyline(scene: THREE.Scene): void {
     { kind: 'dome', x: 66, s: 4.2, z: -55 },
   ];
 
+  // the colony's big relay, silhouetted on the far ridge — the assay dish is
+  // the small cousin of this, and the pair sells the scale of the settlement
+  {
+    const relayX = 66, relayZ = -50;
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 7, 6), far)
+      .translateX(relayX).translateY(3.5).translateZ(relayZ));
+    const bigDish = new THREE.Mesh(
+      new THREE.SphereGeometry(2.4, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), far);
+    bigDish.position.set(relayX, 7.2, relayZ);
+    bigDish.rotation.x = -2.35;
+    g.add(bigDish);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false }));
+    beacon.position.set(relayX, 8.4, relayZ);
+    g.add(beacon);
+  }
+
   for (const it of items) {
     const mat = it.z < -48 ? far : near;
     let m: THREE.Mesh;
@@ -153,6 +170,28 @@ const GREENHOUSE = new THREE.MeshStandardMaterial({ color: 0x3a7a6a, roughness: 
 const PADMAT = new THREE.MeshStandardMaterial({ color: 0x4a4f5e, roughness: 0.5, metalness: 0.3 });
 const PANEL = new THREE.MeshStandardMaterial({ color: 0x1c2c50, roughness: 0.25, metalness: 0.7 });
 const PAD = new THREE.MeshStandardMaterial({ color: 0x4a3f60, roughness: 0.65 });
+
+/**
+ * A sign on two legs, planted on the pad. Signs used to float unsupported —
+ * gantry legs make them read as real installed infrastructure.
+ */
+function gantrySign(text: string, color: string, x: number, y: number, z: number, span = 1.5): THREE.Group {
+  const g = new THREE.Group();
+  const sign = textSign(text, color);
+  sign.position.set(x, y, z);
+  g.add(sign);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x241d33, roughness: 0.7, metalness: 0.5 });
+  for (const s of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, y, 6), legMat);
+    leg.position.set(x + s * span, y / 2, z);
+    g.add(leg);
+    // a short cross-brace where the leg meets the sign
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.05), legMat);
+    brace.position.set(x + s * (span - 0.17), y - 0.34, z);
+    g.add(brace);
+  }
+  return g;
+}
 
 function textSign(text: string, color: string): THREE.Mesh {
   const cv = document.createElement('canvas');
@@ -277,7 +316,7 @@ export function createSurface(scene: THREE.Scene): void {
       g.add(cyl(0.07, 1.35, METAL, bx - 1.35, 0.68, -0.9));
       g.add(glowDot(0x3ce6c8, bx - 0.02, 1.5, -0.76));
       g.add(glowDot(0x3ce6c8, bx + 1.35, 0.9, -1.02));
-      const sign = textSign('FUEL', '#3ce6c8'); sign.position.set(bx, 3.95, -0.9); g.add(sign);
+      g.add(gantrySign('FUEL', '#3ce6c8', bx, 4.3, -0.55, 1.6));
     } else if (dock.key === 'trade') {
       // domed market: cylinder base + dome, side module with awning, crates
       g.add(cyl(1.7, 0.9, BODY, bx - 0.4, 0.45, -1.7));
@@ -294,7 +333,7 @@ export function createSurface(scene: THREE.Scene): void {
       for (const [ox, oz, s, m] of [[-2.2, 0.4, 0.42, BODY2], [-2.7, 0.2, 0.34, METAL], [-2.4, 0.9, 0.3, BODY2]] as const) {
         g.add(box(s, s * 0.8, s, m as THREE.Material, bx + ox, s * 0.4 + 0.1, oz));
       }
-      const sign = textSign('TRADE', '#ff9a3c'); sign.position.set(bx - 0.4, 3.3, -0.9); g.add(sign);
+      g.add(gantrySign('TRADE', '#ff9a3c', bx - 0.4, 3.5, -0.55, 1.6));
     } else if (dock.key === 'garage') {
       // quonset hangar: stretched half-dome, glowing door, crane, annex
       const hangar = halfDome(1.9, BODY, bx - 0.3, 0, -1.9);
@@ -317,22 +356,35 @@ export function createSurface(scene: THREE.Scene): void {
       g.add(arm);
       g.add(cyl(0.02, 0.7, METAL, bx - 0.85, 2.95, -1.6, 6));
       g.add(glowDot(0xff4d29, bx - 0.85, 2.55, -1.6, 0.06));
-      const sign = textSign('GARAGE', '#e8e2d5'); sign.position.set(bx - 0.3, 2.6, -0.85); g.add(sign);
+      g.add(gantrySign('GARAGE', '#e8e2d5', bx - 0.3, 3.1, -0.55, 1.6));
     } else {
-      // assay: sensor tower + big dish + glowing greenhouse dome
-      g.add(box(1.5, 4.4, 1.5, BODY, bx + 0.6, 2.2, -1.8));
-      g.add(box(1.9, 0.14, 1.9, METAL, bx + 0.6, 4.45, -1.8));
-      const dish = new THREE.Mesh(new THREE.SphereGeometry(1.0, 18, 12, 0, Math.PI), BODY2);
-      dish.position.set(bx + 0.6, 5.2, -1.8);
-      dish.rotation.x = -1.1;
+      // assay: the listening post. Tower, gallery deck, and the dish that hears
+      // colonies going quiet — mounted on a real mast, not hovering.
+      const tx = bx + 0.6;
+      g.add(box(1.5, 4.4, 1.5, BODY, tx, 2.2, -1.8));
+      // gallery deck with a railing, so the roof reads as a place
+      g.add(box(2.1, 0.16, 2.1, METAL, tx, 4.48, -1.8));
+      for (const s of [-1, 1]) {
+        g.add(box(0.06, 0.34, 2.1, METAL, tx + s * 1.0, 4.73, -1.8));
+      }
+      // mast rising from the deck, dish yoked to its top
+      g.add(cyl(0.09, 1.5, METAL, tx, 5.3, -1.8, 8));
+      const yoke = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.05, 6, 14, Math.PI), METAL);
+      yoke.position.set(tx, 5.95, -1.8);
+      yoke.rotation.z = Math.PI;
+      g.add(yoke);
+      const dish = new THREE.Mesh(new THREE.SphereGeometry(0.98, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), BODY2);
+      dish.position.set(tx, 5.98, -1.72);
+      dish.rotation.x = -2.5;   // tipped skyward, listening off-world
       g.add(dish);
-      g.add(cyl(0.03, 0.8, METAL, bx + 0.6, 5.5, -1.55, 6));
-      g.add(glowDot(0xff4d29, bx + 0.6, 5.92, -1.45, 0.05));
-      g.add(windowStrip(0.9, bx + 0.6, 2.6, -1.04, 0x7a5cff));
-      g.add(windowStrip(0.9, bx + 0.6, 3.3, -1.04, 0x7a5cff));
+      // feed horn on its arm, pointing back into the throat of the dish
+      g.add(cyl(0.035, 0.7, METAL, tx, 6.42, -1.35, 6));
+      g.add(glowDot(0xff4d29, tx, 6.72, -1.2, 0.055));
+      g.add(windowStrip(0.9, tx, 2.6, -1.04, 0x7a5cff));
+      g.add(windowStrip(0.9, tx, 3.3, -1.04, 0x7a5cff));
       g.add(halfDome(1.05, GREENHOUSE, bx - 1.5, 0, -1.7));
       g.add(glowDot(0x46e6c8, bx - 1.5, 0.4, -0.68, 0.07));
-      const sign = textSign('ASSAY', '#7a5cff'); sign.position.set(bx + 0.6, 6.3, -0.9); g.add(sign);
+      g.add(gantrySign('ASSAY', '#7a5cff', tx, 3.9, -0.55, 1.5));
     }
   }
 

@@ -11,6 +11,7 @@ import { ChunkField, lavaMat } from './world/chunks';
 import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock } from './world/backdrop';
 import { WreckField } from './world/wrecks';
 import { ThreatField } from './world/entities';
+import { ArrestorField } from './world/arrestors';
 import { Pod } from './player/pod';
 import { PodController, Input } from './player/controller';
 import { Pilot } from './player/pilot';
@@ -42,6 +43,7 @@ class Game {
   pilot!: Pilot;
   wrecks!: WreckField;
   threats!: ThreatField;
+  arrestors!: ArrestorField;
   particles!: Particles;
   lampOn = true;
   hud: Hud;
@@ -165,8 +167,9 @@ class Game {
     }
     this.wrecks = new WreckField(this.scene, this.terrain, this.looted);
     this.ctrl.looted = this.looted;
+    this.arrestors.load(ws?.arrestors ?? []);
     this.charges.length = 0;
-    this.hud.setConsumables(this.state.flares, this.state.charges);
+    this.hud.setConsumables(this.state.flares, this.state.charges, this.state.arrestors);
   }
 
   private buildWorld(seed: number): void {
@@ -183,6 +186,7 @@ class Game {
     this.pilot = new Pilot(this.scene, this.terrain);
     this.threats = new ThreatField(this.scene, this.terrain);
     this.threats.level = this.settings.threats;
+    this.arrestors = new ArrestorField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
   }
 
@@ -269,6 +273,13 @@ class Game {
         this.audio.glyph();
         this.saveNow();
       },
+      onArrested: (impact: number) => {
+        this.particles.landingDust(this.ctrl.px, this.ctrl.py - 0.4, impact * 1.4);
+        this.audio.arrested();
+        this.cam.addShake(Math.min(0.22, impact * 0.008));
+        this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+        this.hud.popup('CAUGHT', '#3ce6c8', this.screen.sx, this.screen.sy);
+      },
       onRuinSighted: () => {
         this.hud.toast('— STRUCTURE —', 'stratum');
         this.audio.stratum();
@@ -320,7 +331,7 @@ class Game {
   }
 
   private saveNow(): void {
-    this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted);
+    this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted, this.arrestors.list);
   }
 
   private travel(id: string): void {
@@ -424,6 +435,7 @@ class Game {
       if (e.code === 'KeyC') this.warpSell();
       if (e.code === 'KeyQ') this.throwFlare();
       if (e.code === 'KeyG') this.placeCharge();
+      if (e.code === 'KeyB') this.toggleArrestor();
       if (e.code === 'KeyF' && (this.mode === 'play' || this.mode === 'eva')) {
         this.lampOn = !this.lampOn;
         this.audio.click();
@@ -485,6 +497,40 @@ class Game {
     this.state.flares--;
     this.audio.flare();
     this.hud.setConsumables(this.state.flares, this.state.charges);
+  }
+
+  /** B — deploy an arrestor at your feet, or pick the one here back up */
+  private toggleArrestor(): void {
+    if (this.mode !== 'play' || this.panels.isOpen) return;
+    const here = this.arrestors.at(this.ctrl.px, this.ctrl.py - 0.45);
+    if (here >= 0) {
+      this.arrestors.retrieve(here);
+      this.state.arrestors++;
+      this.audio.click();
+      this.hud.toast('ARRESTOR RECOVERED');
+      this.hud.setConsumables(this.state.flares, this.state.charges, this.state.arrestors);
+      this.saveNow();
+      return;
+    }
+    if (this.state.arrestors <= 0) {
+      this.hud.toast('NO ARRESTORS — BUY AT THE GARAGE');
+      this.audio.denied();
+      return;
+    }
+    if (!this.ctrl.grounded) {
+      this.hud.toast('LAND FIRST TO DEPLOY');
+      this.audio.denied();
+      return;
+    }
+    if (!this.arrestors.deploy(this.ctrl.px, this.ctrl.py - 0.45)) {
+      this.audio.denied();
+      return;
+    }
+    this.state.arrestors--;
+    this.audio.buy();
+    this.hud.toast('ARRESTOR DEPLOYED');
+    this.hud.setConsumables(this.state.flares, this.state.charges, this.state.arrestors);
+    this.saveNow();
   }
 
   /** G — place a seismic charge */
@@ -686,6 +732,10 @@ class Game {
     const paused = this.panels.isOpen;
     const st = this.state;
 
+    // tell the controller whether a pad is in position to take this fall
+    this.ctrl.arrestorCatch = this.arrestors.catchFall(this.ctrl.px, this.ctrl.py, this.ctrl.vy);
+    this.arrestors.update(this.time);
+
     if (!paused && dt > 0) {
       this.ctrl.update(dt, this.input(), this.time);
 
@@ -790,7 +840,8 @@ class Game {
     });
 
     this.hud.update(st, this.ctrl.depthM, this.ctrl.row, this.ctrl.heatFrac, Math.max(dt, 0.001));
-    this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time, this.state.worldBestRow, this.state.hasDeepArray);
+    this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time,
+      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list);
 
     if (!paused && dt > 0) st.playTime += dt;
     this.updateContractHud();
@@ -918,7 +969,8 @@ class Game {
     });
 
     this.hud.update(this.state, this.ctrl.depthM, this.ctrl.row, 0, Math.max(dt, 0.001));
-    this.map.refresh(this.terrain, this.pilot.px, this.pilot.py, this.time, this.state.worldBestRow, this.state.hasDeepArray);
+    this.map.refresh(this.terrain, this.pilot.px, this.pilot.py, this.time,
+      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list);
   }
 }
 

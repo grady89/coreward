@@ -4,7 +4,7 @@ import {
   FUEL_PRICE, REPAIR_PRICE, TRACKS, GAME_NAME, FORGE, WRECK_LOGS,
   DEATH_FEE_FRAC, RESCUE_FEE_FRAC, RESCUE_MIN_MONEY, fmtMoney, SCANNER_PRICE,
   DEEP_ARRAY_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE, MAX_FLARES_HELD, MAX_CHARGES_HELD,
-  GLYPHS_TO_TRANSLATE,
+  GLYPHS_TO_TRANSLATE, ARRESTOR_PRICE, MAX_ARRESTORS,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE, WORLDS, nextWorld } from '../world/worlds';
@@ -243,9 +243,24 @@ export class Panels {
         <button class="btn" id="repair" ${missing < 1 || st.money < 1 ? 'disabled' : ''}>${missing < 1 ? 'INTACT' : fmt(Math.min(repairCost, st.money))}</button>
       </div>
       ${upgradeRows}
+      <div class="row">
+        <span><span class="r-name">ARRESTORS</span><div class="r-sub">B — deploy a landing pad in your own shaft. Drop at full speed, land clean. Recoverable.</div></span>
+        <span class="r-right">
+          <span class="r-val">×${st.arrestors}</span>
+          <button class="btn" id="buy-arrestor" ${st.money < ARRESTOR_PRICE || st.arrestors >= MAX_ARRESTORS ? 'disabled' : ''}>${fmt(ARRESTOR_PRICE)}</button>
+        </span>
+      </div>
       ${forgeRows}
       <div class="hint">Press E or Esc to leave</div>
     `;
+    this.body().querySelector('#buy-arrestor')?.addEventListener('click', () => {
+      if (st.money < ARRESTOR_PRICE || st.arrestors >= MAX_ARRESTORS) { this.ctx.audio.denied(); return; }
+      st.money -= ARRESTOR_PRICE;
+      st.arrestors++;
+      this.ctx.audio.buy();
+      this.ctx.saveNow();
+      this.renderGarage();
+    });
     this.body().querySelectorAll('button[data-forge]').forEach(btn => {
       btn.addEventListener('click', () => {
         const key = (btn as HTMLElement).dataset.forge as keyof typeof st.emberTech;
