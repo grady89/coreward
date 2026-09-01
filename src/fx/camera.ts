@@ -4,6 +4,13 @@ import { WORLD_W } from '../config';
 // Damped follow camera with velocity look-ahead, speed zoom, surface pull-back,
 // and a decaying shake channel. Reduced-motion kills shake.
 
+/**
+ * How far shake actually throws the camera. Every source (drilling, impacts,
+ * explosions, the Long One's rumble) funnels through here, so this is the one
+ * dial for overall intensity.
+ */
+const SHAKE_AMPLITUDE = 0.8;
+
 export class FollowCam {
   camera: THREE.PerspectiveCamera;
   private shake = 0;
@@ -69,8 +76,8 @@ export class FollowCam {
     this.shake = Math.max(0, this.shake - dt * 1.8);
     const s = this.shake * this.shake;
     this.camera.position.set(
-      this.cx + (Math.random() - 0.5) * s * 1.6,
-      this.cy + (Math.random() - 0.5) * s * 1.6,
+      this.cx + (Math.random() - 0.5) * s * SHAKE_AMPLITUDE,
+      this.cy + (Math.random() - 0.5) * s * SHAKE_AMPLITUDE,
       this.cz
     );
   }
