@@ -97,7 +97,9 @@ export const TRACKS: Track[] = [
     key: 'tank', name: 'FUEL TANK', desc: 'Longer runs. Deeper returns.', unit: ' units',
     tiers: [
       { price: 0, v: 100, label: 'Rust Bucket' },
-      { price: 600, v: 155, label: 'Std. Cell' },
+      // deliberately cheap: the stock tank makes the opening hours crawl, and
+      // this is the purchase that gets a new driller off the starting block
+      { price: 300, v: 155, label: 'Std. Cell' },
       { price: 2300, v: 235, label: 'Long-Haul' },
       { price: 7800, v: 350, label: 'Deep Reserve' },
       { price: 23000, v: 520, label: 'Cryo Column' },
