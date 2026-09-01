@@ -26,12 +26,16 @@ console.log('wrecks generated:', nWrecks, nWrecks > 3 ? 'OK' : 'FAIL');
 await page.evaluate(() => {
   const g = window.__game;
   const w = g.terrain.wrecks[0];
+  // the pilot now steps clear of the pod, so there must be somewhere to stand
+  for (let x = Math.max(1, w.x - 5); x <= Math.min(62, w.x + 5); x++) {
+    for (let y = w.y - 2; y <= w.y; y++) g.terrain.carve(x, y);
+  }
   g.ctrl.px = w.x + 0.5;
   g.ctrl.py = -(w.y + 1) + 0.42;
   g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.cam.snap(g.ctrl.px, g.ctrl.py, 12.5);
 });
-await page.waitForTimeout(700);
+await page.waitForTimeout(1200);
 const near = await page.evaluate(() => window.__game.ctrl.wreckNear);
 console.log('wreck proximity:', near, near === 0 ? 'OK' : 'FAIL');
 const before = await page.evaluate(() => ({ money: window.__game.state.money, logs: window.__game.state.foundLogs.size, cargo: window.__game.state.cargoCount }));
@@ -40,6 +44,18 @@ await page.waitForTimeout(700);
 const evaMode = await page.evaluate(() => window.__game.mode);
 console.log('eva mode:', evaMode, evaMode === 'eva' ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p-eva.png' });
+// the pilot steps clear of the pod, so walk back into arm's reach first
+await page.evaluate(async () => {
+  const g = window.__game;
+  const w = g.terrain.wrecks[0];
+  const dir = w.x + 0.5 > g.pilot.px ? 'ArrowRight' : 'ArrowLeft';
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: dir }));
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    if (g.wreckAtPilot() >= 0) break;
+  }
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: dir }));
+});
 await page.keyboard.press('KeyE'); // salvage
 await page.waitForTimeout(4000);
 const after = await page.evaluate(() => ({
@@ -48,7 +64,18 @@ const after = await page.evaluate(() => ({
 }));
 const rewarded = after.money > before.money || after.logs > before.logs || after.cargo > before.cargo;
 console.log('salvage:', JSON.stringify(after), rewarded ? 'OK' : 'FAIL');
-await page.keyboard.press('KeyE'); // board pod (pilot still at pod position)
+// walk back to the pod and board
+await page.evaluate(async () => {
+  const g = window.__game;
+  const dir = g.ctrl.px > g.pilot.px ? 'ArrowRight' : 'ArrowLeft';
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: dir }));
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    if (Math.abs(g.pilot.px - g.ctrl.px) < 0.6) break;
+  }
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: dir }));
+});
+await page.keyboard.press('KeyE'); // board pod
 await page.waitForTimeout(500);
 const backMode = await page.evaluate(() => window.__game.mode);
 console.log('board pod:', backMode, backMode === 'play' ? 'OK' : 'FAIL');
@@ -63,7 +90,7 @@ await page.evaluate(() => {
   g.state.upgrades.radiator = 5;
   g.cam.snap(g.ctrl.px, g.ctrl.py, 12.5);
 });
-await page.waitForTimeout(1200);
+await page.waitForTimeout(3000); // let the pod settle on the chamber floor
 const coreDiag = await page.evaluate(() => {
   const g = window.__game;
   return { coreNear: g.ctrl.coreNear, row: g.ctrl.row, grounded: g.ctrl.grounded, py: +g.ctrl.py.toFixed(2), mode: g.mode, panel: g.panels.current, hull: +g.state.hull.toFixed(1), fuel: +g.state.fuel.toFixed(1) };

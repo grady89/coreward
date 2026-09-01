@@ -177,14 +177,28 @@ export const GLYPHS_TO_TRANSLATE = 9;
 // ---- arrestors: deployable landing pads for your own shafts ----
 export const ARRESTOR_PRICE = 900;
 export const MAX_ARRESTORS = 4;
-export const ARRESTOR_CATCH_X = 1.5;   // tiles: generous, missing your own pad is miserable
+/**
+ * The catch window must match the plate you can see. Wider than the plate and
+ * it catches you over thin air — which then reads as nonsense when you fly
+ * back up through the same spot.
+ */
+export const ARRESTOR_CATCH_X = 0.95;
 export const ARRESTOR_CATCH_Y = 1.2;
+/** keep pads clear of wrecks so the two meshes never occupy one tile */
+export const ARRESTOR_CLEARANCE = 1.8;
 export const DASH_SPEED = 20;
 export const DASH_COOLDOWN = 2.2;
 
 // ---- EVA ----
 export const EVA_O2 = 45;          // seconds of oxygen
 export const SALVAGE_TIME = 1.5;   // seconds holding the wreck open
+/**
+ * Spot a wreck from across the chamber, but salvage it only at arm's length.
+ * The gap between these two numbers IS the EVA: park at distance, step out,
+ * walk. If they were close together you would never leave the pod at all.
+ */
+export const WRECK_SPOT_RANGE = 9;
+export const WRECK_SALVAGE_RANGE = 1.0;
 
 // Found logs recovered from wrecked pods. DEPTH IS CHRONOLOGY: a wreck's
 // `tier` is how deep it lies, and deeper means older. The player assembles the

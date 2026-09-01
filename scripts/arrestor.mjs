@@ -97,7 +97,17 @@ const cycle = await page.evaluate(async () => {
   const g = window.__game;
   g.state.arrestors = 1;
   g.ctrl.px = 26.5; g.ctrl.py = -151 + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
-  await new Promise(r => setTimeout(r, 700));
+  // `grounded` still reads last frame's value right after a teleport, so let
+  // the fall actually begin before waiting for it to land
+  await new Promise(r => setTimeout(r, 400));
+  for (let i = 0; i < 40 && !g.ctrl.grounded; i++) await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 300));
+  const diag = {
+    grounded: g.ctrl.grounded,
+    blockedByWreck: g.arrestors.blocked(g.ctrl.px, g.ctrl.py - 0.45, g.terrain.wrecks),
+    listLen: g.arrestors.list.length,
+    held: g.state.arrestors,
+  };
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB' })); // deploy
   await new Promise(r => setTimeout(r, 400));
   const afterDeploy = { placed: g.arrestors.list.length, held: g.state.arrestors };
@@ -107,7 +117,7 @@ const cycle = await page.evaluate(async () => {
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB' })); // deploy again
   await new Promise(r => setTimeout(r, 400));
   g.saveNow();
-  return { afterDeploy, afterPickup, placed: g.arrestors.list.length };
+  return { diag, afterDeploy, afterPickup, placed: g.arrestors.list.length };
 });
 console.log('deploy/retrieve:', JSON.stringify(cycle),
   cycle.afterDeploy.placed === 1 && cycle.afterPickup.placed === 0 &&

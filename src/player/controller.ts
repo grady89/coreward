@@ -4,6 +4,7 @@ import {
   HEAT_START_ROW, HEAT_FULL_ROW, HEAT_DMG, GAS_DMG,
   TILE_M, boulderTierNeeded, stratumIndex, CORE_ROW, WORLD_W,
   DASH_SPEED, DASH_COOLDOWN, PAD_X0, PAD_X1, PAD_ROWS, SPAWN_X, VEINLIGHT_FUEL,
+  WRECK_SPOT_RANGE,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE } from '../world/worlds';
@@ -52,6 +53,8 @@ export class PodController {
   /** EVA hooks: set each frame; main renders prompts and handles E */
   coreNear = false;
   wreckNear = -1;
+  /** tiles to the wreck the pod has spotted */
+  wreckDist = 0;
   looted = new Set<number>();
   facing = 1;
   private dashCd = 0;
@@ -190,15 +193,22 @@ export class PodController {
     // the core walk: pod parks in the chamber, the rest is on foot
     this.coreNear = this.grounded && this.row >= CORE_ROW - 1 &&
       Math.abs(this.px - WORLD_W / 2) < 15 && !this.state.endedWorlds.has(ACTIVE.id);
-    // wreck salvage EVA
+    // wreck salvage EVA — spotted from a distance, so long as the pod is
+    // settled. Landing exactly on top of a wreck should never be the price of
+    // admission; walking there is the point.
     this.wreckNear = -1;
-    if (this.grounded && !this.coreNear) {
+    this.wreckDist = 0;
+    const settled = this.grounded || (Math.abs(this.vy) < 3 && Math.abs(this.vx) < 3);
+    if (settled && !this.coreNear) {
+      let best = Infinity;
       for (let i = 0; i < this.terrain.wrecks.length; i++) {
         if (this.looted.has(i)) continue;
         const w = this.terrain.wrecks[i];
-        if (Math.abs(w.x + 0.5 - this.px) < 2.4 && Math.abs(-(w.y + 0.5) - this.py) < 1.8) {
+        const d = Math.hypot(w.x + 0.5 - this.px, -(w.y + 0.5) - this.py);
+        if (d < WRECK_SPOT_RANGE && d < best) {
+          best = d;
           this.wreckNear = i;
-          break;
+          this.wreckDist = d;
         }
       }
     }

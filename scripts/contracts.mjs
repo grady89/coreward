@@ -79,6 +79,66 @@ console.log('abandon:', abandoned === null ? 'OK' : 'FAIL');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 
+// --- frugal contracts scale to YOUR tank, not a fixed 90 units ---
+const frugal = await page.evaluate(() => {
+  const mk = (maxFuel) => {
+    const c = window.__CONTRACT_POOL.find(x => x.kind === 'frugal');
+    return window.__acceptContract(c, {
+      maxFuel, bestDepthM: 500, totalEarned: 0, fuelSpent: 0, playTime: 0,
+    });
+  };
+  const stock = mk(100), upgraded = mk(350);
+  return {
+    stock: { cap: stock.fuelCap, target: stock.target },
+    upgraded: { cap: upgraded.fuelCap, target: upgraded.target },
+  };
+});
+console.log('frugal scales to tank:', JSON.stringify(frugal),
+  frugal.stock.cap === 90 && frugal.upgraded.cap === 315 &&
+  frugal.upgraded.target > frugal.stock.target ? 'OK' : 'FAIL');
+
+// --- meeting the terms LATCHES: later fuel spend cannot revoke it ---
+const latch = await page.evaluate(async () => {
+  const g = window.__game;
+  const c = window.__CONTRACT_POOL.find(x => x.kind === 'frugal');
+  g.state.contract = window.__acceptContract(c, {
+    maxFuel: g.state.maxFuel, bestDepthM: g.state.bestDepthM,
+    totalEarned: g.state.totalEarned, fuelSpent: g.state.fuelSpent, playTime: g.state.playTime,
+  });
+  g.state.totalEarned = g.state.contract.startEarned + g.state.contract.target + 500;
+  await new Promise(r => setTimeout(r, 900));
+  const met = !!g.state.contract.met;
+  // now blow the budget wide open, as a long productive run would
+  g.state.fuelSpent = g.state.contract.startFuelSpent + 99999;
+  await new Promise(r => setTimeout(r, 900));
+  const ev = window.__evaluate(g.state.contract, {
+    bestDepthM: g.state.bestDepthM, totalEarned: g.state.totalEarned,
+    fuelSpent: g.state.fuelSpent, contractOre: g.state.contractOre, now: g.state.playTime,
+  });
+  return { met, stillMet: ev.met, failed: ev.failed };
+});
+console.log('terms latch once met:', JSON.stringify(latch),
+  latch.met && latch.stillMet && !latch.failed ? 'OK' : 'FAIL');
+
+// and it is still claimable at the board afterwards
+await page.evaluate(() => {
+  const g = window.__game;
+  g.ctrl.drilling = null;
+  g.ctrl.px = 30.5; g.ctrl.py = 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  g.cam.snap(30.5, 2, 14);
+});
+await page.waitForTimeout(1200);
+await page.keyboard.press('KeyE');
+await page.waitForTimeout(600);
+await page.click('#to-contracts');
+await page.waitForTimeout(600);
+await page.screenshot({ path: OUT + '/c-latched.png' });
+const claimable = await page.evaluate(() => !!document.querySelector('#c-claim'));
+console.log('claimable after blowing budget:', claimable ? 'OK' : 'FAIL');
+if (claimable) { await page.click('#c-claim'); await page.waitForTimeout(500); }
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+
 // ---- settings ----
 await page.keyboard.press('Escape');
 await page.waitForTimeout(500);

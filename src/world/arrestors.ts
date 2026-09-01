@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARRESTOR_CATCH_X, ARRESTOR_CATCH_Y, MAX_ARRESTORS } from '../config';
+import { ARRESTOR_CATCH_X, ARRESTOR_CATCH_Y, MAX_ARRESTORS, ARRESTOR_CLEARANCE } from '../config';
 
 // Arrestors: deployable landing pads for shafts you have already dug. They
 // catch a full-speed fall and mark the map. Deliberately nothing else — never
@@ -25,18 +25,20 @@ export class ArrestorField {
   constructor(scene: THREE.Scene) {
     scene.add(this.group);
     for (let i = 0; i < MAX_ARRESTORS; i++) {
+      // sized to sit inside a two-wide shaft: a plate that overhangs into the
+      // rock reads as broken, and worse, implies a catch where there is none
       const pad = new THREE.Group();
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 1.4), PLATE);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 8, 24), STRIP);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.11, 1.2), PLATE);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 8, 24), STRIP);
       ring.rotation.x = Math.PI / 2;
-      ring.position.y = 0.09;
+      ring.position.y = 0.085;
       pad.add(plate, ring);
       for (const s of [-1, 1]) {
-        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 1.05), STRIP);
-        bar.position.set(s * 0.95, 0.08, 0);
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 0.9), STRIP);
+        bar.position.set(s * 0.68, 0.075, 0);
         pad.add(bar);
-        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), LAMP);
-        lamp.position.set(s * 1.25, 0.14, 0);
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), LAMP);
+        lamp.position.set(s * 0.88, 0.13, 0);
         pad.add(lamp);
       }
       pad.visible = false;
@@ -76,9 +78,16 @@ export class ArrestorField {
   at(x: number, y: number): number {
     for (let i = 0; i < this.list.length; i++) {
       const a = this.list[i];
-      if (Math.abs(a.x - x) < 1.4 && Math.abs(a.y - y) < 1.0) return i;
+      if (Math.abs(a.x - x) < 1.1 && Math.abs(a.y - y) < 1.0) return i;
     }
     return -1;
+  }
+
+  /** true when something else already occupies this spot */
+  blocked(x: number, y: number, wrecks: { x: number; y: number }[]): boolean {
+    return wrecks.some(w =>
+      Math.abs(w.x + 0.5 - x) < ARRESTOR_CLEARANCE &&
+      Math.abs(-(w.y + 0.5) - y) < ARRESTOR_CLEARANCE);
   }
 
   retrieve(i: number): void {

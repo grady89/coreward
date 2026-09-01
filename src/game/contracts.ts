@@ -12,10 +12,15 @@ export interface Contract {
   title: string;
   flavor: string;
   kind: GoalKind;
-  target: number;        // meters / lumens / ore count
+  target: number;        // meters / lumens / ore count (scaled at accept time)
   oreType?: T;           // for 'ore'
   limitSec?: number;     // wall-clock limit ('speed')
-  fuelCap?: number;      // max fuel spend ('frugal', 'depth' variants)
+  /**
+   * Fuel budget as a FRACTION OF YOUR OWN TANK, never an absolute number.
+   * "One tank" has to mean one tank — an absolute cap becomes unwinnable the
+   * moment you upgrade past it.
+   */
+  fuelCapFrac?: number;
   reward: number;
   worldId: string;       // which dig site posts it
   minBest: number;       // gated by record depth (m) so offers stay sane
@@ -26,7 +31,7 @@ function rot(seed: number, n: number): number {
   return Math.abs(Math.imul(seed ^ 0x9e3779b9, 2246822519)) % n;
 }
 
-const POOL: Omit<Contract, 'id' | 'worldId'>[] = [
+export const POOL: Omit<Contract, 'id' | 'worldId'>[] = [
   {
     title: 'SHALLOW SWEEP', flavor: 'The refinery wants volume, not glory.',
     kind: 'haul', target: 900, reward: 700, minBest: 0,
@@ -41,7 +46,7 @@ const POOL: Omit<Contract, 'id' | 'worldId'>[] = [
   },
   {
     title: 'THIN MARGINS', flavor: 'Prove a drill can pay for itself. One tank.',
-    kind: 'frugal', target: 2000, fuelCap: 90, reward: 2400, minBest: 150,
+    kind: 'frugal', target: 2000, fuelCapFrac: 0.9, reward: 2400, minBest: 150,
   },
   {
     title: 'FAST DESCENT', flavor: 'Beat the seismic window. Down and back.',
@@ -89,42 +94,70 @@ export interface ActiveContract {
   startDepthM: number;
   startEarned: number;
   startFuelSpent: number;
-  startedAt: number;   // seconds of play time
+  startedAt: number;      // seconds of play time
+  /** goal resolved against the pod you had when you signed */
+  target: number;
+  /** absolute fuel budget, resolved from fuelCapFrac at accept time */
+  fuelCap?: number;
+  /**
+   * Latched the instant the terms are satisfied. Once you have done the job,
+   * nothing you do afterwards can un-do it — otherwise a driller who clears
+   * the target early and keeps working loses the contract to their own
+   * productivity, which is absurd.
+   */
+  met?: boolean;
 }
 
-export interface Progress { have: number; need: number; label: string; failed: boolean; }
+/** resolve a posted contract against the pod signing for it */
+export function accept(c: Contract, pod: {
+  maxFuel: number; bestDepthM: number; totalEarned: number; fuelSpent: number; playTime: number;
+}): ActiveContract {
+  // a tank-relative goal scales with the tank it was written for
+  const tankScale = c.fuelCapFrac !== undefined ? pod.maxFuel / 100 : 1;
+  return {
+    c,
+    startDepthM: pod.bestDepthM,
+    startEarned: pod.totalEarned,
+    startFuelSpent: pod.fuelSpent,
+    startedAt: pod.playTime,
+    target: Math.round(c.target * tankScale),
+    fuelCap: c.fuelCapFrac !== undefined ? Math.round(pod.maxFuel * c.fuelCapFrac) : undefined,
+  };
+}
+
+export interface Progress { have: number; need: number; label: string; failed: boolean; met: boolean; }
 
 export function evaluate(a: ActiveContract, s: {
   bestDepthM: number; totalEarned: number; fuelSpent: number; contractOre: number; now: number;
 }): Progress {
   const c = a.c;
+  const need = a.target ?? c.target;
   const elapsed = s.now - a.startedAt;
   const fuelUsed = s.fuelSpent - a.startFuelSpent;
-  const overFuel = c.fuelCap !== undefined && fuelUsed > c.fuelCap;
+  const overFuel = a.fuelCap !== undefined && fuelUsed > a.fuelCap;
   const overTime = c.limitSec !== undefined && elapsed > c.limitSec;
+  const blown = !a.met && (overFuel || overTime);
 
+  let have: number;
+  let label: string;
   switch (c.kind) {
     case 'depth':
-      return { have: Math.round(s.bestDepthM), need: c.target, label: 'DEPTH', failed: overFuel || overTime };
-    case 'haul':
-    case 'frugal':
-      return {
-        have: Math.round(s.totalEarned - a.startEarned), need: c.target,
-        label: 'EARNED', failed: overFuel || overTime,
-      };
-    case 'ore':
-      return { have: s.contractOre, need: c.target, label: 'ORE', failed: overFuel || overTime };
     case 'speed':
-      return { have: Math.round(s.bestDepthM), need: c.target, label: 'DEPTH', failed: overTime };
+      have = Math.round(s.bestDepthM); label = 'DEPTH'; break;
+    case 'ore':
+      have = s.contractOre; label = 'ORE'; break;
+    default:
+      have = Math.round(s.totalEarned - a.startEarned); label = 'EARNED'; break;
   }
+  return { have, need, label, failed: blown, met: !!a.met || (have >= need && !blown) };
 }
 
 export function timeLeft(a: ActiveContract, now: number): number | null {
-  if (a.c.limitSec === undefined) return null;
+  if (a.c.limitSec === undefined || a.met) return null;
   return Math.max(0, a.c.limitSec - (now - a.startedAt));
 }
 
 export function fuelLeft(a: ActiveContract, fuelSpent: number): number | null {
-  if (a.c.fuelCap === undefined) return null;
-  return Math.max(0, a.c.fuelCap - (fuelSpent - a.startFuelSpent));
+  if (a.fuelCap === undefined || a.met) return null;
+  return Math.max(0, a.fuelCap - (fuelSpent - a.startFuelSpent));
 }

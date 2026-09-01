@@ -10,16 +10,20 @@ import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE, WORLDS, nextWorld } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
 import { Settings } from '../game/settings';
-import { Contract, offers, evaluate, timeLeft, fuelLeft } from '../game/contracts';
+import {
+  Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
+} from '../game/contracts';
 
-/** one-line statement of a contract's terms */
-function describe(c: Contract): string {
+/** one-line statement of a contract's terms, priced against this pod */
+function describe(c: Contract, maxFuel: number): string {
+  const scale = c.fuelCapFrac !== undefined ? maxFuel / 100 : 1;
+  const target = Math.round(c.target * scale);
   const bits: string[] = [];
-  if (c.kind === 'depth' || c.kind === 'speed') bits.push(`reach ${c.target}m`);
-  if (c.kind === 'haul' || c.kind === 'frugal') bits.push(`earn ${CUR}${c.target.toLocaleString()}`);
-  if (c.kind === 'ore') bits.push(`mine ${c.target} ${def(c.oreType!).name}`);
+  if (c.kind === 'depth' || c.kind === 'speed') bits.push(`reach ${target}m`);
+  if (c.kind === 'haul' || c.kind === 'frugal') bits.push(`earn ${CUR}${target.toLocaleString()}`);
+  if (c.kind === 'ore') bits.push(`mine ${target} ${def(c.oreType!).name}`);
   if (c.limitSec) bits.push(`in ${c.limitSec}s`);
-  if (c.fuelCap) bits.push(`on ${c.fuelCap} fuel`);
+  if (c.fuelCapFrac) bits.push(`on ${Math.round(maxFuel * c.fuelCapFrac)} fuel`);
   return bits.join(' · ');
 }
 
@@ -492,7 +496,7 @@ export class Panels {
       });
       const tl = timeLeft(st.contract, st.playTime);
       const fl = fuelLeft(st.contract, st.fuelSpent);
-      const done = p.have >= p.need && !p.failed;
+      const done = p.met && !p.failed;
       const pct = Math.min(100, Math.round((p.have / p.need) * 100));
       this.body().innerHTML = `
         ${this.header('CONTRACT BOARD')}
@@ -547,7 +551,7 @@ export class Panels {
           <div class="c-title">${c.title}<span class="c-reward">${fmt(c.reward)}</span></div>
           <div class="c-flavor">${c.flavor}</div>
           <div class="c-meta">
-            <span>${describe(c)}</span>
+            <span>${describe(c, st.maxFuel)}</span>
             <button class="btn" data-accept="${i}">ACCEPT</button>
           </div>
         </div>`).join('')}
@@ -556,13 +560,13 @@ export class Panels {
     this.body().querySelectorAll('button[data-accept]').forEach(btn => {
       btn.addEventListener('click', () => {
         const c = list[Number((btn as HTMLElement).dataset.accept)];
-        st.contract = {
-          c,
-          startDepthM: st.bestDepthM,
-          startEarned: st.totalEarned,
-          startFuelSpent: st.fuelSpent,
-          startedAt: st.playTime,
-        };
+        st.contract = acceptContract(c, {
+          maxFuel: st.maxFuel,
+          bestDepthM: st.bestDepthM,
+          totalEarned: st.totalEarned,
+          fuelSpent: st.fuelSpent,
+          playTime: st.playTime,
+        });
         st.contractOre = 0;
         this.ctx.audio.buy();
         this.ctx.toast(`CONTRACT ACCEPTED — ${c.title}`, 'stratum');

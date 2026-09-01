@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   LOW_FUEL_FRAC, WARP_RATE, SALVAGE_TIME, WRECK_LOGS, SPAWN_X, fmtMoney,
   wreckTierForRow, CHARGE_FUSE, CHARGE_BLAST, CHARGE_SEAL,
+  TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE,
 } from './config';
 import { T, def, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS } from './world/worlds';
@@ -17,7 +18,9 @@ import { PodController, Input } from './player/controller';
 import { Pilot } from './player/pilot';
 import { GameState } from './game/state';
 import { loadSettings, saveSettings } from './game/settings';
-import { evaluate, timeLeft, fuelLeft } from './game/contracts';
+import {
+  evaluate, timeLeft, fuelLeft, accept as acceptContract, POOL as CONTRACT_POOL,
+} from './game/contracts';
 import { Particles } from './fx/particles';
 import { FollowCam } from './fx/camera';
 import { Hud } from './ui/hud';
@@ -148,6 +151,9 @@ class Game {
     (window as unknown as { __WRECK_LOGS: unknown }).__WRECK_LOGS = WRECK_LOGS;
     (window as unknown as { __TILE_DEFS: unknown }).__TILE_DEFS = TILE_DEFS;
     (window as unknown as { __WORLDS: unknown }).__WORLDS = WORLDS;
+    (window as unknown as { __CONTRACT_POOL: unknown }).__CONTRACT_POOL = CONTRACT_POOL;
+    (window as unknown as { __acceptContract: unknown }).__acceptContract = acceptContract;
+    (window as unknown as { __evaluate: unknown }).__evaluate = evaluate;
   }
 
   /** (re)builds the entire scene for the active world — no page reload */
@@ -369,7 +375,18 @@ class Game {
   // ---------- EVA ----------
   private enterEva(): void {
     this.audio.airlock();
-    this.pilot.spawnAt(this.ctrl.px, this.ctrl.py - 0.1);
+    // step out of the hatch on the side the work is, so the pilot is visibly
+    // beside the pod rather than inside it
+    let side = this.ctrl.facing;
+    const target = this.ctrl.wreckNear;
+    if (target >= 0) {
+      const w = this.terrain.wrecks[target];
+      side = Math.sign(w.x + 0.5 - this.ctrl.px) || 1;
+    } else if (this.ctrl.coreNear) {
+      side = Math.sign(this.ember.x - this.ctrl.px) || 1;
+    }
+    // step clear of the boarding radius, or E would put you straight back in
+    this.pilot.spawnAt(this.ctrl.px + side * 1.35, this.ctrl.py - 0.1);
     this.salvaging = null;
     this.mode = 'eva';
     if (!this.evaHintShown) {
@@ -522,6 +539,11 @@ class Game {
       this.audio.denied();
       return;
     }
+    if (this.arrestors.blocked(this.ctrl.px, this.ctrl.py - 0.45, this.terrain.wrecks)) {
+      this.hud.toast('NO ROOM — WRECKAGE IN THE WAY');
+      this.audio.denied();
+      return;
+    }
     if (!this.arrestors.deploy(this.ctrl.px, this.ctrl.py - 0.45)) {
       this.audio.denied();
       return;
@@ -625,7 +647,7 @@ class Game {
         return;
       }
       // board the pod
-      if (Math.abs(this.pilot.px - this.ctrl.px) < 0.9 && Math.abs(this.pilot.py - this.ctrl.py) < 0.9) {
+      if (Math.abs(this.pilot.px - this.ctrl.px) < 0.85 && Math.abs(this.pilot.py - this.ctrl.py) < 0.9) {
         this.exitEva();
       }
       return;
@@ -641,13 +663,30 @@ class Game {
     }
   }
 
+  /** arm's length only — the walk between pod and wreck is the whole point */
   private wreckAtPilot(): number {
     for (let i = 0; i < this.terrain.wrecks.length; i++) {
       if (this.looted.has(i)) continue;
       const w = this.terrain.wrecks[i];
-      if (Math.abs(w.x + 0.5 - this.pilot.px) < 1.6 && Math.abs(-(w.y + 0.5) - this.pilot.py) < 1.6) return i;
+      if (Math.hypot(w.x + 0.5 - this.pilot.px, -(w.y + 0.5) - this.pilot.py) < WRECK_SALVAGE_RANGE) {
+        return i;
+      }
     }
     return -1;
+  }
+
+  /** the unlooted wreck the pilot is walking toward, for the HUD waypoint */
+  private targetWreck(): { i: number; dist: number; dir: number } | null {
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < this.terrain.wrecks.length; i++) {
+      if (this.looted.has(i)) continue;
+      const w = this.terrain.wrecks[i];
+      const d = Math.hypot(w.x + 0.5 - this.pilot.px, -(w.y + 0.5) - this.pilot.py);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best < 0 || bestD > WRECK_SPOT_RANGE + 6) return null;
+    const w = this.terrain.wrecks[best];
+    return { i: best, dist: bestD, dir: Math.sign(w.x + 0.5 - this.pilot.px) };
   }
 
   private onEscape(): void {
@@ -673,7 +712,18 @@ class Game {
 
   // ---------- frame ----------
   private frame(): void {
+    // always drain the clock, or the first frame after unpausing gets a
+    // delta the size of however long the panel was open
     const raw = this.clock.getDelta();
+
+    // A modal panel freezes the world outright. Physics were already halted,
+    // but ore kept spinning, dust kept falling and Dispatch kept talking —
+    // which reads as "not paused" no matter what the simulation is doing.
+    if (this.panels.isOpen && this.mode !== 'title') {
+      this.renderer.render(this.scene, this.cam.camera);
+      return;
+    }
+
     let dt = Math.min(0.05, raw);
     this.time += dt;
 
@@ -758,7 +808,8 @@ class Game {
       if (this.ctrl.coreNear) {
         this.hud.setPrompt(`<span class="key">E</span>EVA — WALK TO ${ACTIVE.coreName}`);
       } else if (this.ctrl.wreckNear >= 0) {
-        this.hud.setPrompt(`<span class="key">E</span>EVA — WRECKED POD`);
+        const m = Math.round(this.ctrl.wreckDist * TILE_M);
+        this.hud.setPrompt(`<span class="key">E</span>EVA — WRECKED POD · ${m}m`);
       } else if (this.ctrl.dock) {
         this.hud.setPrompt(`<span class="key">E</span>${this.ctrl.dock.label}`);
       } else {
@@ -887,13 +938,20 @@ class Game {
       bestDepthM: st.bestDepthM, totalEarned: st.totalEarned,
       fuelSpent: st.fuelSpent, contractOre: st.contractOre, now: st.playTime,
     });
+    // latch the moment the job is done, so nothing afterwards can undo it
+    if (p.met && !st.contract.met) {
+      st.contract.met = true;
+      this.hud.toast('TERMS MET — COLLECT AT THE TRADE POST', 'stratum');
+      this.audio.toast();
+      this.saveNow();
+    }
     const tl = timeLeft(st.contract, st.playTime);
     const fl = fuelLeft(st.contract, st.fuelSpent);
     const parts = [`${p.label} ${p.have.toLocaleString()} / ${p.need.toLocaleString()}`];
     if (tl !== null) parts.push(`${Math.ceil(tl)}s`);
     if (fl !== null) parts.push(`${Math.ceil(fl)} fuel`);
     if (p.failed) parts.push('LAPSED');
-    else if (p.have >= p.need) parts.push('READY — TRADE POST');
+    else if (p.met) parts.push('READY — TRADE POST');
     this.hud.setContract({
       title: st.contract.c.title,
       reward: fmtMoney(st.contract.c.reward),
@@ -949,10 +1007,22 @@ class Game {
         this.hud.setPrompt(null);
       } else if (this.wreckAtPilot() >= 0) {
         this.hud.setPrompt(`<span class="key">E</span>SALVAGE`);
-      } else if (Math.abs(this.pilot.px - this.ctrl.px) < 0.9 && Math.abs(this.pilot.py - this.ctrl.py) < 0.9) {
-        this.hud.setPrompt(`<span class="key">E</span>BOARD POD`);
       } else {
-        this.hud.setPrompt(null);
+        // walking: point at the wreck so the dark doesn't swallow the errand
+        const t = this.targetWreck();
+        const atPod = Math.abs(this.pilot.px - this.ctrl.px) < 0.85
+          && Math.abs(this.pilot.py - this.ctrl.py) < 0.9;
+        if (t && t.dist > WRECK_SALVAGE_RANGE) {
+          const arrow = t.dir < 0 ? '←' : '→';
+          this.hud.setPrompt(
+            `<span class="key">${arrow}</span>WRECK · ${Math.round(t.dist * TILE_M)}m` +
+            (atPod ? ` &nbsp;·&nbsp; <span class="key">E</span>BOARD` : '')
+          );
+        } else if (atPod) {
+          this.hud.setPrompt(`<span class="key">E</span>BOARD POD`);
+        } else {
+          this.hud.setPrompt(null);
+        }
       }
     }
 
