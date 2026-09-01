@@ -415,6 +415,97 @@ input[type="range"]:focus-visible { box-shadow: 0 0 0 2px rgba(255, 154, 60, 0.5
 }
 .survey-foot { font-size: 10px; letter-spacing: 0.14em; color: var(--ink-dim); }
 
+/* ---------- starmap: the Sundering Chart ---------- */
+#starmap-ui {
+  position: fixed; inset: 0; z-index: 14;
+  pointer-events: none !important;
+  opacity: 0; transition: opacity 0.5s var(--ease-out);
+}
+#starmap-ui.open { opacity: 1; }
+#starmap-ui .sm-vig {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(2, 4, 10, 0.65) 100%);
+}
+#starmap-ui .sm-top { position: absolute; top: 22px; left: 26px; }
+#starmap-ui .sm-title {
+  font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  letter-spacing: 0.34em; color: var(--ink);
+  text-shadow: 0 2px 18px rgba(255, 154, 60, 0.25);
+}
+#starmap-ui .sm-acc { color: var(--amber); }
+#starmap-ui .sm-sub {
+  margin-top: 7px; font-family: var(--font-display);
+  font-size: 9px; letter-spacing: 0.32em; color: var(--ink-dim);
+}
+#starmap-ui .sm-close {
+  position: absolute; top: 22px; right: 26px; pointer-events: auto;
+  background: var(--glass); backdrop-filter: blur(8px);
+}
+#starmap-ui .sm-hint {
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.22em;
+  color: var(--ink-dim); white-space: nowrap;
+}
+#starmap-ui .sm-hint .key {
+  display: inline-block; padding: 0 7px; margin-right: 6px; border-radius: 4px;
+  border: 1px solid var(--line); color: var(--ink);
+}
+.sm-tag {
+  position: fixed; transform: translate(-50%, 0); z-index: 1;
+  text-align: center; pointer-events: none;
+  font-family: var(--font-display); transition: opacity 0.25s;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+.sm-tag .tn { display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.26em; color: var(--ink); }
+.sm-tag .st { display: block; font-size: 8px; letter-spacing: 0.3em; margin-top: 4px; }
+.sm-card {
+  position: absolute; right: 26px; top: 50%; z-index: 2;
+  transform: translateY(-50%) translateX(18px);
+  width: 300px; padding: 22px 24px;
+  background: var(--glass-hard); border: 1px solid var(--line); border-radius: 14px;
+  backdrop-filter: blur(10px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
+}
+#starmap-ui.focused .sm-card { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+#starmap-ui.transiting .sm-card,
+#starmap-ui.transiting .sm-top,
+#starmap-ui.transiting .sm-close,
+#starmap-ui.transiting .sm-hint { opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.sm-card .sm-name {
+  font-family: var(--font-display); font-size: 20px; font-weight: 700;
+  letter-spacing: 0.24em; color: var(--ink);
+}
+.sm-card .sm-tagline {
+  font-size: 11.5px; font-style: italic; color: var(--ink-dim);
+  margin: 6px 0 12px; line-height: 1.5;
+}
+.sm-card .sm-chip {
+  display: inline-block; padding: 4px 12px; margin-bottom: 10px; border-radius: 6px;
+  font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: 0.28em;
+}
+.sm-card .sm-chip.you { color: var(--teal); border: 1px solid rgba(60, 230, 200, 0.45); }
+.sm-card .sm-chip.done { color: var(--amber); border: 1px solid rgba(255, 154, 60, 0.45); }
+.sm-card .sm-chip.ok { color: var(--ink); border: 1px solid var(--line); }
+.sm-card .sm-chip.dim { color: var(--ink-dim); border: 1px solid var(--line); }
+.sm-card .r-val.dim2 { color: var(--ink-dim); }
+.sm-card.sm-nudge { animation: sm-nudge 0.3s; }
+@keyframes sm-nudge { 25% { transform: translateY(-50%) translateX(-5px); } 65% { transform: translateY(-50%) translateX(4px); } }
+/* the chart owns the screen: park the game HUD while it is open */
+body.sm-open #hud,
+body.sm-open #comms,
+body.sm-open #prompt,
+body.sm-open #toasts,
+body.sm-open #survey {
+  visibility: hidden !important;
+}
+#sm-veil {
+  position: fixed; inset: 0; z-index: 40;
+  background: #05070f; opacity: 0;
+  pointer-events: none !important;
+  transition: opacity 0.6s ease;
+}
+
 /* ---------- title screen ---------- */
 #title {
   position: fixed; inset: 0; z-index: 30;

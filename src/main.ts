@@ -28,9 +28,10 @@ import { Comms } from './ui/comms';
 import { SurveyMap } from './ui/map';
 import { pick as pickNarrative, WorldStats } from './game/narrative';
 import { Panels, createTitle } from './ui/panels';
+import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
 
-type Mode = 'title' | 'intro' | 'play' | 'eva';
+type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap';
 
 class Game {
   renderer: THREE.WebGLRenderer;
@@ -53,6 +54,7 @@ class Game {
   comms!: Comms;
   map!: SurveyMap;
   panels: Panels;
+  starmap: Starmap | null = null;
   audio = new AudioEngine();
   private evaHintShown = false;
 
@@ -117,7 +119,7 @@ class Game {
         this.saveNow();
       },
       onQuitToTitle: () => this.quitToTitle(),
-      onTravel: (id) => this.travel(id),
+      onOpenStarmap: () => this.openStarmap(),
     });
 
     this.setupWorld();
@@ -133,6 +135,7 @@ class Game {
       this.renderer.setSize(innerWidth, innerHeight);
       this.cam.camera.aspect = innerWidth / innerHeight;
       this.cam.camera.updateProjectionMatrix();
+      this.starmap?.resize(innerWidth / innerHeight);
     });
 
     const fade = document.createElement('div');
@@ -349,6 +352,32 @@ class Game {
     this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted, this.arrestors.list);
   }
 
+  /** ASSAY → the Sundering Chart: travel happens inside the 3D starmap */
+  private openStarmap(): void {
+    if (this.starmap) return;
+    this.panels.close();
+    this.map.close();
+    this.keys.clear();
+    this.starmap = new Starmap(this.ui, {
+      state: this.state,
+      audio: this.audio,
+      reducedMotion: this.reducedMotion,
+      onTravel: (id) => {
+        const sm = this.starmap;
+        this.starmap = null;
+        sm?.dispose();
+        this.travel(id); // the world rebuilds behind the transit flash
+      },
+      onClose: () => {
+        const sm = this.starmap;
+        this.starmap = null;
+        sm?.dispose();
+        this.mode = 'play';
+      },
+    });
+    this.mode = 'starmap';
+  }
+
   private travel(id: string): void {
     this.saveNow();
     this.state.activeWorld = id;
@@ -449,6 +478,13 @@ class Game {
       ArrowDown: 'down', KeyS: 'down',
     };
     addEventListener('keydown', e => {
+      // the starmap owns the keyboard while it is open (M mute stays global)
+      if (this.mode === 'starmap' && this.starmap) {
+        if (this.starmap.handleKey(e.code)) {
+          e.preventDefault();
+          return;
+        }
+      }
       if (map[e.code] !== undefined) {
         e.preventDefault();
         this.keys.add(map[e.code]);
@@ -724,6 +760,13 @@ class Game {
     // always drain the clock, or the first frame after unpausing gets a
     // delta the size of however long the panel was open
     const raw = this.clock.getDelta();
+
+    // the starmap is its own scene, camera and clock — the world sleeps
+    if (this.mode === 'starmap' && this.starmap) {
+      this.starmap.frame(Math.min(0.05, raw));
+      this.starmap?.render(this.renderer);
+      return;
+    }
 
     // A modal panel freezes the world outright. Physics were already halted,
     // but ore kept spinning, dust kept falling and Dispatch kept talking —

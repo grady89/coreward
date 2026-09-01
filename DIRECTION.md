@@ -127,7 +127,25 @@ hull travel with you; terrain, dug tunnels, wrecks and position are per-world.
 Travel from the ASSAY starmap (or the title screen). Same rig on every surface
 (the crew airlifts it ahead of you); each sky says where you are.
 
-### 8b. Ember Forge (NG+ verbs)
+### 8a2. The Sundering Chart (BUILT) — travel as a place, not a button
+
+Travel lives in a full 3D starmap, opened from the ASSAY office. The fiction
+anchor is the dish: the chart is its reconstruction of the catastrophe — the
+cracked star remnant (the Sundering) burning at the center, fragment
+trajectory arcs reaching out to the worlds that caught the pieces. Each site
+is a banded globe painted from its own strata palette with an atmosphere rim
+in its horizon light; the current world wears a pulsing teal beacon ring,
+core-reached worlds have their fragment glinting in orbit, and unresolved
+sites hang as dark masses wrapped in violet static ("the dish is still
+listening" — no arc, because the trajectory isn't solved yet).
+
+Interaction is keyboard-first and mirrors the game's grammar: ←/→ select,
+E commits, Esc backs out. Selecting eases the camera into a hero framing with
+a dossier card (tagline, fragment status, ore yield, surveyed depth, hazard).
+COMMIT TRANSIT plays a real departure — camera punch, FOV kick, star streaks,
+whiteout tinted to the destination's horizon color — and the world rebuilds
+behind the flash. Reduced-motion collapses the transit to a fade. One scene,
+one draw pass, all procedural; no assets.
 
 After any core is touched, the GARAGE gains the **EMBER FORGE**: rule-breaking
 tech bought with *embershards from cargo* (spend the ore instead of selling it —

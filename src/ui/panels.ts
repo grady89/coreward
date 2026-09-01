@@ -39,7 +39,7 @@ interface PanelCtx {
   onRespawn(): void;
   onRescued(): void;
   onQuitToTitle(): void;
-  onTravel(worldId: string): void;
+  onOpenStarmap(): void;
   onSettingsChanged(): void;
 }
 
@@ -353,22 +353,23 @@ export class Panels {
   private renderAssay(): void {
     const st = this.ctx.state;
 
-    // starmap: dig sites, unlock chain, travel
+    // starmap: site roster; travel itself lives in the 3D Sundering Chart
+    const charted = WORLDS.filter(w => w.unlockAfter === null || st.endedWorlds.has(w.unlockAfter)).length;
     const starmap = WORLDS.map(w => {
       const unlocked = w.unlockAfter === null || st.endedWorlds.has(w.unlockAfter);
       const current = w.id === st.activeWorld;
       const done = st.endedWorlds.has(w.id);
-      let action: string;
-      if (current) action = '<span class="r-val">YOU ARE HERE</span>';
-      else if (unlocked) action = `<button class="btn" data-travel="${w.id}">TRAVEL</button>`;
-      else action = '<span class="r-val" style="color:var(--ink-dim)">NO SIGNAL</span>';
+      const status = current ? '<span class="r-val" style="color:var(--teal)">YOU ARE HERE</span>'
+        : done ? '<span class="r-val">CORE REACHED</span>'
+          : unlocked ? '<span class="r-val" style="color:var(--ink-dim)">CHARTED</span>'
+            : '<span class="r-val" style="color:var(--ink-dim)">NO SIGNAL</span>';
       return `
         <div class="row">
           <span>
             <span class="r-name">${unlocked ? w.name : '█████-█'}</span>
             <div class="r-sub">${unlocked ? (done ? w.coreName + ' — reached · ore ×' + w.valueMul : 'ore ×' + w.valueMul) : 'the dish is still listening'}</div>
           </span>
-          ${action}
+          ${status}
         </div>`;
     }).join('');
 
@@ -417,8 +418,9 @@ export class Panels {
           ? '<span class="r-val">INSTALLED</span>'
           : `<button class="btn" id="buy-beacons" ${st.money < BEACON_PRICE ? 'disabled' : ''}>${fmt(BEACON_PRICE)}</button>`}
       </div>` : ''}
-      <div class="forge-head">STARMAP</div>
+      <div class="forge-head">STARMAP<span class="forge-shards">${charted} / ${WORLDS.length} sites charted</span></div>
       ${starmap}
+      <button class="btn primary wide" id="open-starmap">OPEN THE SUNDERING CHART</button>
       ${st.glyphs > 0 ? `
       <div class="forge-head">CODEX<span class="forge-shards">${st.glyphs} / ${GLYPHS_TO_TRANSLATE} carved stones</span></div>
       <div class="lore-note ${st.glyphs >= GLYPHS_TO_TRANSLATE ? '' : 'locked'}">
@@ -459,11 +461,9 @@ export class Panels {
       this.ctx.saveNow();
       this.renderAssay();
     });
-    this.body().querySelectorAll('button[data-travel]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.ctx.audio.buy();
-        this.ctx.onTravel((btn as HTMLElement).dataset.travel!);
-      });
+    this.body().querySelector('#open-starmap')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.ctx.onOpenStarmap();
     });
   }
 
