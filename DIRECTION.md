@@ -163,7 +163,28 @@ screen-shake and impact-freeze toggles (stacking with OS reduced-motion), and
 an FPS counter. Persisted separately from the run save so preferences survive
 NEW EXPEDITION.
 
-### 8f. Survey scanner tiers (BUILT)
+### 8e2. Acclimation — why a maxed pod still explores (BUILT)
+
+The problem: arriving on world 2 with an endgame rig, the top 600m is zero
+challenge and near-zero reward, so drilling straight past it is correct play
+and most of the world becomes scenery. The trap is fixing it by resetting the
+player's upgrades, which makes world 1 feel pointless.
+
+The answer: **keep every upgrade, but gate depth behind that world's own
+survival rig.** Radiators shed *heat* — they are worthless against cold or
+pressure — so each world past the first needs acclimation built from a
+material that only grows in **its upper strata**.
+
+- **CRYOS-2** → Rime Salt → Lagged Hull / Brine Jacket / Deep Winter Rig
+- **MAELIS-6** → Nacre → Ribbed Shell / Nacre Lamination / Pearl Carapace
+
+Later worlds also bite shallower (hazard starts at row 290 / 200 / 150), so
+the gauge forces engagement before the deep pays out. Tier 1 is ~10 minutes of
+shallow work, and a good radiator tier discounts the cost by up to 30% — prior
+investment is credited, never confiscated. Dispatch explains the swap on
+arrival so it never reads as an arbitrary wall.
+
+### 8f. Survey scanner tiers (BUILT — per dig site)
 
 - **Survey Scanner** (✦1,500, assay office): TAB map of tunnels/caves/fluids,
   revealed only to your deepest row per world. Four zoom steps (full column →

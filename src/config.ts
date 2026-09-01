@@ -56,7 +56,12 @@ export const VEINLIGHT_FUEL = 10;
 // heat: rises past this row, damages hull beyond radiator resist
 export const HEAT_START_ROW = 290;
 export const HEAT_FULL_ROW = 500;
-export const HEAT_DMG = 5.5;        // dmg/sec at heat 1.0 with resist 0
+/**
+ * dmg/sec at gauge 1.0 with no resist. High enough that pushing deep without
+ * the right survival rig burns a whole hull in one trip — a firm economic
+ * discouragement rather than an invisible wall.
+ */
+export const HEAT_DMG = 7.5;
 export const LAVA_DMG = 24;         // dmg/sec touching lava
 export const GAS_DMG = 16;          // per pocket burst
 

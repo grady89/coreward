@@ -1,5 +1,6 @@
 import { TRACKS, TrackKey, START_MONEY, ForgeKey } from '../config';
 import { ActiveContract } from './contracts';
+import { worldById } from '../world/worlds';
 import { oreValue } from '../world/tiles';
 import { Terrain } from '../world/terrain';
 
@@ -70,6 +71,48 @@ export class GameState {
   charges = 0;
   /** carved stones recovered — the codex toward the Lamplighters' message */
   glyphs = 0;
+  /** native material mined, per world */
+  native: Record<string, number> = {};
+  /** acclimation tiers fitted, per world */
+  accl: Record<string, number> = {};
+
+  get nativeHeld(): number { return this.native[this.activeWorld] ?? 0; }
+  addNative(n = 1): void {
+    this.native[this.activeWorld] = this.nativeHeld + n;
+  }
+  get acclTier(): number { return this.accl[this.activeWorld] ?? 0; }
+
+  /**
+   * What actually protects you at depth. Radiators shed heat and so only
+   * count on the world whose hazard IS heat; everywhere else you need that
+   * world's own acclimation rig.
+   */
+  get hazardResist(): number {
+    const w = worldById(this.activeWorld);
+    if (!w?.native) return trackValue('radiator', this.upgrades.radiator);
+    const t = this.acclTier;
+    return t > 0 ? w.native.tiers[t - 1].resist : 0;
+  }
+
+  /** a good thermal plant is a head start on any survival rig, not a waste */
+  nativeCost(tier: number): number {
+    const w = worldById(this.activeWorld);
+    const base = w?.native?.tiers[tier]?.need ?? 0;
+    const discount = Math.min(0.3, this.upgrades.radiator * 0.06);
+    return Math.max(3, Math.ceil(base * (1 - discount)));
+  }
+
+  fitAcclimation(): boolean {
+    const w = worldById(this.activeWorld);
+    if (!w?.native) return false;
+    const tier = this.acclTier;
+    if (tier >= w.native.tiers.length) return false;
+    const cost = this.nativeCost(tier);
+    if (this.nativeHeld < cost) return false;
+    this.native[this.activeWorld] = this.nativeHeld - cost;
+    this.accl[this.activeWorld] = tier + 1;
+    return true;
+  }
   /** arrestors in the hold, not yet deployed */
   arrestors = 0;
   activeWorld = 'veil3';
@@ -160,6 +203,8 @@ export class GameState {
     this.charges = 0;
     this.glyphs = 0;
     this.arrestors = 0;
+    this.native = {};
+    this.accl = {};
     this.activeWorld = 'veil3';
     this.worlds = {};
   }
@@ -212,6 +257,8 @@ export class GameState {
         charges: this.charges,
         glyphs: this.glyphs,
         arrestors: this.arrestors,
+        native: this.native,
+        accl: this.accl,
         activeWorld: this.activeWorld,
         worlds: this.worlds,
       }));
@@ -262,6 +309,8 @@ export class GameState {
         this.charges = d.charges ?? 0;
         this.glyphs = d.glyphs ?? 0;
         this.arrestors = d.arrestors ?? 0;
+        this.native = d.native ?? {};
+        this.accl = d.accl ?? {};
         this.activeWorld = d.activeWorld ?? 'veil3';
         this.worlds = d.worlds ?? {};
         return true;

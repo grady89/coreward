@@ -1,7 +1,7 @@
 import {
   GRAVITY, MAX_FALL, MAX_RISE, MAX_SIDE, SIDE_DRAG, POD_W, POD_H,
   FALL_SAFE, FALL_DMG, FUEL_IDLE, FUEL_THRUST, FUEL_SIDE, FUEL_DRILL,
-  HEAT_START_ROW, HEAT_FULL_ROW, HEAT_DMG, GAS_DMG,
+  HEAT_FULL_ROW, HEAT_DMG, GAS_DMG,
   TILE_M, boulderTierNeeded, stratumIndex, CORE_ROW, WORLD_W,
   DASH_SPEED, DASH_COOLDOWN, PAD_X0, PAD_X1, PAD_ROWS, SPAWN_X, VEINLIGHT_FUEL,
   WRECK_SPOT_RANGE,
@@ -28,6 +28,7 @@ export interface PodEvents {
   onDrillBlocked(msg: string): void;
   onDash(): void;
   onVeinlight(fuel: number): void;
+  onNative(total: number): void;
   onGlyph(x: number, y: number): void;
   onRuinSighted(): void;
   /** an arrestor absorbed a fall that would otherwise have hurt */
@@ -291,6 +292,9 @@ export class PodController {
         this.applyDamage(GAS_DMG * (1 + dr.y / 400), 'a gas pocket');
       } else if (t === T.GLYPH) {
         this.ev.onGlyph(dr.x, dr.y);
+      } else if (t === T.NATIVE) {
+        st.addNative();
+        this.ev.onNative(st.nativeHeld);
       } else if (t === T.FUNGUS) {
         // veinlight burns straight into the tank — no cargo slot, no sale
         const before = st.fuel;
@@ -392,10 +396,12 @@ export class PodController {
       }
     }
 
-    // depth gauge (heat / frost / pressure — same math, different fiction)
+    // depth gauge (heat / frost / pressure — same math, different fiction).
+    // Later worlds bite shallower, and only that world's own rig answers it.
     const row = this.row;
-    const heat = Math.min(1.25, Math.max(0, (row - HEAT_START_ROW) / (HEAT_FULL_ROW - HEAT_START_ROW) * 1.25));
-    let excess = Math.max(0, heat - this.state.heatResist);
+    const start = ACTIVE.hazardStartRow;
+    const heat = Math.min(1.25, Math.max(0, (row - start) / (HEAT_FULL_ROW - start) * 1.25));
+    let excess = Math.max(0, heat - this.state.hazardResist);
     // pyro exchanger: halves the damage and converts it to fuel
     if (excess > 0 && this.state.emberTech.converter) {
       this.state.fuel = Math.min(this.state.maxFuel, this.state.fuel + excess * 2.4 * dt);

@@ -138,7 +138,8 @@ class Chunk {
         let harvestable = true;
         if (d.ore) {
           cls = gemClassOf(t);
-          gemColor = t === T.FUNGUS ? ACTIVE.gemTint : d.gem;
+          gemColor = t === T.FUNGUS ? ACTIVE.gemTint
+            : t === T.NATIVE ? (ACTIVE.native?.color ?? d.gem) : d.gem;
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
         } else if (t === T.GLYPH) {
           // the carving itself: a fissure-like mark, lit in the world's core hue

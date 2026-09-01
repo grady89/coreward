@@ -292,6 +292,14 @@ class Game {
         this.audio.stratum();
         this.saveNow();
       },
+      onNative: (total: number) => {
+        const nat = ACTIVE.native;
+        this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+        const color = '#' + (nat?.color ?? 0xcfe8ff).toString(16).padStart(6, '0');
+        this.hud.popup(`+1 ${nat?.ore ?? 'DEPOSIT'}`, color, this.screen.sx, this.screen.sy);
+        this.audio.chime(2);
+        void total;
+      },
       onVeinlight: (fuel: number) => {
         this.state.veinlightHarvested++;
         this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);

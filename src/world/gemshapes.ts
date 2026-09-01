@@ -123,6 +123,7 @@ const CLASS: Record<number, number> = {
   [T.VOIDOPAL]: 3,
   [T.FUNGUS]: 4,
   [T.DIAMOND]: 5,
+  [T.NATIVE]: 1,   // a blocky crystalline crust, distinct from any sale ore
 };
 export function gemClassOf(t: number): number { return CLASS[t] ?? 0; }
 

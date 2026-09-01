@@ -232,6 +232,22 @@ export const EVENTS: NarrativeEvent[] = [
     ],
   },
   {
+    id: 'cryos-accl', world: 'cryos2', trigger: 'depth', value: 380, priority: 2,
+    lines: [
+      'Your radiators are shedding heat you do not have. Shut them down.',
+      'The crews here packed their hulls with rime salt — the white stuff in the upper beds.',
+      'Bring a load to the garage. You are not going deeper without it.',
+    ],
+  },
+  {
+    id: 'maelis-accl', world: 'maelis6', trigger: 'depth', value: 280, priority: 2,
+    lines: [
+      'Hull\'s reading pressure it was not built for. That climbs the whole way down.',
+      'Nacre. The pale layers in the shallows — the reef lays it over a wound.',
+      'Do the same to your hull at the garage, or stop here.',
+    ],
+  },
+  {
     id: 'maelis-arrive', world: 'maelis6', trigger: 'arrive',
     lines: [
       'MAELIS-6. Third site. Ore pays double and change.',

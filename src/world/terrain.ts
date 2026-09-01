@@ -112,6 +112,20 @@ export class Terrain {
       }
     }
 
+    // the world's native survival material, seeded through the UPPER strata
+    // only — it is the reason a fully-kitted pod still has to work the shallows
+    if (ACTIVE.native) {
+      const nr = rng(this.seed ^ 0x4a71ce);
+      for (let y = 18; y < 210; y++) {
+        for (let x = 0; x < this.w; x++) {
+          const i = this.idx(x, y);
+          const t = this.data[i];
+          if (t !== T.DIRT && t !== T.ROCK && t !== T.SLATE) continue;
+          if (nr() < 0.035) this.data[i] = T.NATIVE;
+        }
+      }
+    }
+
     // veinlight on cave walls: a fuel lifeline through the deep bands, thinning
     // out as the emberreach heat takes over
     for (let y = 150; y < 460; y++) {

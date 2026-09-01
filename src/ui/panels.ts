@@ -248,6 +248,7 @@ export class Panels {
         <button class="btn" id="repair" ${missing < 1 || st.money < 1 ? 'disabled' : ''}>${missing < 1 ? 'INTACT' : fmt(Math.min(repairCost, st.money))}</button>
       </div>
       ${upgradeRows}
+      ${this.acclimationRows()}
       <div class="row">
         <span><span class="r-name">ARRESTORS</span><div class="r-sub">B — deploy a landing pad in your own shaft. Drop at full speed, land clean. Recoverable.</div></span>
         <span class="r-right">
@@ -258,6 +259,14 @@ export class Panels {
       ${forgeRows}
       <div class="hint">Press E or Esc to leave</div>
     `;
+    this.body().querySelector('#fit-accl')?.addEventListener('click', () => {
+      if (!st.fitAcclimation()) { this.ctx.audio.denied(); return; }
+      const nat = ACTIVE.native!;
+      this.ctx.audio.buy();
+      this.ctx.toast(`${nat.tiers[st.acclTier - 1].label.toUpperCase()} FITTED`, 'stratum');
+      this.ctx.saveNow();
+      this.renderGarage();
+    });
     this.body().querySelector('#buy-arrestor')?.addEventListener('click', () => {
       if (st.money < ARRESTOR_PRICE || st.arrestors >= MAX_ARRESTORS) { this.ctx.audio.denied(); return; }
       st.money -= ARRESTOR_PRICE;
@@ -306,6 +315,38 @@ export class Panels {
         this.renderGarage();
       });
     });
+  }
+
+  /** the world-specific survival rig, built from that world's own material */
+  private acclimationRows(): string {
+    const st = this.ctx.state;
+    const nat = ACTIVE.native;
+    if (!nat) return '';
+    const tier = st.acclTier;
+    const maxed = tier >= nat.tiers.length;
+    const next = maxed ? null : nat.tiers[tier];
+    const cost = maxed ? 0 : st.nativeCost(tier);
+    const held = st.nativeHeld;
+    return `
+      <div class="forge-head">${nat.gear}<span class="forge-shards">◇ ${held} ${nat.ore}</span></div>
+      <div class="row">
+        <span>
+          <span class="r-name">${maxed ? nat.tiers[tier - 1].label : next!.label}</span>
+          <div class="r-sub">${maxed
+            ? 'Rated to the core. Nothing down there can touch you.'
+            : `${nat.blurb} Survives to ~${Math.round(this.depthFor(next!.resist))}m.`}</div>
+        </span>
+        ${maxed
+          ? '<span class="r-val">FITTED</span>'
+          : `<button class="btn" id="fit-accl" ${held < cost ? 'disabled' : ''}>◇ ${cost}</button>`}
+      </div>`;
+  }
+
+  /** how deep a given resist keeps you alive on this world */
+  private depthFor(resist: number): number {
+    const start = ACTIVE.hazardStartRow;
+    const row = start + (resist / 1.25) * (500 - start);
+    return Math.min(1024, Math.round(row * 2));
   }
 
   // ---------- ASSAY ----------

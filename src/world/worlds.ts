@@ -19,6 +19,22 @@ export interface WorldDef {
   fogStops: FogStop[];
   /** gauge fiction: same math, different label/visuals */
   hazard: { label: string; cold: boolean; cause: string };
+  /** row where the hazard gauge starts biting — later worlds bite shallower */
+  hazardStartRow: number;
+  /**
+   * Acclimation. Radiators shed heat, so they are worthless against cold or
+   * pressure: each world past the first needs its own survival rig, built from
+   * a material that only grows in that world's UPPER strata. This is what
+   * keeps a fully-upgraded pod from skipping straight to the bottom of every
+   * new planet — without taking a single upgrade away from the player.
+   */
+  native?: {
+    ore: string;        // the material's name
+    color: number;      // its gem colour
+    gear: string;       // the fitted rig's name
+    blurb: string;
+    tiers: { need: number; resist: number; label: string }[];
+  };
   /** the molten/corrosive fluid replacing lava */
   fluid: { name: string; base: number; pulseA: number; pulseB: number; dmg: number; fuelDrain: number; threshold: number };
   /** pressure worlds fling the pod when a gas pocket bursts */
@@ -64,6 +80,7 @@ export const WORLDS: WorldDef[] = [
       { row: 505, fog: 0x481a0c, density: 0.018, hemi: 0.02, amb: 0x74381a, ambI: 1.35 },
     ],
     hazard: { label: 'HEAT', cold: false, cause: 'core heat' },
+    hazardStartRow: 290,   // radiators are the acclimation here
     fluid: { name: 'Magma', base: 0xff5a2a, pulseA: 0xff6a2e, pulseB: 0xff5222, dmg: 24, fuelDrain: 0, threshold: 0.74 },
     gasImpulse: 0,
     iceTraction: false,
@@ -107,6 +124,16 @@ export const WORLDS: WorldDef[] = [
       { row: 505, fog: 0x0e3020, density: 0.018, hemi: 0.02, amb: 0x38785a, ambI: 1.35 },
     ],
     hazard: { label: 'FROST', cold: true, cause: 'deep frost' },
+    hazardStartRow: 200,
+    native: {
+      ore: 'Rime Salt', color: 0xcfe8ff, gear: 'CRYO ACCLIMATION',
+      blurb: 'Your radiators shed heat. Down here that is the opposite of help.',
+      tiers: [
+        { need: 12, resist: 0.45, label: 'Lagged Hull' },
+        { need: 30, resist: 0.85, label: 'Brine Jacket' },
+        { need: 60, resist: 1.3, label: 'Deep Winter Rig' },
+      ],
+    },
     fluid: { name: 'Cryobrine', base: 0x5ad8e6, pulseA: 0x62e0ee, pulseB: 0x4ac8da, dmg: 16, fuelDrain: 2.5, threshold: 0.74 },
     gasImpulse: 0,
     iceTraction: true,
@@ -150,6 +177,16 @@ export const WORLDS: WorldDef[] = [
       { row: 505, fog: 0x222c44, density: 0.016, hemi: 0.02, amb: 0x60709a, ambI: 1.45 },
     ],
     hazard: { label: 'PRESSURE', cold: true, cause: 'crush pressure' },
+    hazardStartRow: 150,
+    native: {
+      ore: 'Nacre', color: 0xf2e6ff, gear: 'PRESSURE ACCLIMATION',
+      blurb: 'The ocean layers nacre around a wound. Do the same to your hull.',
+      tiers: [
+        { need: 14, resist: 0.45, label: 'Ribbed Shell' },
+        { need: 34, resist: 0.85, label: 'Nacre Lamination' },
+        { need: 68, resist: 1.3, label: 'Pearl Carapace' },
+      ],
+    },
     fluid: { name: 'Brine', base: 0x2ea86a, pulseA: 0x34b874, pulseB: 0x28985e, dmg: 12, fuelDrain: 4, threshold: 0.7 },
     gasImpulse: 16,
     iceTraction: false,

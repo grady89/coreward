@@ -23,6 +23,7 @@ export enum T {
   RUBBLE = 18,    // collapsed stone from a seismic charge — soft, fast to redig
   CUSTODIAN = 19, // Lamplighter masonry: the only right angles down here
   GLYPH = 20,     // a carved stone; cutting one adds it to the codex
+  NATIVE = 21,    // the world's own survival material — identity from ACTIVE
 }
 
 export interface TileDef {
@@ -61,7 +62,14 @@ export const TILE_DEFS: Record<number, TileDef> = {
   [T.RUBBLE]: D('Rubble', 0.16, 0, true, false, 0),
   [T.CUSTODIAN]: D('Lamplighter Stone', 5.5, 0, true, false, 0),
   [T.GLYPH]: D('Carved Stone', 1.8, 0, true, false, 0),
+  // pays in survivability, never in lumens
+  [T.NATIVE]: D('Native Deposit', 0.7, 0, true, true, 0xcfe8ff, 2),
 };
+
+/** the active world's name for its native material */
+export function nativeName(): string {
+  return ACTIVE.native?.ore ?? 'Native Deposit';
+}
 
 export const def = (t: number): TileDef => TILE_DEFS[t] ?? TILE_DEFS[T.AIR];
 
@@ -124,6 +132,8 @@ export function rockColor(t: number, x: number, y: number): number {
     base = lighten(bandColor(strataSolidForRow(y)), 0.82);
   } else if (t === T.FUNGUS) {
     base = lighten(ACTIVE.gemTint, 0.2);
+  } else if (t === T.NATIVE) {
+    base = lighten(bandColor(strataSolidForRow(y)), 1.18);
   } else {
     base = bandColor(t);
   }
