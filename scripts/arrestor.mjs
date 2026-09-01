@@ -38,13 +38,18 @@ await page.waitForTimeout(400);
 const drop = await page.evaluate(async () => {
   const g = window.__game;
   const X = 26;
+  // fixture: keep wreckage away from the test shaft, since pads refuse to
+  // deploy on top of a wreck
+  g.terrain.wrecks = g.terrain.wrecks.filter(w => Math.abs(w.x - X) > 5);
   // a clean 2-wide shaft from row 4 down to row 150
   for (let y = 4; y < 152; y++) { g.terrain.carve(X, y); g.terrain.carve(X + 1, y); }
   // stand on the shaft floor and deploy
   g.ctrl.drilling = null;
   g.ctrl.px = X + 0.5; g.ctrl.py = -151 + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.hull = g.state.maxHull;
-  await new Promise(r => setTimeout(r, 900));
+  await new Promise(r => setTimeout(r, 400));
+  for (let i = 0; i < 40 && !g.ctrl.grounded; i++) await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 300));
   const grounded = g.ctrl.grounded;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB' }));
   await new Promise(r => setTimeout(r, 400));
@@ -136,7 +141,7 @@ console.log('persisted across reload:', JSON.stringify(persisted), persisted.pla
 // --- shows on the survey map ---
 await page.evaluate(() => {
   const g = window.__game;
-  g.state.hasScanner = true;
+  g.state.buyGear('scanner');
   g.state.worldBestRow = 200;
   g.comms.clear();
 });

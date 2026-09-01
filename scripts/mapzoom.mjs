@@ -16,7 +16,7 @@ await page.waitForTimeout(3400);
 // grant scanner + depth so there is something to look at
 await page.evaluate(() => {
   const g = window.__game;
-  g.state.hasScanner = true;
+  g.state.buyGear('scanner');
   g.state.money = 40000;
   g.state.worldBestRow = 200;
   g.state.bestDepthM = 400;

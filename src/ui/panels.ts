@@ -3,7 +3,8 @@ import { AudioEngine } from '../audio/audio';
 import {
   FUEL_PRICE, REPAIR_PRICE, TRACKS, GAME_NAME, FORGE, WRECK_LOGS,
   DEATH_FEE_FRAC, RESCUE_FEE_FRAC, RESCUE_MIN_MONEY, fmtMoney, SCANNER_PRICE,
-  DEEP_ARRAY_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE, MAX_FLARES_HELD, MAX_CHARGES_HELD,
+  DEEP_ARRAY_PRICE, BEACON_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE,
+  MAX_FLARES_HELD, MAX_CHARGES_HELD,
   GLYPHS_TO_TRANSLATE, ARRESTOR_PRICE, MAX_ARRESTORS,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
@@ -355,6 +356,7 @@ export class Panels {
         <div class="row"><span class="r-name">Blocks cut</span><span class="r-val">${st.blocksDug.toLocaleString()}</span></div>
         <div class="row"><span class="r-name">Hold value</span><span class="r-val">${fmt(st.cargoValue)}</span></div>
       </div>
+      <div class="forge-head">SURVEY — ${ACTIVE.name}<span class="forge-shards">fitted per dig site</span></div>
       <div class="row">
         <span><span class="r-name">SURVEY SCANNER</span><div class="r-sub">${st.hasScanner ? 'Installed — TAB toggles the map · + / − to zoom' : 'A live map of every tunnel you cut · toggled with TAB'}</div></span>
         ${st.hasScanner
@@ -367,6 +369,12 @@ export class Panels {
         ${st.hasDeepArray
           ? '<span class="r-val">INSTALLED</span>'
           : `<button class="btn" id="buy-array" ${st.money < DEEP_ARRAY_PRICE ? 'disabled' : ''}>${fmt(DEEP_ARRAY_PRICE)}</button>`}
+      </div>
+      <div class="row">
+        <span><span class="r-name">SALVAGE BEACONS</span><div class="r-sub">${st.hasBeacons ? 'Installed — registered wrecks marked on the map' : 'Tunes the scanner to distress registries. Somebody should read what they left.'}</div></span>
+        ${st.hasBeacons
+          ? '<span class="r-val">INSTALLED</span>'
+          : `<button class="btn" id="buy-beacons" ${st.money < BEACON_PRICE ? 'disabled' : ''}>${fmt(BEACON_PRICE)}</button>`}
       </div>` : ''}
       <div class="forge-head">STARMAP</div>
       ${starmap}
@@ -383,10 +391,19 @@ export class Panels {
       ${found ? `<div class="forge-head">FOUND LOGS</div>${found}` : ''}
       <div class="hint">Press E or Esc to leave</div>
     `;
+    this.body().querySelector('#buy-beacons')?.addEventListener('click', () => {
+      if (st.money < BEACON_PRICE) { this.ctx.audio.denied(); return; }
+      st.money -= BEACON_PRICE;
+      st.buyGear('beacons');
+      this.ctx.audio.buy();
+      this.ctx.toast('SALVAGE BEACONS TUNED', 'stratum');
+      this.ctx.saveNow();
+      this.renderAssay();
+    });
     this.body().querySelector('#buy-scanner')?.addEventListener('click', () => {
       if (st.money < SCANNER_PRICE) { this.ctx.audio.denied(); return; }
       st.money -= SCANNER_PRICE;
-      st.hasScanner = true;
+      st.buyGear('scanner');
       this.ctx.audio.buy();
       this.ctx.toast('SURVEY SCANNER ONLINE — TAB', 'stratum');
       this.ctx.saveNow();
@@ -395,7 +412,7 @@ export class Panels {
     this.body().querySelector('#buy-array')?.addEventListener('click', () => {
       if (st.money < DEEP_ARRAY_PRICE) { this.ctx.audio.denied(); return; }
       st.money -= DEEP_ARRAY_PRICE;
-      st.hasDeepArray = true;
+      st.buyGear('array');
       this.ctx.audio.buy();
       this.ctx.toast('DEEP ARRAY ONLINE — ORE VISIBLE ON SURVEY', 'stratum');
       this.ctx.saveNow();

@@ -73,6 +73,7 @@ export class SurveyMap {
     terrain: Terrain, px: number, py: number, time: number,
     revealRow: number, deepArray: boolean,
     arrestors: { x: number; y: number }[] = [],
+    wrecks: { x: number; y: number }[] = [],
   ): void {
     if (!this.visible || time - this.lastDraw < 0.35) return;
     this.lastDraw = time;
@@ -130,6 +131,16 @@ export class SurveyMap {
       g.fillStyle = '#ff9a3c';
       g.fillRect(PAD_X0, 0, PAD_X1 - PAD_X0 + 1, 1);
     }
+    // registered wrecks, once the scanner is tuned to distress registries
+    for (const w of wrecks) {
+      const wy = Math.round(w.y) - y0;
+      if (wy < 1 || wy >= rows || w.y >= limit) continue;
+      g.fillStyle = '#ff4d29';
+      g.fillRect(Math.round(w.x) - 1, wy - 1, 3, 3);
+      g.fillStyle = '#ffd9a0';
+      g.fillRect(Math.round(w.x), wy, 1, 1);
+    }
+
     // deployed arrestors: your own infrastructure, marked
     for (const a of arrestors) {
       const ay = Math.round(-a.y) - y0;

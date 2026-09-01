@@ -159,8 +159,10 @@ export const FORGE: ForgeItem[] = [
   { key: 'warp', name: 'WARP HOLD', desc: 'C — teleport-sell your cargo from anywhere at 75% value.', cost: 8 },
 ];
 export const WARP_RATE = 0.75;
+// survey gear — bought separately for each dig site
 export const SCANNER_PRICE = 1500;
 export const DEEP_ARRAY_PRICE = 12000;
+export const BEACON_PRICE = 3000;
 
 // ---- consumables (bought at the fuel depot) ----
 export const FLARE_PRICE = 45;

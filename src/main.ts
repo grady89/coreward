@@ -163,8 +163,9 @@ class Game {
     this.scene = new THREE.Scene();
     const ws = this.state.worlds[this.state.activeWorld];
     this.looted = new Set(ws?.looted ?? []);
-    // pre-fog saves fall back to the pod's global record depth
-    this.state.worldBestRow = ws?.bestRow ?? Math.round(this.state.bestDepthM / 2);
+    // a world you have never dug is unsurveyed, no matter how deep you have
+    // been elsewhere — the fog is per site, not per driller
+    this.state.worldBestRow = ws?.bestRow ?? 0;
     this.buildWorld(ws?.seed ?? ((Math.random() * 0xffffffff) >>> 0));
     if (ws) {
       this.terrain.applyDug(ws.dug);
@@ -892,7 +893,8 @@ class Game {
 
     this.hud.update(st, this.ctrl.depthM, this.ctrl.row, this.ctrl.heatFrac, Math.max(dt, 0.001));
     this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time,
-      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list);
+      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
+      this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : []);
 
     if (!paused && dt > 0) st.playTime += dt;
     this.updateContractHud();
@@ -1040,7 +1042,8 @@ class Game {
 
     this.hud.update(this.state, this.ctrl.depthM, this.ctrl.row, 0, Math.max(dt, 0.001));
     this.map.refresh(this.terrain, this.pilot.px, this.pilot.py, this.time,
-      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list);
+      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
+      this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : []);
   }
 }
 

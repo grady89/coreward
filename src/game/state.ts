@@ -37,8 +37,19 @@ export class GameState {
   endedWorlds = new Set<string>();
   emberTech: Record<ForgeKey, boolean> = { updrill: false, dash: false, warp: false, converter: false };
   foundLogs = new Set<number>();
-  hasScanner = false;
-  hasDeepArray = false;
+  /**
+   * Survey gear is bought PER DIG SITE. A scanner is a survey of one world;
+   * arriving somewhere new means arriving blind, however rich you are.
+   */
+  gear: Record<string, { scanner?: boolean; array?: boolean; beacons?: boolean }> = {};
+
+  private myGear(): { scanner?: boolean; array?: boolean; beacons?: boolean } {
+    return (this.gear[this.activeWorld] ??= {});
+  }
+  get hasScanner(): boolean { return !!this.gear[this.activeWorld]?.scanner; }
+  get hasDeepArray(): boolean { return !!this.gear[this.activeWorld]?.array; }
+  get hasBeacons(): boolean { return !!this.gear[this.activeWorld]?.beacons; }
+  buyGear(k: 'scanner' | 'array' | 'beacons'): void { this.myGear()[k] = true; }
   /** deepest row reached in the ACTIVE world (survey reveal depth) */
   worldBestRow = 0;
   /** lifetime counters contracts measure against */
@@ -132,8 +143,7 @@ export class GameState {
     this.endedWorlds.clear();
     this.emberTech = { updrill: false, dash: false, warp: false, converter: false };
     this.foundLogs.clear();
-    this.hasScanner = false;
-    this.hasDeepArray = false;
+    this.gear = {};
     this.worldBestRow = 0;
     this.fuelSpent = 0;
     this.oreMined = 0;
@@ -186,8 +196,7 @@ export class GameState {
         endedWorlds: [...this.endedWorlds],
         emberTech: this.emberTech,
         foundLogs: [...this.foundLogs],
-        hasScanner: this.hasScanner,
-        hasDeepArray: this.hasDeepArray,
+        gear: this.gear,
         fuelSpent: this.fuelSpent,
         oreMined: this.oreMined,
         playTime: this.playTime,
@@ -230,8 +239,14 @@ export class GameState {
         this.endedWorlds = new Set(d.endedWorlds);
         this.emberTech = { ...this.emberTech, ...d.emberTech };
         this.foundLogs = new Set(d.foundLogs);
-        this.hasScanner = !!d.hasScanner;
-        this.hasDeepArray = !!d.hasDeepArray;
+        this.gear = d.gear ?? {};
+        // pre-per-world saves: whatever they owned was bought on VEIL-3
+        if (d.hasScanner || d.hasDeepArray) {
+          this.gear.veil3 = {
+            scanner: !!d.hasScanner, array: !!d.hasDeepArray,
+            ...(this.gear.veil3 ?? {}),
+          };
+        }
         this.fuelSpent = d.fuelSpent ?? 0;
         this.oreMined = d.oreMined ?? 0;
         this.playTime = d.playTime ?? 0;
