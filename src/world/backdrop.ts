@@ -1,0 +1,447 @@
+import * as THREE from 'three';
+import { WORLD_W, WORLD_ROWS, CORE_ROW, PAD_X0, PAD_X1 } from '../config';
+import { backwallColor } from './tiles';
+import { ACTIVE } from './worlds';
+
+// Backwall, sky, surface rig set-dressing, the Ember, and depth-graded atmosphere.
+
+// ---------- backwall: carved-cave interior behind the tile field ----------
+export function createBackwall(scene: THREE.Scene): void {
+  const EXTRA = 30; // rows past the world bottom so the camera never sees void
+  const cv = document.createElement('canvas');
+  cv.width = WORLD_W; cv.height = WORLD_ROWS + EXTRA;
+  const g = cv.getContext('2d')!;
+  for (let y = 0; y < WORLD_ROWS + EXTRA; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
+      g.fillStyle = backwallColor(x, Math.min(y, WORLD_ROWS - 1));
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(WORLD_W, WORLD_ROWS + 30),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })
+  );
+  // extra height so the camera never sees past the world's bottom edge
+  mesh.position.set(WORLD_W / 2, -(WORLD_ROWS + 30) / 2, -0.62);
+  scene.add(mesh);
+}
+
+// ---------- sky: dusk gradient + sun + ridge silhouette ----------
+export function createSky(scene: THREE.Scene): void {
+  const cv = document.createElement('canvas');
+  cv.width = 2; cv.height = 256;
+  const g = cv.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, ACTIVE.sky.top);
+  grad.addColorStop(0.42, ACTIVE.sky.mid);
+  grad.addColorStop(0.84, ACTIVE.sky.low);
+  grad.addColorStop(1, ACTIVE.sky.horizon);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sky = new THREE.Mesh(
+    new THREE.PlaneGeometry(340, 130),
+    new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, fog: false })
+  );
+  sky.position.set(WORLD_W / 2, 42, -60);
+  scene.add(sky);
+
+  // low, huge sun (a pale disc on the colder worlds)
+  const sun = new THREE.Mesh(
+    new THREE.CircleGeometry(7, 48),
+    new THREE.MeshBasicMaterial({ color: ACTIVE.sky.sun, toneMapped: false, fog: false })
+  );
+  sun.position.set(WORLD_W / 2 - 14, 10.5, -58);
+  scene.add(sun);
+  const halo = new THREE.Mesh(
+    new THREE.CircleGeometry(16, 48),
+    new THREE.MeshBasicMaterial({
+      color: ACTIVE.sky.halo, transparent: true, opacity: 0.22,
+      blending: THREE.AdditiveBlending, toneMapped: false, fog: false, depthWrite: false,
+    })
+  );
+  halo.position.copy(sun.position).z -= 0.5;
+  scene.add(halo);
+
+  // silhouette ridge line
+  // distant colony skyline on the horizon: domes, tanks, slabs, masts
+  createSkyline(scene);
+}
+
+function createSkyline(scene: THREE.Scene): void {
+  // flat painterly silhouettes: unlit, hazed toward the sky by distance
+  const near = new THREE.MeshBasicMaterial({ color: 0x342647, toneMapped: false });
+  const far = new THREE.MeshBasicMaterial({ color: 0x453454, toneMapped: false });
+  const winMat = new THREE.MeshBasicMaterial({ color: 0xffb066, toneMapped: false });
+  const g = new THREE.Group();
+
+  interface S { kind: 'dome' | 'tank' | 'slab' | 'mast'; x: number; s: number; z: number; win?: number; }
+  const items: S[] = [
+    { kind: 'dome', x: -12, s: 3.2, z: -42, win: 3 },
+    { kind: 'slab', x: -6, s: 1.6, z: -42, win: 2 },
+    { kind: 'mast', x: -2, s: 5.5, z: -42 },
+    { kind: 'tank', x: 4, s: 1.8, z: -42 },
+    { kind: 'dome', x: 10, s: 2.2, z: -42, win: 2 },
+    { kind: 'dome', x: 26, s: 4.0, z: -44, win: 4 },
+    { kind: 'slab', x: 33, s: 2.2, z: -42, win: 3 },
+    { kind: 'mast', x: 37, s: 6.5, z: -42 },
+    { kind: 'tank', x: 44, s: 2.4, z: -43 },
+    { kind: 'dome', x: 54, s: 2.8, z: -42, win: 3 },
+    { kind: 'slab', x: 62, s: 1.8, z: -42, win: 2 },
+    { kind: 'dome', x: 72, s: 3.6, z: -44, win: 3 },
+    { kind: 'mast', x: 78, s: 4.5, z: -42 },
+    // very far layer
+    { kind: 'dome', x: 16, s: 5.0, z: -54 },
+    { kind: 'slab', x: 46, s: 3.4, z: -54 },
+    { kind: 'dome', x: 66, s: 4.2, z: -55 },
+  ];
+
+  for (const it of items) {
+    const mat = it.z < -48 ? far : near;
+    let m: THREE.Mesh;
+    if (it.kind === 'dome') {
+      m = new THREE.Mesh(new THREE.SphereGeometry(it.s, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+      m.position.set(it.x, 0, it.z);
+    } else if (it.kind === 'tank') {
+      m = new THREE.Mesh(new THREE.CylinderGeometry(it.s * 0.5, it.s * 0.5, it.s * 1.6, 12), mat);
+      m.position.set(it.x, it.s * 0.8, it.z);
+    } else if (it.kind === 'slab') {
+      m = new THREE.Mesh(new THREE.BoxGeometry(it.s * 2.4, it.s, it.s), mat);
+      m.position.set(it.x, it.s / 2, it.z);
+    } else {
+      m = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, it.s, 6), mat);
+      m.position.set(it.x, it.s / 2, it.z);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false }));
+      beacon.position.set(it.x, it.s + 0.1, it.z);
+      g.add(beacon);
+    }
+    g.add(m);
+    // lit windows keep the silhouettes alive
+    for (let w = 0; w < (it.win ?? 0); w++) {
+      const dot = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.09), winMat);
+      const zFront = it.z + (it.kind === 'dome' ? it.s * 1.02 : it.kind === 'slab' ? it.s / 2 + 0.03 : it.s * 0.55);
+      dot.position.set(
+        it.x + (w - (it.win! - 1) / 2) * (it.s * 0.32),
+        it.kind === 'dome' ? it.s * 0.22 : it.s * (0.3 + (w % 2) * 0.25),
+        zFront
+      );
+      g.add(dot);
+    }
+  }
+  scene.add(g);
+}
+
+// ---------- surface rig: buildings + docking pads ----------
+export interface Dock { key: 'fuel' | 'trade' | 'garage' | 'assay'; label: string; x0: number; x1: number; }
+export const DOCKS: Dock[] = [
+  { key: 'fuel', label: 'FUEL DEPOT', x0: 17, x1: 22 },
+  { key: 'trade', label: 'TRADE POST', x0: 28, x1: 33 },
+  { key: 'garage', label: 'GARAGE', x0: 39, x1: 44 },
+  { key: 'assay', label: 'ASSAY OFFICE', x0: 50, x1: 54 },
+];
+
+const BODY = new THREE.MeshStandardMaterial({ color: 0x3f3352, roughness: 0.8 });
+const BODY2 = new THREE.MeshStandardMaterial({ color: 0x52446b, roughness: 0.8 });
+const METAL = new THREE.MeshStandardMaterial({ color: 0x2a2438, roughness: 0.45, metalness: 0.6 });
+const DOME = new THREE.MeshStandardMaterial({ color: 0x6c5a8f, roughness: 0.35, metalness: 0.2, emissive: 0x1a1030, emissiveIntensity: 0.6 });
+const GREENHOUSE = new THREE.MeshStandardMaterial({ color: 0x3a7a6a, roughness: 0.3, metalness: 0.1, emissive: 0x0f3a2c, emissiveIntensity: 0.8 });
+const PADMAT = new THREE.MeshStandardMaterial({ color: 0x4a4f5e, roughness: 0.5, metalness: 0.3 });
+const PANEL = new THREE.MeshStandardMaterial({ color: 0x1c2c50, roughness: 0.25, metalness: 0.7 });
+const PAD = new THREE.MeshStandardMaterial({ color: 0x4a3f60, roughness: 0.65 });
+
+function textSign(text: string, color: string): THREE.Mesh {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 96;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = 'rgba(10,8,18,0.92)';
+  g.fillRect(0, 0, 512, 96);
+  g.font = '700 52px "Chakra Petch", sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = color; g.shadowBlur = 26;
+  g.fillStyle = color;
+  g.fillText(text, 256, 52);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(3.4, 0.64),
+    new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, transparent: true })
+  );
+}
+
+function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z = 0): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  return m;
+}
+
+function windowStrip(w: number, x: number, y: number, z: number, color = 0xffb066): THREE.Mesh {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, 0.16),
+    new THREE.MeshBasicMaterial({ color, toneMapped: false })
+  );
+  m.position.set(x, y, z);
+  return m;
+}
+
+function cyl(r: number, h: number, mat: THREE.Material, x: number, y: number, z: number, seg = 18): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), mat);
+  m.position.set(x, y, z);
+  return m;
+}
+
+function halfDome(r: number, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+  m.position.set(x, y, z);
+  return m;
+}
+
+function glowDot(color: number, x: number, y: number, z: number, s = 0.09): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(s, 8, 8),
+    new THREE.MeshBasicMaterial({ color, toneMapped: false }));
+  m.position.set(x, y, z);
+  return m;
+}
+
+export function createSurface(scene: THREE.Scene): void {
+  const g = new THREE.Group();
+
+  // distant ground apron: the terrain the colony actually stands on,
+  // stretching from just behind the tile field out to the horizon
+  const groundColor = new THREE.Color(ACTIVE.rockColors[0]).multiplyScalar(0.5);
+  const apron = new THREE.Mesh(
+    new THREE.PlaneGeometry(280, 78),
+    new THREE.MeshStandardMaterial({ color: groundColor, roughness: 1 })
+  );
+  apron.rotation.x = -Math.PI / 2;
+  apron.position.set(WORLD_W / 2, -0.03, -39.4); // covers z ≈ [-78.4, -0.4]
+  g.add(apron);
+
+  // ---- the landing pad: home plate, spawn & tow target ----
+  {
+    // flush plate — the pod's skids rest right on it, never inside it
+    const px = (PAD_X0 + PAD_X1 + 1) / 2; // center of the protected columns
+    g.add(box(4.3, 0.04, 2.5, PADMAT, px, 0.02, 0));
+    const stripMat = new THREE.MeshBasicMaterial({ color: 0xff9a3c, toneMapped: false });
+    for (const s of [-1, 1]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.02, 1.9), stripMat);
+      bar.position.set(px + s * 1.55, 0.05, 0);
+      g.add(bar);
+    }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.045, 8, 32), stripMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(px, 0.05, 0);
+    g.add(ring);
+    for (const [sx, sz] of [[-1.9, -1], [1.9, -1], [-1.9, 1], [1.9, 1]] as const) {
+      g.add(glowDot(0x3ce6c8, px + sx, 0.09, sz, 0.06));
+    }
+  }
+
+  for (const dock of DOCKS) {
+    const cx = (dock.x0 + dock.x1) / 2;
+    // warm practical light spilling from each building
+    const practical = new THREE.PointLight(0xffa04c, 14, 10, 1.8);
+    practical.position.set(cx, 2.6, 1.4);
+    g.add(practical);
+    // dock apron: a flush plate so the pod sits ON it, not in it
+    const pad = box(dock.x1 - dock.x0, 0.04, 2.2, PAD, cx, 0.02, 0);
+    g.add(pad);
+    for (const side of [-1, 1]) {
+      const lamp = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.07, 2.0),
+        new THREE.MeshBasicMaterial({ color: 0x3ce6c8, toneMapped: false })
+      );
+      lamp.position.set(cx + side * (dock.x1 - dock.x0) / 2, 0.06, 0);
+      g.add(lamp);
+    }
+
+    const bx = cx;
+    if (dock.key === 'fuel') {
+      // tank farm: three capped cylinders, linking pipework, hazard band
+      const specs = [[-1.35, 0.6, 2.3], [0, 0.82, 3.1], [1.35, 0.55, 1.9]] as const;
+      for (const [ox, r, h] of specs) {
+        g.add(cyl(r, h, METAL, bx + ox, h / 2, -1.6));
+        g.add(halfDome(r, BODY2, bx + ox, h, -1.6));
+      }
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.14, 20),
+        new THREE.MeshBasicMaterial({ color: 0xff9a3c, toneMapped: false }));
+      band.position.set(bx, 2.2, -1.6);
+      g.add(band);
+      const pipe = cyl(0.07, 2.9, METAL, bx, 1.35, -0.9);
+      pipe.rotation.z = Math.PI / 2;
+      g.add(pipe);
+      g.add(cyl(0.07, 1.35, METAL, bx - 1.35, 0.68, -0.9));
+      g.add(glowDot(0x3ce6c8, bx - 0.02, 1.5, -0.76));
+      g.add(glowDot(0x3ce6c8, bx + 1.35, 0.9, -1.02));
+      const sign = textSign('FUEL', '#3ce6c8'); sign.position.set(bx, 3.95, -0.9); g.add(sign);
+    } else if (dock.key === 'trade') {
+      // domed market: cylinder base + dome, side module with awning, crates
+      g.add(cyl(1.7, 0.9, BODY, bx - 0.4, 0.45, -1.7));
+      g.add(halfDome(1.7, DOME, bx - 0.4, 0.9, -1.7));
+      const ringlight = new THREE.Mesh(new THREE.CylinderGeometry(1.72, 1.72, 0.07, 24),
+        new THREE.MeshBasicMaterial({ color: 0xff9a3c, toneMapped: false }));
+      ringlight.position.set(bx - 0.4, 0.92, -1.7);
+      g.add(ringlight);
+      g.add(box(1.7, 1.4, 1.5, BODY2, bx + 1.9, 0.7, -1.8));
+      const awning = box(2.1, 0.08, 1.9, METAL, bx + 1.9, 1.5, -1.6);
+      awning.rotation.x = -0.12;
+      g.add(awning);
+      g.add(windowStrip(1.2, bx + 1.9, 0.8, -1.04));
+      for (const [ox, oz, s, m] of [[-2.2, 0.4, 0.42, BODY2], [-2.7, 0.2, 0.34, METAL], [-2.4, 0.9, 0.3, BODY2]] as const) {
+        g.add(box(s, s * 0.8, s, m as THREE.Material, bx + ox, s * 0.4 + 0.1, oz));
+      }
+      const sign = textSign('TRADE', '#ff9a3c'); sign.position.set(bx - 0.4, 3.3, -0.9); g.add(sign);
+    } else if (dock.key === 'garage') {
+      // quonset hangar: stretched half-dome, glowing door, crane, annex
+      const hangar = halfDome(1.9, BODY, bx - 0.3, 0, -1.9);
+      hangar.scale.set(1.2, 0.85, 0.75);
+      g.add(hangar);
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.15),
+        new THREE.MeshBasicMaterial({ color: 0x2a1c10, toneMapped: false }));
+      door.position.set(bx - 0.3, 0.62, -0.46);
+      g.add(door);
+      const doorGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.62, 0.07),
+        new THREE.MeshBasicMaterial({ color: 0xffb066, toneMapped: false }));
+      doorGlow.position.set(bx - 0.3, 1.26, -0.45);
+      g.add(doorGlow);
+      g.add(box(1.3, 1.1, 1.4, BODY2, bx + 2, 0.55, -1.9));
+      g.add(windowStrip(0.9, bx + 2, 0.7, -1.18));
+      // crane mast + arm + hook
+      g.add(cyl(0.08, 3.4, METAL, bx - 2.4, 1.7, -1.6, 8));
+      const arm = cyl(0.06, 1.9, METAL, bx - 1.6, 3.3, -1.6, 8);
+      arm.rotation.z = Math.PI / 2;
+      g.add(arm);
+      g.add(cyl(0.02, 0.7, METAL, bx - 0.85, 2.95, -1.6, 6));
+      g.add(glowDot(0xff4d29, bx - 0.85, 2.55, -1.6, 0.06));
+      const sign = textSign('GARAGE', '#e8e2d5'); sign.position.set(bx - 0.3, 2.6, -0.85); g.add(sign);
+    } else {
+      // assay: sensor tower + big dish + glowing greenhouse dome
+      g.add(box(1.5, 4.4, 1.5, BODY, bx + 0.6, 2.2, -1.8));
+      g.add(box(1.9, 0.14, 1.9, METAL, bx + 0.6, 4.45, -1.8));
+      const dish = new THREE.Mesh(new THREE.SphereGeometry(1.0, 18, 12, 0, Math.PI), BODY2);
+      dish.position.set(bx + 0.6, 5.2, -1.8);
+      dish.rotation.x = -1.1;
+      g.add(dish);
+      g.add(cyl(0.03, 0.8, METAL, bx + 0.6, 5.5, -1.55, 6));
+      g.add(glowDot(0xff4d29, bx + 0.6, 5.92, -1.45, 0.05));
+      g.add(windowStrip(0.9, bx + 0.6, 2.6, -1.04, 0x7a5cff));
+      g.add(windowStrip(0.9, bx + 0.6, 3.3, -1.04, 0x7a5cff));
+      g.add(halfDome(1.05, GREENHOUSE, bx - 1.5, 0, -1.7));
+      g.add(glowDot(0x46e6c8, bx - 1.5, 0.4, -0.68, 0.07));
+      const sign = textSign('ASSAY', '#7a5cff'); sign.position.set(bx + 0.6, 6.3, -0.9); g.add(sign);
+    }
+  }
+
+  // habitat domes + solar racks between the working buildings
+  g.add(halfDome(1.4, BODY2, 36.2, 0, -4.5));
+  g.add(glowDot(0xffb066, 36.2, 0.5, -3.12, 0.06));
+  g.add(halfDome(0.95, BODY, 13.5, 0, -4));
+  g.add(glowDot(0xffb066, 13.5, 0.35, -3.07, 0.05));
+  for (const baseX of [7.5, 58.5]) {
+    for (let i = 0; i < 3; i++) {
+      const panel = box(1.35, 0.05, 0.95, PANEL, baseX + i * 1.6, 0.75, -2.6);
+      panel.rotation.z = 0.45;
+      g.add(panel);
+      g.add(cyl(0.05, 0.7, METAL, baseX + i * 1.6, 0.35, -2.6, 6));
+    }
+  }
+
+  // scattered masts + props for silhouette interest
+  const mastMat = new THREE.MeshStandardMaterial({ color: 0x171221, roughness: 0.9 });
+  for (const [mx, mh] of [[6, 5.5], [11, 3.2], [60, 4.6], [47, 2.4]] as const) {
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, mh, 6), mastMat);
+    mast.position.set(mx, mh / 2, -2.5);
+    g.add(mast);
+    const beacon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false })
+    );
+    beacon.position.set(mx, mh + 0.1, -2.5);
+    g.add(beacon);
+  }
+
+  scene.add(g);
+}
+
+// ---------- the buried star fragment (per-world core) ----------
+export interface Ember { group: THREE.Group; light: THREE.PointLight; update(t: number, camRow: number): void; x: number; y: number; }
+
+export function createEmber(scene: THREE.Scene): Ember {
+  const x = WORLD_W / 2, y = -(CORE_ROW + 5);
+  const group = new THREE.Group();
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(2.6, 1),
+    new THREE.MeshBasicMaterial({ color: ACTIVE.core.body, toneMapped: false })
+  );
+  const shell = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(3.3, 1),
+    new THREE.MeshBasicMaterial({
+      color: ACTIVE.core.shell, transparent: true, opacity: 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    })
+  );
+  const light = new THREE.PointLight(ACTIVE.core.light, 0, 60, 1.4);
+  group.add(core, shell, light);
+  group.position.set(x, y, 0);
+  scene.add(group);
+
+  return {
+    group, light, x, y,
+    update(t: number, camRow: number) {
+      const near = camRow > CORE_ROW - 90;
+      light.intensity = near ? 140 + Math.sin(t * 2.1) * 30 : 0;
+      group.visible = camRow > CORE_ROW - 120;
+      if (group.visible) {
+        group.rotation.y = t * 0.25;
+        group.rotation.z = t * 0.11;
+        const p = 1 + Math.sin(t * 2.1) * 0.06;
+        core.scale.setScalar(p);
+        shell.scale.setScalar(1 + Math.sin(t * 1.3 + 1) * 0.1);
+      }
+    },
+  };
+}
+
+// ---------- atmosphere: depth-graded fog, sky light, ambient ----------
+export class Atmosphere {
+  private hemi: THREE.HemisphereLight;
+  private sun: THREE.DirectionalLight;
+  private amb: THREE.AmbientLight;
+  private fog: THREE.FogExp2;
+  private a = new THREE.Color();
+  private b = new THREE.Color();
+
+  constructor(scene: THREE.Scene) {
+    this.hemi = new THREE.HemisphereLight(ACTIVE.sky.hemi, ACTIVE.sky.hemiGround, 0.9);
+    this.sun = new THREE.DirectionalLight(ACTIVE.sky.sun, 1.4);
+    this.sun.position.set(-14, 10, 12);
+    this.amb = new THREE.AmbientLight(0x2a2338, 0.3);
+    scene.add(this.hemi, this.sun, this.amb);
+    this.fog = new THREE.FogExp2(ACTIVE.fogStops[0].fog, 0.005);
+    scene.fog = this.fog;
+    scene.background = new THREE.Color(ACTIVE.sky.top);
+  }
+
+  update(row: number): void {
+    const STOPS = ACTIVE.fogStops;
+    let i = 0;
+    while (i < STOPS.length - 2 && row > STOPS[i + 1].row) i++;
+    const s0 = STOPS[i], s1 = STOPS[i + 1];
+    const t = Math.min(1, Math.max(0, (row - s0.row) / (s1.row - s0.row)));
+
+    this.a.setHex(s0.fog); this.b.setHex(s1.fog);
+    this.fog.color.copy(this.a.lerp(this.b, t));
+    this.fog.density = s0.density + (s1.density - s0.density) * t;
+
+    this.hemi.intensity = s0.hemi + (s1.hemi - s0.hemi) * t;
+    this.sun.intensity = Math.max(0, 1.4 * (1 - row / 20));
+
+    this.a.setHex(s0.amb); this.b.setHex(s1.amb);
+    this.amb.color.copy(this.a.lerp(this.b, t));
+    this.amb.intensity = s0.ambI + (s1.ambI - s0.ambI) * t;
+  }
+}
