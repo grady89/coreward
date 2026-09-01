@@ -120,6 +120,15 @@ class Game {
         this.hud.toast('TOWED TO THE SURFACE');
         this.saveNow();
       },
+      // after a core is met the crew winches the pod home for free — the
+      // kilometer climb is a fine victory lap once, not every time
+      onReturnSurface: () => {
+        this.ctrl.respawnAtSurface();
+        this.cam.snap(this.ctrl.px, 2, 15.5);
+        this.hud.toast('THE CREW HAULS YOU HOME — WELL EARNED', 'stratum');
+        this.audio.stratum();
+        this.saveNow();
+      },
       onQuitToTitle: () => this.quitToTitle(),
       onOpenStarmap: () => this.openStarmap(),
     });

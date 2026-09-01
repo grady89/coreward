@@ -38,6 +38,8 @@ interface PanelCtx {
   toast(msg: string, cls?: string): void;
   onRespawn(): void;
   onRescued(): void;
+  /** free lift home after a core is met — no fee, no fuss */
+  onReturnSurface(): void;
   onQuitToTitle(): void;
   onOpenStarmap(): void;
   onSettingsChanged(): void;
@@ -738,8 +740,16 @@ export class Panels {
       <div class="end-stats">
         ${stats.map(([k, v]) => `<div class="end-stat"><b>${v}</b><span>${k}</span></div>`).join('')}
       </div>
-      <button class="btn primary wide" id="keep">KEEP DIGGING</button>
+      <div class="btn-row">
+        <button class="btn primary" id="surface">RETURN TO SURFACE</button>
+        <button class="btn" id="keep">KEEP DIGGING</button>
+      </div>
     `;
+    this.body().querySelector('#surface')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.close();
+      this.ctx.onReturnSurface();
+    });
     this.body().querySelector('#keep')?.addEventListener('click', () => {
       this.ctx.audio.click();
       this.ctx.saveNow();
