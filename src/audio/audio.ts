@@ -25,6 +25,9 @@ export class AudioEngine {
 
   get ready(): boolean { return this.ctx !== null; }
 
+  /** a context created without a user gesture starts suspended — wake it */
+  resume(): void { void this.ctx?.resume(); }
+
   init(): void {
     if (this.ctx) return;
     const ctx = new AudioContext();

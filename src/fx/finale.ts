@@ -301,10 +301,15 @@ export class Finale {
 
     (el.querySelector('#f-eyebrow') as HTMLElement).textContent =
       `THE SUNDERING · FRAGMENT ${fragN} OF ${WORLDS.length}`;
+    // letters animate one by one, but lines may only break between words
+    let li = 0;
     (el.querySelector('#f-title') as HTMLElement).innerHTML = ACTIVE.ending.title
-      .split('')
-      .map((c, i) => `<span style="--i:${i}">${c === ' ' ? '&nbsp;' : c}</span>`)
-      .join('');
+      .split(' ')
+      .map(word => `<span class="f-word">${word
+        .split('')
+        .map(c => `<span style="--i:${li++}">${c}</span>`)
+        .join('')}</span>`)
+      .join(' ');
     const stagger = this.reducedMotion ? 0.35 : 1.05;
     const base = this.reducedMotion ? 0.4 : 1.5;
     (el.querySelector('#f-lines') as HTMLElement).innerHTML = lines

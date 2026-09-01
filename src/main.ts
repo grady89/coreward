@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {
   LOW_FUEL_FRAC, WARP_RATE, SALVAGE_TIME, WRECK_LOGS, SPAWN_X, fmtMoney,
   wreckTierForRow, CHARGE_FUSE, CHARGE_BLAST, CHARGE_SEAL,
-  TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE, EVA_O2,
+  TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE, EVA_O2, CORE_ROW,
 } from './config';
 import { T, def, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS } from './world/worlds';
@@ -159,6 +159,46 @@ class Game {
     (window as unknown as { __CONTRACT_POOL: unknown }).__CONTRACT_POOL = CONTRACT_POOL;
     (window as unknown as { __acceptContract: unknown }).__acceptContract = acceptContract;
     (window as unknown as { __evaluate: unknown }).__evaluate = evaluate;
+
+    // dev harness: ?core drops the pod at the chamber mouth with the rite
+    // un-run — press E to walk. ?core=cryos2 targets a specific site.
+    const dev = new URLSearchParams(location.search).get('core');
+    if (dev !== null) this.devCoreJump(dev);
+  }
+
+  /**
+   * Jump straight to a world's core chamber to iterate on the Communion.
+   * Dev-only (URL param), and it edits the live save: the target world is
+   * marked un-ended and the pod is outfitted to survive the chamber.
+   */
+  private devCoreJump(worldId: string): void {
+    this.audio.init(); // no user gesture yet, so wake it on the first one
+    const wake = () => this.audio.resume();
+    addEventListener('pointerdown', wake, { once: true });
+    addEventListener('keydown', wake, { once: true });
+
+    const st = this.state;
+    if (WORLDS.some(w => w.id === worldId)) st.activeWorld = worldId;
+    st.endedWorlds.delete(st.activeWorld);
+    this.setupWorld();
+    this.title?.hide();
+    this.title = null;
+
+    // survive the walk-in on any world: full tanks, top radiator, acclimated
+    st.fuel = st.maxFuel;
+    st.hull = st.maxHull;
+    st.upgrades.radiator = Math.max(st.upgrades.radiator, 5);
+    st.accl[st.activeWorld] = 3;
+
+    this.ctrl.px = 20.5;
+    this.ctrl.py = -(CORE_ROW + 9) + 0.42;
+    this.ctrl.vx = 0; this.ctrl.vy = 0;
+    this.cam.snap(this.ctrl.px, this.ctrl.py + 1, 12.5);
+    this.hud.show();
+    this.hud.setConsumables(st.flares, st.charges, st.arrestors);
+    this.hud.setLamp(this.lampOn);
+    this.mode = 'play';
+    this.hud.toast(`DEV — COMMUNION TEST · ${ACTIVE.name} · E TO WALK`, 'stratum');
   }
 
   /** (re)builds the entire scene for the active world — no page reload */

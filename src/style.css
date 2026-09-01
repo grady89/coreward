@@ -608,9 +608,10 @@ body.sm-open #survey {
 }
 #f-title {
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(38px, 7vw, 84px); letter-spacing: 0.26em; text-indent: 0.26em;
+  font-size: clamp(32px, 5.5vw, 72px); letter-spacing: 0.26em; text-indent: 0.26em;
   margin: 14px 0 6px;
 }
+#f-title .f-word { white-space: nowrap; display: inline-block; }
 #f-title span {
   display: inline-block; opacity: 0; transform: translateY(16px);
   animation: f-letter 0.8s var(--ease-out) both;
