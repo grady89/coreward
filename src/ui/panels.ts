@@ -704,23 +704,39 @@ export class Panels {
   }
 
   // ---------- ENDING ----------
+  // The epilogue to the Communion: the only bright screen in the game.
+  // Every other panel is glass on darkness; this one is bone-white — the
+  // player dug toward the light and, for one screen, they are standing in it.
   private renderEnding(): void {
     const st = this.ctx.state;
     const next = nextWorld(ACTIVE.id);
     const firstEnding = st.endedWorlds.size === 1;
+    const fragN = WORLDS.findIndex(w => w.id === ACTIVE.id) + 1;
+    // the rite already spoke the full text over the white; the epilogue
+    // keeps only the last line, as an inscription
+    const lines = ACTIVE.ending.text.split(/<br\s*\/?>/).map(s => s.trim()).filter(Boolean);
+    const epigraph = lines[lines.length - 1] ?? '';
     const unlocks = [
-      next ? `NEW SITE TRIANGULATED — <b style="color:var(--teal)">${next.name}</b>. Travel from the ASSAY office.` : 'The dish is quiet. Three fragments. Three chambers. All yours.',
-      firstEnding ? 'THE EMBER FORGE IS LIT — spend embershards at the GARAGE.' : '',
-    ].filter(Boolean).join('<br/>');
+      next
+        ? `NEW SITE TRIANGULATED — <b class="end-site">${next.name}</b> · travel from the ASSAY office`
+        : 'THE DISH IS QUIET — three fragments, three chambers, all yours',
+      firstEnding ? 'THE EMBER FORGE IS LIT — spend embershards at the GARAGE' : '',
+    ].filter(Boolean).map(u => `<div class="end-unlock">${u}</div>`).join('');
+    const stats: [string, string][] = [
+      ['RECORD DEPTH', `${st.bestDepthM}m`],
+      ['LIFETIME EARNINGS', fmt(st.totalEarned)],
+      ['BLOCKS CUT', st.blocksDug.toLocaleString()],
+      ['CORES REACHED', `${st.endedWorlds.size} / ${WORLDS.length}`],
+    ];
+    this.scrim!.classList.add('rite');
     this.body().innerHTML = `
-      <div class="screen-title good">${ACTIVE.ending.title}</div>
-      <div class="screen-sub" style="font-style:italic">${ACTIVE.ending.text}</div>
-      <div class="screen-sub" style="margin-top:10px">${unlocks}</div>
-      <div class="stat-grid" style="margin-top:14px">
-        <div class="row"><span class="r-name">Record depth</span><span class="r-val">${st.bestDepthM}m</span></div>
-        <div class="row"><span class="r-name">Lifetime earnings</span><span class="r-val">${fmt(st.totalEarned)}</span></div>
-        <div class="row"><span class="r-name">Blocks cut</span><span class="r-val">${st.blocksDug.toLocaleString()}</span></div>
-        <div class="row"><span class="r-name">Cores reached</span><span class="r-val">${st.endedWorlds.size} / ${WORLDS.length}</span></div>
+      <div class="end-eyebrow">THE SUNDERING · FRAGMENT ${fragN} OF ${WORLDS.length}</div>
+      <div class="end-title">${ACTIVE.ending.title}</div>
+      <div class="end-rule"></div>
+      <div class="end-epigraph">${epigraph}</div>
+      ${unlocks}
+      <div class="end-stats">
+        ${stats.map(([k, v]) => `<div class="end-stat"><b>${v}</b><span>${k}</span></div>`).join('')}
       </div>
       <button class="btn primary wide" id="keep">KEEP DIGGING</button>
     `;

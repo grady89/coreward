@@ -165,6 +165,40 @@ The pilot leaves the pod only at designated interactions — never free traversa
 - **The core walk**: the pod stops at the chamber mouth; the last meters to
   every core are walked. The endings are earned on foot.
 
+### 8c2. The Communion (BUILT) — the ending as a rite, not a dialog
+
+The old ending was a proximity check and a panel. The rebuilt ending is the
+game's thesis statement, staged in three movements under three laws:
+
+1. **The walk is the cinematic.** The player keeps the stick the whole way.
+   Every channel — the choir bed, the fragment's quickening heartbeat and
+   pulse, the camera's slow blend toward the fragment, the fog — is driven by
+   **distance, not time**. Back away and the entire crescendo recedes with
+   you. The camera is only taken at the moment of contact.
+2. **Light is liturgy.** The chamber is a carved cathedral (the vault arches
+   from a low mouth to a crest above the fragment), lined with sconce
+   monoliths that ignite as the pilot passes — each one a rising note on a
+   pentatonic scale, so the walk is measured in lights, not meters. Motes of
+   slow light fill the air; the fragment wears an orbiting shard ring, a
+   breathing halo, and a shaft of glow reaching up the dig.
+3. **The touch inverts the game.** Coreward is dark on every screen. At
+   contact the frame floods to white tinted by that world's horizon color,
+   and the ending text plays as staged typography on the game's **only
+   bright screen** — "dig toward the light," paid in full. The stats panel
+   is restyled to match: a bone-white epilogue, then KEEP DIGGING drops you
+   back into the dark.
+
+Supporting grammar: letterbox bars close in when the rite begins; the HUD and
+Dispatch step aside; the O₂ clock stops ("the air is warm — the suit stops
+counting") so the walk is the only mechanic left. E/Esc skips the cinematic
+stretch; R still recalls mid-walk and stands the whole rite down. Reduced
+motion collapses transforms and shortens the white to a quiet fade. All
+procedural — no assets; per-world identity comes free from `ACTIVE.core`,
+`ACTIVE.sky.horizon` and `ACTIVE.ending`. The Kindled (§8g) are deliberately
+absent until their threat design lands; the congregation of sconces holds
+their place. Once a world is ended its sconces stay lit and the fragment
+stays a quarter awake — revisiting the chamber shows the rite happened.
+
 ### 8d. Expedition contracts (BUILT)
 
 A rotating three-offer board at the trade post; one active at a time. Goals:

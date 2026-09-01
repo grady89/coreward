@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {
   LOW_FUEL_FRAC, WARP_RATE, SALVAGE_TIME, WRECK_LOGS, SPAWN_X, fmtMoney,
   wreckTierForRow, CHARGE_FUSE, CHARGE_BLAST, CHARGE_SEAL,
-  TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE,
+  TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE, EVA_O2,
 } from './config';
 import { T, def, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS } from './world/worlds';
@@ -23,6 +23,7 @@ import {
 } from './game/contracts';
 import { Particles } from './fx/particles';
 import { FollowCam } from './fx/camera';
+import { Finale } from './fx/finale';
 import { Hud } from './ui/hud';
 import { Comms } from './ui/comms';
 import { SurveyMap } from './ui/map';
@@ -45,6 +46,7 @@ class Game {
   pod!: Pod;
   ctrl!: PodController;
   pilot!: Pilot;
+  finale!: Finale;
   wrecks!: WreckField;
   threats!: ThreatField;
   arrestors!: ArrestorField;
@@ -161,6 +163,7 @@ class Game {
 
   /** (re)builds the entire scene for the active world — no page reload */
   private setupWorld(): void {
+    this.finale?.dispose(); // a prior world's rite must not leave DOM behind
     setActiveWorld(this.state.activeWorld);
     this.hud.applyWorld();
     this.scene = new THREE.Scene();
@@ -190,6 +193,9 @@ class Game {
     createSky(this.scene);
     createSurface(this.scene);
     this.ember = createEmber(this.scene);
+    this.finale = new Finale(this.scene, this.ember, this.audio, this.ui,
+      this.reducedMotion, this.state.endedWorlds.has(ACTIVE.id));
+    if (this.state.endedWorlds.has(ACTIVE.id)) this.ember.excite = 0.25;
     this.atmosphere = new Atmosphere(this.scene);
     this.particles = new Particles(this.scene);
     this.pod = new Pod(this.scene);
@@ -427,6 +433,16 @@ class Game {
     this.pilot.spawnAt(this.ctrl.px + side * 1.35, this.ctrl.py - 0.1);
     this.salvaging = null;
     this.mode = 'eva';
+    // the core walk is the Communion: HUD, clocks and Dispatch all step
+    // aside for the rite — nothing on the radio belongs in this room
+    if (this.ctrl.coreNear) {
+      this.finale.begin();
+      this.hud.hide();
+      this.hud.setPrompt(null);
+      this.comms.clear();
+      this.hud.toast('THE AIR IS WARM — THE SUIT STOPS COUNTING');
+      return;
+    }
     if (!this.evaHintShown) {
       this.evaHintShown = true;
       this.hud.toast('EVA — PRESS R TO RECALL TO THE POD');
@@ -438,6 +454,11 @@ class Game {
     this.pilot.hide();
     this.hud.setEva(null);
     this.salvaging = null;
+    // boarding the pod mid-walk stands the rite down and restores the HUD
+    if (this.finale.active && !this.finale.finished) {
+      this.finale.abort();
+      this.hud.show();
+    }
     this.mode = 'play';
   }
 
@@ -518,7 +539,12 @@ class Game {
         this.map.zoomBy(-1);
         this.audio.click();
       }
-      if (e.code === 'KeyR' && this.mode === 'eva' && !this.salvaging && !this.panels.isOpen) {
+      if (e.code === 'KeyR' && this.mode === 'eva' && !this.salvaging && !this.panels.isOpen
+        && !this.finale.cinematic) {
+        if (this.finale.active) {
+          this.finale.abort();
+          this.hud.show();
+        }
         this.exitEva();
         this.hud.toast('RECALLED TO THE POD');
       }
@@ -677,6 +703,10 @@ class Game {
   }
 
   private onInteract(): void {
+    if (this.finale?.cinematic) {
+      this.finale.skip();
+      return;
+    }
     if (this.panels.isOpen) {
       const shop = ['fuel', 'trade', 'garage', 'assay'].includes(this.panels.current ?? '');
       if (shop) { this.audio.click(); this.panels.close(); }
@@ -735,6 +765,10 @@ class Game {
   }
 
   private onEscape(): void {
+    if (this.finale?.cinematic) {
+      this.finale.skip();
+      return;
+    }
     if (this.mode !== 'play' && this.mode !== 'eva') return;
     if (this.panels.isOpen) {
       if (this.panels.current !== 'death' && this.panels.current !== 'rescue' && this.panels.current !== 'ending') {
@@ -826,7 +860,9 @@ class Game {
     this.pumpNarrative(raw);
     this.particles.update(dt);
     this.wrecks.update(this.time, dt);
-    this.ember.update(this.time, Math.floor(-this.cam.camera.position.y));
+    const camRow = Math.floor(-this.cam.camera.position.y);
+    this.ember.update(this.time, camRow);
+    this.finale.frame(dt, this.time, camRow);
     this.renderer.render(this.scene, this.cam.camera);
   }
 
@@ -956,6 +992,7 @@ class Game {
     this.comms.update(dt);
     this.hud.pushContract(this.comms.busy);
     if (this.comms.busy || this.mode === 'title') return;
+    if (this.finale.active) return; // Dispatch stays quiet through the rite
 
     const st = this.state;
     const stats: WorldStats = {
@@ -1016,9 +1053,36 @@ class Game {
 
   private evaFrame(dt: number): void {
     const paused = this.panels.isOpen;
+    const fin = this.finale;
+    const rite = fin.active;
 
     if (!paused && dt > 0) {
-      if (this.salvaging) {
+      if (rite) {
+        // the Communion. The chamber is warm: the suit stops counting.
+        this.pilot.o2 = EVA_O2;
+        const still = { left: false, right: false, up: false, down: false };
+        this.pilot.update(dt, fin.cinematic ? still : this.input());
+        fin.advance(dt, this.pilot.px, this.pilot.py);
+
+        // contact — the world is ended the moment the pilot touches the light
+        if (fin.phase === 'walk' &&
+          Math.abs(this.pilot.px - this.ember.x) < 3.4 && Math.abs(this.pilot.py - this.ember.y) < 5) {
+          this.state.endedWorlds.add(ACTIVE.id);
+          fin.touch();
+          this.saveNow();
+        }
+
+        // the white has said its piece: hand over to the epilogue
+        if (fin.finished) {
+          fin.conclude();
+          this.exitEva();
+          this.hud.show();
+          this.audio.ending();
+          this.panels.open('ending');
+          return;
+        }
+        this.hud.setPrompt(null);
+      } else if (this.salvaging) {
         this.salvaging.t += dt;
         if (Math.random() < 0.3) {
           this.particles.drillSpray(this.pilot.px, this.pilot.py, 0x8a8a8a);
@@ -1037,27 +1101,16 @@ class Game {
       }
 
       // oxygen out: blackout, wake in the pod
-      if (this.pilot.o2 <= 0) {
+      if (!rite && this.pilot.o2 <= 0) {
         this.exitEva();
         this.hud.toast('BLACKOUT — THE SUIT DRAGGED YOU HOME');
         this.audio.damage();
         return;
       }
 
-      // the core walk: reaching the fragment on foot ends the world
-      if (!this.state.endedWorlds.has(ACTIVE.id) &&
-        Math.abs(this.pilot.px - this.ember.x) < 3.4 && Math.abs(this.pilot.py - this.ember.y) < 5) {
-        this.state.endedWorlds.add(ACTIVE.id);
-        this.audio.ending();
-        this.panels.open('ending');
-        this.saveNow();
-        this.exitEva();
-        return;
-      }
-
       // contextual prompt
-      if (this.salvaging) {
-        this.hud.setPrompt(null);
+      if (rite || this.salvaging) {
+        // handled above / silent while working
       } else if (this.wreckAtPilot() >= 0) {
         this.hud.setPrompt(`<span class="key">E</span>SALVAGE`);
       } else {
@@ -1079,16 +1132,21 @@ class Game {
       }
     }
 
-    this.hud.setEva(this.pilot.o2);
+    this.hud.setEva(rite ? null : this.pilot.o2);
     this.pod.update(dt, { vx: 0, thrust: 0, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: this.ctrl.row, time: this.time });
-    this.cam.follow(dt, this.pilot.px, this.pilot.py, this.pilot.vx, this.pilot.vy, true);
+    if (rite) {
+      this.cam.finaleFollow(dt, this.pilot.px, this.pilot.py,
+        this.ember.x, this.ember.y, fin.t, fin.touchBlend);
+    } else {
+      this.cam.follow(dt, this.pilot.px, this.pilot.py, this.pilot.vx, this.pilot.vy, true);
+    }
     this.chunks.update(Math.max(0, Math.floor(-this.pilot.py)), this.time);
     this.atmosphere.update(Math.floor(-this.pilot.py));
 
     this.audio.update(dt, {
       thrust: 0, drilling: this.salvaging !== null, hardness: 2,
       row: Math.floor(-this.pilot.py),
-      lowFuel: this.pilot.o2 < 12,
+      lowFuel: !rite && this.pilot.o2 < 12,
     });
 
     this.hud.update(this.state, this.ctrl.depthM, this.ctrl.row, 0, Math.max(dt, 0.001));

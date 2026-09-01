@@ -61,10 +61,20 @@ await page.evaluate(() => {
   g.cam.snap(52, 2, 14);
 });
 await page.waitForTimeout(1100);
-await page.keyboard.press('KeyE');
+await page.keyboard.press('KeyE');       // assay office
 await page.waitForTimeout(700);
-await page.click('button[data-travel="cryos2"]');
-await page.waitForTimeout(2500);
+await page.click('#open-starmap');       // the Sundering Chart
+await page.waitForTimeout(3200); // long settle: SwiftShader frames stretch the ease-in
+await page.waitForFunction(() => document.querySelector('#starmap-ui.open'), { timeout: 10000 });
+// select CRYOS-2 — retry, because the chart's ease-in can swallow early keys
+for (let i = 0; i < 8; i++) {
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(900);
+  const name = await page.evaluate(() => document.querySelector('.sm-card .sm-name')?.textContent);
+  if (name === 'CRYOS-2') break;
+}
+await page.keyboard.press('KeyE');       // commit transit
+await page.waitForTimeout(4500);
 
 const fresh = await page.evaluate(() => ({
   world: window.__game.state.activeWorld,

@@ -186,9 +186,17 @@ export class Terrain {
       }
     }
 
-    // the core chamber: a carved vault at the bottom
-    for (let y = CORE_ROW; y < Math.min(this.h, CORE_ROW + 10); y++) {
-      for (let x = 18; x < 46; x++) this.data[this.idx(x, y)] = T.AIR;
+    // the core chamber: a carved cathedral, not a box — the vault arches
+    // from a low mouth at each edge to a crest above the fragment, so the
+    // last walk happens under a ceiling that rises with every step
+    const ccx = this.w / 2;
+    for (let x = 18; x < 46; x++) {
+      const u = (x + 0.5 - ccx) / 14.5;
+      const arch = Math.sqrt(Math.max(0, 1 - u * u));
+      const h = 3 + Math.floor(arch * 13 + wr() * 1.3);
+      for (let y = CORE_ROW + 10 - h; y < Math.min(this.h, CORE_ROW + 10); y++) {
+        this.data[this.idx(x, y)] = T.AIR;
+      }
     }
     // floor + shell of emberrock kept solid below
     for (let y = CORE_ROW + 10; y < this.h; y++) {

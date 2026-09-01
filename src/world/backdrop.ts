@@ -420,11 +420,41 @@ export function createSurface(scene: THREE.Scene): void {
 }
 
 // ---------- the buried star fragment (per-world core) ----------
-export interface Ember { group: THREE.Group; light: THREE.PointLight; update(t: number, camRow: number): void; x: number; y: number; }
+export interface Ember {
+  group: THREE.Group;
+  light: THREE.PointLight;
+  update(t: number, camRow: number): void;
+  x: number;
+  y: number;
+  /** 0..1 — the Communion drives this as the pilot closes; pulse, halo, ring and shaft all follow */
+  excite: number;
+}
+
+const SHARDS = 12;
+const shardM = new THREE.Matrix4();
+const shardP = new THREE.Vector3();
+const shardQ = new THREE.Quaternion();
+const shardS = new THREE.Vector3();
+const shardE = new THREE.Euler();
+
+function haloTexture(): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.28)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(cv);
+}
 
 export function createEmber(scene: THREE.Scene): Ember {
   const x = WORLD_W / 2, y = -(CORE_ROW + 5);
   const group = new THREE.Group();
+  // the burning heart spins; halo, ring and shaft stay world-oriented
+  const spin = new THREE.Group();
   const core = new THREE.Mesh(
     new THREE.IcosahedronGeometry(2.6, 1),
     new THREE.MeshBasicMaterial({ color: ACTIVE.core.body, toneMapped: false })
@@ -436,26 +466,86 @@ export function createEmber(scene: THREE.Scene): Ember {
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     })
   );
+  spin.add(core, shell);
   const light = new THREE.PointLight(ACTIVE.core.light, 0, 60, 1.4);
-  group.add(core, shell, light);
+
+  // halo: a soft radial sprite that breathes with the pulse
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: haloTexture(), color: ACTIVE.core.light, transparent: true, opacity: 0.4,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  }));
+  halo.scale.setScalar(11);
+
+  // shard ring: crust the star shed on impact, still in orbit around it
+  const shards = new THREE.InstancedMesh(
+    new THREE.TetrahedronGeometry(0.34, 0),
+    new THREE.MeshBasicMaterial({ color: ACTIVE.core.shell, toneMapped: false }),
+    SHARDS
+  );
+  shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  shards.frustumCulled = false;
+
+  // light shaft: the fragment's glow reaching up the dig
+  const shaftCv = document.createElement('canvas');
+  shaftCv.width = 2; shaftCv.height = 128;
+  const sg = shaftCv.getContext('2d')!;
+  const sGrad = sg.createLinearGradient(0, 128, 0, 0);
+  sGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
+  sGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  sg.fillStyle = sGrad;
+  sg.fillRect(0, 0, 2, 128);
+  const shaft = new THREE.Mesh(
+    new THREE.PlaneGeometry(5.5, 18),
+    new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(shaftCv), color: ACTIVE.core.light,
+      transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending,
+      depthWrite: false, toneMapped: false,
+    })
+  );
+  shaft.position.set(0, 11.5, -0.3);
+
+  group.add(spin, light, halo, shards, shaft);
   group.position.set(x, y, 0);
   scene.add(group);
 
-  return {
-    group, light, x, y,
+  const ember: Ember = {
+    group, light, x, y, excite: 0,
     update(t: number, camRow: number) {
+      const ex = this.excite;
       const near = camRow > CORE_ROW - 90;
-      light.intensity = near ? 140 + Math.sin(t * 2.1) * 30 : 0;
+      const rate = 2.1 + ex * 2.6;
+      const pulse = Math.sin(t * rate);
+      light.intensity = near ? (140 + pulse * 30) * (1 + ex * 1.4) : 0;
       group.visible = camRow > CORE_ROW - 120;
-      if (group.visible) {
-        group.rotation.y = t * 0.25;
-        group.rotation.z = t * 0.11;
-        const p = 1 + Math.sin(t * 2.1) * 0.06;
-        core.scale.setScalar(p);
-        shell.scale.setScalar(1 + Math.sin(t * 1.3 + 1) * 0.1);
+      if (!group.visible) return;
+      spin.rotation.y = t * (0.25 + ex * 0.3);
+      spin.rotation.z = t * 0.11;
+      core.scale.setScalar(1 + pulse * (0.06 + ex * 0.07));
+      shell.scale.setScalar(1 + Math.sin(t * 1.3 + 1) * 0.1 + ex * 0.12);
+      halo.scale.setScalar(11 + pulse * 1.5 + ex * 6);
+      (halo.material as THREE.SpriteMaterial).opacity = 0.3 + pulse * 0.08 + ex * 0.35;
+      (shaft.material as THREE.MeshBasicMaterial).opacity = 0.1 + ex * 0.3;
+
+      for (let i = 0; i < SHARDS; i++) {
+        const ring = i % 2;                      // two inclined orbits
+        const a = t * (0.16 + ring * 0.09 + ex * 0.22) + (i / SHARDS) * Math.PI * 2;
+        const r = 4.3 + ring * 1.2 + Math.sin(i * 3.7) * 0.3;
+        const incl = ring === 0 ? 0.28 : -0.42;
+        shardP.set(
+          Math.cos(a) * r,
+          Math.sin(a) * r * Math.sin(incl),
+          Math.sin(a) * r * Math.cos(incl) * 0.35
+        );
+        shardE.set(t * 0.8 + i, t * 0.6, i * 1.3);
+        shardQ.setFromEuler(shardE);
+        shardS.setScalar(0.7 + Math.sin(i * 2.1) * 0.3);
+        shardM.compose(shardP, shardQ, shardS);
+        shards.setMatrixAt(i, shardM);
       }
+      shards.instanceMatrix.needsUpdate = true;
     },
   };
+  return ember;
 }
 
 // ---------- atmosphere: depth-graded fog, sky light, ambient ----------

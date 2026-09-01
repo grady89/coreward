@@ -311,4 +311,79 @@ export class AudioEngine {
     const notes = [262, 330, 392, 523, 660, 784];
     notes.forEach((f, i) => this.tone(f, 2.2, 0.07, 'sine', i * 220));
   }
+
+  // ---- the Communion: the core-walk crescendo ----
+  private choir: { chord: GainNode; shimmer: GainNode } | null = null;
+
+  /** lazily build the sustained choir: a low chord + a high shimmer */
+  private ensureChoir(): void {
+    if (!this.ctx || this.choir) return;
+    const ctx = this.ctx;
+    const chord = ctx.createGain();
+    chord.gain.value = 0;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    chord.connect(lp).connect(this.musicBus);
+    [110, 164.8, 220, 277.2].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      // slow detune drift so the chord breathes like voices, not a synth
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.11 + i * 0.05;
+      const lfoG = ctx.createGain();
+      lfoG.gain.value = f * 0.0035;
+      lfo.connect(lfoG).connect(o.frequency);
+      const g = ctx.createGain();
+      g.gain.value = [1, 0.7, 0.55, 0.35][i];
+      o.connect(g).connect(chord);
+      o.start(); lfo.start();
+    });
+    const shimmer = ctx.createGain();
+    shimmer.gain.value = 0;
+    shimmer.connect(this.musicBus);
+    [659.3, 880, 1108.7].forEach(f => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.value = 0.3;
+      o.connect(g).connect(shimmer);
+      o.start();
+    });
+    this.choir = { chord, shimmer };
+  }
+
+  /** distance-driven choir level, 0..1 — call every frame during the walk */
+  finaleBed(level: number): void {
+    if (!this.ctx) return;
+    this.ensureChoir();
+    const t = this.ctx.currentTime;
+    this.choir!.chord.gain.setTargetAtTime(level * 0.055, t, 0.6);
+    this.choir!.shimmer.gain.setTargetAtTime(level * level * 0.02, t, 0.9);
+  }
+
+  /** the fragment's heartbeat — strength rises as the pilot closes */
+  emberBeat(strength: number): void {
+    this.thump(52 + strength * 12, 0.5, 0.05 + strength * 0.09);
+    this.tone(104, 0.35, 0.02 + strength * 0.03, 'sine', 70);
+  }
+
+  /** a sconce ignites: the walk climbs a pentatonic scale, light by light */
+  sconce(i: number): void {
+    const scale = [392, 440, 523.3, 587.3, 659.3, 784];
+    const f = scale[Math.min(i, scale.length - 1)];
+    this.tone(f, 1.4, 0.055, 'sine');
+    this.tone(f * 2, 1.1, 0.025, 'sine', 70);
+  }
+
+  /** contact: a sub drop, a rising bloom, then a wide slow chord */
+  finaleTouch(): void {
+    this.finaleBed(0);
+    this.thump(40, 1.4, 0.22);
+    this.noise(2.2, 0.1, 500, 5200);
+    [220, 329.6, 440, 554.4, 659.3].forEach((f, i) =>
+      this.tone(f, 3.2, 0.05, 'sine', 250 + i * 140));
+  }
 }

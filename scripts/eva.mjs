@@ -21,9 +21,15 @@ const spotted = await page.evaluate(async () => {
   const idx = g.terrain.wrecks.findIndex(w => w.x > 14 && w.x < 50);
   window.__wreckIdx = idx;
   const w = g.terrain.wrecks[idx];
-  // open a corridor so there is somewhere to walk
+  // open a corridor so there is somewhere to walk — and floor it, because a
+  // natural cave under the gallery drops the pilot a row and strands the walk
   for (let x = w.x - 10; x <= w.x + 10; x++) {
     for (let y = w.y - 3; y <= w.y; y++) g.terrain.carve(x, y);
+    const fi = g.terrain.idx(x, w.y + 1);
+    if (g.terrain.data[fi] === 0 /* T.AIR */) {
+      g.terrain.data[fi] = 2; /* T.ROCK */
+      g.chunks.markDirty(x, w.y + 1);
+    }
   }
   g.ctrl.drilling = null;
   g.ctrl.px = w.x + 0.5 - 6; g.ctrl.py = -(w.y + 1) + 0.42;

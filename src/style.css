@@ -579,3 +579,116 @@ body.sm-open #survey {
   #hud-depth { font-size: 16px; }
   .panel { padding: 18px; }
 }
+
+/* ---------- the Communion: the core-walk finale ---------- */
+/* Sits under the panel layer (z 20) so the epilogue opens over the white. */
+#finale { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+#finale .f-bar {
+  position: absolute; left: 0; right: 0; height: 0; background: #050308;
+  transition: height 1.8s var(--ease-out);
+}
+#finale .f-bar.top { top: 0; }
+#finale .f-bar.bot { bottom: 0; }
+#finale.on .f-bar { height: 11vh; }
+#f-white {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(120% 95% at 50% 56%,
+    #ffffff 0%, #f7f1e3 52%, var(--f-tint, #ffd9a8) 150%);
+}
+#f-text {
+  position: absolute; inset: 0; padding: 0 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; color: #1a1428; opacity: 0;
+}
+#finale.lit #f-text { opacity: 1; }
+#f-eyebrow {
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.52em; text-indent: 0.52em; color: rgba(26, 20, 40, 0.5);
+  animation: f-fade 1.2s ease 0.1s both;
+}
+#f-title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(38px, 7vw, 84px); letter-spacing: 0.26em; text-indent: 0.26em;
+  margin: 14px 0 6px;
+}
+#f-title span {
+  display: inline-block; opacity: 0; transform: translateY(16px);
+  animation: f-letter 0.8s var(--ease-out) both;
+  animation-delay: calc(0.3s + var(--i) * 0.055s);
+}
+#f-lines { margin-top: 18px; max-width: 620px; }
+.f-line {
+  font-size: 15px; line-height: 2; font-style: italic;
+  color: rgba(26, 20, 40, 0.82);
+  opacity: 0; animation: f-fade 1.3s ease both; animation-delay: var(--d);
+}
+#f-hint {
+  position: absolute; bottom: calc(11vh + 22px); left: 50%; transform: translateX(-50%);
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.3em;
+  color: rgba(26, 20, 40, 0.45); white-space: nowrap;
+  opacity: 0;
+}
+/* the hint's clock starts when the white lights, not when the walk begins */
+#finale.lit #f-hint { animation: f-fade 1s ease both; animation-delay: var(--d, 6s); }
+#f-hint .key {
+  border: 1px solid rgba(26, 20, 40, 0.4); border-radius: 4px;
+  padding: 0 6px; margin-right: 8px; color: rgba(26, 20, 40, 0.7); font-weight: 700;
+}
+#finale.fading { opacity: 0; transition: opacity 2.2s ease; }
+@keyframes f-letter { to { opacity: 1; transform: none; } }
+@keyframes f-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- the epilogue: the only bright screen in the game ---------- */
+.panel-scrim.rite {
+  background: radial-gradient(120% 95% at 50% 45%,
+    #ffffff 0%, #f7f1e3 55%, #eee2c9 140%);
+  backdrop-filter: none;
+}
+.panel-scrim.rite .panel {
+  background: transparent; border: none; box-shadow: none;
+  color: #1a1428; text-align: center; max-width: 620px;
+  scrollbar-color: rgba(26, 20, 40, 0.25) transparent;
+}
+.end-eyebrow {
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.52em; text-indent: 0.52em; color: rgba(26, 20, 40, 0.5);
+}
+.end-title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(30px, 5vw, 52px); letter-spacing: 0.26em; text-indent: 0.26em;
+  margin: 12px 0 0;
+}
+.end-rule {
+  width: 46px; height: 2px; margin: 20px auto;
+  background: #b25a00;
+}
+.end-epigraph {
+  font-style: italic; font-size: 14px; line-height: 1.9;
+  color: rgba(26, 20, 40, 0.75); margin-bottom: 20px;
+}
+.end-unlock {
+  font-family: var(--font-display); font-size: 11.5px; letter-spacing: 0.14em;
+  color: rgba(26, 20, 40, 0.68); margin: 6px 0;
+}
+.end-unlock .end-site { color: #0c7a68; }
+.end-stats {
+  display: flex; justify-content: center; gap: 30px; flex-wrap: wrap;
+  margin: 26px 0 8px; padding-top: 22px;
+  border-top: 1px solid rgba(26, 20, 40, 0.14);
+}
+.end-stat b {
+  display: block; font-family: var(--font-display); font-weight: 700;
+  font-size: 20px; color: #1a1428;
+}
+.end-stat span {
+  display: block; margin-top: 3px; font-family: var(--font-display);
+  font-size: 9px; letter-spacing: 0.24em; color: rgba(26, 20, 40, 0.5);
+}
+.panel-scrim.rite .btn {
+  color: #1a1428; background: rgba(26, 20, 40, 0.05);
+  border-color: rgba(26, 20, 40, 0.25); margin-top: 18px;
+}
+.panel-scrim.rite .btn.primary {
+  color: #b25a00; border-color: rgba(178, 90, 0, 0.55);
+}
+.panel-scrim.rite .btn:hover { background: rgba(26, 20, 40, 0.1); }

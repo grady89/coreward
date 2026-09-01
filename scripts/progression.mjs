@@ -29,6 +29,13 @@ await page.evaluate(() => {
   // the pilot now steps clear of the pod, so there must be somewhere to stand
   for (let x = Math.max(1, w.x - 5); x <= Math.min(62, w.x + 5); x++) {
     for (let y = w.y - 2; y <= w.y; y++) g.terrain.carve(x, y);
+    // and a floor under the whole approach — a natural cave below the
+    // corridor drops the pilot a row and strands the walk
+    const fi = g.terrain.idx(x, w.y + 1);
+    if (g.terrain.data[fi] === 0 /* T.AIR */) {
+      g.terrain.data[fi] = 2; /* T.ROCK */
+      g.chunks.markDirty(x, w.y + 1);
+    }
   }
   g.ctrl.px = w.x + 0.5;
   g.ctrl.py = -(w.y + 1) + 0.42;
@@ -44,7 +51,8 @@ await page.waitForTimeout(700);
 const evaMode = await page.evaluate(() => window.__game.mode);
 console.log('eva mode:', evaMode, evaMode === 'eva' ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p-eva.png' });
-// the pilot steps clear of the pod, so walk back into arm's reach first
+// the pilot steps clear of the pod, so walk back into arm's reach first —
+// well inside the range, or the slide after keyup drifts back out of it
 await page.evaluate(async () => {
   const g = window.__game;
   const w = g.terrain.wrecks[0];
@@ -52,10 +60,11 @@ await page.evaluate(async () => {
   window.dispatchEvent(new KeyboardEvent('keydown', { code: dir }));
   for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 100));
-    if (g.wreckAtPilot() >= 0) break;
+    if (Math.hypot(w.x + 0.5 - g.pilot.px, -(w.y + 0.5) - g.pilot.py) < 0.55) break;
   }
   window.dispatchEvent(new KeyboardEvent('keyup', { code: dir }));
 });
+await page.waitForTimeout(300); // settle
 await page.keyboard.press('KeyE'); // salvage
 await page.waitForTimeout(4000);
 const after = await page.evaluate(() => ({
@@ -96,13 +105,20 @@ const coreDiag = await page.evaluate(() => {
   return { coreNear: g.ctrl.coreNear, row: g.ctrl.row, grounded: g.ctrl.grounded, py: +g.ctrl.py.toFixed(2), mode: g.mode, panel: g.panels.current, hull: +g.state.hull.toFixed(1), fuel: +g.state.fuel.toFixed(1) };
 });
 console.log('core proximity:', JSON.stringify(coreDiag), coreDiag.coreNear ? 'OK' : 'FAIL');
-await page.keyboard.press('KeyE'); // EVA
+await page.keyboard.press('KeyE'); // EVA — begins the Communion
 await page.waitForTimeout(500);
+const riteOn = await page.evaluate(() => window.__game.finale.phase);
+console.log('communion begins:', riteOn, riteOn === 'walk' ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p-corewalk.png' });
 await page.keyboard.down('ArrowRight');
-await page.waitForTimeout(7000);
+// walk until the touch registers (the world is ended at contact, not at the panel)
+await page.waitForFunction(() => window.__game.state.endedWorlds.has('veil3'), { timeout: 15000 });
 await page.keyboard.up('ArrowRight');
-await page.waitForTimeout(600);
+await page.screenshot({ path: OUT + '/p-communion.png' });
+// let the rite play a beat, then skip the white to the epilogue
+await page.waitForTimeout(2500);
+await page.keyboard.press('KeyE');
+await page.waitForTimeout(900);
 const endState = await page.evaluate(() => ({ panel: window.__game.panels.current, ended: [...window.__game.state.endedWorlds] }));
 console.log('ending:', JSON.stringify(endState), endState.panel === 'ending' && endState.ended.includes('veil3') ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p-ending.png' });
@@ -143,11 +159,21 @@ await page.evaluate(() => {
   g.cam.snap(52, 2, 14);
 });
 await page.waitForTimeout(700);
-await page.keyboard.press('KeyE');
-await page.waitForTimeout(600);
+await page.keyboard.press('KeyE');       // assay office
+await page.waitForTimeout(700);
+await page.click('#open-starmap');       // the Sundering Chart
+await page.waitForTimeout(3200); // long settle: SwiftShader frames stretch the ease-in
 await page.screenshot({ path: OUT + '/p-starmap.png' });
-await page.click('button[data-travel="cryos2"]');
-await page.waitForTimeout(2000); // in-place world swap, no reload
+await page.waitForFunction(() => document.querySelector('#starmap-ui.open'), { timeout: 10000 });
+// select CRYOS-2 — retry, because the chart's ease-in can swallow early keys
+for (let i = 0; i < 8; i++) {
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(900);
+  const name = await page.evaluate(() => document.querySelector('.sm-card .sm-name')?.textContent);
+  if (name === 'CRYOS-2') break;
+}
+await page.keyboard.press('KeyE');       // commit transit
+await page.waitForTimeout(4500); // transit flash + in-place world swap, no reload
 const world2 = await page.evaluate(() => ({ active: window.__game.state.activeWorld, mode: window.__game.mode }));
 console.log('travel:', JSON.stringify(world2), world2.active === 'cryos2' && world2.mode === 'play' ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p-cryos-surface.png' });

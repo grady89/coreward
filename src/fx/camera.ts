@@ -50,6 +50,25 @@ export class FollowCam {
     this.camera.lookAt(this.cx, this.cy + (atSurface ? -0.6 : 0), 0);
   }
 
+  /**
+   * The Communion framing: starts as the EVA close-follow, then blends the
+   * frame toward the midpoint of pilot and fragment as the walk crescendo
+   * (t) rises, and pushes in once the touch (touch) takes over. Distance-
+   * driven like everything else in the finale, so backing away recedes.
+   */
+  finaleFollow(dt: number, px: number, py: number, ex: number, ey: number, t: number, touch: number): void {
+    const mix = 0.3 * t + 0.45 * touch;
+    const tx = px + (ex - px) * mix;
+    const ty = py + 0.6 + (ey - py) * (0.25 * t + 0.45 * touch);
+    const tz = 8.5 + t * 1.6 - touch * 3.2;
+    const k = Math.min(1, dt * (2.2 + touch * 1.5));
+    this.cx += (tx - this.cx) * k;
+    this.cy += (ty - this.cy) * k;
+    this.cz += (tz - this.cz) * Math.min(1, dt * 1.6);
+    this.apply(dt);
+    this.camera.lookAt(this.cx, this.cy, 0);
+  }
+
   /** cinematic pose used by the title screen; drift + mouse parallax */
   titlePose(time: number, mouseX: number, mouseY: number): void {
     const ox = Math.sin(time * 0.11) * 1.6 + mouseX * 1.2;
