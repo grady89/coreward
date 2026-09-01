@@ -167,7 +167,7 @@ export class Starmap {
   private streakMat: THREE.LineBasicMaterial | null = null;
 
   // scene handles
-  private sunderCore!: THREE.Mesh;
+  private sunderCore!: THREE.Group;
   private sunderShell!: THREE.Mesh;
   private sunderHalo!: THREE.Group;
   private sunderGlow!: THREE.Sprite;
@@ -305,14 +305,40 @@ export class Starmap {
   }
 
   private buildSundering(): void {
-    this.sunderCore = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.1, 1),
-      new THREE.MeshBasicMaterial({ color: 0xffc98a, toneMapped: false })
+    // a broken star: dark husk chunks drifting around a molten heart, the
+    // light escaping through the cracks between them
+    this.sunderCore = new THREE.Group();
+    const heart = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.74, 1),
+      new THREE.MeshBasicMaterial({ color: 0xfff0d0, toneMapped: false })
     );
+    heart.name = 'heart';
+    this.sunderCore.add(heart);
+    const husk = new THREE.MeshStandardMaterial({
+      color: 0x5a2a18, roughness: 0.85, flatShading: true,
+      emissive: 0xff5a2a, emissiveIntensity: 0.22,
+    });
+    // semi-regular directions with jitter: the husk covers the heart in
+    // pieces, never sealing it — three gaps stay open, one per lost fragment
+    const dirs = [
+      new THREE.Vector3(1, 0.35, 0.2), new THREE.Vector3(-0.8, 0.5, 0.55),
+      new THREE.Vector3(-0.4, -0.9, 0.3), new THREE.Vector3(0.5, -0.4, -0.9),
+      new THREE.Vector3(-0.7, 0.1, -0.75), new THREE.Vector3(0.15, 0.95, -0.5),
+    ];
+    for (const d of dirs) {
+      d.normalize();
+      const chunk = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48 + Math.random() * 0.14, 0), husk);
+      chunk.scale.set(1, 0.65 + Math.random() * 0.25, 0.8 + Math.random() * 0.2);
+      chunk.position.copy(d).multiplyScalar(0.82);
+      chunk.lookAt(0, 0, 0);
+      chunk.userData.dir = d.clone();
+      chunk.userData.phase = Math.random() * Math.PI * 2;
+      this.sunderCore.add(chunk);
+    }
     this.sunderShell = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.5, 1),
       new THREE.MeshBasicMaterial({
-        color: 0xff6a2a, wireframe: true, transparent: true, opacity: 0.4,
+        color: 0xff6a2a, wireframe: true, transparent: true, opacity: 0.28,
         blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
       })
     );
@@ -678,8 +704,18 @@ export class Starmap {
 
     // the wound at the center of the chart
     const pulse = 1 + Math.sin(t * 2.1) * 0.06;
-    this.sunderCore.scale.setScalar(pulse);
     this.sunderCore.rotation.y = t * 0.2;
+    for (const c of this.sunderCore.children) {
+      if (c.name === 'heart') {
+        c.scale.setScalar(pulse);
+        continue;
+      }
+      // husk pieces breathe apart and back — the cracks open and close
+      const d = c.userData.dir as THREE.Vector3;
+      const ph = c.userData.phase as number;
+      c.position.copy(d).multiplyScalar(0.82 + Math.sin(t * 0.7 + ph) * 0.07);
+      c.rotation.z = Math.sin(t * 0.4 + ph) * 0.14;
+    }
     this.sunderShell.rotation.y = -t * 0.13;
     this.sunderShell.rotation.z = t * 0.07;
     this.sunderShell.scale.setScalar(1 + Math.sin(t * 1.4 + 1) * 0.08);
