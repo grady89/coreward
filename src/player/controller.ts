@@ -33,6 +33,8 @@ export interface PodEvents {
   onRuinSighted(): void;
   /** an arrestor absorbed a fall that would otherwise have hurt */
   onArrested(impact: number): void;
+  /** the pod refuses to carry the pilot closer to an unmet core */
+  onCoreBalk(): void;
 }
 
 interface Drilling { x: number; y: number; dir: DrillDir; progress: number; hardness: number; }
@@ -120,6 +122,7 @@ export class PodController {
     }
     st.fuel = Math.max(0, st.fuel - FUEL_IDLE * dt);
     this.dashCd = Math.max(0, this.dashCd - dt);
+    this.coreBalk(dt, input, time);
 
     // ---- integrate + collide ----
     this.vy -= GRAVITY * dt;
@@ -180,6 +183,34 @@ export class PodController {
     this.ev.onDash();
   }
 
+  private balkMsgAt = 0;
+
+  /**
+   * The pod refuses the fragment. Inside the chamber of an unmet core a
+   * repulsion field shoves the pod away from the center, so the machine can
+   * only park at the chamber mouth — the last meters belong to the suit.
+   * This is what guarantees the walk: you cannot land beside the light.
+   */
+  private coreBalk(dt: number, input: Input, time: number): void {
+    if (this.state.endedWorlds.has(ACTIVE.id)) return; // a met core is calm
+    if (this.row <= CORE_ROW - 16) return;             // only the vault's air
+    const dx = this.px - WORLD_W / 2;
+    const R = 9.5;
+    const d = Math.abs(dx);
+    if (d >= R) return;
+    const out = Math.sign(dx) || (this.facing >= 0 ? -1 : 1);
+    // a soft wall that stiffens toward the center — no engine out-pushes it
+    this.vx += out * (1 - d / R) * 260 * dt;
+    // and no dash, gas-fling or dive carries you through it
+    if (out > 0 ? this.vx < -5 : this.vx > 5) this.vx = -out * 5;
+    // tell the player what just happened, the first times they lean on it
+    const leaningIn = out > 0 ? input.left : input.right;
+    if (leaningIn && time - this.balkMsgAt > 5) {
+      this.balkMsgAt = time;
+      this.ev.onCoreBalk();
+    }
+  }
+
   private proximity(): void {
     // close enough to a Lamplighter chamber to see what it is
     if (!this.state.sawRuins) {
@@ -191,15 +222,17 @@ export class PodController {
         }
       }
     }
-    // the core walk: pod parks in the chamber, the rest is on foot
-    this.coreNear = this.grounded && this.row >= CORE_ROW - 1 &&
+    // the core walk: pod parks in the chamber, the rest is on foot. A
+    // settled pod is enough — requiring strict ground contact made the E
+    // prompt flicker away between landing bounces and eat presses.
+    const settled = this.grounded || (Math.abs(this.vy) < 3 && Math.abs(this.vx) < 3);
+    this.coreNear = settled && this.row >= CORE_ROW - 1 &&
       Math.abs(this.px - WORLD_W / 2) < 15 && !this.state.endedWorlds.has(ACTIVE.id);
     // wreck salvage EVA — spotted from a distance, so long as the pod is
     // settled. Landing exactly on top of a wreck should never be the price of
     // admission; walking there is the point.
     this.wreckNear = -1;
     this.wreckDist = 0;
-    const settled = this.grounded || (Math.abs(this.vy) < 3 && Math.abs(this.vx) < 3);
     if (settled && !this.coreNear) {
       let best = Infinity;
       for (let i = 0; i < this.terrain.wrecks.length; i++) {

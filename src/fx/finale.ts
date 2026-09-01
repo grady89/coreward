@@ -40,7 +40,6 @@ export class Finale {
   private touchT = 0;
   private touchDur: number;
   private whiteT = 0;
-  private whiteDur = 6;
   private beatIn = 0;
   private sconces: Sconce[] = [];
   private sconceFlare: THREE.PointLight;
@@ -209,9 +208,9 @@ export class Finale {
         this.igniteText();
       }
     } else if (this.phase === 'white') {
+      // the white holds for as long as the player wants to sit with it —
+      // only E/Esc (skip) moves the rite on to the epilogue
       this.whiteT += dt;
-      // stay in 'white' so the caller sees the handoff; conclude() closes it
-      if (this.whiteT >= this.whiteDur) this.finished = true;
     }
   }
 
@@ -226,13 +225,21 @@ export class Finale {
     }
   }
 
-  /** E/Esc during the cinematic stretch: straight to the epilogue */
+  /**
+   * E/Esc advances one movement at a time: through the touch it jumps to the
+   * white so the text is never skipped past unseen; on the white it hands
+   * over to the epilogue — after a short guard so a held key can't blow
+   * through the page before a single word lands.
+   */
   skip(): void {
-    if (!this.cinematic) return;
-    if (this.whiteEl) this.whiteEl.style.opacity = '1';
-    if (this.phase === 'touch') this.igniteText();
-    this.phase = 'white';
-    this.finished = true;
+    if (this.phase === 'touch') {
+      if (this.whiteEl) this.whiteEl.style.opacity = '1';
+      this.igniteText();
+      this.phase = 'white';
+      this.whiteT = 0;
+      return;
+    }
+    if (this.phase === 'white' && this.whiteT >= 0.6) this.finished = true;
   }
 
   /** the epilogue panel is open — let the white linger under it, then go */
@@ -318,6 +325,5 @@ export class Finale {
     const total = base + lines.length * stagger;
     (el.querySelector('#f-hint') as HTMLElement).style.setProperty('--d', `${(total + 0.6).toFixed(2)}s`);
     el.classList.add('lit');
-    this.whiteDur = this.reducedMotion ? total + 1.2 : total + 2.6;
   }
 }

@@ -115,8 +115,9 @@ await page.keyboard.down('ArrowRight');
 await page.waitForFunction(() => window.__game.state.endedWorlds.has('veil3'), { timeout: 15000 });
 await page.keyboard.up('ArrowRight');
 await page.screenshot({ path: OUT + '/p-communion.png' });
-// let the rite play a beat, then skip the white to the epilogue
-await page.waitForTimeout(2500);
+// the white waits for the player: reach it, sit a beat, then E to go on
+await page.waitForFunction(() => window.__game.finale.phase === 'white', { timeout: 20000 });
+await page.waitForTimeout(1500); // past the held-key guard
 await page.keyboard.press('KeyE');
 await page.waitForTimeout(900);
 const endState = await page.evaluate(() => ({ panel: window.__game.panels.current, ended: [...window.__game.state.endedWorlds] }));

@@ -341,6 +341,11 @@ class Game {
         this.audio.stratum();
         this.saveNow();
       },
+      onCoreBalk: () => {
+        this.hud.toast('THE POD REFUSES — THE LAST METERS ARE WALKED');
+        this.audio.denied();
+        this.cam.addShake(0.12);
+      },
       onNative: (total: number) => {
         const nat = ACTIVE.native;
         this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);

@@ -188,10 +188,16 @@ game's thesis statement, staged in three movements under three laws:
    is restyled to match: a bone-white epilogue, then KEEP DIGGING drops you
    back into the dark.
 
-Supporting grammar: letterbox bars close in when the rite begins; the HUD and
-Dispatch step aside; the O₂ clock stops ("the air is warm — the suit stops
-counting") so the walk is the only mechanic left. E/Esc skips the cinematic
-stretch; R still recalls mid-walk and stands the whole rite down. Reduced
+Supporting grammar: **the pod refuses the fragment** — inside an unmet core's
+chamber a repulsion field shoves the machine away from the center, so it can
+only park at the mouth ("THE POD REFUSES — THE LAST METERS ARE WALKED"). The
+walk cannot be skipped by clever landing; the sconce procession is guaranteed.
+Letterbox bars close in when the rite begins; the HUD and Dispatch step aside;
+the O₂ clock stops ("the air is warm — the suit stops counting") so the walk
+is the only mechanic left. The white page **waits for the player** — E/Esc
+advances one movement at a time (through the touch it jumps to the text, never
+past it), so the words are read at the reader's pace, not a timer's. R still
+recalls mid-walk and stands the whole rite down. Reduced
 motion collapses transforms and shortens the white to a quiet fade. All
 procedural — no assets; per-world identity comes free from `ACTIVE.core`,
 `ACTIVE.sky.horizon` and `ACTIVE.ending`. The Kindled (§8g) are deliberately
