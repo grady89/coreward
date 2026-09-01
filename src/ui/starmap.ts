@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLDS, WorldDef } from '../world/worlds';
+import { WORLDS, HUSK, WorldDef } from '../world/worlds';
 import { GameState } from '../game/state';
 import { AudioEngine } from '../audio/audio';
 import { TILE_M } from '../config';
@@ -47,6 +47,8 @@ const SITE_POSE: Record<string, { pos: [number, number, number]; size: number; s
   veil3: { pos: [-8.6, 0.4, 4.6], size: 2.0, spin: 0.05, tilt: 0.18 },
   cryos2: { pos: [5.2, 1.7, 13.0], size: 1.55, spin: 0.07, tilt: -0.3 },
   maelis6: { pos: [16.5, -0.8, -4.5], size: 2.4, spin: 0.04, tilt: 0.12 },
+  // the husk hangs off-plane, away from the wreck — no arc reaches it
+  site297: { pos: [-15.5, 2.6, -9.5], size: 1.7, spin: 0.02, tilt: 0.05 },
 };
 
 function css(hex: number): string { return '#' + hex.toString(16).padStart(6, '0'); }
@@ -234,7 +236,7 @@ export class Starmap {
       this.veilTo('#05070f', 0, 700);
     });
 
-    this.selected = Math.max(0, WORLDS.findIndex(w => w.id === ctx.state.activeWorld));
+    this.selected = Math.max(0, this.sites.findIndex(s => s.current));
     addEventListener('pointermove', this.onMove);
     addEventListener('pointerdown', this.onDown);
     document.body.classList.add('sm-open'); // parks the game HUD
@@ -369,7 +371,10 @@ export class Starmap {
 
   private buildSites(): void {
     const st = this.ctx.state;
-    WORLDS.forEach((def, i) => {
+    // SITE 297 resolves on the chart once two cores are met — a signal with
+    // no fragment arc, which is exactly what is wrong with it
+    const defs = st.endedWorlds.size >= 2 ? [...WORLDS, HUSK] : [...WORLDS];
+    defs.forEach((def, i) => {
       const pose = SITE_POSE[def.id] ?? {
         pos: [Math.cos(i * 2.1) * (10 + i * 4), (i % 2) * 1.4 - 0.6, Math.sin(i * 2.1) * (10 + i * 4)] as [number, number, number],
         size: 2, spin: 0.05, tilt: 0.15,
@@ -377,7 +382,7 @@ export class Starmap {
       const pos = new THREE.Vector3(...pose.pos);
       const unlocked = def.unlockAfter === null || st.endedWorlds.has(def.unlockAfter);
       const current = def.id === st.activeWorld;
-      const done = st.endedWorlds.has(def.id);
+      const done = !def.husk && st.endedWorlds.has(def.id);
 
       // orbit ring
       const ring = circleLine(Math.hypot(pos.x, pos.z), 128, 0x3a4260, unlocked ? 0.3 : 0.12);
@@ -429,6 +434,17 @@ export class Starmap {
         wire.position.copy(pos);
         this.scene.add(wire);
       }
+      if (def.husk) {
+        // resolved, and wrong: the gray mass wears the same static as an
+        // unresolved signal, because the dish cannot say what it is hearing
+        wireMat = new THREE.MeshBasicMaterial({
+          color: 0x7a5cff, wireframe: true, transparent: true, opacity: 0.1,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        });
+        wire = new THREE.Mesh(new THREE.IcosahedronGeometry(pose.size * 1.06, 1), wireMat);
+        wire.position.copy(pos);
+        this.scene.add(wire);
+      }
       planet.position.copy(pos);
       planet.userData.site = i;
       this.scene.add(planet);
@@ -436,7 +452,7 @@ export class Starmap {
       // fragment trajectory arc: the path this piece of the star took
       let curve: THREE.QuadraticBezierCurve3 | null = null;
       let sparks: THREE.Points | null = null;
-      if (unlocked) {
+      if (unlocked && !def.husk) {
         const dir = pos.clone().normalize();
         const mid = pos.clone().multiplyScalar(0.5).add(new THREE.Vector3(0, 2.4 + pos.length() * 0.09, 0));
         curve = new THREE.QuadraticBezierCurve3(dir.multiplyScalar(1.9), mid, pos.clone());
@@ -488,9 +504,10 @@ export class Starmap {
       const tag = document.createElement('div');
       tag.className = 'sm-tag';
       const status = current ? ['YOU ARE HERE', 'var(--teal)']
-        : done ? ['CORE REACHED', 'var(--amber)']
-          : unlocked ? ['CHARTED', 'var(--ink-dim)']
-            : ['NO SIGNAL', 'var(--ink-dim)'];
+        : def.husk ? ['SIGNAL RESOLVED', 'var(--violet)']
+          : done ? ['CORE REACHED', 'var(--amber)']
+            : unlocked ? ['CHARTED', 'var(--ink-dim)']
+              : ['NO SIGNAL', 'var(--ink-dim)'];
       tag.innerHTML = `<span class="tn">${unlocked ? def.name : '█████-█'}</span><span class="st" style="color:${status[1]}">${status[0]}</span>`;
 
       this.sites.push({
@@ -665,6 +682,20 @@ export class Starmap {
         <div class="row"><span class="r-name">FRAGMENT</span><span class="r-val dim2">NOT TRIANGULATED</span></div>
         <div class="row"><span class="r-name">THE DISH</span><span class="r-val dim2">STILL LISTENING</span></div>
         <button class="btn wide" disabled>NO TRANSIT SOLUTION</button>`;
+      return;
+    }
+    if (d.husk) {
+      const action = s.current
+        ? '<button class="btn wide" disabled>YOU ARE HERE</button>'
+        : '<button class="btn primary wide" id="sm-commit">COMMIT TRANSIT</button>';
+      this.card.innerHTML = `
+        <div class="sm-name">${d.name}</div>
+        <div class="sm-tagline">${d.tagline}</div>
+        <div class="sm-chip dim">SIGNAL RESOLVED</div>
+        <div class="row"><span class="r-name">FRAGMENT</span><span class="r-val dim2">TAKEN</span></div>
+        <div class="row"><span class="r-name">COLONY BEACON</span><span class="r-val dim2">TRANSMITTING</span></div>
+        <div class="row"><span class="r-name">COLONY</span><span class="r-val dim2">—</span></div>
+        ${action}`;
       return;
     }
     const rowBest = d.id === st.activeWorld

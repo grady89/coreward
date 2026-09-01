@@ -18,7 +18,10 @@ export type TriggerKind =
   | 'death'        // value: unused
   | 'stranded'     // value: unused
   | 'veinlight'    // value: veinlight harvested (lifetime)
-  | 'ore';         // value: count, with `ore` field
+  | 'ore'          // value: count, with `ore` field
+  | 'order'        // SITE 297 walked; fires on the next dig-site frame
+  | 'extract'      // a fragment is in the hold
+  | 'seat';        // a fragment has been carried home
 
 export interface NarrativeEvent {
   id: string;
@@ -44,6 +47,9 @@ export interface WorldStats {
   sawRuins: boolean;
   justDied: boolean;
   justStranded: boolean;
+  huskVisited: boolean;
+  carryingNow: boolean;
+  reseatedAny: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +261,39 @@ export const EVENTS: NarrativeEvent[] = [
       'I\'m told they were exhausted. I\'m told that a lot now.',
     ],
   },
+  // ---- ACT IV: the pattern ----
+  {
+    id: 'husk-arrive', world: 'site297', trigger: 'arrive', priority: 4,
+    lines: [
+      'SITE 297. I don\'t have a briefing for this one.',
+      'No extraction schedule, no assay codes. The colony beacon is on. The colony isn\'t.',
+      'Look around. Then come back and tell me I\'m wrong to be afraid of this.',
+    ],
+  },
+  {
+    id: 'extraction-order', trigger: 'order', priority: 4,
+    lines: [
+      'Priority traffic from Cindral. Reading it as written:',
+      'EXTRACTION ORDER 9-1-1. FRAGMENT RECOVERY AUTHORIZED. ✦300,000 PER UNIT ON DELIVERY. ALL DRILLER DEBTS CLEARED AT FIRST DELIVERY.',
+      'That\'s the whole message. They know what\'s down there. They\'ve always known.',
+      'I\'m required to relay offers. I\'m not required to tell you what to do with them.',
+    ],
+  },
+  {
+    id: 'first-extract', trigger: 'extract', priority: 3,
+    lines: [
+      'Your hold reads hot and your world reads… dimmer. From orbit. I can see it from ORBIT.',
+      'Whatever you\'re carrying — the tunnels are waking up around it. Climb.',
+    ],
+  },
+  {
+    id: 'first-seat', trigger: 'seat', priority: 3,
+    lines: [
+      'Telemetry says you went down heavy and came up empty.',
+      'Cindral flagged the delivery as failed. I logged it as: driller declined.',
+      'I\'ve never typed that before. It felt good.',
+    ],
+  },
   {
     id: 'cores-2', trigger: 'cores', value: 2,
     lines: [
@@ -300,6 +339,88 @@ function satisfied(e: NarrativeEvent, s: WorldStats): boolean {
     case 'ruins': return s.sawRuins;
     case 'death': return s.justDied;
     case 'stranded': return s.justStranded;
+    case 'order': return s.huskVisited && s.world !== 'site297';
+    case 'extract': return s.carryingNow;
+    case 'seat': return s.reseatedAny;
     default: return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4 content: the husk readables and the ending pages. Content, not code.
+// ---------------------------------------------------------------------------
+
+export interface HuskReadable { x: number; name: string; lines: string[]; }
+
+/** three stops on SITE 297, walked to on foot, in any order */
+export const HUSK_READABLES: HuskReadable[] = [
+  {
+    x: 19.5, name: 'FUEL DEPOT LEDGER',
+    lines: [
+      'The depot ledger, final page: fuel out, eighty-four units. Fuel in, eighty-four units. Balanced to the drop.',
+      'The last entry stops mid-line. The pen is still in the crease.',
+    ],
+  },
+  {
+    x: 36.2, name: 'HAB DOME LOG',
+    lines: [
+      'A family packed this room in under an hour. Relocation assistance: approved. The stamp is Cindral\'s.',
+      'The crayon drawing on the wall is of a sky with a sun in it.',
+    ],
+  },
+  {
+    x: 47.5, name: 'SURVEY OFFICE',
+    lines: [
+      'The contract on the desk is yours. Not like yours — yours. Same advance, same clauses, word for word.',
+      'CINDRAL ADVANCE · ✦40 · RECOVERABLE AGAINST EARNINGS.',
+      'The signature line is blank, and you catch yourself reaching for it.',
+    ],
+  },
+];
+
+export type EndingKind = 'extract' | 'return' | 'kindle';
+
+export interface EndingPageDef {
+  cls: string;
+  eyebrow: string;
+  title: string;
+  lines: string[];
+  /** the epilogue panel's short inscription */
+  epigraph: string;
+}
+
+export const ENDING_PAGES: Record<EndingKind, EndingPageDef> = {
+  extract: {
+    cls: 'page-dark',
+    eyebrow: 'CINDRAL EXTRACTION · ORDER 9-1-1 · FILLED',
+    title: 'OUT',
+    lines: [
+      'Three fragments, delivered. Three worlds, closed. The colonies get another century of light, and the invoices will call it a rescue.',
+      'Your debts are cleared. Your lease is bought. You are warm, and paid, and free — everything this job ever dangled and never gave.',
+      'The sky over the Dusklight Rig has nothing in it tonight. You are the only one left who knows what used to be there.',
+    ],
+    epigraph: 'You are out. That was always the deal.',
+  },
+  return: {
+    cls: 'page-dawn',
+    eyebrow: 'THE SUNDERING · MADE WHOLE',
+    title: 'DAWN',
+    lines: [
+      'The last fragment settles into its cradle like it never left. The chamber takes a breath. So do you.',
+      'Your hold is empty. Your tank is low. Your debts are still yours, every one — and none of that is the thing you will remember.',
+      'Twelve centuries of amber, and then — for the first time anyone alive has seen it — the sky over VEIL-3 turns gold.',
+    ],
+    epigraph: 'The stats below are unchanged. That is the point.',
+  },
+  kindle: {
+    cls: 'page-pure',
+    eyebrow: 'THE LAMPLIGHTERS’ INSTRUCTIONS · COMPLETE',
+    title: 'KINDLE',
+    lines: [
+      'Three fragments in one cradle, and the marks on the stones tell you the rest. They reach for each other the way they have wanted to for twelve hundred years.',
+      'A star is born small, in the crust of a world, under a rig that came here to dig.',
+      'At the trade post, the contract board is empty. Nobody has to take that job anymore.',
+    ],
+    epigraph: 'The famine is over. So is the need.',
+  },
+};

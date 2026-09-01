@@ -1,7 +1,7 @@
 import { GameState } from '../game/state';
 import { stratumIndex, LOW_FUEL_FRAC, EVA_O2, fmtMoney, CUR_NAME } from '../config';
 import { def } from '../world/tiles';
-import { ACTIVE } from '../world/worlds';
+import { ACTIVE, worldById } from '../world/worlds';
 import { oreIcon } from './icons';
 
 // DOM HUD: bars, depth, money, cargo, prompt, toasts, popups, damage flash.
@@ -186,6 +186,15 @@ export class Hud {
     this.depthEl.textContent = depthM + 'm';
     this.stratumEl.textContent = ACTIVE.strata[stratumIndex(Math.max(0, row))];
 
+    // a fragment in the hold IS the hold
+    if (st.carrying) {
+      this.cargoCount.textContent = '◆ FRAGMENT';
+      this.cargoCount.classList.add('full');
+      const name = worldById(st.carrying)?.coreName ?? 'THE FRAGMENT';
+      const row = `<div class="c-row"><b>${name}</b></div>`;
+      if (this.cargoList.innerHTML !== row) this.cargoList.innerHTML = row;
+      return;
+    }
     const cap = st.cargoCap, n = st.cargoCount;
     this.cargoCount.textContent = `${n} / ${cap}`;
     this.cargoCount.classList.toggle('full', n >= cap);

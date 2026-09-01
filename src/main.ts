@@ -4,9 +4,11 @@ import {
   LOW_FUEL_FRAC, WARP_RATE, SALVAGE_TIME, WRECK_LOGS, SPAWN_X, fmtMoney,
   wreckTierForRow, CHARGE_FUSE, CHARGE_BLAST, CHARGE_SEAL,
   TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE, EVA_O2, CORE_ROW,
+  EXTRACT_OFFER, EXTRACT_HOLD, LANCE_SHOT_COST, LANCE_RANGE,
+  GLYPHS_TO_TRANSLATE, FORGE,
 } from './config';
 import { T, def, rockColor, TILE_DEFS } from './world/tiles';
-import { ACTIVE, setActiveWorld, WORLDS } from './world/worlds';
+import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
 import { Terrain } from './world/terrain';
 import { ChunkField, lavaMat } from './world/chunks';
 import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock } from './world/backdrop';
@@ -27,7 +29,9 @@ import { Finale } from './fx/finale';
 import { Hud } from './ui/hud';
 import { Comms } from './ui/comms';
 import { SurveyMap } from './ui/map';
-import { pick as pickNarrative, WorldStats } from './game/narrative';
+import {
+  pick as pickNarrative, WorldStats, HUSK_READABLES, ENDING_PAGES, EndingKind,
+} from './game/narrative';
 import { Panels, createTitle } from './ui/panels';
 import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
@@ -80,6 +84,17 @@ class Game {
   private saveTimer = 0;
   private dmgFxAt = -9;
   private title: { hide(): void } | null = null;
+  private eHeld = false;
+  private coreHold = 0;
+  private coreActKind: 'extract' | 'seat' | 'offer' | null = null;
+  private faunaDead = false;
+  private veinKillAcc = 0;
+  private quakeAcc = 6;
+  private pendingEnding: EndingKind | null = null;
+  private endingSnapshot: {
+    money: number; carrying: string | null;
+    extracted: string[]; delivered: string[]; reseated: string[]; offered: string[];
+  } | null = null;
   private clock = new THREE.Clock();
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private screen = { sx: 0, sy: 0 };
@@ -97,7 +112,7 @@ class Game {
 
     // load the save FIRST so the active world shapes the whole scene
     const hadSave = this.state.load();
-    setActiveWorld(this.state.activeWorld);
+    setActiveWorld(this.state.activeWorld, this.state.extracted.has(this.state.activeWorld));
 
     this.ui = document.getElementById('ui')!;
     const ui = this.ui;
@@ -128,6 +143,13 @@ class Game {
         this.hud.toast('THE CREW HAULS YOU HOME — WELL EARNED', 'stratum');
         this.audio.stratum();
         this.saveNow();
+      },
+      onDeliverFragment: () => this.deliverFragment(),
+      onEndingContinue: () => this.endingContinue(),
+      onNewExpedition: () => {
+        this.pendingEnding = null;
+        this.endingSnapshot = null;
+        this.startNew();
       },
       onQuitToTitle: () => this.quitToTitle(),
       onOpenStarmap: () => this.openStarmap(),
@@ -213,7 +235,9 @@ class Game {
   /** (re)builds the entire scene for the active world — no page reload */
   private setupWorld(): void {
     this.finale?.dispose(); // a prior world's rite must not leave DOM behind
-    setActiveWorld(this.state.activeWorld);
+    // an extracted world arrives with its color spent and its fauna gone
+    setActiveWorld(this.state.activeWorld, this.state.extracted.has(this.state.activeWorld));
+    this.faunaDead = !!ACTIVE.husk || this.state.extracted.has(this.state.activeWorld);
     this.hud.applyWorld();
     this.scene = new THREE.Scene();
     const ws = this.state.worlds[this.state.activeWorld];
@@ -242,15 +266,17 @@ class Game {
     createSky(this.scene);
     createSurface(this.scene);
     this.ember = createEmber(this.scene);
+    this.ember.taken = this.state.extracted.has(ACTIVE.id);
     this.finale = new Finale(this.scene, this.ember, this.audio, this.ui,
-      this.reducedMotion, this.state.endedWorlds.has(ACTIVE.id));
+      this.reducedMotion,
+      this.state.endedWorlds.has(ACTIVE.id) && !this.state.extracted.has(ACTIVE.id));
     if (this.state.endedWorlds.has(ACTIVE.id)) this.ember.excite = 0.25;
     this.atmosphere = new Atmosphere(this.scene);
     this.particles = new Particles(this.scene);
     this.pod = new Pod(this.scene);
     this.pilot = new Pilot(this.scene, this.terrain);
     this.threats = new ThreatField(this.scene, this.terrain);
-    this.threats.level = this.settings.threats;
+    this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
     this.arrestors = new ArrestorField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
   }
@@ -480,7 +506,7 @@ class Game {
     if (target >= 0) {
       const w = this.terrain.wrecks[target];
       side = Math.sign(w.x + 0.5 - this.ctrl.px) || 1;
-    } else if (this.ctrl.coreNear) {
+    } else if (this.ctrl.coreNear || this.ctrl.coreRevisit) {
       side = Math.sign(this.ember.x - this.ctrl.px) || 1;
     }
     // step clear of the boarding radius, or E would put you straight back in
@@ -508,8 +534,10 @@ class Game {
     this.pilot.hide();
     this.hud.setEva(null);
     this.salvaging = null;
-    // boarding the pod mid-walk stands the rite down and restores the HUD
-    if (this.finale.active && !this.finale.finished) {
+    // boarding the pod mid-walk stands the rite down and restores the HUD.
+    // Only the Communion can be abandoned this way — an unmaking in progress
+    // owns the screen until it is done with it.
+    if (this.finale.isCommunion && !this.finale.finished) {
       this.finale.abort();
       this.hud.show();
     }
@@ -564,7 +592,11 @@ class Game {
         e.preventDefault();
         this.keys.add(map[e.code]);
       }
-      if (e.code === 'KeyE') this.onInteract();
+      if (e.code === 'KeyE') {
+        if (!e.repeat) this.onInteract();
+        this.eHeld = true;
+      }
+      if (e.code === 'KeyX') this.fireLance();
       if (e.code === 'Escape') this.onEscape();
       if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.mode === 'play' && !this.panels.isOpen) {
         this.ctrl.dash();
@@ -595,10 +627,12 @@ class Game {
       }
       if (e.code === 'KeyR' && this.mode === 'eva' && !this.salvaging && !this.panels.isOpen
         && !this.finale.cinematic) {
-        if (this.finale.active) {
+        if (this.finale.isCommunion) {
           this.finale.abort();
           this.hud.show();
         }
+        this.coreActKind = null;
+        this.coreHold = 0;
         this.exitEva();
         this.hud.toast('RECALLED TO THE POD');
       }
@@ -608,12 +642,13 @@ class Game {
     });
     addEventListener('keyup', e => {
       if (map[e.code] !== undefined) this.keys.delete(map[e.code]);
+      if (e.code === 'KeyE') this.eHeld = false;
     });
     addEventListener('pointermove', e => {
       this.mouseX = (e.clientX / innerWidth - 0.5) * 2;
       this.mouseY = -(e.clientY / innerHeight - 0.5) * 2;
     });
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('blur', () => { this.keys.clear(); this.eHeld = false; });
   }
 
   /** push preference changes into the systems that read them */
@@ -622,7 +657,7 @@ class Game {
     this.audio.setVolumes(s.master, s.sfx, s.music);
     this.cam.reducedMotion = this.reducedMotion || !s.shake;
     this.hud.setFps(s.showFps ? 0 : null);
-    if (this.threats) this.threats.level = s.threats;
+    if (this.threats) this.threats.level = this.faunaDead ? 'off' : s.threats;
     saveSettings(s);
   }
 
@@ -768,6 +803,23 @@ class Game {
     }
     if (this.mode === 'eva') {
       if (this.salvaging) return;
+      // at a cradle the E key is a HOLD, managed per-frame — not a press
+      if (this.coreActKind) return;
+      // SITE 297: the readables are the whole errand
+      if (ACTIVE.husk) {
+        const i = HUSK_READABLES.findIndex((r, idx) =>
+          !this.state.huskRead.has(idx) && Math.abs(this.pilot.px - r.x) < 1.2);
+        if (i >= 0) {
+          this.state.huskRead.add(i);
+          this.comms.say(HUSK_READABLES[i].lines);
+          this.audio.glyph();
+          if (this.state.huskRead.size >= HUSK_READABLES.length && !this.state.huskVisited) {
+            this.state.huskVisited = true;
+          }
+          this.saveNow();
+          return;
+        }
+      }
       // salvage first — the pilot often steps out right on top of the wreck
       const idx = this.wreckAtPilot();
       if (idx >= 0) {
@@ -782,7 +834,23 @@ class Game {
       return;
     }
     if (this.mode !== 'play') return;
-    if (this.ctrl.coreNear || this.ctrl.wreckNear >= 0) {
+    // SITE 297: the buildings are offline, the dish still points at the sky,
+    // and anywhere you can land you can walk
+    if (ACTIVE.husk) {
+      if (this.ctrl.dock) {
+        if (this.ctrl.dock.key === 'assay') {
+          this.audio.click();
+          this.openStarmap();
+        } else {
+          this.hud.toast('OFFLINE — NO ONE IS HOME');
+          this.audio.denied();
+        }
+        return;
+      }
+      if (this.ctrl.grounded) this.enterEva();
+      return;
+    }
+    if (this.ctrl.coreNear || this.ctrl.coreRevisit || this.ctrl.wreckNear >= 0) {
       this.enterEva();
       return;
     }
@@ -902,6 +970,13 @@ class Game {
       this.playFrame(dt);
     }
 
+    // the unmaking and the ending pages run outside EVA, so they are driven
+    // here — and they own the screen until the player says otherwise
+    if (this.finale.phase === 'unmake' || this.finale.phase === 'page') {
+      this.finale.advance(dt, this.pilot.px, this.pilot.py);
+      if (this.finale.finished) this.finishCinematic();
+    }
+
     if (this.settings.showFps) {
       this.fpsFrames++;
       if (this.time - this.fpsAt >= 1) {
@@ -945,15 +1020,27 @@ class Game {
       }
     }
 
-    // contextual prompt: dock < wreck < core walk
+    // contextual prompt: dock < wreck < core walk < the second pilgrimage
     if (!paused) {
       if (this.ctrl.coreNear) {
         this.hud.setPrompt(`<span class="key">E</span>EVA — WALK TO ${ACTIVE.coreName}`);
+      } else if (this.ctrl.coreRevisit) {
+        const st = this.state;
+        const label = st.carrying === ACTIVE.id
+          ? `EVA — CARRY ${ACTIVE.coreName} HOME`
+          : st.carrying && ACTIVE.id === 'veil3'
+            ? 'EVA — THE ASSEMBLY'
+            : `EVA — ORDER 9-1-1 · ${ACTIVE.coreName}`;
+        this.hud.setPrompt(`<span class="key">E</span>${label}`);
       } else if (this.ctrl.wreckNear >= 0) {
         const m = Math.round(this.ctrl.wreckDist * TILE_M);
         this.hud.setPrompt(`<span class="key">E</span>EVA — WRECKED POD · ${m}m`);
       } else if (this.ctrl.dock) {
-        this.hud.setPrompt(`<span class="key">E</span>${this.ctrl.dock.label}`);
+        this.hud.setPrompt(ACTIVE.husk
+          ? `<span class="key">E</span>${this.ctrl.dock.key === 'assay' ? 'THE SUNDERING CHART' : this.ctrl.dock.label + ' — OFFLINE'}`
+          : `<span class="key">E</span>${this.ctrl.dock.label}`);
+      } else if (ACTIVE.husk && this.ctrl.grounded) {
+        this.hud.setPrompt(`<span class="key">E</span>EVA — WALK THE COLONY`);
       } else {
         this.hud.setPrompt(null);
       }
@@ -975,7 +1062,8 @@ class Game {
       this.updateCharges(dt);
       this.threats.update({
         podX: this.ctrl.px, podY: this.ctrl.py,
-        lampOn: this.lampOn, thrust: this.ctrl.thrust, dt, time: this.time,
+        lampOn: this.lampOn, thrust: this.ctrl.thrust,
+        carrying: !!this.state.carrying, dt, time: this.time,
         hurt: (a, c) => this.ctrl.hurtFromThreat(a, c),
         drain: a => { st.fuel = Math.max(0, st.fuel - a); },
         onAlert: () => {
@@ -1020,6 +1108,45 @@ class Game {
       this.cam.addShake(0.05);
     }
 
+    // the climb: a carried fragment kills the veinlight around it, shakes
+    // rubble into the tunnels below, and drains the world's color behind you
+    if (!paused && dt > 0 && st.carrying) {
+      this.cam.addShake(0.012);
+      this.veinKillAcc += dt;
+      if (this.veinKillAcc > 0.5) {
+        this.veinKillAcc = 0;
+        const cx = Math.floor(this.ctrl.px), cy = Math.floor(-this.ctrl.py);
+        for (let dy = -6; dy <= 6; dy++) {
+          for (let dx = -6; dx <= 6; dx++) {
+            if (dx * dx + dy * dy > 36) continue;
+            const tx = cx + dx, ty = cy + dy;
+            if (tx < 0 || tx >= this.terrain.w || ty < 1 || ty >= this.terrain.h) continue;
+            if (this.terrain.get(tx, ty) === T.FUNGUS) this.terrain.carve(tx, ty);
+          }
+        }
+      }
+      this.quakeAcc -= dt;
+      if (this.quakeAcc <= 0) {
+        this.quakeAcc = 5 + Math.random() * 3;
+        this.cam.addShake(0.25);
+        this.audio.rumbleTick();
+        // shed rubble into open tunnels BELOW the pod — never ahead of the climb
+        const cy = Math.floor(-this.ctrl.py);
+        for (let n = 0; n < 3; n++) {
+          const tx = Math.floor(this.ctrl.px) + Math.floor((Math.random() - 0.5) * 16);
+          const ty = cy + 6 + Math.floor(Math.random() * 12);
+          if (tx < 1 || tx >= this.terrain.w - 1 || ty >= this.terrain.h) continue;
+          if (this.terrain.get(tx, ty) === T.AIR) {
+            this.terrain.data[this.terrain.idx(tx, ty)] = T.RUBBLE;
+            this.terrain.dug.delete(this.terrain.idx(tx, ty));
+            this.chunks.markDirty(tx, ty);
+          }
+        }
+      }
+    }
+    this.atmosphere.drain = st.carrying
+      ? Math.max(0, 1 - Math.max(0, this.ctrl.row) / CORE_ROW) * 0.7
+      : 0;
     this.atmosphere.update(this.ctrl.row - (this.ctrl.py > -2 ? 6 : 0));
 
     const dr = this.ctrl.drilling;
@@ -1030,6 +1157,7 @@ class Game {
       row: this.ctrl.row,
       lowFuel: !paused && st.fuel / st.maxFuel < LOW_FUEL_FRAC && st.fuel > 0,
       menace: this.threats.menace,
+      dead: !!ACTIVE.husk, // SITE 297 is the first world without music
     });
 
     this.hud.update(st, this.ctrl.depthM, this.ctrl.row, this.ctrl.heatFrac, Math.max(dt, 0.001));
@@ -1061,11 +1189,16 @@ class Game {
       sawRuins: st.sawRuins,
       justDied: this.flagDied,
       justStranded: this.flagStranded,
+      huskVisited: st.huskVisited,
+      carryingNow: st.carrying !== null,
+      reseatedAny: st.reseated.size > 0,
     };
     const e = pickNarrative(stats, st.firedEvents);
     if (e) {
       st.firedEvents.add(e.id);
       this.comms.say(e.lines);
+      // the order, once heard, is posted at the trade post forever
+      if (e.id === 'extraction-order') st.extractOrderHeard = true;
       this.state.persist();
     }
     this.flagDied = false;
@@ -1105,10 +1238,262 @@ class Game {
     });
   }
 
+  // ---------- Phase 4: the cradle, the climb, the endings ----------
+
+  /** an unmaking or an ending page has run its course */
+  private finishCinematic(): void {
+    const wasPage = this.finale.phase === 'page';
+    this.finale.conclude();
+    if (this.mode === 'eva') this.exitEva();
+    this.hud.show();
+    if (wasPage && this.pendingEnding) {
+      this.panels.open('finale', { ending: this.pendingEnding });
+      return;
+    }
+    // extraction: the world is dimmer, the hold is heavy, the way out is up
+    this.hud.toast(`${ACTIVE.coreName} IS IN YOUR HOLD — CLIMB`, 'stratum');
+    this.saveNow();
+  }
+
+  /** the pilot is standing at the fragment's seat on a met world */
+  private atCradle(): boolean {
+    if (!this.state.endedWorlds.has(ACTIVE.id) || ACTIVE.husk) return false;
+    return Math.abs(this.pilot.px - this.ember.x) < 3.6
+      && Math.abs(this.pilot.py - this.ember.y) < 5;
+  }
+
+  /** what holding E at this cradle would do, or null */
+  private cradleAction(): { kind: 'extract' | 'seat' | 'offer'; label: string } | null {
+    const st = this.state;
+    if (st.carrying === ACTIVE.id && st.extracted.has(ACTIVE.id)) {
+      return { kind: 'seat', label: `SEAT ${ACTIVE.coreName}` };
+    }
+    // the assembly: foreign fragments laid in VEIL-3's cradle
+    if (st.carrying && st.carrying !== ACTIVE.id && ACTIVE.id === 'veil3' && !st.extracted.has('veil3')) {
+      const w = worldById(st.carrying);
+      return { kind: 'offer', label: `LAY ${w?.coreName ?? 'THE FRAGMENT'} IN THE CRADLE` };
+    }
+    if (!st.carrying && st.extractOrderHeard && !st.extracted.has(ACTIVE.id)) {
+      return { kind: 'extract', label: `EXTRACT ${ACTIVE.coreName}` };
+    }
+    return null;
+  }
+
+  /** hold-to-commit at a cradle: release aborts, no penalty */
+  private cradleFrame(dt: number): void {
+    const act = this.cradleAction();
+    if (!act) {
+      this.coreActKind = null;
+      this.coreHold = 0;
+      this.hud.setPrompt(`<span class="key">R</span>BACK TO THE POD`);
+      return;
+    }
+    if (this.eHeld) {
+      this.coreActKind = act.kind;
+      this.coreHold += dt;
+      this.ember.excite = Math.min(1, 0.25 + this.coreHold / EXTRACT_HOLD);
+      if (this.coreHold >= EXTRACT_HOLD) {
+        this.coreHold = 0;
+        this.coreActKind = null;
+        this.commitCradle(act.kind);
+        return;
+      }
+    } else {
+      this.coreActKind = null;
+      this.coreHold = Math.max(0, this.coreHold - dt * 2);
+      this.ember.excite = 0.25;
+    }
+    const pct = Math.round((this.coreHold / EXTRACT_HOLD) * 100);
+    this.hud.setPrompt(
+      `<span class="key">HOLD E</span>${act.label}` +
+      `<span class="hold-bar"><span style="width:${pct}%"></span></span>`
+    );
+  }
+
+  private commitCradle(kind: 'extract' | 'seat' | 'offer'): void {
+    const st = this.state;
+    this.snapshotFork();
+    if (kind === 'extract') {
+      st.carrying = ACTIVE.id;
+      st.extracted.add(ACTIVE.id);
+      st.cargo.clear(); // the fragment IS the hold
+      this.finale.beginUnmake();
+      this.hud.hide();
+      this.comms.clear();
+      this.saveNow();
+      return;
+    }
+    if (kind === 'seat') {
+      st.carrying = null;
+      st.extracted.delete(ACTIVE.id);
+      st.reseated.add(ACTIVE.id);
+      this.finale.seatRelight();
+      this.audio.finaleTouch();
+      this.hud.toast(`${ACTIVE.coreName} IS HOME`, 'stratum');
+      // RETURN is the culmination, not a single change of heart: every core
+      // met, every fragment back in its own cradle, none sold to Cindral.
+      const allMet = WORLDS.every(w => st.endedWorlds.has(w.id));
+      const allHome = WORLDS.every(w => !st.extracted.has(w.id) && !st.delivered.has(w.id));
+      if (allMet && allHome && st.reseated.size > 0) this.triggerEnding('return');
+      this.saveNow();
+      return;
+    }
+    // offer: a foreign fragment laid in VEIL-3's cradle
+    const carried = st.carrying!;
+    st.offered.add(carried);
+    st.carrying = null;
+    this.audio.finaleTouch();
+    this.finale.seatRelight();
+    const need = WORLDS.filter(w => w.id !== 'veil3').map(w => w.id);
+    const haveAll = need.every(id => st.offered.has(id));
+    if (haveAll && this.kindleReady()) {
+      this.triggerEnding('kindle');
+    } else {
+      const left = need.filter(id => !st.offered.has(id)).length;
+      this.hud.toast(left > 0
+        ? `LAID IN THE CRADLE — ${left} FRAGMENT${left === 1 ? '' : 'S'} STILL OUT THERE`
+        : 'LAID IN THE CRADLE — THE MARKS ARE NOT ALL READ');
+    }
+    this.saveNow();
+  }
+
+  /** the KINDLE gate: every glyph, every log, the full forge */
+  private kindleReady(): boolean {
+    const st = this.state;
+    return st.glyphs >= GLYPHS_TO_TRANSLATE
+      && st.foundLogs.size >= WRECK_LOGS.length
+      && FORGE.every(f => st.emberTech[f.key]);
+  }
+
+  /** sell the fragment in the hold to Cindral — the third one ends the game */
+  private deliverFragment(): void {
+    const st = this.state;
+    if (!st.carrying) return;
+    this.snapshotFork();
+    const id = st.carrying;
+    st.carrying = null;
+    st.delivered.add(id);
+    st.money += EXTRACT_OFFER;
+    st.totalEarned += EXTRACT_OFFER;
+    this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+    this.hud.popup('+' + fmtMoney(EXTRACT_OFFER), '#ff9a3c', this.screen.sx, this.screen.sy);
+    this.audio.sell(8);
+    this.hud.toast('DELIVERED — DEBTS CLEARED', 'stratum');
+    this.saveNow();
+    if (st.delivered.size >= WORLDS.length) this.triggerEnding('extract');
+  }
+
+  /**
+   * Photograph the fork BEFORE a fragment action mutates it. The rewind is
+   * only meaningful if it restores the moment the player was still choosing,
+   * so this must be called first thing in every act that could end the game.
+   */
+  private snapshotFork(): void {
+    const st = this.state;
+    this.endingSnapshot = {
+      money: st.money, carrying: st.carrying,
+      extracted: [...st.extracted], delivered: [...st.delivered],
+      reseated: [...st.reseated], offered: [...st.offered],
+    };
+  }
+
+  /** an ending fires: play its page over the fork already photographed */
+  private triggerEnding(kind: EndingKind): void {
+    this.pendingEnding = kind;
+    if (!this.endingSnapshot) this.snapshotFork();
+    GameState.markEnding(kind);
+    this.hud.hide();
+    this.hud.setPrompt(null);
+    this.comms.clear();
+    this.audio.finaleBed(0);
+    this.audio.ending();
+    const page = ENDING_PAGES[kind];
+    this.finale.beginPage({
+      cls: page.cls, eyebrow: page.eyebrow, title: page.title, lines: page.lines,
+    });
+    if (this.mode === 'eva') { this.pilot.hide(); this.mode = 'play'; }
+    this.saveNow();
+  }
+
+  /**
+   * CONTINUE after an ending: rewind to the moment before the choice, so one
+   * save can stand at the fork and walk every road. The emblem is already
+   * stamped outside the save and stays won.
+   */
+  private endingContinue(): void {
+    const snap = this.endingSnapshot;
+    const st = this.state;
+    if (snap) {
+      st.money = snap.money;
+      st.carrying = snap.carrying;
+      st.extracted = new Set(snap.extracted);
+      st.delivered = new Set(snap.delivered);
+      st.reseated = new Set(snap.reseated);
+      st.offered = new Set(snap.offered);
+    }
+    this.pendingEnding = null;
+    this.endingSnapshot = null;
+    this.setupWorld();
+    this.ctrl.respawnAtSurface();
+    this.cam.snap(this.ctrl.px, 2, 15.5);
+    this.hud.show();
+    this.mode = 'play';
+    this.hud.toast('THE MOMENT BEFORE — THE CHOICE IS STILL YOURS', 'stratum');
+    this.saveNow();
+  }
+
+  /** X — the Lumen Lance: the only true weapon, and it fires money */
+  private fireLance(): void {
+    if (this.mode !== 'play' || this.panels.isOpen) return;
+    const st = this.state;
+    if (!st.emberTech.lance) return;
+    if (st.money < LANCE_SHOT_COST) {
+      this.hud.toast('NO LUMENS — THE LANCE IS EMPTY');
+      this.audio.denied();
+      return;
+    }
+    st.money -= LANCE_SHOT_COST;
+    const dir = this.ctrl.facing;
+    this.threats.lance(this.ctrl.px, this.ctrl.py, dir, LANCE_RANGE);
+    this.audio.lance();
+    this.cam.addShake(0.2);
+    for (let i = 1; i < LANCE_RANGE; i += 1.5) {
+      this.particles.oreBurst(this.ctrl.px + dir * i, this.ctrl.py, 0xfff0c0);
+    }
+    this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+    this.hud.popup('-' + fmtMoney(LANCE_SHOT_COST), '#ffe08a', this.screen.sx, this.screen.sy);
+  }
+
+  /** SITE 297: point the pilot at whatever they have not read yet */
+  private huskPrompt(): void {
+    const st = this.state;
+    const here = HUSK_READABLES.findIndex((r, i) =>
+      !st.huskRead.has(i) && Math.abs(this.pilot.px - r.x) < 1.2);
+    if (here >= 0) {
+      this.hud.setPrompt(`<span class="key">E</span>${HUSK_READABLES[here].name}`);
+      return;
+    }
+    let best = -1, bestD = Infinity;
+    HUSK_READABLES.forEach((r, i) => {
+      if (st.huskRead.has(i)) return;
+      const d = Math.abs(this.pilot.px - r.x);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    if (best >= 0) {
+      const arrow = HUSK_READABLES[best].x < this.pilot.px ? '←' : '→';
+      this.hud.setPrompt(`<span class="key">${arrow}</span>${HUSK_READABLES[best].name} · ${Math.round(bestD * TILE_M)}m`);
+    } else {
+      const atPod = Math.abs(this.pilot.px - this.ctrl.px) < 0.85;
+      this.hud.setPrompt(atPod
+        ? `<span class="key">E</span>BOARD POD`
+        : `<span class="key">R</span>BACK TO THE POD`);
+    }
+  }
+
   private evaFrame(dt: number): void {
     const paused = this.panels.isOpen;
     const fin = this.finale;
-    const rite = fin.active;
+    const rite = fin.isCommunion;
 
     if (!paused && dt > 0) {
       if (rite) {
@@ -1136,6 +1521,8 @@ class Game {
           return;
         }
         this.hud.setPrompt(null);
+      } else if (this.coreActKind || this.atCradle()) {
+        this.cradleFrame(dt);
       } else if (this.salvaging) {
         this.salvaging.t += dt;
         if (Math.random() < 0.3) {
@@ -1154,6 +1541,9 @@ class Game {
         this.pilot.update(dt, this.input());
       }
 
+      // SITE 297 has no clock: there is nothing here to run out of but time
+      if (ACTIVE.husk) this.pilot.o2 = EVA_O2;
+
       // oxygen out: blackout, wake in the pod
       if (!rite && this.pilot.o2 <= 0) {
         this.exitEva();
@@ -1163,8 +1553,12 @@ class Game {
       }
 
       // contextual prompt
-      if (rite || this.salvaging) {
+      if (rite || this.salvaging || this.coreActKind) {
         // handled above / silent while working
+      } else if (ACTIVE.husk) {
+        this.huskPrompt();
+      } else if (this.atCradle()) {
+        // handled by cradleFrame
       } else if (this.wreckAtPilot() >= 0) {
         this.hud.setPrompt(`<span class="key">E</span>SALVAGE`);
       } else {
@@ -1186,7 +1580,7 @@ class Game {
       }
     }
 
-    this.hud.setEva(rite ? null : this.pilot.o2);
+    this.hud.setEva(rite || ACTIVE.husk ? null : this.pilot.o2);
     this.pod.update(dt, { vx: 0, thrust: 0, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: this.ctrl.row, time: this.time });
     if (rite) {
       this.cam.finaleFollow(dt, this.pilot.px, this.pilot.py,

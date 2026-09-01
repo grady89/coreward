@@ -81,6 +81,13 @@ export class Terrain {
   idx(x: number, y: number): number { return y * this.w + x; }
 
   generate(): void {
+    // SITE 297: solid slag to the mantle. No caves, no ore, no fluids, no
+    // wrecks, no ruins, no chamber. The drill has nothing to say here.
+    if (ACTIVE.husk) {
+      this.data.fill(T.VOIDROCK);
+      return;
+    }
+
     const r = rng(this.seed);
     const caveN = new Noise2(this.seed ^ 0x9e3779b9);
     const lavaN = new Noise2(this.seed ^ 0x51ed270b);

@@ -49,8 +49,14 @@ await page.evaluate(() => {
 await page.waitForTimeout(4500);
 const offer1 = await page.evaluate(() => window.__game.panels.current);
 await page.click('#stay');
-await page.waitForTimeout(14000);
-const offer2 = await page.evaluate(() => window.__game.panels.current);
+// the re-offer is on a 6s GAME-time timer, and game time advances at roughly
+// half wall-clock under SwiftShader — poll for it instead of guessing a wait
+let offer2 = null;
+for (let i = 0; i < 60; i++) {
+  await page.waitForTimeout(500);
+  offer2 = await page.evaluate(() => window.__game.panels.current);
+  if (offer2 === 'rescue') break;
+}
 console.log('tow re-offer after declining:', offer1, '->', offer2, offer1 === 'rescue' && offer2 === 'rescue' ? 'OK' : 'FAIL');
 
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');

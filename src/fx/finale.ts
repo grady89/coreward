@@ -20,7 +20,16 @@ const WALK_FAR = 13;                // tiles: where the crescendo begins
 const TOUCH_AT = 3.4;               // tiles: contact (matches main's check)
 const MOTES = 110;
 
-export type FinalePhase = 'idle' | 'walk' | 'touch' | 'white' | 'done';
+export type FinalePhase = 'idle' | 'walk' | 'touch' | 'white' | 'unmake' | 'page' | 'done';
+
+/** an ending's full-screen typography page */
+export interface EndingPage {
+  /** overlay class: 'page-dark' | 'page-dawn' | 'page-pure' */
+  cls: string;
+  eyebrow: string;
+  title: string;
+  lines: string[];
+}
 
 interface Sconce {
   x: number;
@@ -40,6 +49,8 @@ export class Finale {
   private touchT = 0;
   private touchDur: number;
   private whiteT = 0;
+  private unmakeT = 0;
+  private pageT = 0;
   private beatIn = 0;
   private sconces: Sconce[] = [];
   private sconceFlare: THREE.PointLight;
@@ -110,8 +121,19 @@ export class Finale {
   }
 
   get active(): boolean { return this.phase !== 'idle' && this.phase !== 'done'; }
+  /**
+   * The Communion proper — the first meeting with a fragment. EVA owns these
+   * phases; the unmaking and the ending pages are driven from the main frame
+   * instead, because they outlive the walk that started them.
+   */
+  get isCommunion(): boolean {
+    return this.phase === 'walk' || this.phase === 'touch' || this.phase === 'white';
+  }
   /** the hands-off stretch: input is the fragment's now */
-  get cinematic(): boolean { return this.phase === 'touch' || this.phase === 'white'; }
+  get cinematic(): boolean {
+    return this.phase === 'touch' || this.phase === 'white' ||
+      this.phase === 'unmake' || this.phase === 'page';
+  }
   /** 0..1 blend the camera uses to push in past the walk framing */
   get touchBlend(): number {
     if (this.phase === 'touch') return Math.min(1, this.touchT / (this.touchDur * 0.6));
@@ -120,6 +142,8 @@ export class Finale {
 
   /** ambience: runs every frame in every mode, cheap and gated by camera row */
   frame(dt: number, time: number, camRow: number): void {
+    // ending pages run in any mode, so their clock lives here, not in advance
+    if (this.phase === 'page') this.pageT += dt;
     const near = camRow > CORE_ROW - 120;
     this.motes.visible = near;
     if (!near) return;
@@ -146,7 +170,7 @@ export class Finale {
       const s = this.sconces[i];
       if (!s.lit) continue;
       s.litT += dt;
-      const rise = Math.min(1, s.litT * 2.5);
+      const rise = Math.min(1, Math.max(0, s.litT) * 2.5);
       const flicker = 0.86 + Math.sin(time * 3.1 + i * 1.7) * 0.14;
       s.mat.opacity = (0.12 + 0.88 * rise) * flicker;
       s.orb.scale.setScalar(1 + Math.sin(Math.min(s.litT * 3, Math.PI)) * 0.8);
@@ -211,7 +235,93 @@ export class Finale {
       // the white holds for as long as the player wants to sit with it —
       // only E/Esc (skip) moves the rite on to the epilogue
       this.whiteT += dt;
+    } else if (this.phase === 'unmake') {
+      // the Communion's dark mirror: the sconces gutter out one by one as
+      // the fragment leaves its seat, and the chamber light dies with them
+      this.unmakeT += dt;
+      const u = this.unmakeT;
+      for (let i = 0; i < this.sconces.length; i++) {
+        const sc = this.sconces[i];
+        if (sc.lit && u > 0.4 + i * 0.35) {
+          sc.lit = false;
+          sc.mat.opacity = 0.12;
+          sc.orb.scale.setScalar(1);
+          this.audio.sconceOut(i);
+        }
+      }
+      this.ember.excite = Math.max(0, 1 - u / 2.6);
+      if (u >= 3.2) {
+        this.ember.taken = true;
+        this.finished = true;
+      }
+    } else if (this.phase === 'page') {
+      // an ending's page waits for the player, like the white does
+      this.pageT += dt;
     }
+  }
+
+  /** the extraction rite: sconces die, the light leaves with you */
+  beginUnmake(): void {
+    this.phase = 'unmake';
+    this.unmakeT = 0;
+    this.finished = false;
+    this.buildOverlay();
+    this.audio.extractChord();
+  }
+
+  /** a fragment comes home: relight the chamber, staggered */
+  seatRelight(): void {
+    this.ember.taken = false;
+    this.ember.excite = 1;
+    for (let i = 0; i < this.sconces.length; i++) {
+      const sc = this.sconces[i];
+      if (!sc.lit) {
+        sc.lit = true;
+        sc.litT = -i * 0.25;
+      }
+    }
+  }
+
+  /** an ending's typography page — black, dawn, or pure white */
+  beginPage(page: EndingPage): void {
+    this.overlay?.remove();
+    this.phase = 'page';
+    this.pageT = 0;
+    this.finished = false;
+    const el = document.createElement('div');
+    el.id = 'finale';
+    el.className = 'on ' + page.cls;
+    el.innerHTML = `
+      <div class="f-bar top"></div><div class="f-bar bot"></div>
+      <div id="f-white"></div>
+      <div id="f-text">
+        <div id="f-eyebrow">${page.eyebrow}</div>
+        <div id="f-title"></div>
+        <div id="f-lines"></div>
+        <div id="f-hint"><span class="key">E</span>GO ON</div>
+      </div>`;
+    let li = 0;
+    (el.querySelector('#f-title') as HTMLElement).innerHTML = page.title
+      .split(' ')
+      .map(word => `<span class="f-word">${word
+        .split('')
+        .map(c => `<span style="--i:${li++}">${c}</span>`)
+        .join('')}</span>`)
+      .join(' ');
+    const stagger = this.reducedMotion ? 0.35 : 1.05;
+    const base = this.reducedMotion ? 0.4 : 1.5;
+    (el.querySelector('#f-lines') as HTMLElement).innerHTML = page.lines
+      .map((l, i) => `<div class="f-line" style="--d:${(base + i * stagger).toFixed(2)}s">${l}</div>`)
+      .join('');
+    (el.querySelector('#f-hint') as HTMLElement).style.setProperty(
+      '--d', `${(base + page.lines.length * stagger + 0.6).toFixed(2)}s`);
+    this.ui.appendChild(el);
+    this.overlay = el;
+    this.whiteEl = el.querySelector('#f-white') as HTMLElement;
+    requestAnimationFrame(() => {
+      if (this.whiteEl) this.whiteEl.style.opacity = '1';
+      el.classList.add('lit');
+    });
   }
 
   /** contact. The world is already marked ended by the caller. */
@@ -240,6 +350,14 @@ export class Finale {
       return;
     }
     if (this.phase === 'white' && this.whiteT >= 0.6) this.finished = true;
+    if (this.phase === 'unmake') {
+      // fast-forward the gutter-out
+      for (const sc of this.sconces) { sc.lit = false; sc.mat.opacity = 0.12; }
+      this.ember.excite = 0;
+      this.ember.taken = true;
+      this.finished = true;
+    }
+    if (this.phase === 'page' && this.pageT >= 0.8) this.finished = true;
   }
 
   /** the epilogue panel is open — let the white linger under it, then go */

@@ -36,7 +36,7 @@ export class GameState {
   blocksDug = 0;
   milestones = new Set<string>();
   endedWorlds = new Set<string>();
-  emberTech: Record<ForgeKey, boolean> = { updrill: false, dash: false, warp: false, converter: false };
+  emberTech: Record<ForgeKey, boolean> = { updrill: false, dash: false, warp: false, converter: false, lance: false };
   foundLogs = new Set<number>();
   /**
    * Survey gear is bought PER DIG SITE. A scanner is a survey of one world;
@@ -71,6 +71,23 @@ export class GameState {
   charges = 0;
   /** carved stones recovered — the codex toward the Lamplighters' message */
   glyphs = 0;
+  // ---- Phase 4: the pattern ----
+  /** fragment in the hold ('veil3' | 'cryos2' | 'maelis6'), or null */
+  carrying: string | null = null;
+  /** worlds whose fragment has been removed from its cradle */
+  extracted = new Set<string>();
+  /** fragments sold to Cindral — these can never go home */
+  delivered = new Set<string>();
+  /** worlds whose fragment was carried back down and re-seated */
+  reseated = new Set<string>();
+  /** foreign fragments laid in VEIL-3's cradle — the KINDLE assembly */
+  offered = new Set<string>();
+  /** all three SITE 297 readables have been walked to */
+  huskVisited = false;
+  /** SITE 297 readables already read (indexes) */
+  huskRead = new Set<number>();
+  /** Dispatch has relayed Cindral Extraction Order 9-1-1 */
+  extractOrderHeard = false;
   /** native material mined, per world */
   native: Record<string, number> = {};
   /** acclimation tiers fitted, per world */
@@ -140,6 +157,8 @@ export class GameState {
   }
 
   addCargo(t: number): boolean {
+    // a fragment in the hold IS the hold — nothing rides along with it
+    if (this.carrying) return false;
     if (this.cargoCount >= this.cargoCap) return false;
     this.cargo.set(t, (this.cargo.get(t) ?? 0) + 1);
     return true;
@@ -184,7 +203,7 @@ export class GameState {
     this.blocksDug = 0;
     this.milestones.clear();
     this.endedWorlds.clear();
-    this.emberTech = { updrill: false, dash: false, warp: false, converter: false };
+    this.emberTech = { updrill: false, dash: false, warp: false, converter: false, lance: false };
     this.foundLogs.clear();
     this.gear = {};
     this.worldBestRow = 0;
@@ -205,8 +224,30 @@ export class GameState {
     this.arrestors = 0;
     this.native = {};
     this.accl = {};
+    this.carrying = null;
+    this.extracted.clear();
+    this.delivered.clear();
+    this.reseated.clear();
+    this.offered.clear();
+    this.huskVisited = false;
+    this.huskRead.clear();
+    this.extractOrderHeard = false;
     this.activeWorld = 'veil3';
     this.worlds = {};
+  }
+
+  // ---- ending emblems: meta-progress that survives NEW EXPEDITION ----
+  private static ENDINGS_KEY = 'coreward_endings';
+  static endingsSeen(): Set<string> {
+    try { return new Set(JSON.parse(localStorage.getItem(GameState.ENDINGS_KEY) ?? '[]')); }
+    catch { return new Set(); }
+  }
+  static markEnding(kind: string): void {
+    try {
+      const s = GameState.endingsSeen();
+      s.add(kind);
+      localStorage.setItem(GameState.ENDINGS_KEY, JSON.stringify([...s]));
+    } catch { /* storage unavailable — the moment still happened */ }
   }
 
   // ---- persistence ----
@@ -259,6 +300,14 @@ export class GameState {
         arrestors: this.arrestors,
         native: this.native,
         accl: this.accl,
+        carrying: this.carrying,
+        extracted: [...this.extracted],
+        delivered: [...this.delivered],
+        reseated: [...this.reseated],
+        offered: [...this.offered],
+        huskVisited: this.huskVisited,
+        huskRead: [...this.huskRead],
+        extractOrderHeard: this.extractOrderHeard,
         activeWorld: this.activeWorld,
         worlds: this.worlds,
       }));
@@ -311,6 +360,14 @@ export class GameState {
         this.arrestors = d.arrestors ?? 0;
         this.native = d.native ?? {};
         this.accl = d.accl ?? {};
+        this.carrying = d.carrying ?? null;
+        this.extracted = new Set(d.extracted ?? []);
+        this.delivered = new Set(d.delivered ?? []);
+        this.reseated = new Set(d.reseated ?? []);
+        this.offered = new Set(d.offered ?? []);
+        this.huskVisited = !!d.huskVisited;
+        this.huskRead = new Set(d.huskRead ?? []);
+        this.extractOrderHeard = !!d.extractOrderHeard;
         this.activeWorld = d.activeWorld ?? 'veil3';
         this.worlds = d.worlds ?? {};
         return true;

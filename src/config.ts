@@ -155,13 +155,14 @@ export function boulderTierNeeded(row: number): number {
 }
 
 // ---- Ember Forge: rule-breaking tech bought with embershards from cargo ----
-export type ForgeKey = 'updrill' | 'dash' | 'warp' | 'converter';
+export type ForgeKey = 'updrill' | 'dash' | 'warp' | 'converter' | 'lance';
 export interface ForgeItem { key: ForgeKey; name: string; desc: string; cost: number; }
 export const FORGE: ForgeItem[] = [
   { key: 'dash', name: 'BLINK COIL', desc: 'Shift — lateral dash. No fuel, short cooldown.', cost: 3 },
   { key: 'updrill', name: 'ASCENT COIL', desc: 'Hold up against a ceiling to drill upward.', cost: 5 },
   { key: 'converter', name: 'PYRO EXCHANGER', desc: 'Halves core damage and converts it to fuel.', cost: 6 },
   { key: 'warp', name: 'WARP HOLD', desc: 'C — teleport-sell your cargo from anywhere at 75% value.', cost: 8 },
+  { key: 'lance', name: 'LUMEN LANCE', desc: `X — fires Lumens as ammunition, ${CUR}120 a shot. The only true weapon. A last resort.`, cost: 9 },
 ];
 export const WARP_RATE = 0.75;
 // survey gear — bought separately for each dig site
@@ -180,6 +181,20 @@ export const MAX_CHARGES_HELD = 6;
 
 /** carved stones needed before the Lamplighters' message resolves */
 export const GLYPHS_TO_TRANSLATE = 9;
+
+// ---- Phase 4: extraction, the climb, and the endings ----
+/** Cindral's standing offer per delivered fragment — genuinely tempting */
+export const EXTRACT_OFFER = 300000;
+/** hold-to-commit seconds at a cradle (extract / seat / offer alike) */
+export const EXTRACT_HOLD = 2.5;
+/** the pod runs hot and heavy with a fragment in the hold */
+export const CARRY_THRUST_MUL = 0.8;
+export const CARRY_FUEL_MUL = 1.5;
+/** ore on an extracted world still sells, but the trace light is spent */
+export const EXTRACTED_ORE_MUL = 0.25;
+/** Lumen Lance: shooting spends money, so the economy stays in the combat */
+export const LANCE_SHOT_COST = 120;
+export const LANCE_RANGE = 10;
 
 // ---- arrestors: deployable landing pads for your own shafts ----
 export const ARRESTOR_PRICE = 900;

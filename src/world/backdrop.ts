@@ -50,22 +50,25 @@ export function createSky(scene: THREE.Scene): void {
   sky.position.set(WORLD_W / 2, 42, -60);
   scene.add(sky);
 
-  // low, huge sun (a pale disc on the colder worlds)
-  const sun = new THREE.Mesh(
-    new THREE.CircleGeometry(7, 48),
-    new THREE.MeshBasicMaterial({ color: ACTIVE.sky.sun, toneMapped: false, fog: false })
-  );
-  sun.position.set(WORLD_W / 2 - 14, 10.5, -58);
-  scene.add(sun);
-  const halo = new THREE.Mesh(
-    new THREE.CircleGeometry(16, 48),
-    new THREE.MeshBasicMaterial({
-      color: ACTIVE.sky.halo, transparent: true, opacity: 0.22,
-      blending: THREE.AdditiveBlending, toneMapped: false, fog: false, depthWrite: false,
-    })
-  );
-  halo.position.copy(sun.position).z -= 0.5;
-  scene.add(halo);
+  // low, huge sun (a pale disc on the colder worlds) — SITE 297 gets none:
+  // the only sky in the game with nothing in it
+  if (!ACTIVE.husk) {
+    const sun = new THREE.Mesh(
+      new THREE.CircleGeometry(7, 48),
+      new THREE.MeshBasicMaterial({ color: ACTIVE.sky.sun, toneMapped: false, fog: false })
+    );
+    sun.position.set(WORLD_W / 2 - 14, 10.5, -58);
+    scene.add(sun);
+    const halo = new THREE.Mesh(
+      new THREE.CircleGeometry(16, 48),
+      new THREE.MeshBasicMaterial({
+        color: ACTIVE.sky.halo, transparent: true, opacity: 0.22,
+        blending: THREE.AdditiveBlending, toneMapped: false, fog: false, depthWrite: false,
+      })
+    );
+    halo.position.copy(sun.position).z -= 0.5;
+    scene.add(halo);
+  }
 
   // silhouette ridge line
   // distant colony skyline on the horizon: domes, tanks, slabs, masts
@@ -428,6 +431,8 @@ export interface Ember {
   y: number;
   /** 0..1 — the Communion drives this as the pilot closes; pulse, halo, ring and shaft all follow */
   excite: number;
+  /** the fragment has been extracted: the cradle stands empty */
+  taken: boolean;
 }
 
 const SHARDS = 12;
@@ -509,8 +514,9 @@ export function createEmber(scene: THREE.Scene): Ember {
   scene.add(group);
 
   const ember: Ember = {
-    group, light, x, y, excite: 0,
+    group, light, x, y, excite: 0, taken: false,
     update(t: number, camRow: number) {
+      if (this.taken) { group.visible = false; light.intensity = 0; return; }
       const ex = this.excite;
       const near = camRow > CORE_ROW - 90;
       const rate = 2.1 + ex * 2.6;
@@ -556,6 +562,12 @@ export class Atmosphere {
   private fog: THREE.FogExp2;
   private a = new THREE.Color();
   private b = new THREE.Color();
+  private ash = new THREE.Color(0x2e2e30);
+  /**
+   * 0..1 — the extraction climb sets this: the world's color drains toward
+   * slag gray behind the rising pod. The color script running backwards.
+   */
+  drain = 0;
 
   constructor(scene: THREE.Scene) {
     this.hemi = new THREE.HemisphereLight(ACTIVE.sky.hemi, ACTIVE.sky.hemiGround, 0.9);
@@ -585,5 +597,10 @@ export class Atmosphere {
     this.a.setHex(s0.amb); this.b.setHex(s1.amb);
     this.amb.color.copy(this.a.lerp(this.b, t));
     this.amb.intensity = s0.ambI + (s1.ambI - s0.ambI) * t;
+
+    if (this.drain > 0) {
+      this.fog.color.lerp(this.ash, this.drain);
+      this.amb.color.lerp(this.ash, this.drain * 0.7);
+    }
   }
 }

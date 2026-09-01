@@ -1,7 +1,9 @@
 # SPEC — Phase 4 "THE PATTERN" · the husk, extraction, and the three endings
 
-Status: **DRAFT — awaiting sign-off.** Per [PLAN.md](PLAN.md) Phase 4, no code
-until this document is approved. Canon sources: [LORE.md](LORE.md) §6–9,
+Status: **BUILT — 2026-09-01.** Signed off and implemented as written; the
+⛩ table below was approved unchanged. Suites: `husk.mjs`, `extraction.mjs`,
+`endings.mjs`, plus the full 24-suite regression, all green.
+Deltas from the draft are marked **[as built]**. Canon sources: [LORE.md](LORE.md) §6–9,
 [DIRECTION.md](DIRECTION.md) §8. Open decisions are marked ⛩ at the end —
 everything else is proposed as written, with numbers.
 
@@ -248,6 +250,8 @@ Everything in §3 waits on that answer.
 | D2 | When does EXTRACT unlock | after husk visit (never at a first Communion) |
 | D3 | Re-seating descent is calm | yes — the asymmetry is the argument |
 | D4 | Post-ending save | emblem + rewind to pre-choice; all endings reachable |
+| — | **[as built]** RETURN gate | tightened: needs all three cores MET and none sold, not merely one change of heart |
+| — | **[as built]** Husk O₂ | no oxygen clock on SITE 297 — nothing there to run out of but time |
 | D5 | Cindral offer size | ✦300,000 per fragment |
 | D6 | KINDLE chamber | VEIL-3 (the dawn world) |
 

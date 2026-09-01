@@ -693,3 +693,78 @@ body.sm-open #survey {
   color: #b25a00; border-color: rgba(178, 90, 0, 0.55);
 }
 .panel-scrim.rite .btn:hover { background: rgba(26, 20, 40, 0.1); }
+
+/* ---------- Phase 4: the order, the hold, the endings ---------- */
+.order-card {
+  margin-top: 14px; padding: 14px;
+  border: 1px solid rgba(255, 154, 60, 0.35); border-radius: 10px;
+  background: rgba(255, 154, 60, 0.05);
+}
+.order-head {
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.24em;
+  color: var(--amber);
+}
+.order-body { font-size: 12px; color: var(--ink-dim); margin-top: 6px; line-height: 1.6; }
+.order-body b { color: var(--ink); font-family: var(--font-display); }
+.order-note {
+  margin-top: 10px; font-size: 11px; letter-spacing: 0.1em;
+  color: var(--ink-dim); text-align: center;
+}
+.order-card .btn { margin-top: 12px; }
+
+/* hold-to-commit meter, drawn inside the contextual prompt */
+.hold-bar {
+  display: inline-block; width: 90px; height: 4px; margin-left: 12px;
+  vertical-align: middle; background: rgba(232, 226, 213, 0.16); border-radius: 2px;
+  overflow: hidden;
+}
+.hold-bar > span { display: block; height: 100%; background: var(--amber); }
+
+/* ending pages: the same rite typography, three different skies */
+#finale.page-dark #f-white {
+  background: radial-gradient(120% 95% at 50% 56%, #14141a 0%, #08080c 60%, #000 140%);
+}
+#finale.page-dark #f-text { color: #e8e2d5; }
+#finale.page-dark #f-eyebrow { color: rgba(232, 226, 213, 0.45); }
+#finale.page-dark .f-line { color: rgba(232, 226, 213, 0.8); }
+#finale.page-dark #f-hint { color: rgba(232, 226, 213, 0.4); }
+#finale.page-dark #f-hint .key {
+  border-color: rgba(232, 226, 213, 0.35); color: rgba(232, 226, 213, 0.65);
+}
+#finale.page-dawn #f-white {
+  background: linear-gradient(180deg, #2a1a3e 0%, #a04a34 42%, #ffb066 74%, #ffe6b8 100%);
+}
+#finale.page-dawn #f-text { color: #2a1408; }
+#finale.page-dawn #f-eyebrow { color: rgba(42, 20, 8, 0.55); }
+#finale.page-dawn .f-line { color: rgba(42, 20, 8, 0.85); }
+#finale.page-pure #f-white { background: #fff; }
+#finale.page-pure #f-title { text-shadow: 0 0 40px rgba(255, 220, 150, 0.9); }
+
+/* the EXTRACT epilogue is the one dark panel in the set */
+.panel-scrim.rite.rite-dark {
+  background: radial-gradient(120% 95% at 50% 45%, #14141a 0%, #08080c 60%, #000 140%);
+}
+.panel-scrim.rite.rite-dark .panel { color: #e8e2d5; }
+.panel-scrim.rite.rite-dark .end-eyebrow,
+.panel-scrim.rite.rite-dark .end-epigraph { color: rgba(232, 226, 213, 0.62); }
+.panel-scrim.rite.rite-dark .end-title { color: #e8e2d5; }
+.panel-scrim.rite.rite-dark .end-rule { background: var(--amber); }
+.panel-scrim.rite.rite-dark .end-stats { border-top-color: rgba(232, 226, 213, 0.16); }
+.panel-scrim.rite.rite-dark .end-stat b { color: #e8e2d5; }
+.panel-scrim.rite.rite-dark .end-stat span { color: rgba(232, 226, 213, 0.5); }
+.panel-scrim.rite.rite-dark .btn {
+  color: #e8e2d5; background: rgba(232, 226, 213, 0.07);
+  border-color: rgba(232, 226, 213, 0.25);
+}
+.panel-scrim.rite.rite-dark .btn.primary { color: var(--amber); border-color: rgba(255, 154, 60, 0.5); }
+.panel-scrim.rite.rite-dark .btn:hover { background: rgba(232, 226, 213, 0.14); }
+
+/* title screen: ending emblems, meta-progress that outlives every save */
+#title .emblems {
+  display: flex; gap: 14px; justify-content: center; margin-top: 14px;
+  animation: fade-up 0.9s var(--ease-out) 1.6s both;
+}
+#title .emblem { font-size: 15px; opacity: 0.85; }
+#title .em-extract { color: #6a6a76; }
+#title .em-return { color: var(--amber); }
+#title .em-kindle { color: #fff2c8; text-shadow: 0 0 14px rgba(255, 230, 160, 0.8); }

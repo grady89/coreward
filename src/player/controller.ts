@@ -4,7 +4,7 @@ import {
   HEAT_FULL_ROW, HEAT_DMG, GAS_DMG,
   TILE_M, boulderTierNeeded, stratumIndex, CORE_ROW, WORLD_W,
   DASH_SPEED, DASH_COOLDOWN, PAD_X0, PAD_X1, PAD_ROWS, SPAWN_X, VEINLIGHT_FUEL,
-  WRECK_SPOT_RANGE,
+  WRECK_SPOT_RANGE, CARRY_THRUST_MUL, CARRY_FUEL_MUL,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE } from '../world/worlds';
@@ -55,6 +55,8 @@ export class PodController {
   dock: Dock | null = null;
   /** EVA hooks: set each frame; main renders prompts and handles E */
   coreNear = false;
+  /** a met core, revisitable on foot: extract / seat / offer */
+  coreRevisit = false;
   wreckNear = -1;
   /** tiles to the wreck the pod has spotted */
   wreckDist = 0;
@@ -98,29 +100,32 @@ export class PodController {
     }
 
     // ---- thrust ----
+    // a fragment in the hold: the pod runs hot and heavy
+    const carryT = st.carrying ? CARRY_THRUST_MUL : 1;
+    const carryF = st.carrying ? CARRY_FUEL_MUL : 1;
     const hasFuel = st.fuel > 0;
     this.thrust = 0; this.sideThrust = 0;
     if (input.up && hasFuel) {
-      this.vy += 52 * st.thrustMul * dt;
+      this.vy += 52 * st.thrustMul * carryT * dt;
       this.thrust = 1;
-      st.fuel = Math.max(0, st.fuel - FUEL_THRUST * dt);
+      st.fuel = Math.max(0, st.fuel - FUEL_THRUST * carryF * dt);
     }
     if (input.left && hasFuel) {
-      this.vx -= 30 * st.thrustMul * dt;
+      this.vx -= 30 * st.thrustMul * carryT * dt;
       this.sideThrust = -1;
       this.facing = -1;
-      st.fuel = Math.max(0, st.fuel - FUEL_SIDE * dt);
+      st.fuel = Math.max(0, st.fuel - FUEL_SIDE * carryF * dt);
     } else if (input.right && hasFuel) {
-      this.vx += 30 * st.thrustMul * dt;
+      this.vx += 30 * st.thrustMul * carryT * dt;
       this.sideThrust = 1;
       this.facing = 1;
-      st.fuel = Math.max(0, st.fuel - FUEL_SIDE * dt);
+      st.fuel = Math.max(0, st.fuel - FUEL_SIDE * carryF * dt);
     } else {
       // damp sideways drift — glazed ice barely grips
       const drag = SIDE_DRAG * (ACTIVE.iceTraction && this.grounded ? 0.28 : 1);
       this.vx -= this.vx * Math.min(1, drag * dt);
     }
-    st.fuel = Math.max(0, st.fuel - FUEL_IDLE * dt);
+    st.fuel = Math.max(0, st.fuel - FUEL_IDLE * carryF * dt);
     this.dashCd = Math.max(0, this.dashCd - dt);
     this.coreBalk(dt, input, time);
 
@@ -226,14 +231,22 @@ export class PodController {
     // settled pod is enough — requiring strict ground contact made the E
     // prompt flicker away between landing bounces and eat presses.
     const settled = this.grounded || (Math.abs(this.vy) < 3 && Math.abs(this.vx) < 3);
+    const ended = this.state.endedWorlds.has(ACTIVE.id);
     this.coreNear = settled && this.row >= CORE_ROW - 1 &&
-      Math.abs(this.px - WORLD_W / 2) < 15 && !this.state.endedWorlds.has(ACTIVE.id);
+      Math.abs(this.px - WORLD_W / 2) < 15 && !ended;
+    // the second pilgrimage: a met core can be revisited on foot — to take
+    // the fragment (order in hand), to seat one home, or to offer one up
+    this.coreRevisit = settled && this.row >= CORE_ROW - 1 &&
+      Math.abs(this.px - WORLD_W / 2) < 15 && ended && !ACTIVE.husk && (
+        this.state.carrying !== null ||
+        (this.state.extractOrderHeard && !this.state.extracted.has(ACTIVE.id))
+      );
     // wreck salvage EVA — spotted from a distance, so long as the pod is
     // settled. Landing exactly on top of a wreck should never be the price of
     // admission; walking there is the point.
     this.wreckNear = -1;
     this.wreckDist = 0;
-    if (settled && !this.coreNear) {
+    if (settled && !this.coreNear && !this.coreRevisit) {
       let best = Infinity;
       for (let i = 0; i < this.terrain.wrecks.length; i++) {
         if (this.looted.has(i)) continue;
@@ -255,6 +268,14 @@ export class PodController {
 
   private tryDrill(x: number, y: number, dir: DrillDir, time: number): void {
     if (x < 0 || x >= WORLD_W || y < 0) return;
+    // SITE 297 is slag to the mantle — nothing here wants digging
+    if (ACTIVE.husk) {
+      if (time - this.blockedMsgAt > 2.5) {
+        this.blockedMsgAt = time;
+        this.ev.onDrillBlocked('SLAG — THE DRILL SKATES OFF');
+      }
+      return;
+    }
     // the landing pad's plating can't be cut — the start stays a safe perch
     if (y < PAD_ROWS && x >= PAD_X0 && x <= PAD_X1) {
       if (time - this.blockedMsgAt > 2.5) {
@@ -433,7 +454,12 @@ export class PodController {
     // Later worlds bite shallower, and only that world's own rig answers it.
     const row = this.row;
     const start = ACTIVE.hazardStartRow;
-    const heat = Math.min(1.25, Math.max(0, (row - start) / (HEAT_FULL_ROW - start) * 1.25));
+    // a start past the full-heat row means this world has no gauge at all —
+    // without the guard the denominator flips sign and pins the meter
+    const span = HEAT_FULL_ROW - start;
+    const heat = span <= 0 || row <= start
+      ? 0
+      : Math.min(1.25, Math.max(0, (row - start) / span * 1.25));
     let excess = Math.max(0, heat - this.state.hazardResist);
     // pyro exchanger: halves the damage and converts it to fuel
     if (excess > 0 && this.state.emberTech.converter) {
@@ -442,7 +468,22 @@ export class PodController {
     }
     this.heatFrac = heat > 0.02 ? Math.min(1, excess / 0.6) : 0;
     if (excess > 0) this.applyDamage(excess * HEAT_DMG * dt, ACTIVE.hazard.cause);
+
+    // the fragment cooking the hull: a slow clock at any depth, sub-lethal
+    // until the climb drags on too long
+    if (this.state.carrying) {
+      this.carryHeat = Math.min(0.85, this.carryHeat + dt * 0.01);
+      this.heatFrac = Math.max(this.heatFrac, this.carryHeat);
+      if (this.carryHeat > 0.75) {
+        this.applyDamage((this.carryHeat - 0.75) * 15 * dt, 'the fragment in the hold');
+      }
+    } else {
+      this.carryHeat = 0;
+    }
   }
+
+  /** rises while a fragment rides in the hold — the climb's soft clock */
+  private carryHeat = 0;
 
   private applyDamage(amount: number, cause: string): void {
     if (amount <= 0) return;

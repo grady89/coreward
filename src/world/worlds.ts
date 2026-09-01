@@ -10,6 +10,8 @@ export interface WorldDef {
   tagline: string;
   unlockAfter: string | null;
   valueMul: number;
+  /** SITE 297: not a dig site. Undrillable slag, no fauna, no music. */
+  husk?: boolean;
   /** six band names matching BAND_FROM rows */
   strata: [string, string, string, string, string, string];
   /** solid colors for bands: topsoil, regolith, mid, deep, core-reach */
@@ -212,14 +214,91 @@ export const WORLDS: WorldDef[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// SITE 297 — the husk. One of the ~300 seed worlds Cindral already emptied.
+// Not a dig site: an intact colony with the lights on and nobody home. The
+// ledger name IS the horror; it gets no poetry.
+// ---------------------------------------------------------------------------
+const GRAY_FOG = { fog: 0x101012, density: 0.008, hemi: 0.5, amb: 0x2a2a2c, ambI: 0.4 };
+export const HUSK: WorldDef = {
+  id: 'site297',
+  name: 'SITE 297',
+  coreName: '—',
+  tagline: 'Signal resolved. Nothing is transmitting it.',
+  unlockAfter: null, // gated by cores met, not by chain — see the chart
+  valueMul: 0,
+  husk: true,
+  strata: ['SLAG', 'SLAG', 'SLAG', 'SLAG', 'SLAG', 'SLAG'],
+  rockColors: [0x4a4a4c, 0x3e3e40, 0x333336, 0x2a2a2c, 0x222224],
+  sky: {
+    top: '#08080a', mid: '#141416', low: '#232326', horizon: '#4a4a4e',
+    sun: 0x3a3a3e, halo: 0x2a2a2c, hemi: 0x5a5a5e, hemiGround: 0x1c1c1e,
+  },
+  fogStops: [
+    { row: -6, ...GRAY_FOG },
+    { row: 24, ...GRAY_FOG },
+    { row: 505, ...GRAY_FOG },
+  ],
+  hazard: { label: 'NONE', cold: false, cause: 'nothing' },
+  hazardStartRow: 9999,
+  fluid: { name: 'Slag', base: 0x2a2a2c, pulseA: 0x2a2a2c, pulseB: 0x2a2a2c, dmg: 0, fuelDrain: 0, threshold: 2 },
+  gasImpulse: 0,
+  iceTraction: false,
+  swarm: {
+    name: 'NOTHING', keys: 'light', color: 0x333336, hunting: 0x333336,
+    alert: '—', counter: '—',
+  },
+  core: { body: 0x3a3a3e, shell: 0x2a2a2c, light: 0x4a4a4e },
+  gemTint: 0x3a3a3e,
+  ending: { title: '—', text: '—' },
+  lore: ['—', '—', '—', '—', '—'],
+};
+
+/** hex → its own luminance, painted gray */
+function gray(hex: number): number {
+  const r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
+  const l = Math.round(r * 0.299 + g * 0.587 + b * 0.114);
+  return (l << 16) | (l << 8) | l;
+}
+
+function grayCss(hexCss: string): string {
+  const v = gray(parseInt(hexCss.replace('#', ''), 16));
+  return '#' + v.toString(16).padStart(6, '0');
+}
+
+/**
+ * A world whose fragment has been taken: the same terrain, every color spent.
+ * The color script run to its end. Ore still sells — at a quarter, because
+ * value IS trace light and the light is gone.
+ */
+function huskify(def: WorldDef): WorldDef {
+  return {
+    ...def,
+    valueMul: def.valueMul * 0.25,
+    rockColors: def.rockColors.map(gray) as WorldDef['rockColors'],
+    sky: {
+      top: grayCss(def.sky.top), mid: grayCss(def.sky.mid),
+      low: grayCss(def.sky.low), horizon: grayCss(def.sky.horizon),
+      sun: gray(def.sky.sun), halo: gray(def.sky.halo),
+      hemi: gray(def.sky.hemi), hemiGround: gray(def.sky.hemiGround),
+    },
+    fogStops: def.fogStops.map(s => ({ ...s, fog: gray(s.fog), amb: gray(s.amb) })),
+    fluid: { ...def.fluid, base: gray(def.fluid.base), pulseA: gray(def.fluid.pulseA), pulseB: gray(def.fluid.pulseB) },
+    swarm: { ...def.swarm, color: gray(def.swarm.color), hunting: gray(def.swarm.hunting) },
+    core: { body: gray(def.core.body), shell: gray(def.core.shell), light: gray(def.core.light) },
+    gemTint: gray(def.gemTint),
+  };
+}
+
 export let ACTIVE: WorldDef = WORLDS[0];
 
-export function setActiveWorld(id: string): void {
-  ACTIVE = WORLDS.find(w => w.id === id) ?? WORLDS[0];
+export function setActiveWorld(id: string, extracted = false): void {
+  const def = WORLDS.find(w => w.id === id) ?? (id === HUSK.id ? HUSK : WORLDS[0]);
+  ACTIVE = extracted && !def.husk ? huskify(def) : def;
 }
 
 export function worldById(id: string): WorldDef | undefined {
-  return WORLDS.find(w => w.id === id);
+  return id === HUSK.id ? HUSK : WORLDS.find(w => w.id === id);
 }
 
 export function nextWorld(afterId: string): WorldDef | undefined {

@@ -15,6 +15,8 @@ export interface ThreatCtx {
   lampOn: boolean;
   /** 0..1 thruster output — what the cold worlds listen for */
   thrust: number;
+  /** a stolen fragment in the hold: the Wardens can feel it */
+  carrying: boolean;
   dt: number;
   time: number;
   /** hull damage */
@@ -64,6 +66,7 @@ interface Worm {
   trail: { x: number; y: number }[];
   life: number;
   stuck: number;
+  stunT: number;      // Lumen Lance stagger
 }
 
 interface Flare {
@@ -80,6 +83,7 @@ interface Warden {
   sweep: number;      // beam angle
   engaged: boolean;
   integrity: number;  // charges hurt it; nothing else does
+  blindT: number;     // seconds of Lumen Lance overexposure left
 }
 
 const tmpM = new THREE.Matrix4();
@@ -100,7 +104,7 @@ export class ThreatField {
   menace = 0;
 
   // Long Ones
-  private worm: Worm = { alive: false, x: 0, y: 0, dirX: 1, dirY: 0, trail: [], life: 0, stuck: 0 };
+  private worm: Worm = { alive: false, x: 0, y: 0, dirX: 1, dirY: 0, trail: [], life: 0, stuck: 0, stunT: 0 };
   private wormMesh!: THREE.InstancedMesh;
   private wormTimer = 12;
   /** rises as a Long One closes — drives the rumble tell */
@@ -112,7 +116,7 @@ export class ThreatField {
   private flareLights: THREE.PointLight[] = [];
 
   // Wardens — Lamplighter machines, still on duty
-  private warden: Warden = { alive: false, x: 0, y: 0, homeX: 0, homeY: 0, sweep: 0, engaged: false, integrity: 100 };
+  private warden: Warden = { alive: false, x: 0, y: 0, homeX: 0, homeY: 0, sweep: 0, engaged: false, integrity: 100, blindT: 0 };
   private wardenGroup!: THREE.Group;
   private wardenBeam!: THREE.SpotLight;
   private wardenTarget!: THREE.Object3D;
@@ -222,16 +226,19 @@ export class ThreatField {
     const { dt, podX, podY, lampOn } = ctx;
 
     if (!w.alive) {
-      // post one at the nearest chamber once the player is in its hall
+      // post one at the nearest chamber once the player is in its hall —
+      // and with a stolen fragment aboard, every hall is on alert
+      const wake = ctx.carrying ? 30 : 18;
       for (const r of ruins) {
         const d = Math.hypot(r.x - podX, -r.y - podY);
-        if (d < 18 && d > 5) {
+        if (d < wake && d > 5) {
           w.alive = true;
           w.x = r.x; w.y = -r.y;
           w.homeX = r.x; w.homeY = -r.y;
           w.sweep = 0;
           w.engaged = false;
           w.integrity = 100;
+          w.blindT = 0;
           this.wardenGroup.visible = true;
           break;
         }
@@ -245,20 +252,24 @@ export class ThreatField {
     const dx = podX - w.x, dy = podY - w.y;
     const dist = Math.hypot(dx, dy);
 
-    // leave its post behind and it powers down again
-    if (dist > 30) {
+    // leave its post behind and it powers down again — it will not stand
+    // down while the vault's fragment is moving
+    if (dist > (ctx.carrying ? 50 : 30)) {
       w.alive = false;
       this.wardenGroup.visible = false;
       this.scrutiny = 0;
       return;
     }
 
-    // it tracks luminance, not motion: run dark and it keeps sweeping past you
+    // it tracks luminance, not motion: run dark and it keeps sweeping past
+    // you. A carried fragment IS luminance — the dark no longer hides you
+    // from a Warden, though it still beats everything else down here.
+    w.blindT = Math.max(0, w.blindT - dt);
     const flare = this.brightestFlare();
     const flareDist = flare ? Math.hypot(flare.x - w.x, flare.y - w.y) : 999;
-    const seesPod = lampOn && dist < 15;
+    const seesPod = (lampOn || ctx.carrying) && dist < 15;
     const seesFlare = flareDist < 17;
-    w.engaged = seesPod || seesFlare;
+    w.engaged = w.blindT <= 0 && (seesPod || seesFlare);
 
     const tx = seesFlare && !seesPod ? flare!.x : podX;
     const ty = seesFlare && !seesPod ? flare!.y : podY;
@@ -344,6 +355,28 @@ export class ThreatField {
     }
   }
 
+  /**
+   * The Lumen Lance: a paid overexposure. Vaporizes swarm clusters in the
+   * corridor, staggers a Long One, blinds a Warden — light used as argument.
+   */
+  lance(x: number, y: number, dir: number, range: number): void {
+    const inPath = (tx: number, ty: number): boolean => {
+      const dx = (tx - x) * dir;
+      return dx > -0.5 && dx < range && Math.abs(ty - y) < 1.3;
+    };
+    for (let i = this.flies.length - 1; i >= 0; i--) {
+      const f = this.flies[i];
+      if (inPath(f.x, f.y)) this.flies.splice(i, 1);
+    }
+    const w = this.worm;
+    if (w.alive && inPath(w.x, w.y)) w.stunT = 3;
+    const wd = this.warden;
+    if (wd.alive && inPath(wd.x, wd.y)) {
+      wd.blindT = 6;
+      wd.engaged = false;
+    }
+  }
+
   /** true where a Long One's bulk fits: open on both axes, never a 1-wide shaft */
   private wide(x: number, y: number): boolean {
     const air = (cx: number, cy: number) => this.terrain.get(cx, cy) === T.AIR;
@@ -367,6 +400,7 @@ export class ThreatField {
       w.dirX = 0; w.dirY = -1;
       w.life = 0;
       w.stuck = 0;
+      w.stunT = 0;
       w.trail.length = 0;
       for (let i = 0; i < WORM_SEGMENTS * 4; i++) w.trail.push({ x: w.x, y: w.y });
       return;
@@ -395,6 +429,12 @@ export class ThreatField {
     }
 
     w.life += dt;
+    if (w.stunT > 0) {
+      // lanced: it recoils in place, all light and no appetite
+      w.stunT -= dt;
+      this.rumble += (0 - this.rumble) * Math.min(1, dt * 2);
+      return;
+    }
     const dx = podX - w.x;
     const dy = podY - w.y;
     const dist = Math.hypot(dx, dy);

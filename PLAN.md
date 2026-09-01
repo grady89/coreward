@@ -116,8 +116,7 @@ Same grammar, different organ (DIRECTION §8g).
 ## Phase 4 — v0.8 "THE PATTERN" · narrative payoffs & endings (~2–3 sessions)
 
 The riskiest design work — a written mini-spec for 4.3 gets user sign-off
-before code. **Spec drafted: [SPEC-PHASE4.md](SPEC-PHASE4.md) — awaiting
-sign-off on its ⛩ decision table.**
+before code. **BUILT 2026-09-01 to [SPEC-PHASE4.md](SPEC-PHASE4.md).**
 
 - **4.1 Glyph codex.** Glyphs collected at ruins (EVA pickups), codex page at
   the assay office, progressive translation as coverage grows; at 100% the

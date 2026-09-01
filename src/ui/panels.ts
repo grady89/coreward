@@ -14,6 +14,8 @@ import { Settings } from '../game/settings';
 import {
   Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
 } from '../game/contracts';
+import { ENDING_PAGES, EndingKind } from '../game/narrative';
+import { EXTRACT_OFFER } from '../config';
 
 /** one-line statement of a contract's terms, priced against this pod */
 function describe(c: Contract, maxFuel: number): string {
@@ -28,7 +30,7 @@ function describe(c: Contract, maxFuel: number): string {
   return bits.join(' · ');
 }
 
-export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts';
+export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale';
 
 interface PanelCtx {
   state: GameState;
@@ -40,6 +42,12 @@ interface PanelCtx {
   onRescued(): void;
   /** free lift home after a core is met — no fee, no fuss */
   onReturnSurface(): void;
+  /** the fragment in the hold is sold to Cindral at the trade post */
+  onDeliverFragment(): void;
+  /** an ending's epilogue closed with CONTINUE: rewind to the moment before */
+  onEndingContinue(): void;
+  /** an ending's epilogue chose a fresh start */
+  onNewExpedition(): void;
   onQuitToTitle(): void;
   onOpenStarmap(): void;
   onSettingsChanged(): void;
@@ -53,6 +61,7 @@ export class Panels {
   private deathCause = '';
   private deathFee = 0;
   private lostCargo = 0;
+  private endingKind: EndingKind = 'extract';
 
   constructor(private ui: HTMLElement, private ctx: PanelCtx) {}
 
@@ -64,10 +73,11 @@ export class Panels {
     this.current = null;
   }
 
-  open(kind: PanelKind, opts?: { cause?: string }): void {
+  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind }): void {
     this.close();
     this.current = kind;
     if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause);
+    if (kind === 'finale' && opts?.ending) this.endingKind = opts.ending;
     this.scrim = document.createElement('div');
     this.scrim.className = 'panel-scrim';
     this.scrim.innerHTML = `<div class="panel" id="panel-body"></div>`;
@@ -96,6 +106,7 @@ export class Panels {
       case 'death': this.renderDeath(); break;
       case 'rescue': this.renderRescue(); break;
       case 'ending': this.renderEnding(); break;
+      case 'finale': this.renderFinale(); break;
       case 'settings': this.renderSettings(); break;
       case 'contracts': this.renderContracts(); break;
     }
@@ -179,14 +190,29 @@ export class Panels {
           </span>
         </div>`).join('')
       : `<div class="row"><span class="r-sub">Your hold is empty. The crust is not.</span></div>`;
+    // Cindral's standing order: posted forever once relayed, so the number
+    // sits there every time you sell a load of ordinary ore beside it
+    const order = st.extractOrderHeard ? `
+      <div class="order-card">
+        <div class="order-head">CINDRAL EXTRACTION ORDER 9-1-1</div>
+        <div class="order-body">FRAGMENT RECOVERY · <b>${fmt(EXTRACT_OFFER)}</b> PER UNIT ON DELIVERY · ALL DEBTS CLEARED</div>
+        ${st.carrying
+          ? `<button class="btn primary wide" id="deliver">DELIVER THE FRAGMENT · ${fmt(EXTRACT_OFFER)}</button>`
+          : `<div class="order-note">no fragment in hold</div>`}
+      </div>` : '';
     this.body().innerHTML = `
       ${this.header('TRADE POST')}
       ${rows}
       <div class="sell-total"><span>TOTAL</span><b>${fmt(st.cargoValue)}</b></div>
       <button class="btn primary wide" id="sell" ${st.cargoCount === 0 ? 'disabled' : ''}>SELL ALL</button>
+      ${order}
       <button class="btn wide" id="to-contracts">CONTRACT BOARD${st.contract ? ' · 1 ACTIVE' : ''}</button>
       <div class="hint">Press E or Esc to leave</div>
     `;
+    this.body().querySelector('#deliver')?.addEventListener('click', () => {
+      this.close();
+      this.ctx.onDeliverFragment();
+    });
     this.body().querySelector('#to-contracts')?.addEventListener('click', () => {
       this.ctx.audio.click();
       this.open('contracts');
@@ -756,6 +782,46 @@ export class Panels {
       this.close();
     });
   }
+
+  // ---------- FINALE ----------
+  // The epilogue after an ending's page. The choice already happened; this
+  // is the record of it — and the door back to the moment before, so one
+  // save can stand at the fork and try every road.
+  private renderFinale(): void {
+    const st = this.ctx.state;
+    const page = ENDING_PAGES[this.endingKind];
+    const stats: [string, string][] = [
+      ['RECORD DEPTH', `${st.bestDepthM}m`],
+      ['LIFETIME EARNINGS', fmt(st.totalEarned)],
+      ['BLOCKS CUT', st.blocksDug.toLocaleString()],
+      ['ENDINGS SEEN', `${GameState.endingsSeen().size} / 3`],
+    ];
+    this.scrim!.classList.add('rite');
+    if (this.endingKind === 'extract') this.scrim!.classList.add('rite-dark');
+    this.body().innerHTML = `
+      <div class="end-eyebrow">${page.eyebrow}</div>
+      <div class="end-title">${page.title}</div>
+      <div class="end-rule"></div>
+      <div class="end-epigraph">${page.epigraph}</div>
+      <div class="end-stats">
+        ${stats.map(([k, v]) => `<div class="end-stat"><b>${v}</b><span>${k}</span></div>`).join('')}
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="rewind">CONTINUE — THE MOMENT BEFORE</button>
+        <button class="btn" id="fresh">NEW EXPEDITION</button>
+      </div>
+    `;
+    this.body().querySelector('#rewind')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.close();
+      this.ctx.onEndingContinue();
+    });
+    this.body().querySelector('#fresh')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.close();
+      this.ctx.onNewExpedition();
+    });
+  }
 }
 
 // ---------- title screen ----------
@@ -767,9 +833,18 @@ export function createTitle(
   const el = document.createElement('div');
   el.id = 'title';
   const letters = GAME_NAME.split('').map((c, i) => `<span style="--i:${i}">${c}</span>`).join('');
+  // ending emblems: meta-progress that outlives every save
+  const seen = GameState.endingsSeen();
+  const emblems = seen.size === 0 ? '' : `
+    <div class="emblems">${(['extract', 'return', 'kindle'] as const)
+      .filter(k => seen.has(k))
+      .map(k => `<span class="emblem em-${k}" title="${k.toUpperCase()}">${
+        k === 'extract' ? '◼' : k === 'return' ? '☀' : '✷'}</span>`)
+      .join('')}</div>`;
   el.innerHTML = `
     <div id="wordmark">${letters}</div>
     <div class="tagline">${ACTIVE.tagline}</div>
+    ${emblems}
     <div class="menu">
       ${hasSave ? `<button class="btn primary" id="t-continue">CONTINUE — ${ACTIVE.name}</button>` : ''}
       <button class="btn ${hasSave ? '' : 'primary'}" id="t-new">${hasSave ? 'NEW EXPEDITION' : 'DESCEND'}</button>

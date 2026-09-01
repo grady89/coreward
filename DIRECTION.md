@@ -329,6 +329,47 @@ light, heat, or space died with its fragment. The threat is that nothing comes.
    Lumens as ammunition**. Shooting spends money, so the economy stays inside
    the combat and the Lance stays a last resort.
 
+### 8i. Act IV — the husk, extraction, the three endings (BUILT)
+
+Full spec: [SPEC-PHASE4.md](SPEC-PHASE4.md). The shape in brief:
+
+**SITE 297** appears on the Sundering Chart once two cores are met — a
+resolved signal with no fragment arc, because the fragment is already gone.
+Not a dig site: slag to the mantle, no fauna, no drone (the game's first
+silence), a sky with no sun, and an intact Cindral colony with the lights on
+and nobody home. Three walk-to readables end at a survey office holding a
+contract with the player's own terms on it. Walking all three unlocks Act IV.
+
+**Extraction** is the Communion's dark mirror, and never available at a first
+meeting — the rite stays pure. After the husk, Dispatch relays Cindral's
+Order 9-1-1 (✦300,000 a fragment, all debts cleared), which then stands at the
+trade post forever. At a met core, HOLD E takes the fragment: sconces gutter
+out one by one on a descending scale, the choir inverts to minor, and there is
+no white page — you do not get the bright screen for this.
+
+**The climb is systemic, never scripted.** One `carrying` state that existing
+systems read: the hold is the fragment (nothing else fits), thrust ×0.8 and
+fuel ×1.5, a slow heat clock, Wardens waking at every ruin band and tracking
+the fragment's light (the dark no longer hides you *from them*), veinlight
+dying in a radius as you rise, quakes shedding rubble into the tunnels
+*below*, and the fog draining toward slag from the bottom up. Carrying one
+back **down** is calm — no Wardens, no quakes. The world knows the difference
+between a thief and a lamplighter, and that asymmetry is the argument.
+
+**Three endings, earned by disposition of the fragments, never by a menu:**
+EXTRACT (sell all three) is the game's only *black* page — "OUT", the rig
+under an empty sky, and it must read as a real win; RETURN (all three cores
+met, all three seated home) comes up as **dawn**, amber finally turning gold,
+with the debts pointedly unchanged in the stats; KINDLE (9/9 glyphs + 12/12
+logs + the full forge, all three laid in VEIL-3's cradle) burns past white to
+a new star, and ends on an empty contract board. An ending stamps a permanent
+emblem on the title screen and then offers CONTINUE — THE MOMENT BEFORE, which
+rewinds to the fork so one save can walk every road.
+
+**The Lumen Lance** joins the forge at 9 shards: X fires, each shot spends
+✦120, and it blinds rather than kills — swarms vaporize, hunters stagger,
+Wardens overexpose for 6s. The climb is beatable without it, verified.
+
 ### 8h. Deferred (next)
 
 - **EVA grapple hook**: climb walls the jump can't clear, opening real on-foot

@@ -127,9 +127,19 @@ export class AudioEngine {
   update(dt: number, o: {
     thrust: number; drilling: boolean; hardness: number; row: number;
     lowFuel: boolean; menace?: number;
+    /** a husk world: no drone, no music — the first silence in the game */
+    dead?: boolean;
   }): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+
+    if (o.dead) {
+      this.droneGain.gain.setTargetAtTime(0, t, 1.2);
+      this.droneNoiseGain.gain.setTargetAtTime(0, t, 1.2);
+      this.swarmGain.gain.setTargetAtTime(0, t, 0.4);
+      this.thrustGain.gain.setTargetAtTime(o.thrust * 0.16, t, 0.06);
+      return;
+    }
 
     // swarm wing-shimmer: a high band that rises as they close
     const men = o.menace ?? 0;
@@ -379,6 +389,30 @@ export class AudioEngine {
     const f = scale[Math.min(i, scale.length - 1)];
     this.tone(f, 1.4, 0.055, 'sine');
     this.tone(f * 2, 1.1, 0.025, 'sine', 70);
+  }
+
+  /** a sconce dies: the same scale, descending, hollowed out */
+  sconceOut(i: number): void {
+    const scale = [784, 659.3, 587.3, 523.3, 440, 392];
+    const f = scale[Math.min(i, scale.length - 1)];
+    this.tone(f * 0.5, 1.6, 0.05, 'sine');
+    this.tone(f * 0.5 * 0.944, 1.6, 0.03, 'sine', 40); // a flat rub against it
+  }
+
+  /** the Lumen Lance: light spent as ammunition — a struck bell, not a gun */
+  lance(): void {
+    this.tone(1318.5, 0.5, 0.1, 'sine');
+    this.tone(1975.5, 0.4, 0.05, 'sine', 30);
+    this.noise(0.5, 0.12, 6000, 1400);
+    this.thump(160, 0.2, 0.08);
+  }
+
+  /** extraction: the Communion's chord, inverted — resolve slides to minor */
+  extractChord(): void {
+    this.thump(46, 1.6, 0.16);
+    [220, 261.6, 311.1, 415.3].forEach((f, i) =>
+      this.tone(f, 3.4, 0.045, 'sine', 200 + i * 180));
+    this.noise(2.4, 0.07, 2400, 120); // the bloom, falling instead of rising
   }
 
   /** contact: a sub drop, a rising bloom, then a wide slow chord */
