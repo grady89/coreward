@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Structure Review</title>
+  <style>html, body { margin: 0; overflow: hidden; background: #2b3339; }</style>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import { STRUCTURE_BUILDERS, buildFuelDepot, buildTradePost, buildGarage, buildAssay } from '/src/world/structures.ts';
+
+    // Beauty-shot stage in the style of the reference plates: flat slate
+    // backdrop, warm dusk key light, subtle rim. Renderer matches the game.
+    const params = new URLSearchParams(location.search);
+    const which = params.get('s') ?? 'fuel';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2b3339);
+    scene.fog = new THREE.Fog(0x2b3339, 18, 42);
+
+    // ground: a barely-lighter disc so structures cast presence, not float
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(40, 48),
+      new THREE.MeshStandardMaterial({ color: 0x333c42, roughness: 1 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // dusk lighting, warm key like the game's surface
+    scene.add(new THREE.HemisphereLight(0xffb066, 0x2a2a30, 0.9));
+    const key = new THREE.DirectionalLight(0xffc98a, 1.9);
+    key.position.set(-8, 10, 9);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x8ac8ff, 0.55);
+    rim.position.set(9, 6, -7);
+    scene.add(rim);
+    scene.add(new THREE.AmbientLight(0x2a2338, 0.55));
+
+    // the warm practical each dock carries in-game
+    const practical = (x) => {
+      const p = new THREE.PointLight(0xffa04c, 14, 10, 1.8);
+      p.position.set(x, 2.6, 1.4);
+      scene.add(p);
+    };
+
+    const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.1, 100);
+
+    if (which === 'all') {
+      // the whole colony strip, spaced as on the pads
+      const spacing = 8.5;
+      const keys = ['fuel', 'trade', 'garage', 'assay'];
+      keys.forEach((k, i) => {
+        const b = STRUCTURE_BUILDERS[k]();
+        b.position.x = (i - 1.5) * spacing;
+        scene.add(b);
+        practical(b.position.x);
+      });
+      camera.position.set(0, 4.6, 27);
+      camera.lookAt(0, 2.6, -2);
+    } else {
+      const b = STRUCTURE_BUILDERS[which]();
+      scene.add(b);
+      practical(0);
+      // slightly low 3/4 hero framing, like the reference plates
+      const view = {
+        fuel: { pos: [3.2, 2.7, 8.6], target: 2.2 },
+        trade: { pos: [3.2, 2.5, 8.2], target: 1.9 },
+        garage: { pos: [3.4, 2.8, 9.6], target: 2.2 },
+        assay: { pos: [3.8, 3.4, 11.6], target: 3.4 },
+      }[which] ?? { pos: [3.2, 2.6, 8.2], target: 2.0 };
+      camera.position.set(...view.pos);
+      camera.lookAt(0.1, view.target, -1.6);
+    }
+
+    renderer.render(scene, camera);
+    // signal the screenshot runner
+    document.title = 'READY:' + which;
+  </script>
+</body>
+</html>
