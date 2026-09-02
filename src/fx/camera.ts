@@ -20,6 +20,8 @@ export class FollowCam {
   reducedMotion = false;
   /** dev sandbox pull-back, so a big creature fits the frame. 0 in play. */
   zoomBias = 0;
+  /** horizontal follow clamp — vault levels are their own width, not the world's */
+  xMax = WORLD_W;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(52, aspect, 0.1, 200);
@@ -39,7 +41,7 @@ export class FollowCam {
   follow(dt: number, x: number, y: number, vx: number, vy: number, close = false): void {
     const atSurface = y > -5 && !close;
     const speed = Math.hypot(vx, vy);
-    const tx = Math.min(WORLD_W - 9, Math.max(9, x + vx * 0.22));
+    const tx = Math.min(this.xMax - 9, Math.max(9, x + vx * 0.22));
     const ty = atSurface ? Math.max(y + 1.4, 1.8) : y + vy * 0.16 + (close ? 0.5 : 0);
     const tz = (close ? 8.5 : atSurface ? 14 : 12.5) + speed * 0.12 + this.zoomBias;
 

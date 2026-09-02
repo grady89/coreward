@@ -50,6 +50,9 @@ const warden = await page.evaluate(async () => {
   g.ctrl.drilling = null;
   const rx = Math.floor(r.x), ry = Math.floor(r.y);
   for (let y = ry - 9; y < ry - 6; y++) for (let x = rx - 1; x <= rx + 1; x++) g.terrain.carve(x, y);
+  // the sighting flight may have posted a Warden at some OTHER hall; there is
+  // only one of it, so stand that one down before watching this hall
+  g.threats.reset();
   g.ctrl.px = rx + 0.5; g.ctrl.py = -(ry - 7) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.hull = 100000;
   g.lampOn = true;

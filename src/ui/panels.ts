@@ -773,7 +773,7 @@ export class Panels {
           : 'Something lives down there.'}</div></span>
         <button class="btn" id="s-threats">${s.threats.toUpperCase()}</button>
       </div>
-      ${toggle('vaultAssist', 'Vault assist', 'The Nine Stones, gentler: slower hazards, thriftier jets')}
+      ${toggle('vaultAssist', 'Vault assist', 'The Nine Stones, gentler: hazards at six-tenths speed')}
       <div class="forge-head">DISPLAY</div>
       ${toggle('showFps', 'Performance counter', 'Show frames per second')}
       <button class="btn wide" id="s-close">BACK</button>

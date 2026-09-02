@@ -14,7 +14,7 @@ export interface Settings {
   showFps: boolean;
   /** some players are here for the calm digging — let them have it */
   threats: ThreatSetting;
-  /** the Nine Stones, gentler: slower hazards, thriftier jets. The message
+  /** the Nine Stones, gentler: hazards at six-tenths speed. The message
    * is the reward, not the reflex — KINDLE stays reachable with this on. */
   vaultAssist: boolean;
 }

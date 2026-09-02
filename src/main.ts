@@ -937,6 +937,8 @@ class Game {
       if (map[e.code] !== undefined) {
         e.preventDefault();
         this.keys.add(map[e.code]);
+        // vault jumping is edge-triggered and buffered, Celeste-school
+        if (this.mode === 'vault' && map[e.code] === 'up' && !e.repeat) this.vault?.jumpPress();
       }
       if (e.code === 'KeyE') {
         if (!e.repeat) this.onInteract();
@@ -944,8 +946,9 @@ class Game {
       }
       if (e.code === 'KeyX') this.fireLance();
       if (e.code === 'Escape') this.onEscape();
-      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && this.mode === 'play' && !this.panels.isOpen) {
-        this.ctrl.dash();
+      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !this.panels.isOpen) {
+        if (this.mode === 'play') this.ctrl.dash();
+        else if (this.mode === 'vault' && !e.repeat) this.vault?.dash(this.input());
       }
       if (e.code === 'KeyC') this.warpSell();
       if (e.code === 'KeyQ') this.throwFlare();
@@ -1003,7 +1006,10 @@ class Game {
       }
     });
     addEventListener('keyup', e => {
-      if (map[e.code] !== undefined) this.keys.delete(map[e.code]);
+      if (map[e.code] !== undefined) {
+        this.keys.delete(map[e.code]);
+        if (this.mode === 'vault' && map[e.code] === 'up') this.vault?.jumpRelease();
+      }
       if (e.code === 'KeyE') this.eHeld = false;
     });
     addEventListener('pointermove', e => {

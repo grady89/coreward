@@ -6,7 +6,30 @@ Status: **BUILT — 2026-09-02.** Implemented as written; deltas are marked
 hazard grammars, the Famine economy, completion, codex, grandfathering,
 KINDLE gate), plus reworked `phase3.mjs` and the full regression.
 
-**[as built] highlights:**
+**SECOND PASS — 2026-09-02, after the first playtest.** The playtest verdict
+was right: hover let you fly past every room, the ceiling-beams were
+unwinnable walls, and the rooms were corridors, not levels. Rebuilt:
+
+- **Movement is discrete now, Celeste-school.** No hover, no meter. Walk,
+  jump (coyote time, buffering, variable height), wall-slide + wall-jump,
+  and ONE stored **spark**: Shift + a direction is an 8-way dash. Landing
+  on stone relights it; a lit sconce relights it mid-air — sconces are the
+  refill crystals, and routes are built from them. In the Famine the light
+  is dead: its sconces checkpoint but give nothing back.
+- **Hazard kit v2:** light **shuttles** (bolts patrolling a visible rail —
+  jump them or wait them out), swinging **censers** on chains, stone
+  **crusher** pistons still cycling, **pursuit** waves of unlight that hunt
+  you once you commit (the Ember's collapse, the Kindled's last corridor),
+  **brazier doors** that melt open at a sconce count, and the beams fixed:
+  they spin full circles (pointing away half the time) and masonry cover
+  blocks them — hide, then run.
+- **All nine levels re-authored** as ramping acts: VEIL-3 teaches the
+  moveset one idea at a time, CRYOS-2 tests it, MAELIS-6 examines it with
+  everything at once. The completion card reports your gutter count.
+- Assist = hazards at 0.6 speed. `vaults.mjs` guards the movement metrics
+  (jump ≈ 2.8 tiles) the maps are authored against.
+
+**[as built] highlights (first pass, still true):**
 - Vault assist = hazard speed ×0.6 and jet drain ×0.75 (no extra sconces —
   the maps stay identical in both modes).
 - The Kindled cameo stands in THE RETURN's bottom corridor, and **four**

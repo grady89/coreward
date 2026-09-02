@@ -927,3 +927,12 @@ body.sm-open #survey {
 .codex-row .codex-mark { width: 34px; height: 34px; flex: none; color: #ffd9a0; }
 .codex-row.locked .codex-mark { color: rgba(255, 255, 255, 0.18); }
 .codex-row.locked .r-name, .codex-row.locked .r-sub { opacity: 0.45; font-style: italic; }
+#vault-hud .vh-spark {
+  font-size: 20px; margin-top: 6px; color: #2a3038;
+  text-shadow: none; transition: color 150ms, text-shadow 150ms;
+}
+#vault-hud .vh-spark.lit { color: #bfe8ff; text-shadow: 0 0 12px rgba(191, 232, 255, 0.9); }
+#vault-card .vc-reforms {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.26em;
+  color: var(--ink-dim); margin-top: 10px;
+}

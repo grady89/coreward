@@ -3,35 +3,44 @@ import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
 import { VaultDef, ParsedVault, parseVault } from '../world/vaults';
 
-// A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3).
+// A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
+// second pass). The movement set is discrete now, Celeste-school:
 //
-// Its own scene, its own camera, its own physics: the world outside is
-// frozen and the suit runs on the room's worklight. The pilot flies like
-// a tiny pod — thrust in the held direction, gravity from whatever zone
-// you are standing in — walking and jumping are free, the jets drink the
-// meter, and failure is never death: your light gutters and you re-form
-// at the last sconce you lit.
+//   walk / jump ......... free (coyote time, jump buffering, variable height)
+//   wall-slide / -jump .. free — press into a wall airborne and it catches you
+//   the SPARK ........... one stored dash, 8-way, on Shift. Landing on stone
+//                         relights it; so does any lit sconce within reach —
+//                         including mid-air, which is what routes are made of.
+//
+// There is no hover. There is no meter. You carry one breath of light and
+// the level is the question of where you spend it. Failure is never death:
+// you gutter and re-form at the last sconce you lit.
 
 const HW = 0.15;
 const HH = 0.26;
 const EPS = 0.001;
 const WALK = 3.6;
-const JUMP = 8.6;
-const GRAV = 13;
-const THRUST = 26;
-const AIR_CTRL = 14;        // free lateral drift — just loses to a gust, barely beats a current
-const MAX_V = 11;
-const METER_MAX = 100;
-const DRAIN = 30;           // per second of jetting
-const REFILL_SCONCE = 60;   // in a lit sconce's glow
-const SCONCE_RANGE = 2.4;
-const BRIDGE_HALF = 1.7;    // seconds each bridge group burns
+const AIR_CTRL = 26;        // horizontal steering, airborne (capped at walk speed)
+const JUMP = 11;
+const GRAV = 24;            // heavier than the old float — jumps ARC now
+const MAX_FALL = 13;
+const DASH_V = 14;
+const DASH_T = 0.15;
+const DASH_KEEP = 6.5;      // speed retained when the dash ends
+const WALL_SLIDE = 2.6;     // max fall speed against a wall
+const WALL_JUMP_UP = 10.5;
+const WALL_JUMP_OUT = 5.6;
+const COYOTE = 0.1;
+const BUFFER = 0.12;
+const SCONCE_LIGHT_R = 1.0; // touch an unlit sconce to light it
+const SCONCE_SPARK_R = 1.4; // a lit sconce relights the spark from here
+const BRIDGE_HALF = 1.7;
 const BRIDGE_WARN = 0.35;
 const RIME_CRUMBLE = 0.55;
 const RIME_REGROW = 3.5;
 const BEAM_R = 0.3;
-const REFORM_T = 0.5;
-const INVULN_T = 1.0;
+const REFORM_T = 0.35;
+const INVULN_T = 0.6;
 
 export interface VaultAudio {
   sconce(): void;
@@ -45,16 +54,15 @@ interface Input { left: boolean; right: boolean; up: boolean; down: boolean; }
 type Phase = 'run' | 'reform' | 'complete';
 
 export class VaultRun {
-  /** the master stone was touched and the sequence has finished */
   completed = false;
-  /** the run wants to end (player stepped back through, or abandoned) */
   closed = false;
   phase: Phase = 'run';
-  meter = METER_MAX;
+  /** the one breath of light. True = a dash is loaded. */
+  spark = true;
   px: number; py: number;
   vx = 0; vy = 0;
   grounded = false;
-  /** times the light guttered — the honest difficulty telemetry */
+  /** times the light guttered — honest difficulty telemetry, shown at the end */
   reforms = 0;
 
   get glyphId(): string { return this.glyph.id; }
@@ -69,21 +77,43 @@ export class VaultRun {
   private walkT = 0;
   private checkpoint: { x: number; y: number };
   private sconceLit: boolean[];
+  private doorOpen: boolean[];
   private bridgeOn = [true, false];
   private rimeState: { t: number; gone: number }[];
-  private beams: { x: number; y: number; ex: number; ey: number; mesh: THREE.Mesh }[] = [];
+  private beamRays: { ex: number; ey: number; mesh: THREE.Mesh }[] = [];
   private windT = 0;
   private gusting = false;
+  // movement state
+  private dashT = 0;
+  private dashVX = 0;
+  private dashVY = 0;
+  private coyoteT = 0;
+  private bufferT = 0;
+  private wallDir = 0;
+  private wallCoyote = 0;
+  private jumpHeld = false;
+  private jumpCut = false;
+  // pursuit state
+  private pursuitOn = false;
+  private pursuitEdge = 0;
+  private pursuitDone = false;
 
   // visuals
   private pilotGroup = new THREE.Group();
   private legL!: THREE.Mesh;
   private legR!: THREE.Mesh;
   private lamp!: THREE.PointLight;
-  private jetMat!: THREE.MeshBasicMaterial;
+  private sparkMesh!: THREE.Mesh;
+  private trail: { mesh: THREE.Mesh; t: number }[] = [];
   private sconceMeshes: { flame: THREE.Mesh; light: THREE.PointLight; mat: THREE.MeshBasicMaterial }[] = [];
+  private doorMeshes: THREE.Mesh[][] = [];
   private bridgeMeshes: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: 0 | 1 }[] = [];
   private rimeMeshes: THREE.Mesh[] = [];
+  private shuttleMeshes: { bolt: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
+  private censerMeshes: { bob: THREE.Group; chain: THREE.Line; light: THREE.PointLight }[] = [];
+  private crusherMeshes: THREE.Mesh[] = [];
+  private pursuitMesh: THREE.Mesh | null = null;
+  private pursuitEdgeMesh: THREE.Mesh | null = null;
   private masterGroup!: THREE.Group;
   private motes!: THREE.Points;
   private motePos!: Float32Array;
@@ -102,30 +132,38 @@ export class VaultRun {
   ) {
     this.p = parseVault(def);
     this.cam = new FollowCam(aspect);
+    this.cam.xMax = this.p.w;
     this.px = this.p.entry.x + 0.5;
     this.py = -(this.p.entry.y + 0.5) - 0.2;
     this.checkpoint = { x: this.px, y: this.py };
     this.sconceLit = this.p.sconces.map(() => false);
+    this.doorOpen = this.p.doors.map(() => false);
     this.rimeState = this.p.rime.map(() => ({ t: -1, gone: 0 }));
     this.build();
-    this.cam.snap(this.px, this.py + 0.5, 9.5);
-    this.cam.zoomBias = 9; // pulled back: the room is the subject, and the room is the puzzle
+    this.cam.zoomBias = 9;
+    this.cam.snap(this.px, this.py + 0.5, 17.5);
 
     this.hud = document.createElement('div');
     this.hud.id = 'vault-hud';
     this.hud.innerHTML = `
       <div class="vh-name">${glyph.name}</div>
-      <div class="vh-meter"><div class="vh-fill"></div></div>
-      <div class="vh-hint">WORKLIGHT — jets drink it, sconces pour it back · Esc leaves</div>`;
+      <div class="vh-spark">◆</div>
+      <div class="vh-hint">SHIFT — spend the spark · stone and sconces relight it · walls catch you · Esc leaves</div>`;
     ui.appendChild(this.hud);
   }
 
-  // ---------------- construction ----------------
+  // ---------------- geometry ----------------
+
+  private hazardMul(): number { return this.assist ? 0.6 : 1; }
 
   private solidTile(x: number, y: number): boolean {
     if (x < 0 || y < 0 || x >= this.p.w || y >= this.p.h) return true;
     const i = y * this.p.w + x;
     if (this.p.solid[i]) return true;
+    for (let d = 0; d < this.p.doors.length; d++) {
+      if (this.doorOpen[d]) continue;
+      for (const t of this.p.doors[d].tiles) if (t.x === x && t.y === y) return true;
+    }
     for (let b = 0; b < this.p.bridges.length; b++) {
       const br = this.p.bridges[b];
       if (br.x === x && br.y === y) return this.bridgeOn[br.group];
@@ -137,6 +175,19 @@ export class VaultRun {
     return false;
   }
 
+  private gravityAt(x: number, y: number): [number, number] {
+    const tx = Math.floor(x), ty = Math.floor(-y);
+    if (tx < 0 || ty < 0 || tx >= this.p.w || ty >= this.p.h) return [0, -GRAV];
+    switch (this.p.gravity[ty * this.p.w + tx]) {
+      case 1: return [0, GRAV];
+      case 2: return [GRAV * 0.55, 0];
+      case 3: return [-GRAV * 0.55, 0];
+      default: return [0, -GRAV];
+    }
+  }
+
+  // ---------------- construction ----------------
+
   private build(): void {
     const { p } = this;
     this.scene.background = new THREE.Color(0x05060c);
@@ -145,8 +196,7 @@ export class VaultRun {
     key.position.set(0.4, 1, 0.8);
     this.scene.add(key);
 
-    // masonry — one instanced box, dark tiles painted near-black so the
-    // lamp is what finds them
+    // masonry
     let count = 0;
     for (let i = 0; i < p.w * p.h; i++) if (p.solid[i]) count++;
     const box = new THREE.BoxGeometry(1, 1, 1);
@@ -172,7 +222,7 @@ export class VaultRun {
     inst.instanceMatrix.needsUpdate = true;
     this.scene.add(inst);
 
-    // unlight: the kill tiles read as holes in the world with an ember seam
+    // unlight
     const killMat = new THREE.MeshBasicMaterial({ color: 0x1a0508 });
     const seamMat = new THREE.MeshBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.22 });
     for (let y = 0; y < p.h; y++) {
@@ -183,8 +233,6 @@ export class VaultRun {
         hole.scale.setScalar(0.98);
         const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.08), seamMat);
         seam.position.set(x + 0.5, -(y + 0.5) + 0.42, 0.42);
-        // a faint ember haze inside the pit, so the void reads as a place
-        // light goes to die and not as a platform
         const haze = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.8),
           new THREE.MeshBasicMaterial({ color: 0x4a1008, transparent: true, opacity: 0.5, depthWrite: false }));
         haze.position.set(x + 0.5, -(y + 0.5), 0.35);
@@ -206,7 +254,21 @@ export class VaultRun {
       this.sconceMeshes.push({ flame, light, mat: fm });
     }
 
-    // light bridges
+    // doors — masonry a shade warmer, with a faint rune of the count it wants
+    for (const d of this.p.doors) {
+      const meshes: THREE.Mesh[] = [];
+      const dm = new THREE.MeshStandardMaterial({ color: 0x7a6a56, roughness: 0.5, metalness: 0.3, flatShading: true, transparent: true });
+      for (const t of d.tiles) {
+        const m = new THREE.Mesh(box, dm);
+        m.position.set(t.x + 0.5, -(t.y + 0.5), 0);
+        m.scale.setScalar(0.99);
+        this.scene.add(m);
+        meshes.push(m);
+      }
+      this.doorMeshes.push(meshes);
+    }
+
+    // bridges
     for (const b of this.p.bridges) {
       const bm = new THREE.MeshBasicMaterial({ color: this.hue, transparent: true, opacity: 0.85 });
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.28, 0.6), bm);
@@ -215,7 +277,7 @@ export class VaultRun {
       this.bridgeMeshes.push({ mesh, mat: bm, group: b.group });
     }
 
-    // rime shelves
+    // rime
     const rimeMat = new THREE.MeshStandardMaterial({ color: 0xcfeaf5, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 });
     for (const r of this.p.rime) {
       const mesh = new THREE.Mesh(box, rimeMat.clone());
@@ -229,14 +291,73 @@ export class VaultRun {
     for (const b of this.def.beams ?? []) {
       const bm = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.26), bm);
-      const emitter = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.5),
+      const emitter = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.5),
         new THREE.MeshStandardMaterial({ color: 0x9a94ae, roughness: 0.5, metalness: 0.5 }));
       emitter.position.set(b.x, -b.y, 0.1);
       this.scene.add(mesh, emitter);
-      this.beams.push({ x: b.x, y: -b.y, ex: b.x, ey: -b.y, mesh });
+      this.beamRays.push({ ex: b.x, ey: -b.y, mesh });
     }
 
-    // the unlit figures — dark and narrow, the faintest ember at the chest
+    // shuttles — a bolt of light on a rail; the rail itself is drawn faint
+    for (const s of this.def.shuttles ?? []) {
+      const railGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(s.x0 + 0.5, -(s.y0 + 0.5), 0.05),
+        new THREE.Vector3(s.x1 + 0.5, -(s.y1 + 0.5), 0.05),
+      ]);
+      const rail = new THREE.Line(railGeo, new THREE.LineBasicMaterial({ color: this.hue, transparent: true, opacity: 0.18 }));
+      const horizontal = Math.abs(s.x1 - s.x0) >= Math.abs(s.y1 - s.y0);
+      const bm = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+      const bolt = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? 1.4 : 0.34, horizontal ? 0.34 : 1.4, 0.4), bm);
+      this.scene.add(rail, bolt);
+      this.shuttleMeshes.push({ bolt, mat: bm });
+    }
+
+    // censers — a lantern on a chain, still swinging after all this time
+    for (const c of this.def.censers ?? []) {
+      const chainGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -c.len, 0),
+      ]);
+      const chain = new THREE.Line(chainGeo, new THREE.LineBasicMaterial({ color: 0x8f89a4, transparent: true, opacity: 0.7 }));
+      chain.position.set(c.x, -c.y, 0.2);
+      const bob = new THREE.Group();
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0x6f8f88, roughness: 0.4, metalness: 0.7 }));
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
+      const light = new THREE.PointLight(0xffd9a0, 2.2, 7, 1.7);
+      bob.add(shell, flame, light);
+      this.scene.add(chain, bob);
+      this.censerMeshes.push({ bob, chain, light });
+    }
+
+    // crushers — pistons of the same stone, ember-seamed on the working face
+    for (const c of this.def.crushers ?? []) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(c.w, c.h, 1),
+        new THREE.MeshStandardMaterial({ color: 0x6a6480, roughness: 0.55, metalness: 0.3, flatShading: true }));
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(
+        c.dx !== 0 ? 0.1 : c.w * 0.9, c.dx !== 0 ? c.h * 0.9 : 0.1),
+        new THREE.MeshBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.5 }));
+      face.position.set(c.dx !== 0 ? Math.sign(c.dx) * c.w / 2 : 0, c.dy !== 0 ? -Math.sign(c.dy) * c.h / 2 : 0, 0.51);
+      mesh.add(face);
+      this.scene.add(mesh);
+      this.crusherMeshes.push(mesh);
+    }
+
+    // pursuit — the consumed dark, and its burning leading edge
+    if (this.def.pursuit) {
+      const z = this.def.pursuit.zone;
+      const zw = z[2] - z[0] + 1, zh = z[3] - z[1] + 1;
+      this.pursuitMesh = new THREE.Mesh(new THREE.PlaneGeometry(zw, zh),
+        new THREE.MeshBasicMaterial({ color: 0x02030a, transparent: true, opacity: 0.96, depthWrite: false }));
+      this.pursuitMesh.visible = false;
+      const vertical = this.def.pursuit.dir === 'down' || this.def.pursuit.dir === 'up';
+      this.pursuitEdgeMesh = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? zw : 0.16, vertical ? 0.16 : zh),
+        new THREE.MeshBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.pursuitEdgeMesh.visible = false;
+      this.scene.add(this.pursuitMesh, this.pursuitEdgeMesh);
+    }
+
+    // figures
     for (const f of this.p.figures) {
       const dark = new THREE.MeshBasicMaterial({ color: 0x05070c });
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.5, 0.2), dark);
@@ -248,7 +369,7 @@ export class VaultRun {
       this.scene.add(body, ember);
     }
 
-    // the master stone: the glyph, burning, with its own glow
+    // master stone
     this.masterGroup = new THREE.Group();
     const slab = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.8, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x2a2738, roughness: 0.4, metalness: 0.3 }));
@@ -262,24 +383,21 @@ export class VaultRun {
     this.masterGroup.position.set(this.p.master.x + 0.5, -(this.p.master.y + 0.5), 0);
     this.scene.add(this.masterGroup);
 
-    // the entry: a lit doorframe — the first checkpoint is the way in
+    // entry frame
     const frame = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.7, 0.15),
       new THREE.MeshBasicMaterial({ color: this.hue, transparent: true, opacity: 0.22 }));
     frame.position.set(this.p.entry.x + 0.5, -(this.p.entry.y + 0.5), -0.3);
     this.scene.add(frame);
 
-    // worklight motes: the air itself, falling the way the room says down.
-    // In a gravity zone they fall sideways or up — shown, never told.
+    // motes falling the way each zone says down
     const N = 420;
     this.motePos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) this.seedMote(i);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.motePos, 3));
-    const pm = new THREE.PointsMaterial({ color: 0xd8d2ff, size: 0.06, transparent: true, opacity: 0.5, depthWrite: false });
-    this.motes = new THREE.Points(geo, pm);
+    this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xd8d2ff, size: 0.06, transparent: true, opacity: 0.5, depthWrite: false }));
     this.scene.add(this.motes);
 
-    // wind streaks, born only during a gust
     if (this.def.wind) {
       const W = 120;
       const wp = new Float32Array(W * 3);
@@ -294,8 +412,7 @@ export class VaultRun {
       this.scene.add(this.windStreaks);
     }
 
-    // the pilot — same suit as pilot.ts, rebuilt here because this scene
-    // lives and dies with the run
+    // the pilot
     const suit = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.6, metalness: 0.15 });
     const accent = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.2 });
     const visorM = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.15, metalness: 0.5, emissive: 0x0d3a40, emissiveIntensity: 0.6 });
@@ -312,13 +429,13 @@ export class VaultRun {
     this.legR = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.1, 3, 6), suit);
     this.legL.position.set(-0.06, -0.16, 0);
     this.legR.position.set(0.06, -0.16, 0);
-    this.jetMat = new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0 });
-    const jet = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 8), this.jetMat);
-    jet.position.set(0, -0.32, -0.05);
-    jet.rotation.x = Math.PI;
+    // the spark itself rides on the pack, visibly lit or spent
+    this.sparkMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.075),
+      new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
+    this.sparkMesh.position.set(0, 0.1, -0.2);
     this.lamp = new THREE.PointLight(0xffe6c0, 6, 6, 1.6);
     this.lamp.position.set(0, 0.25, 0.4);
-    this.pilotGroup.add(body, pack, head, visor, this.legL, this.legR, jet, this.lamp);
+    this.pilotGroup.add(body, pack, head, visor, this.legL, this.legR, this.sparkMesh, this.lamp);
     this.scene.add(this.pilotGroup);
   }
 
@@ -336,23 +453,226 @@ export class VaultRun {
     this.motePos[i * 3] = -5; this.motePos[i * 3 + 1] = 5;
   }
 
-  // ---------------- physics ----------------
+  // ---------------- movement ----------------
 
-  private gravityAt(x: number, y: number): [number, number] {
-    const tx = Math.floor(x), ty = Math.floor(-y);
-    if (tx < 0 || ty < 0 || tx >= this.p.w || ty >= this.p.h) return [0, -GRAV];
-    switch (this.p.gravity[ty * this.p.w + tx]) {
-      case 1: return [0, GRAV];
-      case 2: return [GRAV, 0];
-      case 3: return [-GRAV, 0];
-      default: return [0, -GRAV];
+  /** Shift pressed: spend the spark on an 8-way burst */
+  dash(input: Input): void {
+    if (this.phase !== 'run' || !this.spark || this.dashT > 0) return;
+    let dx = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+    let dy = (input.up ? 1 : 0) + (input.down ? -1 : 0);
+    if (dx === 0 && dy === 0) dx = this.facing;
+    const len = Math.hypot(dx, dy);
+    this.spark = false;
+    this.dashT = DASH_T;
+    this.dashVX = (dx / len) * DASH_V;
+    this.dashVY = (dy / len) * DASH_V;
+    this.vx = this.dashVX;
+    this.vy = this.dashVY;
+    if (dx !== 0) this.facing = Math.sign(dx);
+    // the burst leaves a short trail of itself
+    for (let i = 0; i < 3; i++) {
+      const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.16, 3, 6),
+        new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.4 - i * 0.1 }));
+      ghost.position.set(this.px - this.dashVX * 0.02 * (i + 1), this.py - this.dashVY * 0.02 * (i + 1), 0.05);
+      this.scene.add(ghost);
+      this.trail.push({ mesh: ghost, t: 0.25 });
     }
   }
 
-  private darkAt(x: number, y: number): boolean {
-    const tx = Math.floor(x), ty = Math.floor(-y);
-    if (tx < 0 || ty < 0 || tx >= this.p.w || ty >= this.p.h) return false;
-    return !!this.p.dark[ty * this.p.w + tx];
+  /** jump pressed (edge) — buffered so a slightly-early press still lands */
+  jumpPress(): void { this.bufferT = BUFFER; this.jumpHeld = true; this.jumpCut = false; }
+  jumpRelease(): void { this.jumpHeld = false; }
+
+  private step(dt: number, input: Input): void {
+    const [gx, gy] = this.gravityAt(this.px, this.py);
+    const vertical = gx === 0;
+    const gSign = vertical ? Math.sign(-gy) : 0; // 1 = falls down, -1 = falls up
+
+    // timers
+    this.coyoteT = Math.max(0, this.coyoteT - dt);
+    this.bufferT = Math.max(0, this.bufferT - dt);
+    this.wallCoyote = Math.max(0, this.wallCoyote - dt);
+
+    if (this.dashT > 0) {
+      // mid-dash: locked velocity, no gravity — the burst is the burst
+      this.dashT -= dt;
+      this.vx = this.dashVX;
+      this.vy = this.dashVY;
+      if (this.dashT <= 0) {
+        this.vx = Math.sign(this.vx) * Math.min(Math.abs(this.vx), DASH_KEEP);
+        this.vy = Math.sign(this.vy) * Math.min(Math.abs(this.vy), DASH_KEEP);
+      }
+    } else {
+      // steering
+      const move = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+      if (move !== 0) {
+        const accel = this.grounded ? 34 : AIR_CTRL;
+        this.vx += move * accel * dt;
+        if (Math.abs(this.vx) > WALK && Math.sign(this.vx) === move && this.grounded) this.vx = move * WALK;
+        // airborne steering never outruns a dash — the dash is the fast verb
+        if (!this.grounded && Math.sign(this.vx) === move && Math.abs(this.vx) > 5) this.vx = move * 5;
+        this.facing = move;
+      } else if (this.grounded) {
+        this.vx -= this.vx * Math.min(1, 14 * dt);
+      }
+
+      // gravity
+      this.vx += gx * dt;
+      this.vy += gy * dt;
+
+      // wall slide (vertical gravity only): pressing into a wall catches you
+      this.wallDir = 0;
+      if (vertical && !this.grounded) {
+        const top = Math.floor(-(this.py + HH - EPS));
+        const bot = Math.floor(-(this.py - HH + EPS));
+        const near = (side: number): boolean => {
+          const c = Math.floor(this.px + side * (HW + 0.06));
+          for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) return true;
+          return false;
+        };
+        if (move === -1 && near(-1)) this.wallDir = -1;
+        else if (move === 1 && near(1)) this.wallDir = 1;
+        if (this.wallDir !== 0) {
+          this.wallCoyote = COYOTE;
+          const falling = gSign > 0 ? this.vy < 0 : this.vy > 0;
+          if (falling) {
+            const cap = WALL_SLIDE * gSign;
+            if (gSign > 0 ? this.vy < -cap : this.vy > -cap) this.vy = -cap;
+          }
+        }
+      }
+
+      // jump: from ground (coyote'd), or off a wall
+      if (this.bufferT > 0 && vertical) {
+        if (this.grounded || this.coyoteT > 0) {
+          this.vy = JUMP * gSign;
+          this.grounded = false;
+          this.coyoteT = 0;
+          this.bufferT = 0;
+          this.jumpCut = false;
+        } else if (this.wallDir !== 0 || this.wallCoyote > 0) {
+          const away = this.wallDir !== 0 ? -this.wallDir : -Math.sign(this.facing);
+          this.vy = WALL_JUMP_UP * gSign;
+          this.vx = away * WALL_JUMP_OUT;
+          this.facing = away;
+          this.bufferT = 0;
+          this.wallCoyote = 0;
+          this.jumpCut = false;
+        }
+      }
+      // variable height: let go early and the jump shortens
+      if (!this.jumpHeld && !this.jumpCut && vertical) {
+        const rising = gSign > 0 ? this.vy > 0 : this.vy < 0;
+        if (rising) { this.vy *= 0.45; this.jumpCut = true; }
+      }
+
+      // wind
+      if (this.def.wind && this.gusting) {
+        const w = this.def.wind;
+        const wx = Math.floor(this.px), wy = Math.floor(-this.py);
+        let sheltered = false;
+        for (let d = 1; d <= 2 && !sheltered; d++) {
+          const cx = wx - w.dir * d;
+          if (this.solidTile(cx, wy) || this.solidTile(cx, wy - 1)) sheltered = true;
+        }
+        if (!sheltered) this.vx += w.dir * w.force * (this.assist ? 0.6 : 1) * dt;
+      }
+
+      // caps
+      this.vy = Math.max(-MAX_FALL, Math.min(MAX_FALL, this.vy));
+      this.vx = Math.max(-MAX_FALL, Math.min(MAX_FALL, this.vx));
+    }
+
+    // integrate
+    const wasGrounded = this.grounded;
+    this.grounded = false;
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt / 0.2));
+    const sdt = dt / steps;
+    let floorTile: [number, number] | null = null;
+    for (let i = 0; i < steps; i++) {
+      this.moveX(this.vx * sdt);
+      const r = this.moveY(this.vy * sdt, gSign);
+      if (r) floorTile = r;
+    }
+    if (wasGrounded && !this.grounded) this.coyoteT = COYOTE;
+    if (this.grounded) {
+      this.spark = true;             // stone underfoot relights the breath
+      this.coyoteT = COYOTE;
+    }
+
+    // rime wakes underfoot
+    if (floorTile) {
+      for (let i = 0; i < this.p.rime.length; i++) {
+        const rm = this.p.rime[i];
+        if (rm.x === floorTile[0] && rm.y === floorTile[1] && this.rimeState[i].t < 0 && this.rimeState[i].gone <= 0) {
+          this.rimeState[i].t = 0;
+        }
+      }
+    }
+
+    // sconces: touch to light (a checkpoint), stand in the glow to relight
+    for (let i = 0; i < this.p.sconces.length; i++) {
+      const s = this.p.sconces[i];
+      const d = Math.hypot(this.px - (s.x + 0.5), this.py + s.y + 0.5);
+      if (!this.sconceLit[i] && d < SCONCE_LIGHT_R) {
+        this.sconceLit[i] = true;
+        this.checkpoint = { x: s.x + 0.5, y: -(s.y + 0.5) - 0.2 };
+        if (!this.def.deadLight) this.spark = true;
+        this.audio.sconce();
+        this.openDoors();
+      } else if (this.sconceLit[i] && !this.def.deadLight && d < SCONCE_SPARK_R) {
+        this.spark = true;
+      }
+    }
+
+    // the master stone
+    const m = this.p.master;
+    if (Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5) < 1.5) {
+      this.phase = 'complete';
+      this.phaseT = 0;
+      this.vx = 0; this.vy = 0;
+      return;
+    }
+
+    // hazards
+    if (this.invuln > 0) return;
+    if (this.touchingKill()) { this.reform(); return; }
+    for (const b of this.beamRays) {
+      const bd = (this.def.beams ?? [])[this.beamRays.indexOf(b)];
+      if (!bd) continue;
+      const bx = bd.x, by = -bd.y;
+      const dx = b.ex - bx, dy = b.ey - by;
+      const len2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((this.px - bx) * dx + (this.py - by) * dy) / len2));
+      if (Math.hypot(this.px - (bx + dx * t), this.py - (by + dy * t)) < BEAM_R) { this.reform(); return; }
+    }
+    for (let i = 0; i < (this.def.shuttles ?? []).length; i++) {
+      const pos = this.shuttlePos(i);
+      const horizontal = Math.abs((this.def.shuttles![i].x1 - this.def.shuttles![i].x0)) >= Math.abs((this.def.shuttles![i].y1 - this.def.shuttles![i].y0));
+      const hw = horizontal ? 0.7 : 0.17, hh = horizontal ? 0.17 : 0.7;
+      if (Math.abs(this.px - pos.x) < hw + HW && Math.abs(this.py - pos.y) < hh + HH) { this.reform(); return; }
+    }
+    for (let i = 0; i < (this.def.censers ?? []).length; i++) {
+      const pos = this.censerPos(i);
+      if (Math.hypot(this.px - pos.x, this.py - pos.y) < 0.55 + HW) { this.reform(); return; }
+    }
+    for (let i = 0; i < (this.def.crushers ?? []).length; i++) {
+      const r = this.crusherRect(i);
+      if (this.px + HW > r.x0 && this.px - HW < r.x1 && this.py + HH > r.y1 && this.py - HH < r.y0) { this.reform(); return; }
+    }
+    if (this.pursuitOn && this.def.pursuit) {
+      const pu = this.def.pursuit;
+      const [zx0, zy0, zx1, zy1] = pu.zone;
+      const inZone = this.px > zx0 && this.px < zx1 + 1 && -this.py > zy0 && -this.py < zy1 + 1;
+      if (inZone) {
+        const consumed =
+          pu.dir === 'down' ? -this.py < this.pursuitEdge :
+          pu.dir === 'up' ? -this.py > this.pursuitEdge :
+          pu.dir === 'right' ? this.px < this.pursuitEdge :
+          this.px > this.pursuitEdge;
+        if (consumed) { this.reform(); return; }
+      }
+    }
   }
 
   private moveX(dx: number): void {
@@ -362,17 +682,17 @@ export class VaultRun {
     if (dx > 0) {
       const c = Math.floor(this.px + HW);
       for (let r = top; r <= bot; r++) {
-        if (this.solidTile(c, r)) { this.px = c - HW - EPS; this.vx = 0; break; }
+        if (this.solidTile(c, r)) { this.px = c - HW - EPS; this.vx = 0; if (this.dashT > 0) this.dashVX = 0; break; }
       }
     } else if (dx < 0) {
       const c = Math.floor(this.px - HW);
       for (let r = top; r <= bot; r++) {
-        if (this.solidTile(c, r)) { this.px = c + 1 + HW + EPS; this.vx = 0; break; }
+        if (this.solidTile(c, r)) { this.px = c + 1 + HW + EPS; this.vx = 0; if (this.dashT > 0) this.dashVX = 0; break; }
       }
     }
   }
 
-  private moveY(dy: number): { floorTile: [number, number] | null } {
+  private moveY(dy: number, gSign: number): [number, number] | null {
     this.py += dy;
     const left = Math.floor(this.px - HW + EPS);
     const right = Math.floor(this.px + HW - EPS);
@@ -383,8 +703,8 @@ export class VaultRun {
         if (this.solidTile(c, r)) {
           this.py = -r + HH + EPS;
           this.vy = 0;
-          this.grounded = true;
-          floorTile = [c, r];
+          if (this.dashT > 0) this.dashVY = 0;
+          if (gSign > 0) { this.grounded = true; floorTile = [c, r]; }
           break;
         }
       }
@@ -395,12 +715,14 @@ export class VaultRun {
           if (this.solidTile(c, r)) {
             this.py = -(r + 1) - HH - EPS;
             this.vy = 0;
+            if (this.dashT > 0) this.dashVY = 0;
+            if (gSign < 0) { this.grounded = true; floorTile = [c, r]; }
             break;
           }
         }
       }
     }
-    return { floorTile };
+    return floorTile;
   }
 
   private touchingKill(): boolean {
@@ -420,16 +742,57 @@ export class VaultRun {
     this.reforms++;
     this.phase = 'reform';
     this.phaseT = 0;
+    if (this.def.pursuit) { this.pursuitOn = false; this.pursuitDone = false; }
+  }
+
+  private openDoors(): void {
+    const lit = this.sconceLit.filter(Boolean).length;
+    for (let d = 0; d < this.p.doors.length; d++) {
+      const need = this.def.doorNeeds?.[this.p.doors[d].ch] ?? 1;
+      if (!this.doorOpen[d] && lit >= need) {
+        this.doorOpen[d] = true;
+        this.audio.complete();
+      }
+    }
+  }
+
+  // ---------------- hazard positions ----------------
+
+  private shuttlePos(i: number): { x: number; y: number } {
+    const s = this.def.shuttles![i];
+    const u = (this.time / (s.period / this.hazardMul()) + s.phase) % 1;
+    const ping = u < 0.5 ? u * 2 : 2 - u * 2;
+    return {
+      x: s.x0 + 0.5 + (s.x1 - s.x0) * ping,
+      y: -(s.y0 + 0.5) - (s.y1 - s.y0) * ping,
+    };
+  }
+
+  private censerPos(i: number): { x: number; y: number } {
+    const c = this.def.censers![i];
+    const a = c.arc * Math.sin(Math.PI * 2 * (this.time / (c.period / this.hazardMul()) + c.phase));
+    return { x: c.x + Math.sin(a) * c.len, y: -c.y - Math.cos(a) * c.len };
+  }
+
+  private crusherRect(i: number): { x0: number; y0: number; x1: number; y1: number } {
+    const c = this.def.crushers![i];
+    const u = (this.time / (c.period / this.hazardMul()) + c.phase) % 1;
+    // extend fast, dwell, withdraw, rest
+    const ext = u < 0.22 ? u / 0.22 : u < 0.45 ? 1 : u < 0.72 ? 1 - (u - 0.45) / 0.27 : 0;
+    const ox = c.dx * ext, oy = c.dy * ext;
+    return {
+      x0: c.x + ox, y0: -(c.y + oy),
+      x1: c.x + c.w + ox, y1: -(c.y + c.h + oy),
+    };
   }
 
   // ---------------- frame ----------------
 
   frame(dt: number, input: Input, lampOn: boolean): void {
     this.time += dt;
-    const hazardMul = this.assist ? 0.6 : 1;
-    const drainMul = this.assist ? 0.75 : 1;
+    const hazardMul = this.hazardMul();
 
-    // bridges keep their metronome even while you re-form
+    // bridges
     const cycle = (BRIDGE_HALF * 2) / hazardMul;
     const half = cycle / 2;
     const tc = this.time % cycle;
@@ -437,26 +800,31 @@ export class VaultRun {
     this.bridgeOn[1] = !this.bridgeOn[0];
     const warn = (tc % half) > half - BRIDGE_WARN;
 
-    // beams sweep
+    // beams
     const bdefs = this.def.beams ?? [];
     for (let i = 0; i < bdefs.length; i++) {
       const b = bdefs[i];
-      const u = (this.time / (b.period / hazardMul) + b.phase) % 1;
-      const ping = u < 0.5 ? u * 2 : 2 - u * 2;
-      const ang = b.a0 + (b.a1 - b.a0) * ping;
-      const beam = this.beams[i];
-      let ex = beam.x, ey = beam.y;
-      for (let s = 0; s < 60; s++) {
+      let ang: number;
+      if (b.spin) {
+        ang = Math.PI * 2 * ((this.time / (b.period / hazardMul) + b.phase) % 1);
+      } else {
+        const u = (this.time / (b.period / hazardMul) + b.phase) % 1;
+        const ping = u < 0.5 ? u * 2 : 2 - u * 2;
+        ang = (b.a0 ?? -2.35) + ((b.a1 ?? -0.79) - (b.a0 ?? -2.35)) * ping;
+      }
+      const ray = this.beamRays[i];
+      let ex = b.x, ey = -b.y;
+      for (let s = 0; s < 90; s++) {
         const nx = ex + Math.cos(ang) * 0.35;
         const ny = ey + Math.sin(ang) * 0.35;
         if (this.solidTile(Math.floor(nx), Math.floor(-ny))) break;
         ex = nx; ey = ny;
       }
-      beam.ex = ex; beam.ey = ey;
-      const len = Math.hypot(ex - beam.x, ey - beam.y);
-      beam.mesh.position.set((beam.x + ex) / 2, (beam.y + ey) / 2, 0.15);
-      beam.mesh.scale.set(len, 1, 1);
-      beam.mesh.rotation.z = Math.atan2(ey - beam.y, ex - beam.x);
+      ray.ex = ex; ray.ey = ey;
+      const len = Math.hypot(ex - b.x, ey + b.y);
+      ray.mesh.position.set((b.x + ex) / 2, (-b.y + ey) / 2, 0.15);
+      ray.mesh.scale.set(len, 1, 1);
+      ray.mesh.rotation.z = Math.atan2(ey + b.y, ex - b.x);
     }
 
     // wind
@@ -464,11 +832,10 @@ export class VaultRun {
       const w = this.def.wind;
       this.windT += dt;
       const period = w.calm + w.gust;
-      const inGust = (this.windT % period) > w.calm;
-      this.gusting = inGust;
+      this.gusting = (this.windT % period) > w.calm;
       const mat = (this.windStreaks!.material as THREE.PointsMaterial);
-      mat.opacity += ((inGust ? 0.55 : 0) - mat.opacity) * Math.min(1, dt * 6);
-      if (inGust) {
+      mat.opacity += ((this.gusting ? 0.55 : 0) - mat.opacity) * Math.min(1, dt * 6);
+      if (this.gusting) {
         const pos = this.windStreaks!.geometry.getAttribute('position') as THREE.BufferAttribute;
         for (let i = 0; i < pos.count; i++) {
           let x = pos.getX(i) + w.dir * (8 + (i % 5)) * dt;
@@ -480,7 +847,7 @@ export class VaultRun {
       }
     }
 
-    // rime shelves crumble and regrow
+    // rime
     for (let i = 0; i < this.rimeState.length; i++) {
       const rs = this.rimeState[i];
       const mesh = this.rimeMeshes[i];
@@ -488,7 +855,6 @@ export class VaultRun {
         rs.gone -= dt;
         mesh.visible = false;
         if (rs.gone <= 0) {
-          // never regrow into the pilot
           const r = this.p.rime[i];
           if (Math.abs(this.px - (r.x + 0.5)) < 1 && Math.abs(this.py + r.y + 0.5) < 1) rs.gone = 0.4;
           else { rs.t = -1; mesh.visible = true; }
@@ -500,20 +866,45 @@ export class VaultRun {
       }
     }
 
+    // pursuit arming + advance
+    if (this.def.pursuit && this.phase === 'run') {
+      const pu = this.def.pursuit;
+      if (!this.pursuitOn && !this.pursuitDone) {
+        const [tx0, ty0, tx1, ty1] = pu.trigger;
+        if (this.px > tx0 && this.px < tx1 + 1 && -this.py > ty0 && -this.py < ty1 + 1) {
+          this.pursuitOn = true;
+          this.pursuitEdge =
+            pu.dir === 'down' ? pu.zone[1] :
+            pu.dir === 'up' ? pu.zone[3] + 1 :
+            pu.dir === 'right' ? pu.zone[0] : pu.zone[2] + 1;
+          this.audio.deny();
+        }
+      } else if (this.pursuitOn) {
+        const sp = pu.speed * hazardMul;
+        this.pursuitEdge += (pu.dir === 'down' || pu.dir === 'right' ? sp : -sp) * dt;
+        const past =
+          pu.dir === 'down' ? this.pursuitEdge > pu.zone[3] + 1 :
+          pu.dir === 'up' ? this.pursuitEdge < pu.zone[1] :
+          pu.dir === 'right' ? this.pursuitEdge > pu.zone[2] + 1 :
+          this.pursuitEdge < pu.zone[0];
+        if (past) { this.pursuitOn = false; this.pursuitDone = true; }
+      }
+    }
+
     if (this.phase === 'reform') {
       this.phaseT += dt;
       this.pilotGroup.scale.setScalar(Math.max(0.01, 1 - this.phaseT / REFORM_T));
       if (this.phaseT >= REFORM_T) {
         this.px = this.checkpoint.x; this.py = this.checkpoint.y;
         this.vx = 0; this.vy = 0;
-        this.meter = METER_MAX;
+        this.spark = true;
+        this.dashT = 0;
         this.invuln = INVULN_T;
         this.phase = 'run';
         this.pilotGroup.scale.setScalar(1);
       }
     } else if (this.phase === 'complete') {
       this.phaseT += dt;
-      // the room answers: sconces light in sequence, the stone flares
       const n = Math.floor(this.phaseT / 0.35);
       for (let i = 0; i < Math.min(n, this.sconceLit.length); i++) {
         if (!this.sconceLit[i]) { this.sconceLit[i] = true; this.audio.sconce(); }
@@ -525,50 +916,11 @@ export class VaultRun {
         this.showCard();
       }
     } else {
-      this.step(dt, input, drainMul);
+      this.invuln = Math.max(0, this.invuln - dt);
+      this.step(dt, input);
     }
 
-    // shared per-frame updates
-    this.invuln = Math.max(0, this.invuln - dt);
-
-    // meter refill
-    const dark = this.darkAt(this.px, this.py);
-    let refill = dark ? 0 : (this.def.ambient ?? 7);
-    for (let i = 0; i < this.p.sconces.length; i++) {
-      if (!this.sconceLit[i]) continue;
-      const s = this.p.sconces[i];
-      if (Math.hypot(this.px - (s.x + 0.5), this.py + s.y + 0.5) < SCONCE_RANGE) { refill = REFILL_SCONCE; break; }
-    }
-    this.meter = Math.min(METER_MAX, this.meter + refill * dt);
-
-    // sconce touch
-    if (this.phase === 'run') {
-      for (let i = 0; i < this.p.sconces.length; i++) {
-        if (this.sconceLit[i]) continue;
-        const s = this.p.sconces[i];
-        if (Math.hypot(this.px - (s.x + 0.5), this.py + s.y + 0.5) > 0.95) continue;
-        const cost = this.def.sconceCost ?? 0;
-        if (cost > 0 && this.meter < cost + 8) {
-          // not enough of you to feed it — the socket flickers and refuses
-          this.sconceMeshes[i].mat.color.setHex(0x6a5138);
-          this.audio.deny();
-          continue;
-        }
-        this.meter -= cost;
-        this.sconceLit[i] = true;
-        this.checkpoint = { x: s.x + 0.5, y: -(s.y + 0.5) - 0.2 };
-        this.audio.sconce();
-      }
-      // the master stone
-      const m = this.p.master;
-      if (Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5) < 1.5) {
-        this.phase = 'complete';
-        this.phaseT = 0;
-        this.vx = 0; this.vy = 0;
-      }
-    }
-
-    // visuals
+    // ---------------- visuals ----------------
     for (let i = 0; i < this.sconceMeshes.length; i++) {
       const sm = this.sconceMeshes[i];
       const lit = this.sconceLit[i];
@@ -576,11 +928,62 @@ export class VaultRun {
       sm.mat.color.setHex(lit ? 0xffd9a0 : 0x342e22);
       sm.flame.scale.setScalar(lit ? 1 + Math.sin(this.time * 9 + i) * 0.15 : 0.8);
     }
+    for (let d = 0; d < this.doorMeshes.length; d++) {
+      for (const m of this.doorMeshes[d]) {
+        const mm = m.material as THREE.MeshStandardMaterial;
+        mm.opacity += ((this.doorOpen[d] ? 0 : 1) - mm.opacity) * Math.min(1, dt * 3);
+        m.visible = mm.opacity > 0.03;
+      }
+    }
     for (const bm of this.bridgeMeshes) {
       const on = this.bridgeOn[bm.group];
       const flick = warn && on ? (Math.sin(this.time * 55) > 0 ? 1 : 0.25) : 1;
       bm.mat.opacity = on ? 0.85 * flick : 0.06;
       bm.mesh.scale.y = on ? 1 : 0.4;
+    }
+    for (let i = 0; i < this.shuttleMeshes.length; i++) {
+      const pos = this.shuttlePos(i);
+      this.shuttleMeshes[i].bolt.position.set(pos.x, pos.y, 0.15);
+      this.shuttleMeshes[i].mat.opacity = 0.75 + Math.sin(this.time * 24 + i) * 0.2;
+    }
+    for (let i = 0; i < this.censerMeshes.length; i++) {
+      const c = this.def.censers![i];
+      const pos = this.censerPos(i);
+      const cm = this.censerMeshes[i];
+      cm.bob.position.set(pos.x, pos.y, 0.2);
+      cm.chain.position.set(c.x, -c.y, 0.2);
+      cm.chain.rotation.z = Math.atan2(pos.x - c.x, -(pos.y + c.y));
+      cm.light.intensity = 2 + Math.sin(this.time * 8 + i) * 0.4;
+    }
+    for (let i = 0; i < this.crusherMeshes.length; i++) {
+      const r = this.crusherRect(i);
+      this.crusherMeshes[i].position.set((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 0);
+    }
+    if (this.def.pursuit && this.pursuitMesh && this.pursuitEdgeMesh) {
+      const pu = this.def.pursuit;
+      const [zx0, zy0, zx1, zy1] = pu.zone;
+      const on = this.pursuitOn;
+      this.pursuitMesh.visible = on;
+      this.pursuitEdgeMesh.visible = on;
+      if (on) {
+        if (pu.dir === 'down') {
+          const top = -zy0, edge = -this.pursuitEdge;
+          this.pursuitMesh.scale.y = Math.max(0.001, (top - edge) / (zy1 - zy0 + 1));
+          this.pursuitMesh.position.set((zx0 + zx1 + 1) / 2, (top + edge) / 2, 0.45);
+          this.pursuitEdgeMesh.position.set((zx0 + zx1 + 1) / 2, edge, 0.46);
+        } else if (pu.dir === 'right') {
+          const left = zx0, edge = this.pursuitEdge;
+          this.pursuitMesh.scale.x = Math.max(0.001, (edge - left) / (zx1 - zx0 + 1));
+          this.pursuitMesh.position.set((left + edge) / 2, -(zy0 + zy1 + 1) / 2, 0.45);
+          this.pursuitEdgeMesh.position.set(edge, -(zy0 + zy1 + 1) / 2, 0.46);
+        }
+      }
+    }
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      const t = this.trail[i];
+      t.t -= dt;
+      (t.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, t.t * 1.6);
+      if (t.t <= 0) { this.scene.remove(t.mesh); this.trail.splice(i, 1); }
     }
     this.lamp.intensity = lampOn ? 6 : 0.6;
     const dot = this.masterGroup.getObjectByName('glyph-light');
@@ -591,13 +994,13 @@ export class VaultRun {
       }
     }
 
-    // motes drift the way the room says down
+    // motes
     const pos = this.motes.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i);
       const [gx, gy] = this.gravityAt(x, y);
-      let nx = x + (gx / GRAV) * 0.45 * dt;
-      let ny = y + (gy / GRAV) * 0.45 * dt + (gy === -GRAV ? 0 : 0);
+      const nx = x + (gx / GRAV) * 0.45 * dt;
+      const ny = y + (gy / GRAV) * 0.45 * dt;
       const ti = Math.floor(-ny) * this.p.w + Math.floor(nx);
       if (nx < 0 || nx >= this.p.w || -ny >= this.p.h || -ny < 0 || this.p.solid[ti]) {
         this.seedMote(i);
@@ -607,105 +1010,23 @@ export class VaultRun {
     }
     pos.needsUpdate = true;
 
-    // pilot mesh + camera + hud
+    // pilot mesh + spark + camera + hud
     this.walkT += dt * Math.abs(this.vx) * 4;
     const swing = this.grounded ? Math.sin(this.walkT) * 0.5 : 0.3;
     this.legL.rotation.x = swing;
     this.legR.rotation.x = -swing;
     this.pilotGroup.rotation.y = this.facing > 0 ? 0.35 : -0.35;
     this.pilotGroup.position.set(this.px, this.py, 0.1);
+    const sm = this.sparkMesh.material as THREE.MeshBasicMaterial;
+    sm.color.setHex(this.spark ? 0xbfe8ff : 0x2a3038);
+    this.sparkMesh.rotation.y += dt * 3;
+    this.sparkMesh.scale.setScalar(this.spark ? 1 + Math.sin(this.time * 6) * 0.15 : 0.7);
     this.cam.follow(dt, this.px, this.py, this.vx, this.vy, true);
-    const fill = this.hud.querySelector('.vh-fill') as HTMLDivElement | null;
-    if (fill) {
-      fill.style.width = `${this.meter}%`;
-      fill.style.background = this.meter < 25 ? '#ff6a4a' : '#ffd9a0';
-    }
+    const pip = this.hud.querySelector('.vh-spark') as HTMLDivElement | null;
+    if (pip) pip.className = 'vh-spark' + (this.spark ? ' lit' : '');
   }
 
-  private step(dt: number, input: Input, drainMul: number): void {
-    const [gx, gy] = this.gravityAt(this.px, this.py);
-    const downGravity = gy < 0 && gx === 0;
-
-    let jetting = false;
-    if (downGravity && this.grounded) {
-      // on honest ground the suit is just legs: walking is free, and so is
-      // the jump that starts every flight
-      const move = (input.left ? -1 : 0) + (input.right ? 1 : 0);
-      if (move !== 0) {
-        this.vx += move * 30 * dt;
-        this.vx = Math.max(-WALK, Math.min(WALK, this.vx));
-        this.facing = move;
-      } else {
-        this.vx -= this.vx * Math.min(1, 14 * dt);
-      }
-      if (input.up) { this.vy = JUMP; this.grounded = false; }
-    } else {
-      // airborne (or sideways/upside-down): drift is free, jets are not
-      const move = (input.left ? -1 : 0) + (input.right ? 1 : 0);
-      if (move !== 0) {
-        this.vx += move * AIR_CTRL * dt;
-        this.facing = move;
-      }
-      if (this.meter > 0) {
-        if (input.up) { this.vy += THRUST * dt; jetting = true; }
-        if (input.down) { this.vy -= THRUST * dt; jetting = true; }
-      }
-    }
-    if (jetting) this.meter = Math.max(0, this.meter - DRAIN * drainMul * dt);
-    this.jetMat.opacity += ((jetting ? 0.8 : 0) - this.jetMat.opacity) * Math.min(1, dt * 10);
-
-    // wind is a hand on your back — unless masonry stands windward of you
-    if (this.def.wind && this.gusting) {
-      const w = this.def.wind;
-      const wx = Math.floor(this.px), wy = Math.floor(-this.py);
-      let sheltered = false;
-      for (let d = 1; d <= 2 && !sheltered; d++) {
-        const cx = wx - w.dir * d;
-        if (this.solidTile(cx, wy) || this.solidTile(cx, wy - 1)) sheltered = true;
-      }
-      if (!sheltered) this.vx += w.dir * w.force * (this.assist ? 0.6 : 1) * dt;
-    }
-
-    this.vx += gx * dt;
-    this.vy += gy * dt;
-    this.vx = Math.max(-MAX_V, Math.min(MAX_V, this.vx));
-    this.vy = Math.max(-MAX_V, Math.min(MAX_V, this.vy));
-
-    this.grounded = false;
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt / 0.2));
-    const sdt = dt / steps;
-    let floorTile: [number, number] | null = null;
-    for (let i = 0; i < steps; i++) {
-      this.moveX(this.vx * sdt);
-      const r = this.moveY(this.vy * sdt);
-      if (r.floorTile) floorTile = r.floorTile;
-    }
-
-    // standing on young ice wakes it
-    if (floorTile) {
-      for (let i = 0; i < this.p.rime.length; i++) {
-        const rm = this.p.rime[i];
-        if (rm.x === floorTile[0] && rm.y === floorTile[1] && this.rimeState[i].t < 0 && this.rimeState[i].gone <= 0) {
-          this.rimeState[i].t = 0;
-        }
-      }
-    }
-
-    // hazards
-    if (this.invuln <= 0) {
-      if (this.touchingKill()) { this.reform(); return; }
-      for (const b of this.beams) {
-        // distance from pilot to the beam segment
-        const dx = b.ex - b.x, dy = b.ey - b.y;
-        const len2 = dx * dx + dy * dy || 1;
-        const t = Math.max(0, Math.min(1, ((this.px - b.x) * dx + (this.py - b.y) * dy) / len2));
-        const cx = b.x + dx * t, cy = b.y + dy * t;
-        if (Math.hypot(this.px - cx, this.py - cy) < BEAM_R) { this.reform(); return; }
-      }
-    }
-  }
-
-  // ---------------- completion card / lifecycle ----------------
+  // ---------------- lifecycle ----------------
 
   private showCard(): void {
     this.card = document.createElement('div');
@@ -714,19 +1035,17 @@ export class VaultRun {
       <div class="vc-glyph">${glyphSvg(this.glyph, 'vc-svg')}</div>
       <div class="vc-name">${this.glyph.name}</div>
       <div class="vc-text">${this.glyph.fragment}</div>
+      <div class="vc-reforms">${this.reforms === 0 ? 'unguttered' : `guttered ×${this.reforms}`}</div>
       <div class="vc-hint">E — STEP BACK THROUGH THE STONE</div>`;
     this.hud.parentElement?.appendChild(this.card);
   }
 
-  /** E pressed inside the vault */
   interact(): void {
     if (this.completed) { this.closed = true; return; }
-    // stepping back out through the way in abandons the attempt
     const e = this.p.entry;
     if (Math.hypot(this.px - (e.x + 0.5), this.py + e.y + 0.5) < 1.1) this.closed = true;
   }
 
-  /** Esc always leaves — the stone holds no one */
   abandon(): void { this.closed = true; }
 
   resize(aspect: number): void {
