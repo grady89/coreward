@@ -5,6 +5,10 @@ Every transmission the dispatcher speaks, pulled from `src/game/narrative.ts`
 them. The husk readables and ending pages are **not** in this file — those are
 the player reading, not her voice.
 
+The game's second speaker — **the Lamplighters**, the voice of the glyph
+codex from [SPEC-GLYPHS.md](SPEC-GLYPHS.md) — is scripted at the end of this
+file, with its own voice design. It is deliberately everything Dispatch is not.
+
 ## Who she is
 
 Sixteen years on the assay dish. Working poor, like the driller. Act I she is
@@ -310,3 +314,139 @@ that is happening right now.*
 *Direction: hushed. She's describing something she can only half believe.*
 1. There are figures on the chamber floor. Made of the same light as the fragment. Do not walk into one.
 2. They are not guarding it. I think they are waiting for it to be taken. Take it, and see.
+
+---
+
+# THE LAMPLIGHTERS — the codex voice
+
+**Status: the nine per-glyph fragments are from [SPEC-GLYPHS.md](SPEC-GLYPHS.md)
+§2, which is PROPOSED — not built yet.** What exists in the game today is only
+the 9/9 assembled reading and the locked line
+([panels.ts:459](src/ui/panels.ts#L459)). Safe to record now: the spec treats
+the fragment texts as final, and the assembled reading is shipped.
+
+## Who they are
+
+Not the dispatcher, not the company, not alive. A dead guild speaking in
+first-person plural through carved stone, translated one vault at a time. They
+were **maintenance** — keepers of small lights, the last shift — and the whole
+message is a work log that turns into an apology that turns into a bequest.
+The register is the point: they describe hiding a star the way a caretaker
+describes winterizing a building.
+
+## How they should sound
+
+Everything Dispatch is not, on every axis:
+
+| | Dispatch | The Lamplighters |
+|---|---|---|
+| Medium | live radio, narrow band | carved stone, full range |
+| Tempo | conversational, reactive | very slow, finished — nothing left to react to |
+| Emotion | leaks through procedure | worn completely smooth; sad without sounding sad |
+| Number | one woman, present tense | a "we," long gone |
+| Post | band-pass 300–3400 Hz, squelch | stacked doubles, long stone reverb |
+
+- **Plain, not grand.** No prophecy voice, no boom, no whisper-ASMR. "We were
+  never grand. We were maintenance." Read it like an end-of-shift log entry
+  written by someone very tired and very certain.
+- **Make the "we" in post, not in the prompt.** Generate ONE steady voice,
+  dry. Then duplicate the take two or three times, detune the copies ten to
+  twenty cents, pan them slightly, and sit them 6–9 dB under the lead. Add a
+  long, dark stone-room reverb. You get a quiet choir that is recognizably one
+  voice — which is the Kindled's whole story in audio form.
+- **ElevenLabs settings:** stability HIGH (70+), style near zero — the exact
+  opposite of Dispatch. This voice never cracks. It finished cracking twelve
+  hundred years ago.
+- **One file per fragment**, not per line — they play whole at the master
+  stone. Name by glyph: `codex-wick.mp3` … `codex-kindled.mp3`,
+  `codex-assembled.mp3`.
+
+## Voice design prompts
+
+1. **The steward (recommended).** "An elderly woman with a low, level,
+   unhurried voice, speaking plainly and without any performance, as if
+   dictating instructions for someone who will read them long after she is
+   gone. No placeable accent. Calm, patient, faintly sad, completely at
+   peace. Very slow pace, even rhythm. Dry close-mic studio recording, no
+   room tone."
+2. **The foreman.** "A woman in her sixties with a flat, weathered,
+   matter-of-fact voice, like a site supervisor reading the final entry of a
+   logbook aloud. Zero drama, slight roughness, long pauses between
+   sentences. Clean dry recording."
+3. **The neutral.** "An ageless, androgynous voice, soft and clear, neither
+   warm nor cold, speaking slowly with almost no inflection — informative,
+   final, gentle. Studio-dry, close-mic."
+4. **The choir seed.** "A middle-aged woman with an extremely steady, even,
+   quiet voice — minimal inflection, no vibrato, uniform pacing — designed to
+   be layered into unison stacks. Neutral accent, dry recording, no
+   breathiness."
+
+**Audition text:** *"We were never grand. We were maintenance. You do not
+save a fire by carrying it with you. If you have read this far, then you can
+put it back — and we are sorry, again, for what that will cost you."*
+
+## The nine fragments
+
+*Direction: order-independent — each is the whole voice in miniature. No
+fragment should sound more dramatic than another; the ramp is in the words,
+not the read.*
+
+### codex-wick — THE WICK (VEIL-3)
+There was a guild for it, once. Someone to walk the dark and keep the small lights fed. We were never grand. We were maintenance.
+
+### codex-famine — THE FAMINE (VEIL-3)
+Then light stopped being a thing you could make more of. Call it a famine; the word is close enough. Every lit thing became a spent thing. The sky went first.
+
+### codex-lastshift — THE LAST SHIFT (VEIL-3)
+The others left, or stopped. We stayed, because a shift does not end when it is hopeless. It ends when it is relieved. No one relieved us.
+
+### codex-vault — THE VAULT (CRYOS-2)
+You do not save a fire by carrying it with you. You save it by building a room it cannot leave and weather cannot enter.
+
+### codex-ember — THE EMBER (CRYOS-2)
+So we took the last whole light and planted it. Under a world. Deeper than grief. A seed is not stolen goods. A seed is a promise made to soil.
+
+### codex-weather — THE WEATHER (CRYOS-2)
+Everything on a surface is weather eventually — rain, war, forgetting. Depth is the only calm we ever found. We are sorry it is also dark.
+
+### codex-debt — THE DEBT (MAELIS-6)
+Understand what taking it means. The room stays warm exactly as long as the light stays in it. This is not a lock. It is arithmetic.
+
+### codex-return — THE RETURN (MAELIS-6)
+If you have the strength to carry it out, you have the strength to carry it back. One of those makes you rich. The other makes you us.
+
+### codex-kindled — THE KINDLED (MAELIS-6)
+Some of us could not leave the light we tended. They set down their bodies like tools at the end of a shift, and stayed. If you meet them, they are not asking for help. They are keeping it company.
+
+## The assembled reading — 9/9
+
+*Direction: the only long read they get. Same voice, same pace — resist the
+urge to swell. The last sentence is the entire game; land it exactly as flat
+and as kind as everything else. Shipped text, verbatim from
+[panels.ts:459](src/ui/panels.ts#L459).*
+
+### codex-assembled
+We were not thieves. We were the last shift, and the light was going out, and we did the only thing anyone could think of: we put it somewhere it would keep. Under a world, where weather could not reach it. We are sorry for the dark we left you standing in. It was meant to be temporary. Everything is meant to be temporary. If you have read this far, then you can put it back — and we are sorry, again, for what that will cost you.
+
+**Not voiced:** the locked-codex line ("The marks repeat but the sense will
+not come…") is the *player's* frustrated marginalia, not the Lamplighters —
+recommend leaving it silent text.
+
+## Dispatch and the vaults
+
+*The spec gives Dispatch one canonical vault line and budgets one beat per
+completed world-act. Only the first line below is spec text; the three act
+beats are **DRAFT** — write them into the code at G3, or replace them.*
+
+### vault-first-entry — first time the player enters any vault *(spec §1)*
+*Direction: unnerved, checking her instruments mid-sentence.*
+1. That reading is wrong. That wall is two metres thick.
+
+### vault-act-veil3 — DRAFT — third VEIL-3 vault translated
+1. Three blackouts, three stones, and you come back out with words. "Maintenance," they called it. …Sixteen years on a dish. I know exactly what they meant.
+
+### vault-act-cryos — DRAFT — third CRYOS-2 vault translated
+1. So it was never a strike. It was a deposit. Somebody put the light down there on purpose — and Cindral has been billing us for the withdrawal.
+
+### vault-act-maelis — DRAFT — third MAELIS-6 vault translated
+1. "The other makes you us." I've read your relay five times now. That's not a warning, Dusklight. I think it's an invitation.
