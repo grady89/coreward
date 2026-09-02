@@ -46,23 +46,25 @@ await page.screenshot({ path: OUT + '/p3-ruin.png' });
 const warden = await page.evaluate(async () => {
   const g = window.__game;
   const r = g.terrain.ruins[0];
-  // stand inside the chamber, a respectful distance from its centre
+  // a Warden posts as you APPROACH its hall: wait in a pocket just above it
   g.ctrl.drilling = null;
-  g.ctrl.px = r.x + 3; g.ctrl.py = -r.y; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  const rx = Math.floor(r.x), ry = Math.floor(r.y);
+  for (let y = ry - 9; y < ry - 6; y++) for (let x = rx - 1; x <= rx + 1; x++) g.terrain.carve(x, y);
+  g.ctrl.px = rx + 0.5; g.ctrl.py = -(ry - 7) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.hull = 100000;
   g.lampOn = true;
   g.cam.snap(r.x, -r.y, 15);
   await new Promise(res => setTimeout(res, 1600));
-  const posted = g.threats.wardenAlive;
-  const engagedLit = g.threats.warden.engaged;
+  const posted = g.threats.wardens.alive;
+  const engagedLit = g.threats.wardens.engaged;
   const diag = {
-    dist: +Math.hypot(g.threats.warden.x - g.ctrl.px, g.threats.warden.y - g.ctrl.py).toFixed(1),
+    dist: +Math.hypot(g.threats.wardens.x - g.ctrl.px, g.threats.wardens.y - g.ctrl.py).toFixed(1),
     lamp: g.lampOn,
   };
   // run dark: it should lose interest and go back to sweeping
   g.lampOn = false;
   await new Promise(res => setTimeout(res, 1500));
-  const engagedDark = g.threats.warden.engaged;
+  const engagedDark = g.threats.wardens.engaged;
   return { posted, engagedLit, engagedDark, diag, scrutiny: +g.threats.scrutiny.toFixed(2) };
 });
 console.log('warden:', JSON.stringify(warden),
@@ -72,13 +74,15 @@ await page.screenshot({ path: OUT + '/p3-warden.png' });
 // --- only demolition hurts a Warden ---
 const wardenKill = await page.evaluate(async () => {
   const g = window.__game;
-  if (!g.threats.wardenAlive) return { err: 'no warden' };
-  const before = g.threats.warden.integrity;
-  g.threats.drillHit(g.threats.warden.x, g.threats.warden.y, 1);
-  const afterDrill = g.threats.warden.integrity;
-  g.threats.blast(g.threats.warden.x, g.threats.warden.y, 3.2);
-  g.threats.blast(g.threats.warden.x, g.threats.warden.y, 3.2);
-  return { before, afterDrill, alive: g.threats.wardenAlive };
+  if (!g.threats.wardens.alive) return { err: 'no warden' };
+  const before = g.threats.wardens.integrity;
+  g.threats.drillHit(g.threats.wardens.x, g.threats.wardens.y, 1);
+  const afterDrill = g.threats.wardens.integrity;
+  g.threats.blast(g.threats.wardens.x, g.threats.wardens.y, 3.2);
+  g.threats.blast(g.threats.wardens.x, g.threats.wardens.y, 3.2);
+  // it comes down over a second and a half, not in a frame
+  for (let i = 0; i < 80 && g.threats.wardens.alive; i++) await new Promise(r => setTimeout(r, 100));
+  return { before, afterDrill, alive: g.threats.wardens.alive };
 });
 console.log('warden armour:', JSON.stringify(wardenKill),
   wardenKill.afterDrill === wardenKill.before && !wardenKill.alive ? 'OK' : 'FAIL');
@@ -147,24 +151,27 @@ const cryosSwarm = await page.evaluate(async () => {
   g.state.fuel = g.state.maxFuel; g.state.hull = 100000;
   g.cam.snap(31.5, -204, 12.5);
   g.threats.reset();
+  const rw = g.threats.rimewings;
   for (let i = 0; i < 40; i++) {
-    g.threats.spawnTimer = 0;
+    rw.spawnTimer = 0;
     await new Promise(r => setTimeout(r, 60));
-    if (g.threats.mesh.count > 0) break;
+    if (rw.count > 0) break;
   }
-  const s = g.threats.swarms.find(x => x.alive);
-  if (!s) return { err: 'no swarm' };
+  const s = rw.clusters.find(x => x.alive);
+  if (!s) return { err: 'no cluster' };
   s.ax = g.ctrl.px + 3; s.ay = g.ctrl.py;
+  for (const w of rw.wings) if (w.cluster === rw.clusters.indexOf(s)) { w.x = s.ax; w.y = s.ay; }
+  const awake = () => rw.clusters.some(x => x.alive && x.phase !== 'frozen');
   // lamp ON but engine OFF: a heat-keyed swarm should not care
   g.lampOn = true;
   await new Promise(r => setTimeout(r, 1400));
-  const lampOnly = g.threats.swarms.some(x => x.alerted);
+  const lampOnly = awake();
   // now fire the thrusters
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowUp' }));
-  await new Promise(r => setTimeout(r, 1600));
-  const withThrust = g.threats.swarms.some(x => x.alerted);
+  let withThrust = false;
+  for (let i = 0; i < 60 && !withThrust; i++) { await new Promise(r => setTimeout(r, 100)); withThrust = awake(); }
   window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowUp' }));
-  return { world: g.state.activeWorld, lampOnly, withThrust };
+  return { world: g.state.activeWorld, lampOnly, withThrust, phases: rw.clusters.map(c => c.phase) };
 });
 console.log('cryos heat-keyed:', JSON.stringify(cryosSwarm),
   cryosSwarm.lampOnly === false && cryosSwarm.withThrust === true ? 'OK' : 'FAIL');

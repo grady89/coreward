@@ -1,10 +1,11 @@
 # COREWARD — E2E Implementation Plan (v0.3.3 → 1.0)
 
-> **STATUS 2026-09-01 — Phases 0–3 built, 13 headless suites green.**
-> Shipped overnight: the narrative event engine + Dispatch, the Cindral advance,
-> wreck chronology, lamp toggle, glimmerflies, Long Ones, flares, seismic
-> charges, drill-as-weapon, the Threats setting, Lamplighter ruins, the glyph
-> codex, Wardens, and per-world swarm dialects.
+> **STATUS 2026-09-01 — Phases 0–4 built, headless suites green.**
+> Shipped: the narrative event engine + Dispatch, the Cindral advance, wreck
+> chronology, lamp toggle, the full three-world fauna ([BESTIARY.md](BESTIARY.md)),
+> flares, seismic charges, drill-as-weapon, the Threats setting, Lamplighter
+> ruins, the glyph codex, Wardens, the Kindled, the husk, extraction and the
+> three endings.
 > **Next: the ⛩ playtest gates below — they need a human, not another suite.**
 > Then Phase 4 (husk world, fragment extraction, three endings, Lumen Lance),
 > and the per-world *hunter* variants still outstanding: Brinewyrm,
@@ -95,7 +96,10 @@ collapse, mimic hatch.
 
 ## Phase 3 — v0.7 "DIALECTS" · per-world fauna + the Lamplighters (~2–3 sessions)
 
-Same grammar, different organ (DIRECTION §8g).
+Same grammar, different organ (DIRECTION §8g). **BUILT 2026-09-01** — every
+creature below, plus retooled Glimmerflies, Long Ones and Wardens; the record
+of what each one looks like, how it moves and what rule it enforces is
+[BESTIARY.md](BESTIARY.md). Verified by `scripts/fauna.mjs`.
 
 - **3.1 CRYOS-2 (heat-keyed):** Rimewings (thruster wash thaws them → cut your
   engine and drift), Brinewyrm (lives in cryobrine, surfaces to strike),

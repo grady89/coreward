@@ -34,16 +34,16 @@ const spawn = await page.evaluate(async () => {
   const row = 200;
   for (let y = row - 6; y < row + 6; y++)
     for (let x = 18; x < 42; x++) g.terrain.carve(x, y);
-  g.ctrl.px = 30.5; g.ctrl.py = -row + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  g.ctrl.px = 30.5; g.ctrl.py = -(row + 5) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.fuel = g.state.maxFuel; g.state.hull = g.state.maxHull;
   g.cam.snap(30.5, -row, 12.5);
   g.threats.reset();
   // force spawn attempts
   let live = 0;
   for (let i = 0; i < 40; i++) {
-    g.threats.spawnTimer = 0;
+    g.threats.flies.spawnTimer = 0;
     await new Promise(r => setTimeout(r, 60));
-    live = g.threats.mesh.count;
+    live = g.threats.flies.count;
     if (live > 0) break;
   }
   return { live, row };
@@ -56,21 +56,25 @@ const hunt = await page.evaluate(async () => {
   const g = window.__game;
   g.lampOn = true;
   // walk a swarm right next to the pod so it notices
-  const s = g.threats.swarms.find(s => s.alive);
+  const s = g.threats.flies.swarms.find(s => s.alive);
   if (!s) return { err: 'no swarm' };
   s.ax = g.ctrl.px + 3; s.ay = g.ctrl.py;
-  for (const f of g.threats.flies) { f.x = s.ax; f.y = s.ay; }
+  for (const f of g.threats.flies.flies) { f.x = s.ax; f.y = s.ay; }
   await new Promise(r => setTimeout(r, 900));
-  const alertedLit = g.threats.swarms.some(x => x.alerted);
+  const alertedLit = g.threats.flies.swarms.some(x => x.alerted);
+  // the flock collapses on its anchor first, then dives — give it up to 6s
   const hullBefore = g.state.hull;
-  await new Promise(r => setTimeout(r, 1600));
-  const hullAfter = g.state.hull;
+  let hullAfter = hullBefore;
+  for (let i = 0; i < 60 && hullAfter >= hullBefore; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    hullAfter = g.state.hull;
+  }
   // now go dark
   // 5s wall-clock: headless sim-time runs ~30% slow (dt is clamped at 0.05)
   g.lampOn = false;
   await new Promise(r => setTimeout(r, 5000));
-  const alertedDark = g.threats.swarms.some(x => x.alerted);
-  const detail = g.threats.swarms.map(x => ({
+  const alertedDark = g.threats.flies.swarms.some(x => x.alerted);
+  const detail = g.threats.flies.swarms.map(x => ({
     alive: x.alive, alerted: x.alerted, dark: +x.darkFor.toFixed(2),
   }));
   return {
@@ -89,7 +93,7 @@ const off = await page.evaluate(async () => {
   g.settings.threats = 'off';
   g.applySettings();
   await new Promise(r => setTimeout(r, 600));
-  return { level: g.threats.level, count: g.threats.mesh.count };
+  return { level: g.threats.level, count: g.threats.flies.count };
 });
 console.log('threats off:', JSON.stringify(off), off.level === 'off' && off.count === 0 ? 'OK' : 'FAIL');
 

@@ -29,6 +29,8 @@ export interface WorldSave {
    * glacier rock, a coil-less pod could wake up sealed under a true ceiling.
    */
   rime?: number[];
+  /** dug tiles a Shellback has sealed back up with nacre (MAELIS-6) */
+  nacre?: number[];
 }
 
 export class GameState {
@@ -177,6 +179,18 @@ export class GameState {
     return true;
   }
 
+  /** a mimic takes the single most valuable unit in the hold; 0 if it's empty */
+  stealCargo(): number {
+    let best = 0, bestV = -1;
+    for (const [t, c] of this.cargo) {
+      if (c > 0 && oreValue(t) > bestV) { best = t; bestV = oreValue(t); }
+    }
+    if (!best) return 0;
+    const c = this.cargo.get(best)! - 1;
+    if (c > 0) this.cargo.set(best, c); else this.cargo.delete(best);
+    return best;
+  }
+
   sellAll(rate = 1): number {
     const total = Math.round(this.cargoValue * rate);
     this.money += total;
@@ -270,8 +284,11 @@ export class GameState {
     looted: Set<number>, arrestors: { x: number; y: number }[] = [],
   ): void {
     // rime only ever forms on dug tiles, so the dug set is the whole search
-    const rime: number[] = [];
-    for (const i of terrain.dug) if (terrain.data[i] === T.RIME) rime.push(i);
+    const rime: number[] = [], nacre: number[] = [];
+    for (const i of terrain.dug) {
+      if (terrain.data[i] === T.RIME) rime.push(i);
+      else if (terrain.data[i] === T.NACRE) nacre.push(i);
+    }
     this.worlds[this.activeWorld] = {
       seed: terrain.seed,
       dug: [...terrain.dug],
@@ -280,6 +297,7 @@ export class GameState {
       bestRow: this.worldBestRow,
       arrestors: arrestors.map(a => ({ x: a.x, y: a.y })),
       rime,
+      nacre,
     };
     this.persist();
   }

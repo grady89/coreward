@@ -407,6 +407,131 @@ export class AudioEngine {
     this.thump(95, 0.14, 0.1);
   }
 
+  // ---- the fauna: each has a voice, none of them a growl ----
+
+  /** a frequency glide — the building block of every animal call below */
+  private glide(from: number, to: number, dur: number, peak: number, type: OscillatorType = 'sine', delayMs = 0): void {
+    if (!this.ctx) return;
+    setTimeout(() => {
+      if (!this.ctx) return;
+      const o = this.ctx.createOscillator();
+      const t = this.ctx.currentTime;
+      o.type = type;
+      o.frequency.setValueAtTime(from, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
+      o.connect(this.env(dur, peak, 0.02));
+      o.start(); o.stop(t + dur + 0.05);
+    }, delayMs);
+  }
+
+  /** rock parting around something big: a long low tear */
+  wormEmerge(v = 1): void {
+    this.noise(1.2, 0.3 * v, 500, 60);
+    this.glide(90, 38, 1.1, 0.16 * v);
+    this.thump(48, 0.9, 0.2 * v);
+  }
+  /** teeth meet hull */
+  wormBite(): void {
+    this.noise(0.25, 0.3, 2400, 300);
+    this.thump(140, 0.2, 0.2);
+    this.tone(880, 0.08, 0.08, 'square', 30);
+  }
+  /** the brine before a breach: a gut-deep bubbling */
+  gurgle(v = 1): void {
+    for (let i = 0; i < 7; i++) this.glide(180 + Math.random() * 120, 60, 0.18, 0.06 * v, 'sine', i * 110 + Math.random() * 60);
+    this.noise(0.9, 0.08 * v, 700, 200);
+  }
+  /** a polyp letting go */
+  polypBurst(v = 1): void {
+    this.noise(0.14, 0.14 * v, 3000, 400);
+    this.glide(520, 180, 0.16, 0.08 * v);
+  }
+  /** your own pulse, when something unlit walks at you */
+  heartbeat(dread: number): void {
+    const v = 0.06 + dread * 0.08;
+    this.thump(60, 0.14, v);
+    setTimeout(() => this.thump(52, 0.12, v * 0.8), 130);
+  }
+  /** the lamp finds it — a single held note, wrong in the mix */
+  stillwalkerSeen(): void {
+    this.glide(1760, 1740, 2.2, 0.035, 'sine');
+    this.glide(1319, 1300, 2.4, 0.03, 'sine', 40);
+    this.noise(0.6, 0.03, 2000, 300);
+  }
+  /** it closes on the hull and the cold gets in */
+  stillwalkerGrab(): void {
+    this.noise(1.2, 0.2, 400, 40);
+    this.glide(220, 30, 1.2, 0.14, 'sawtooth');
+    this.tone(2637, 0.3, 0.04, 'sine', 100);
+  }
+  /** the room takes hold */
+  riptidePull(): void {
+    this.noise(2.5, 0.12, 300, 900);
+    this.glide(40, 70, 2.4, 0.08);
+  }
+  /** something opens in the wall */
+  riptideEye(): void {
+    this.glide(60, 240, 0.9, 0.06, 'sine');
+    this.tone(1046, 1.2, 0.03, 'sine', 300);
+    this.noise(1.0, 0.05, 200, 1800);
+  }
+  /** a Shellback's legs on stone */
+  shellbackChitter(v = 1): void {
+    for (let i = 0; i < 6; i++) this.tone(1800 + Math.random() * 900, 0.03, 0.03 * v, 'square', i * 45);
+  }
+  /** nacre laid: a short wet click and a ring */
+  shellbackSeal(v = 1): void {
+    this.noise(0.12, 0.08 * v, 1800, 300);
+    this.tone(1480, 0.5, 0.04 * v, 'sine', 40);
+    this.tone(2220, 0.4, 0.02 * v, 'sine', 60);
+  }
+  /** a geode that was not a geode */
+  mimicHatch(): void {
+    this.noise(0.3, 0.16, 2600, 500);
+    this.tone(1244, 0.3, 0.06, 'triangle', 60);
+    this.tone(932, 0.25, 0.05, 'triangle', 140);
+    this.glide(400, 900, 0.25, 0.05, 'square', 200);
+  }
+  /** six legs, fast, on rock */
+  crabSkitter(v = 1): void {
+    for (let i = 0; i < 4; i++) this.tone(2400 + Math.random() * 1200, 0.025, 0.03 * v, 'square', i * 55);
+  }
+  /** a foot of masonry comes down */
+  wardenStep(v = 1): void {
+    this.thump(64, 0.35, 0.14 * v);
+    this.noise(0.18, 0.08 * v, 900, 120);
+  }
+  /** the lantern comes up to full */
+  wardenWake(): void {
+    this.glide(220, 880, 0.8, 0.06, 'sine');
+    this.tone(1760, 1.4, 0.03, 'sine', 400);
+    this.noise(0.8, 0.06, 1500, 4000);
+  }
+  /** the beam on your hull: a lamp that hurts */
+  wardenFlash(): void {
+    this.noise(0.3, 0.14, 6000, 2000);
+    this.tone(3520, 0.25, 0.05, 'sine');
+    this.thump(120, 0.15, 0.1);
+  }
+  /** the lantern goes out */
+  wardenBlind(): void {
+    this.glide(880, 110, 0.7, 0.08, 'sine');
+    this.noise(0.5, 0.08, 3000, 200);
+    this.thump(70, 0.4, 0.1);
+  }
+  /** four figures turning */
+  kindledNotice(): void {
+    this.tone(523, 2.4, 0.03, 'sine');
+    this.tone(659, 2.4, 0.025, 'sine', 120);
+    this.tone(784, 2.6, 0.02, 'sine', 260);
+  }
+  /** touch: everything, at once, silently — then the air goes */
+  kindledTouch(): void {
+    this.noise(1.6, 0.24, 8000, 100);
+    this.tone(4186, 1.2, 0.05, 'sine');
+    this.glide(200, 30, 1.6, 0.1);
+  }
+
   /** the Lumen Lance: light spent as ammunition — a struck bell, not a gun */
   lance(): void {
     this.tone(1318.5, 0.5, 0.1, 'sine');

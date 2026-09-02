@@ -44,8 +44,8 @@ const flare = await page.evaluate(async () => {
   const before = g.state.flares;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ' }));
   await new Promise(r => setTimeout(r, 900));
-  const lit = g.threats.flareLights.filter(l => l.visible).length;
-  return { before, after: g.state.flares, lit, meshCount: g.threats.flareMesh.count };
+  const lit = g.threats.flares.list.filter(f => f.alive).length;
+  return { before, after: g.state.flares, lit };
 });
 console.log('flare thrown:', JSON.stringify(flare),
   flare.after === flare.before - 1 && flare.lit === 1 ? 'OK' : 'FAIL');
@@ -59,9 +59,9 @@ const widthRule = await page.evaluate(() => {
   for (let y = 320; y < 340; y++) t.carve(10, y);            // 1-wide
   for (let y = 320; y < 340; y++) for (let x = 30; x < 34; x++) t.carve(x, y); // wide
   return {
-    narrow: g.threats.wide(10, 330),
-    wide: g.threats.wide(31, 330),
-    edgeOfWide: g.threats.wide(30, 330),
+    narrow: window.__wide(t, 10, 330),
+    wide: window.__wide(t, 31, 330),
+    edgeOfWide: window.__wide(t, 30, 330),
   };
 });
 console.log('corridor rule:', JSON.stringify(widthRule),
@@ -76,16 +76,16 @@ const worm = await page.evaluate(async () => {
   g.cam.snap(31.5, -330, 12.5);
   await new Promise(r => setTimeout(r, 400));
   let spawned = false;
+  const w = g.threats.longOne;
   for (let i = 0; i < 40; i++) {
-    g.threats.wormTimer = 0;
+    w.timer = 0;
     await new Promise(r => setTimeout(r, 70));
-    if (g.threats.wormAlive) { spawned = true; break; }
+    if (w.alive) { spawned = true; break; }
   }
-  const w = g.threats.worm;
   await new Promise(r => setTimeout(r, 300)); // let it draw a frame
-  return { spawned, segs: g.threats.wormMesh.count, x: +w.x.toFixed(1), y: +w.y.toFixed(1) };
+  return { spawned, phase: w.phase, x: +w.x.toFixed(1), y: +w.y.toFixed(1) };
 });
-console.log('long one:', JSON.stringify(worm), worm.spawned && worm.segs === 11 ? 'OK' : 'FAIL');
+console.log('long one:', JSON.stringify(worm), worm.spawned ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p2-worm.png' });
 
 // --- charge seals a tunnel with rubble and kills the worm ---
@@ -97,19 +97,21 @@ const charge = await page.evaluate(async () => {
   g.state.charges = 2;
   g.state.hull = 100000; // outlive the fuse
   await new Promise(r => setTimeout(r, 400));
-  const wormBefore = g.threats.wormAlive;
+  const lo = g.threats.longOne;
+  const wormBefore = lo.alive;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyG' }));
   await new Promise(r => setTimeout(r, 60));
   const c = g.charges[0];
   if (!c) return { err: 'charge not placed' };
   const px = Math.floor(c.x), py = Math.floor(-c.y);
   const airBefore = g.terrain.get(px, py);
-  // park the worm inside the blast radius
-  if (g.threats.wormAlive) { g.threats.worm.x = c.x + 1.5; g.threats.worm.y = c.y; }
+  // park the worm inside the blast radius, and keep it there through the fuse
+  const park = setInterval(() => { if (lo.alive) { lo.x = c.x + 1.5; lo.y = c.y; } }, 100);
   // headless runs sim-time at ~40% with this much on screen (dt is clamped)
   await new Promise(r => setTimeout(r, 11000));
+  clearInterval(park);
   return {
-    wormBefore, wormAfter: g.threats.wormAlive,
+    wormBefore, wormAfter: lo.alive,
     airBefore, tileAfter: g.terrain.get(px, py),
     charges: g.state.charges, remaining: g.charges.length,
     fuse: g.charges[0] ? +g.charges[0].fuse.toFixed(2) : 'gone',

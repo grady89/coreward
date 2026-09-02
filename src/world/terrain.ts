@@ -141,7 +141,21 @@ export class Terrain {
         const i = this.idx(x, y);
         const host = this.data[i];
         if ((host === T.VOIDROCK || host === T.EMBERROCK) && this.touchesAir(x, y) && r() < chance) {
-          this.data[i] = T.FUNGUS;
+          // on the cold world some of the light in the walls is not veinlight
+          this.data[i] = ACTIVE.id === 'cryos2' && r() < 0.22 ? T.FROSTBLOOM : T.FUNGUS;
+        }
+      }
+    }
+
+    // VEIL-3's geodes that aren't: seeded in the voidopal band, in plain rock,
+    // wearing voidopal's swirl a shade off and a size too big
+    if (ACTIVE.id === 'veil3') {
+      const mr = rng(this.seed ^ 0x3a2a5a);
+      for (let y = 280; y < 470; y++) {
+        for (let x = 1; x < this.w - 1; x++) {
+          const i = this.idx(x, y);
+          const host = this.data[i];
+          if ((host === T.VOIDROCK || host === T.EMBERROCK) && mr() < 0.0045) this.data[i] = T.MIMIC;
         }
       }
     }
@@ -228,6 +242,19 @@ export class Terrain {
     const i = this.idx(x, y);
     if (this.data[i] === T.AIR) return;
     this.data[i] = T.AIR;
+    this.dug.add(i);
+    this.onChange(x, y);
+  }
+
+  /**
+   * something alive fills a dug tile back in (rime, nacre). Stays in `dug`
+   * so saves know the tile was touched and can restore what it became.
+   */
+  fill(x: number, y: number, t: T): void {
+    if (x < 0 || x >= this.w || y < 0 || y >= this.h) return;
+    const i = this.idx(x, y);
+    if (this.data[i] !== T.AIR) return;
+    this.data[i] = t;
     this.dug.add(i);
     this.onChange(x, y);
   }

@@ -14,7 +14,8 @@ import { Terrain } from './world/terrain';
 import { ChunkField, lavaMat } from './world/chunks';
 import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock } from './world/backdrop';
 import { WreckField } from './world/wrecks';
-import { ThreatField } from './world/entities';
+import { ThreatField, FaunaEvent } from './world/entities';
+import { wide } from './world/fauna/types';
 import { ArrestorField } from './world/arrestors';
 import { Pod } from './player/pod';
 import { PodController, Input } from './player/controller';
@@ -75,6 +76,8 @@ class Game {
   private flagStranded = false;
   private charges: { x: number; y: number; fuse: number }[] = [];
   private rumbleAcc = 0;
+  private dreadAcc = 0;
+  private faunaSfxAt = new Map<string, number>();
   private looted = new Set<number>();
   private salvaging: { idx: number; t: number } | null = null;
   private keys = new Set<string>();
@@ -193,6 +196,7 @@ class Game {
     (window as unknown as { __WRECK_LOGS: unknown }).__WRECK_LOGS = WRECK_LOGS;
     (window as unknown as { __TILE_DEFS: unknown }).__TILE_DEFS = TILE_DEFS;
     (window as unknown as { __WORLDS: unknown }).__WORLDS = WORLDS;
+    (window as unknown as { __wide: unknown }).__wide = wide;
     (window as unknown as { __CONTRACT_POOL: unknown }).__CONTRACT_POOL = CONTRACT_POOL;
     (window as unknown as { __acceptContract: unknown }).__acceptContract = acceptContract;
     (window as unknown as { __evaluate: unknown }).__evaluate = evaluate;
@@ -256,6 +260,7 @@ class Game {
       this.terrain.applyDug(ws.dug);
       // shafts that had skinned over stay skinned over — and stay rammable
       for (const i of ws.rime ?? []) this.terrain.data[i] = T.RIME;
+      for (const i of ws.nacre ?? []) this.terrain.data[i] = T.NACRE;
       this.ctrl.px = ws.podX;
       this.ctrl.py = ws.podY;
     }
@@ -285,7 +290,7 @@ class Game {
     this.particles = new Particles(this.scene);
     this.pod = new Pod(this.scene);
     this.pilot = new Pilot(this.scene, this.terrain);
-    this.threats = new ThreatField(this.scene, this.terrain);
+    this.threats = new ThreatField(this.scene, this.terrain, this.particles);
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
     this.arrestors = new ArrestorField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
@@ -415,6 +420,21 @@ class Game {
         this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
         this.hud.popup(fuel > 0 ? `+${fuel} FUEL` : 'TANK FULL', '#46e6c8', this.screen.sx, this.screen.sy);
         this.audio.veinlight();
+      },
+      onMimicHatch: (x: number, y: number) => {
+        this.threats.hatchMimic(x, y);
+      },
+      onFrostbloom: (x: number, y: number) => {
+        // the cold comes out all at once: the tank takes it, the air sets
+        const st = this.state;
+        st.fuel = Math.max(0, st.fuel - 18);
+        this.threats.frostbloom(x, y, this.ctrl.px, this.ctrl.py);
+        this.audio.iceCrack();
+        this.hud.coldFlash();
+        this.cam.addShake(0.3);
+        this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+        this.hud.popup('-18 FUEL', '#b0a8ff', this.screen.sx, this.screen.sy);
+        this.onFaunaEvent('frostbloom', x + 0.5, -(y + 0.5));
       },
     };
   }
@@ -1083,10 +1103,31 @@ class Game {
       this.updateCharges(dt);
       this.threats.update({
         podX: this.ctrl.px, podY: this.ctrl.py,
+        vx: this.ctrl.vx, vy: this.ctrl.vy,
         lampOn: this.lampOn, thrust: this.ctrl.thrust,
+        drilling: this.ctrl.drilling !== null, grounded: this.ctrl.grounded,
+        still: this.ctrl.still,
         carrying: !!this.state.carrying, dt, time: this.time,
         hurt: (a, c) => this.ctrl.hurtFromThreat(a, c),
         drain: a => { st.fuel = Math.max(0, st.fuel - a); },
+        push: (dx, dy) => { this.ctrl.vx += dx; this.ctrl.vy += dy; },
+        hold: s => { this.ctrl.held = Math.max(this.ctrl.held, s); },
+        native: n => {
+          for (let i = 0; i < n; i++) st.addNative();
+          const nat = ACTIVE.native;
+          this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+          this.hud.popup(`+${n} ${nat?.ore ?? 'DEPOSIT'}`, '#' + (nat?.color ?? 0xcfe8ff).toString(16).padStart(6, '0'), this.screen.sx, this.screen.sy);
+          this.audio.chime(2);
+        },
+        steal: () => st.stealCargo(),
+        give: t => {
+          if (st.addCargo(t)) {
+            this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+            this.hud.popup('RECOVERED', '#' + def(t).gem.toString(16).padStart(6, '0'), this.screen.sx, this.screen.sy);
+            this.audio.chime(def(t).oreTier);
+          }
+        },
+        shake: a => this.cam.addShake(a),
         onAlert: () => {
           this.hud.toast(ACTIVE.swarm.alert);
           this.audio.swarmAlert();
@@ -1097,9 +1138,10 @@ class Game {
             setTimeout(() => this.hud.toast(ACTIVE.swarm.counter), 1800);
           }
         },
+        onEvent: (id, x, y) => this.onFaunaEvent(id, x, y),
       });
 
-      // the Long One announces itself through the rock before you see it
+      // the big ones announce themselves through the rock before you see them
       if (this.threats.rumble > 0.12) {
         this.rumbleAcc -= dt;
         if (this.rumbleAcc <= 0) {
@@ -1107,6 +1149,25 @@ class Game {
           this.audio.rumbleTick();
           this.cam.addShake(this.threats.rumble * 0.12);
         }
+      }
+      // something unlit is walking at you: your own pulse, getting faster
+      if (this.threats.dread > 0.1) {
+        this.dreadAcc -= dt;
+        if (this.dreadAcc <= 0) {
+          this.dreadAcc = 1.3 - this.threats.dread * 0.85;
+          this.audio.heartbeat(this.threats.dread);
+        }
+      }
+      // the chamber has residents of its own
+      const kh = this.threats.updateChamber(dt, this.time, this.ctrl.px, this.ctrl.py, false, false, (id, x, y) => this.onFaunaEvent(id, x, y));
+      if (kh === 'pod') {
+        this.ctrl.hurtFromThreat(40, 'the Kindled');
+        this.ctrl.vy += 9;
+        this.ctrl.vx = (this.ctrl.px >= this.threats.kindled.touchX ? 1 : -1) * 6;
+        this.hud.overexpose();
+        this.audio.kindledTouch();
+        this.cam.addShake(0.5);
+        this.onFaunaEvent('kindled-touch', this.ctrl.px, this.ctrl.py);
       }
 
       // drilling into something is the only weapon you start with
@@ -1306,6 +1367,149 @@ class Game {
       // lines live in the transmission registry so the transcript can replay them
       this.comms.say(ADHOC_TRANSMISSIONS['rime-taught'].lines);
       this.state.persist();
+    }
+  }
+
+  // ---------- Phase 3: the fauna talk back ----------
+
+  /** Dispatch explains a creature once, the first time it shows itself */
+  private teach(id: string): void {
+    if (this.state.firedEvents.has(id) || !ADHOC_TRANSMISSIONS[id]) return;
+    this.state.firedEvents.add(id);
+    this.comms.say(ADHOC_TRANSMISSIONS[id].lines);
+    this.state.persist();
+  }
+
+  /** a sound that must not machine-gun: one per id per `gap` seconds */
+  private faunaSfx(id: string, gap: number, play: () => void): void {
+    if (this.time - (this.faunaSfxAt.get(id) ?? -9) < gap) return;
+    this.faunaSfxAt.set(id, this.time);
+    play();
+  }
+
+  /**
+   * Every creature reports what it did through here. Toasts, sounds, camera
+   * and the one-time Dispatch line all hang off the event, so the creature
+   * modules stay about the creature.
+   */
+  private onFaunaEvent(id: FaunaEvent, x = this.ctrl.px, y = this.ctrl.py): void {
+    const near = Math.hypot(x - this.ctrl.px, y - this.ctrl.py);
+    const vol = Math.max(0.15, 1 - near / 18);
+    switch (id) {
+      case 'longone-emerge':
+        this.faunaSfx(id, 2, () => this.audio.wormEmerge(vol));
+        this.hud.toast('— IT HEARD THE DRILL —', 'stratum');
+        this.teach('longone-taught');
+        break;
+      case 'longone-bite':
+        this.audio.wormBite();
+        this.hud.damageFlash();
+        break;
+      case 'longone-lost':
+        this.hud.toast('IT LOST YOU. STAY QUIET.');
+        break;
+      case 'rimewing-wake':
+        this.faunaSfx(id, 3, () => this.audio.swarmAlert());
+        this.teach('rimewing-taught');
+        break;
+      case 'rimewing-freeze':
+        this.faunaSfx(id, 1.5, () => this.audio.iceCrack());
+        break;
+      case 'polyp-seen':
+        this.teach('polyp-taught');
+        break;
+      case 'polyp-burst':
+        this.faunaSfx(id, 0.4, () => this.audio.polypBurst(vol));
+        break;
+      case 'brinewyrm-churn':
+        this.faunaSfx(id, 3, () => this.audio.gurgle(vol));
+        this.hud.toast('THE BRINE IS CHURNING');
+        this.teach('brinewyrm-taught');
+        break;
+      case 'brinewyrm-breach':
+        this.audio.wormEmerge(1);
+        this.hud.toast('— BREACH —', 'stratum');
+        break;
+      case 'brinewyrm-bite':
+        this.audio.wormBite();
+        this.hud.damageFlash();
+        break;
+      case 'stillwalker-seen':
+        this.hud.toast('— SOMETHING IN THE WALL — KEEP IT LIT —', 'stratum');
+        this.audio.stillwalkerSeen();
+        this.teach('stillwalker-taught');
+        break;
+      case 'stillwalker-grab':
+        this.audio.stillwalkerGrab();
+        this.hud.overexpose(0.35);
+        this.hud.toast('IT HAD YOU FOR A SECOND');
+        this.teach('stillwalker-taught');
+        break;
+      case 'frostbloom':
+        this.hud.toast('FROSTBLOOM — THE POCKET IS SEALING');
+        this.teach('frostbloom-taught');
+        break;
+      case 'riptide-enter':
+        this.faunaSfx(id, 6, () => this.audio.riptidePull());
+        this.hud.toast('THE ROOM IS PULLING');
+        this.teach('riptide-taught');
+        break;
+      case 'riptide-eye':
+        this.faunaSfx(id, 4, () => this.audio.riptideEye());
+        this.hud.toast('— IT IS LOOKING AT YOU —', 'stratum');
+        this.cam.addShake(0.12);
+        break;
+      case 'shellback-seen':
+        this.faunaSfx(id, 8, () => this.audio.shellbackChitter(vol));
+        this.teach('shellback-taught');
+        break;
+      case 'shellback-seal':
+        this.faunaSfx(id, 1, () => this.audio.shellbackSeal(vol));
+        break;
+      case 'shellback-killed':
+        this.hud.toast('SHELLBACK DOWN — NACRE SHED');
+        break;
+      case 'mimic-hatch':
+        this.audio.mimicHatch();
+        this.hud.toast('— IT WAS NOT A GEODE —', 'stratum');
+        this.teach('mimic-taught');
+        break;
+      case 'crab-skitter':
+        this.faunaSfx(id, 0.5, () => this.audio.crabSkitter(vol));
+        break;
+      case 'mimic-escaped':
+        this.hud.toast('THE MIMIC GOT AWAY WITH YOUR ORE');
+        this.audio.cargoFull();
+        break;
+      case 'mimic-killed':
+        this.audio.chime(3);
+        break;
+      case 'warden-step':
+        this.faunaSfx(id, 0.3, () => this.audio.wardenStep(vol));
+        break;
+      case 'warden-wake':
+        this.audio.wardenWake();
+        break;
+      case 'warden-flash':
+        this.faunaSfx(id, 0.5, () => this.audio.wardenFlash());
+        this.hud.overexpose(0.5);
+        break;
+      case 'warden-blind':
+        this.hud.toast('WARDEN BLINDED');
+        this.audio.wardenBlind();
+        break;
+      case 'warden-down':
+        this.hud.toast('— WARDEN DOWN —', 'stratum');
+        this.audio.explosion();
+        break;
+      case 'kindled-seen':
+        this.hud.toast('— THEY ARE TURNING TO LOOK —', 'stratum');
+        this.audio.kindledNotice();
+        this.teach('kindled-taught');
+        break;
+      case 'kindled-touch':
+        this.hud.damageFlash();
+        break;
     }
   }
 
@@ -1615,10 +1819,20 @@ class Game {
       // SITE 297 has no clock: there is nothing here to run out of but time
       if (ACTIVE.husk) this.pilot.o2 = EVA_O2;
 
+      // the Kindled: on foot, a touch is the whole suit's air, at once
+      const kh = this.threats.updateChamber(dt, this.time, this.pilot.px, this.pilot.py, true, rite, (id, x, y) => this.onFaunaEvent(id, x, y));
+      if (kh === 'suit') {
+        this.hud.overexpose();
+        this.audio.kindledTouch();
+        this.cam.addShake(0.4);
+        this.onFaunaEvent('kindled-touch', this.pilot.px, this.pilot.py);
+        this.pilot.o2 = 0;
+      }
+
       // oxygen out: blackout, wake in the pod
       if (!rite && this.pilot.o2 <= 0) {
         this.exitEva();
-        this.hud.toast('BLACKOUT — THE SUIT DRAGGED YOU HOME');
+        this.hud.toast(kh === 'suit' ? 'BLACKOUT — SOMETHING TOOK YOUR AIR' : 'BLACKOUT — THE SUIT DRAGGED YOU HOME');
         this.audio.damage();
         return;
       }

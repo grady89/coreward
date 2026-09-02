@@ -39,6 +39,8 @@ export class Hud {
   private promptEl!: HTMLElement;
   private toastsEl!: HTMLElement;
   private flashEl!: HTMLElement;
+  private whiteEl!: HTMLElement;
+  private coldEl!: HTMLElement;
   private hazeEl!: HTMLElement;
   private hudEl!: HTMLElement;
   private shownMoney = 0;
@@ -49,6 +51,8 @@ export class Hud {
       <div id="vignette" class="fx-layer"></div>
       <div id="heat-haze" class="fx-layer"></div>
       <div id="damage-flash" class="fx-layer"></div>
+      <div id="cold-flash" class="fx-layer"></div>
+      <div id="white-flash" class="fx-layer"></div>
       <div id="hud">
         <div id="hud-status" class="hud-corner">
           <div class="bar" id="bar-fuel"><div class="bar-fill fuel"></div><span class="bar-label">FUEL</span><span class="bar-value"></span></div>
@@ -103,6 +107,8 @@ export class Hud {
     this.promptEl = $('#prompt');
     this.toastsEl = $('#toasts');
     this.flashEl = $('#damage-flash');
+    this.whiteEl = $('#white-flash');
+    this.coldEl = $('#cold-flash');
     this.hazeEl = $('#heat-haze');
     this.contractEl = $('#hud-contract');
     this.ctName = $('#ct-name');
@@ -249,5 +255,21 @@ export class Hud {
   damageFlash(): void {
     this.flashEl.classList.add('hit');
     requestAnimationFrame(() => requestAnimationFrame(() => this.flashEl.classList.remove('hit')));
+  }
+
+  /** the screen goes white and comes back: light used against you */
+  overexpose(strength = 1): void {
+    this.whiteEl.classList.add('hit');
+    this.whiteEl.style.opacity = String(Math.min(1, strength));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      this.whiteEl.classList.remove('hit');
+      this.whiteEl.style.opacity = '0';
+    }));
+  }
+
+  /** a frostbloom went off: the edges ice over for a moment */
+  coldFlash(): void {
+    this.coldEl.classList.add('hit');
+    requestAnimationFrame(() => requestAnimationFrame(() => this.coldEl.classList.remove('hit')));
   }
 }

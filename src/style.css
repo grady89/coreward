@@ -43,6 +43,17 @@ html, body {
   opacity: 0; transition: opacity 0.5s var(--ease-out);
 }
 #damage-flash.hit { opacity: 1; transition: none; }
+/* light used against you: a Warden's flash, the Kindled, a Stillwalker's grip */
+#white-flash {
+  background: #fff;
+  opacity: 0; transition: opacity 0.9s var(--ease-out);
+}
+#white-flash.hit { transition: none; }
+#cold-flash {
+  background: radial-gradient(ellipse at center, rgba(176, 168, 255, 0.1) 0%, rgba(120, 160, 255, 0.5) 100%);
+  opacity: 0; transition: opacity 1.4s var(--ease-out);
+}
+#cold-flash.hit { opacity: 1; transition: none; }
 #heat-haze {
   background: radial-gradient(ellipse at bottom, rgba(255, 90, 42, 0.25) 0%, transparent 60%);
   opacity: 0; transition: opacity 1.2s;

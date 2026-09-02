@@ -135,4 +135,14 @@ export class Particles {
   lavaBubble(x: number, y: number): void {
     this.sparks.spawn(x, y, 0xff5a2a, { count: 2, speed: 1.4, up: 2.5, life: 0.6, gravity: 5, spread: 0.4 });
   }
+
+  /** the fauna's own vocabulary: matte matter (frost, rock, shell, ash) */
+  dustBurst(x: number, y: number, color: number, o: SpawnOpts): void {
+    this.dust.spawn(x, y, color, o);
+  }
+
+  /** ...and glowing matter (bioluminescence, splinters of light) */
+  sparkBurst(x: number, y: number, color: number, o: SpawnOpts): void {
+    this.sparks.spawn(x, y, color, o);
+  }
 }

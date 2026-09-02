@@ -136,7 +136,7 @@ class Chunk {
         let gemScale = 1;
         let cls = 0;
         let harvestable = true;
-        if (d.ore) {
+        if (d.ore || t === T.MIMIC || t === T.FROSTBLOOM) {
           cls = gemClassOf(t);
           gemColor = t === T.FUNGUS ? ACTIVE.gemTint
             : t === T.NATIVE ? (ACTIVE.native?.color ?? d.gem) : d.gem;

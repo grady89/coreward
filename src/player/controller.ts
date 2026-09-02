@@ -38,11 +38,16 @@ export interface PodEvents {
   onCoreBalk(): void;
   /** the pod rammed through a tile of young ice */
   onSmash(x: number, y: number): void;
+  /** a geode that wasn't: something is out, and it has your best ore */
+  onMimicHatch(x: number, y: number): void;
+  /** a frostbloom cut: the cold comes out all at once */
+  onFrostbloom(x: number, y: number): void;
 }
 
 interface Drilling { x: number; y: number; dir: DrillDir; progress: number; hardness: number; }
 
 const EPS = 0.001;
+const HELD_INPUT: Input = { left: false, right: false, up: false, down: false };
 const HW = POD_W / 2;
 const HH = POD_H / 2;
 
@@ -65,6 +70,10 @@ export class PodController {
   wreckDist = 0;
   looted = new Set<number>();
   facing = 1;
+  /** seconds a creature has the controls — input ignored, hull inert */
+  held = 0;
+  /** seconds the pod has been quiet: engine cold, drill still, barely moving */
+  still = 0;
   private dashCd = 0;
   private lastStratum = 0;
   private strandedFired = false;
@@ -97,10 +106,22 @@ export class PodController {
     const fuelBefore = st.fuel;
 
     if (this.drilling) {
+      this.still = 0;
       this.stepDrilling(dt, time);
       st.fuelSpent += Math.max(0, fuelBefore - st.fuel);
       return;
     }
+
+    if (this.held > 0) {
+      // something has you. The engine answers nothing.
+      this.held -= dt;
+      this.thrust = 0; this.sideThrust = 0;
+      this.vx *= 1 - Math.min(1, dt * 6);
+      this.vy *= 1 - Math.min(1, dt * 6);
+      input = HELD_INPUT;
+    }
+    const quiet = !input.up && !input.left && !input.right && Math.abs(this.vx) < 0.6 && Math.abs(this.vy) < 0.6;
+    this.still = quiet ? this.still + dt : 0;
 
     // ---- thrust ----
     // a fragment in the hold: the pod runs hot and heavy
@@ -350,9 +371,13 @@ export class PodController {
         this.applyDamage(GAS_DMG * (1 + dr.y / 400), 'a gas pocket');
       } else if (t === T.GLYPH) {
         this.ev.onGlyph(dr.x, dr.y);
-      } else if (t === T.NATIVE) {
+      } else if (t === T.NATIVE || t === T.NACRE) {
         st.addNative();
         this.ev.onNative(st.nativeHeld);
+      } else if (t === T.MIMIC) {
+        this.ev.onMimicHatch(dr.x, dr.y);
+      } else if (t === T.FROSTBLOOM) {
+        this.ev.onFrostbloom(dr.x, dr.y);
       } else if (t === T.FUNGUS) {
         // veinlight burns straight into the tank — no cargo slot, no sale
         const before = st.fuel;

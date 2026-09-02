@@ -124,12 +124,16 @@ const CLASS: Record<number, number> = {
   [T.FUNGUS]: 4,
   [T.DIAMOND]: 5,
   [T.NATIVE]: 1,   // a blocky crystalline crust, distinct from any sale ore
+  [T.MIMIC]: 3,    // wears voidopal's swirl — a shade off, a size too big
+  [T.FROSTBLOOM]: 4,
+  [T.NACRE]: 1,
 };
 export function gemClassOf(t: number): number { return CLASS[t] ?? 0; }
 
 const SCALE: Record<number, number> = {
   [T.FUNGUS]: 0.9, [T.COPPER]: 0.95, [T.IRON]: 0.9, [T.SILVER]: 0.95,
   [T.GOLD]: 1, [T.RUBY]: 1.05, [T.VOIDOPAL]: 1.1, [T.DIAMOND]: 1, [T.EMBERSHARD]: 1.15,
+  [T.MIMIC]: 1.28, [T.FROSTBLOOM]: 0.95, [T.NACRE]: 1.1,
 };
 export function gemScaleOf(t: number): number { return SCALE[t] ?? 1; }
 

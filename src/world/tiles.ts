@@ -25,6 +25,9 @@ export enum T {
   GLYPH = 20,     // a carved stone; cutting one adds it to the codex
   NATIVE = 21,    // the world's own survival material — identity from ACTIVE
   RIME = 22,      // young ice: a refrozen shaft — the one tile a pod can RAM through
+  MIMIC = 23,     // a geode that isn't — cut it and something hatches with your best ore
+  FROSTBLOOM = 24,// veinlight's cold cousin: pays in a flash-freeze, not fuel
+  NACRE = 25,     // a Shellback's pearl seal over a tile you dug — cuts to native
 }
 
 export interface TileDef {
@@ -68,6 +71,10 @@ export const TILE_DEFS: Record<number, TileDef> = {
   // half-set ice over a healed shaft — drills like packed snow, and it is the
   // only ceiling in the game that gives way to a pod ramming it from below
   [T.RIME]: D('Young Ice', 0.5, 0, true, false, 0),
+  // ore:false on purpose — nothing goes in the hold; something comes out of the rock
+  [T.MIMIC]: D('Voidopal', 1.6, 0, true, false, 0xb266ff, 6),
+  [T.FROSTBLOOM]: D('Frostbloom', 0.3, 0, true, false, 0xb0a8ff, 0),
+  [T.NACRE]: D('Nacre', 0.9, 0, true, true, 0xe8dcff, 2),
 };
 
 /** the active world's name for its native material */
@@ -92,6 +99,8 @@ function bandColor(t: number): number {
   if (t === T.GLYPH) return 0x7c7694;
   // young ice reads paler and glassier than any glacier rock around it
   if (t === T.RIME) return 0xa9d6e6;
+  // a Shellback's seal: pearl, paler than anything the planet made itself
+  if (t === T.NACRE) return 0xd8cce8;
   return ACTIVE.rockColors[BAND_OF[t] ?? 1];
 }
 
@@ -133,11 +142,13 @@ export function rockColor(t: number, x: number, y: number): number {
     const c = bandColor(strataSolidForRow(y));
     const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
     base = (r << 16) | (Math.min(255, Math.round(g * 1.14)) << 8) | Math.round(b * 0.9);
-  } else if (def(t).ore && t !== T.FUNGUS) {
-    // ore body = host rock, slightly dark so the gem pops
+  } else if ((def(t).ore && t !== T.FUNGUS && t !== T.NACRE) || t === T.MIMIC) {
+    // ore body = host rock, slightly dark so the gem pops (the mimic copies this)
     base = lighten(bandColor(strataSolidForRow(y)), 0.82);
   } else if (t === T.FUNGUS) {
     base = lighten(ACTIVE.gemTint, 0.2);
+  } else if (t === T.FROSTBLOOM) {
+    base = lighten(0x9a90ff, 0.22);
   } else if (t === T.NATIVE) {
     base = lighten(bandColor(strataSolidForRow(y)), 1.18);
   } else {

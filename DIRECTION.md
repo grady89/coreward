@@ -314,9 +314,11 @@ marked unread, which is the honest answer for a first visit.
   voids — every ore deposit painted in its own color. That is the upgrade worth
   paying for.
 
-### 8g. Threats & the light arsenal (APPROVED, not yet built)
+### 8g. Threats & the light arsenal (BUILT 2026-09-01)
 
-Narrative canon lives in [LORE.md](LORE.md). Design law for this track:
+Narrative canon lives in [LORE.md](LORE.md); the built creatures — look,
+motion and rule for every one — are in [BESTIARY.md](BESTIARY.md). The
+bullets below are the approved brief they were built to. Design law:
 
 > **The pod is a digging machine. If it becomes a gunship, the game dies.**
 
@@ -368,7 +370,7 @@ They are the Lamplighters', and their sameness across worlds is lore.
   with nacre. Not attacking: **repairing**. The Pearl's defense made ambient —
   the world heals its wound while you're inside it, and the way home can close.
 
-**The husk world (planned)** has no fauna at all. Everything that keyed on
+**The husk world** has no fauna at all. Everything that keyed on
 light, heat, or space died with its fragment. The threat is that nothing comes.
 
 **Constants on every world:**
@@ -376,7 +378,8 @@ light, heat, or space died with its fragment. The threat is that nothing comes.
   vault. Slow, armoured, sweeping light-beams; they track by luminance. Not
   evil — doing their job, which makes the player the thief.
 - **The Kindled** (core chambers) — half-light shapes, non-hostile, lethal to
-  touch.
+  touch. Built: they yield on foot until cornered; the pod gets bitten and
+  thrown.
 
 **The arsenal — light-first, gun-last:**
 

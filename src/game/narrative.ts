@@ -333,6 +333,76 @@ export const ADHOC_TRANSMISSIONS: Record<string, { world?: string; lines: string
       'And fit the acclimation. A warm hull keeps your wake open longer. Not in the manual; it is in the wrecks.',
     ],
   },
+  // ---- fauna: Dispatch has a line for each the first time it shows itself ----
+  'longone-taught': {
+    world: 'veil3',
+    lines: [
+      'That noise through the rock was not the rock. Something down there hunts by the sound of a drill.',
+      'It cannot see. Stop cutting and it loses you. Stop moving and it forgets you. Then dig somewhere else.',
+    ],
+  },
+  'mimic-taught': {
+    world: 'veil3',
+    lines: [
+      'Ha. You cut a geode and it grew legs and ran off with your best stone. Yes. That happens down there.',
+      'They are not fast. Put a drill in it before it climbs out of your lamp and the ore comes back.',
+    ],
+  },
+  'rimewing-taught': {
+    world: 'cryos2',
+    lines: [
+      'Those are Rimewings. They sleep in the walls and they wake to warmth — engine heat, drill heat.',
+      'Coast when you can. Fly cold. A flare will pull them off you: they go for the hotter thing.',
+    ],
+  },
+  'brinewyrm-taught': {
+    world: 'cryos2',
+    lines: [
+      'Do not hover over the brine. Something lives in those pools that hears your engine through the water.',
+      'You will see it churn before it comes up. That is your one warning. Move, or throw it a flare to bite.',
+    ],
+  },
+  'stillwalker-taught': {
+    world: 'cryos2',
+    lines: [
+      'Listen to me. Whatever you just lit, keep it lit. They do not move while they are seen.',
+      'Turn your lamp off in the deep and they walk. Through the ice. At you. It only stops when the light finds it.',
+    ],
+  },
+  'frostbloom-taught': {
+    world: 'cryos2',
+    lines: [
+      'Frostbloom. A pale flower in the veinlight. Cut it and the cold comes out all at once.',
+      'It just cost you fuel and sealed your pocket in young ice. Young ice will not hold a pod — ram up through it.',
+    ],
+  },
+  'polyp-taught': {
+    world: 'maelis6',
+    lines: [
+      'Pressure polyps. They grow where the rock is thin and they burst when something moves past them.',
+      'Look for the pulse. Anything glowing in a rhythm down there is counting, and it is counting you.',
+    ],
+  },
+  'riptide-taught': {
+    world: 'maelis6',
+    lines: [
+      'You felt that pull. That was not current. It was the room deciding it wants you in the middle of it.',
+      'It only has a grip in open water. Keep a wall at your back. Narrow shafts are your friend on this one.',
+    ],
+  },
+  'shellback-taught': {
+    world: 'maelis6',
+    lines: [
+      'A Shellback. It walks your tunnels behind you and seals them shut with its own shell — nacre.',
+      'Nacre cuts easy and it sells. If one is walling you in, that is a vein it is laying for you. Or kill it: it drops more.',
+    ],
+  },
+  'kindled-taught': {
+    lines: [
+      'There are figures on the chamber floor. Made of the same light as the fragment. Do not walk into one.',
+      'They are not guarding it. I think they are waiting for it to be taken. Take it, and see.',
+    ],
+  },
 };
 
 /** the transmission behind a fired-event id — null for non-dispatch ids */
