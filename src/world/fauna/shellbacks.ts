@@ -174,6 +174,12 @@ export class Shellbacks implements Creature {
     if (b.trail.length > 6) b.trail.shift();
   }
 
+  devStage(x: number, y: number): void {
+    // only lives in tiles YOU dug, 9..16 out: the sandbox carves a long
+    // corridor first, or trySpawn has nowhere legal to put one
+    if (!this.backs.some(b => b.alive)) this.trySpawn(x, y);
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
     if (this.pendingKill) {

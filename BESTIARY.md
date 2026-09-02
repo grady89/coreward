@@ -171,9 +171,37 @@ is [entities.ts](src/world/entities.ts).
 4. **Seismic charges** — the only thing that fells a Warden, and it takes two.
 5. **Lumen Lance** — fires Lumens. Shooting spends money, so it stays last.
 
+## The sandbox — how to actually look at one
+Run the game with **`?fauna`** in the URL. It loads the right world, carves
+the creature's habitat, forces it alive beside you, and puts a card on
+screen saying what to watch and what to press.
+
+| key | |
+|---|---|
+| `[` `]` | previous / next creature |
+| `\` | restage the current one (watch the same three seconds again) |
+| `H` | hide the card |
+| `F` | lamp — the counter for half this list |
+
+`?fauna=riptide` opens straight onto one. The pod is invulnerable-ish
+(full tanks, top radiator, 20 flares, 10 charges) and **the sandbox never
+writes to your save**.
+
+Staging is split on purpose: [src/dev/sandbox.ts](src/dev/sandbox.ts) owns
+the ground (which world, what room, where the pod parks, how far the camera
+pulls back), and each creature owns getting itself onto that ground via
+`Creature.devStage()` — because "the Brinewyrm refuses any pool within five
+tiles" is a fact about the Brinewyrm, not about a test script.
+
 ## Verification
-[scripts/fauna.mjs](scripts/fauna.mjs) covers every creature above headless;
-[scripts/threats.mjs](scripts/threats.mjs), [phase2.mjs](scripts/phase2.mjs)
-and [phase3.mjs](scripts/phase3.mjs) cover the VEIL-3 kit, Wardens and the
-dialect switch. All green 2026-09-01. Screens are software-GL, so judge
-motion in a real browser, not in the PNGs.
+[scripts/fauna.mjs](scripts/fauna.mjs) covers every creature above headless
+and **stages through the sandbox's own code**, so a staging bug fails a test
+instead of quietly passing the wrong one.
+[scripts/sandbox.mjs](scripts/sandbox.mjs) checks all twelve stages still
+come alive — the failure that otherwise goes unnoticed until you try to look
+at something. [threats.mjs](scripts/threats.mjs),
+[phase2.mjs](scripts/phase2.mjs) and [phase3.mjs](scripts/phase3.mjs) cover
+the VEIL-3 kit, Wardens and the dialect switch. All green 2026-09-01.
+
+Screens are software-GL and motion does not survive a still, so the suites
+prove behaviour and the sandbox is where you judge feel.

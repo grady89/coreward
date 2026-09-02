@@ -137,6 +137,22 @@ export class Glimmerflies implements Creature {
     }
   }
 
+  devStage(x: number, y: number): void {
+    if (this.swarms.some(s => s.alive)) return;
+    this.trySpawn(x, y, 'full');
+    // a natural swarm sits 9+ tiles out; drag it inside lamp range so the
+    // murmuration reads at once instead of after a flight across the room
+    const slot = this.swarms.findIndex(s => s.alive);
+    if (slot < 0) return;
+    const s = this.swarms[slot];
+    const ox = s.ax, oy = s.ay;
+    s.ax = x + 6; s.ay = y + 1;
+    for (const f of this.flies) {
+      if (f.swarm !== slot) continue;
+      f.x += s.ax - ox; f.y += s.ay - oy;
+    }
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, lampOn } = ctx;
     const row = Math.floor(-podY);

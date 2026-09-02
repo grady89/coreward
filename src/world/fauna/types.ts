@@ -65,6 +65,18 @@ export interface Creature {
   blast?(x: number, y: number, radius: number): void;
   lance?(x: number, y: number, dir: number, range: number): void;
   drillHit?(x: number, y: number, dt: number): void;
+  /**
+   * Dev sandbox only: force this creature into existence next to the pod at
+   * (x, y), close enough to watch. Natural spawning keeps its distance and
+   * picks its own ground; this deliberately does not. Each creature knows
+   * where it actually belongs relative to the pod — in the pool, on the
+   * wall, inside the rock — which is knowledge no external staging script
+   * can guess at without duplicating the spawn rules.
+   *
+   * The sandbox prepares the habitat before calling (see src/dev/sandbox.ts)
+   * and calls this every frame until the creature reports itself alive.
+   */
+  devStage?(x: number, y: number): void;
 }
 
 /** a light source that is not the pod: flares, and anything else that burns */

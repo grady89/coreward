@@ -209,6 +209,29 @@ export class Brinewyrm implements Creature {
     this.wanderT = 0;
   }
 
+  devStage(x: number, y: number): void {
+    if (!this.alive && !this.trySpawn(x, y)) return;
+    // trySpawn deliberately refuses pools within 5 tiles and prefers whatever
+    // natural brine is nearest — both wrong for a sandbox, where the pool
+    // under your nozzle IS the test. Put it in the closest brine there is.
+    const cx = Math.floor(x), cy = Math.floor(-y);
+    let best = Infinity, bx = -1, by = -1;
+    for (let dy = -8; dy <= 8; dy++) {
+      for (let dx = -8; dx <= 8; dx++) {
+        const tx = cx + dx, ty = cy + dy;
+        if (!this.brine(tx, ty)) continue;
+        const d = dx * dx + dy * dy;
+        if (d < best) { best = d; bx = tx; by = ty; }
+      }
+    }
+    if (bx < 0) return;
+    this.x = this.poolX = bx + 0.5;
+    this.y = this.poolY = -(by + 0.5);
+    this.phase = 'cruise'; this.phaseT = 0;
+    this.alert = 0; this.cooldown = 0; this.stunT = 0; this.wanderT = 0;
+    this.chain.lay(this.x, this.y, 1, 0);
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
     if (!this.alive) {

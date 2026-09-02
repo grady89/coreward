@@ -50,7 +50,19 @@ node scripts/narrative.mjs out/    # event engine, Dispatch delivery, wreck chro
 node scripts/threats.mjs out/      # lamp toggle, swarm attraction, threat settings
 node scripts/phase2.mjs out/       # flares, Long Ones, corridor rule, seismic charges
 node scripts/phase3.mjs out/       # ruins, glyphs, codex, Wardens, per-world dialects
+node scripts/fauna.mjs   out/      # every creature on all three worlds
+node scripts/sandbox.mjs out/      # all 12 dev-sandbox stages still come alive
 ```
+
+## Look at the fauna (dev)
+
+Headless suites prove behaviour; they cannot tell you whether a gait reads.
+Run the game with **`?fauna`** and it cycles every creature — right world,
+habitat carved, creature alive beside you, with a card saying what to watch.
+`[` `]` cycle, `\` restage, `H` hides the card. `?fauna=riptide` opens on
+one. It never writes to your save. `?core=cryos2` still jumps to a chamber
+for the Communion. Roster and staging: [src/dev/sandbox.ts](src/dev/sandbox.ts),
+creature-by-creature notes in [BESTIARY.md](BESTIARY.md).
 
 **A headless testing note:** `dt` is clamped at 0.05s/frame so fast falls can
 never tunnel through terrain. Under SwiftShader (~15fps) that makes simulated

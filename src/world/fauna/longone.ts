@@ -208,6 +208,12 @@ export class LongOne implements Creature {
     return false;
   }
 
+  devStage(x: number, y: number): void {
+    // it needs a wall to come out of, so let trySpawn pick its own ground:
+    // watching it choose a wall and burst through is the thing being tested
+    if (!this.alive) this.trySpawn(x, y);
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
     if (!this.alive) {

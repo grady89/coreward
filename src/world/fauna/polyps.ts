@@ -176,6 +176,12 @@ export class Polyps implements Creature {
     }
   }
 
+  devStage(x: number, y: number): void {
+    // they never move, so where trySpawn grows them is where you go to them —
+    // approach speed is the variable under test (NOTICE is only 4.2 tiles)
+    if (!this.clusters.some(c => c.alive)) this.trySpawn(x, y, 'full');
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY } = ctx;
     const row = Math.floor(-podY);

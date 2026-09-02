@@ -17,14 +17,25 @@ await page.click('#t-new');
 await page.waitForTimeout(3600);
 await page.evaluate(() => window.__game.comms.clear());
 
-// helper injected per world: carve a room and park the pod in it
+// helper injected per world. `stage(id)` runs the dev sandbox's own staging
+// (src/dev/sandbox.ts) so there is exactly one definition of what ground each
+// creature needs — a staging bug fails here instead of passing for the wrong
+// reason. `room`/`park` remain for the cases that test terrain rules, not a
+// creature.
 const HELPERS = `
   const g = window.__game;
   const room = (x0, x1, y0, y1) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) g.terrain.carve(x, y); };
   const park = (x, y) => { g.ctrl.drilling = null; g.ctrl.px = x; g.ctrl.py = -y + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0; g.cam.snap(x, -y, 12.5); };
   const until = async (fn, n = 60, ms = 100) => { for (let i = 0; i < n; i++) { if (fn()) return true; await new Promise(r => setTimeout(r, ms)); } return fn(); };
+  const stage = async id => {
+    g.devStage(id);
+    const s = window.__STAGES.find(s => s.id === id);
+    g.state.hull = 100000;
+    await until(() => s.alive(g.threats), 90);
+    return s;
+  };
   g.state.hull = 100000; g.state.fuel = g.state.maxFuel; g.state.upgrades.radiator = 5; g.state.upgrades.drill = 5;
-  return { g, room, park, until };
+  return { g, room, park, until, stage };
 `;
 await page.evaluate(src => { window.__H = new Function(src); }, HELPERS);
 
@@ -47,17 +58,11 @@ ok('mimics seeded', seeded, seeded.n >= 10 && seeded.minY >= 280 && seeded.maxY 
 
 // --- cutting a mimic hatches it, it steals, killing it gives back ---
 const mimic = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  // stand in a room and cut a mimic tile placed under the pod
-  room(26, 36, 300, 306);
-  g.terrain.data[g.terrain.idx(31, 306)] = 23; g.chunks.markDirty(31, 306);
-  park(31.5, 305);
-  g.state.cargo.clear(); g.state.addCargo(6); g.state.addCargo(3); // two ores, tier 6 is the prize
-  g.threats.reset();
-  await new Promise(r => setTimeout(r, 300));
-  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }));
-  const hatched = await until(() => g.threats.mimics.crabs.some(c => c.alive), 120);
-  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown' }));
+  const { g, until, stage } = window.__H();
+  // the stage stocks the hold with a diamond and a copper: the theft has to
+  // find something worth taking or there is nothing to test
+  await stage('mimic');
+  const hatched = g.threats.mimics.crabs.some(c => c.alive);
   const crab = g.threats.mimics.crabs.find(c => c.alive);
   const stolen = crab ? crab.stolen : 0;
   const cargoAfterTheft = [...g.state.cargo.entries()];
@@ -65,20 +70,18 @@ const mimic = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 300));
   // run it down with the drill
   if (crab) g.threats.drillHit(crab.x, crab.y, 0.1);
-  const returned = await until(() => (g.state.cargo.get(6) ?? 0) === 1, 30);
+  const returned = await until(() => (g.state.cargo.get(16) ?? 0) === 1, 30);
   return { hatched, stolen, cargoAfterTheft, seenEvent, returned, cargo: [...g.state.cargo.entries()] };
 });
-ok('mimic', mimic, mimic.hatched && mimic.stolen === 6 && mimic.seenEvent && mimic.returned);
+ok('mimic', mimic, mimic.hatched && mimic.stolen === 16 && mimic.seenEvent && mimic.returned);
 await page.screenshot({ path: OUT + '/f-mimic.png' });
 
 // --- the Long One hunts sound: drilling draws it, stillness loses it ---
 const longOne = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  room(20, 44, 330, 340);
-  park(31.5, 339);
-  g.threats.reset();
+  const { g, stage } = window.__H();
+  await stage('longone');
   const lo = g.threats.longOne;
-  const spawned = await until(() => { lo.timer = 0; return lo.alive; }, 60);
+  const spawned = lo.alive;
   const phase0 = lo.phase;
   return { spawned, phase0, x: +lo.x.toFixed(1), y: +lo.y.toFixed(1), rumble: +g.threats.rumble.toFixed(2) };
 });
@@ -126,13 +129,10 @@ ok('cryos2 roster', roster2, roster2.rimewings && roster2.brinewyrm && roster2.s
 
 // --- frostbloom seeded in the veinlight, and cutting one seals the pocket ---
 const frost = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
+  const { g, until, stage } = window.__H();
   let n = 0;
   for (let y = 0; y < 512; y++) for (let x = 0; x < 64; x++) if (window.__game.terrain.get(x, y) === 24) n++;
-  room(26, 36, 250, 256);
-  g.terrain.data[g.terrain.idx(31, 256)] = 24; g.chunks.markDirty(31, 256);
-  park(31.5, 255);
-  g.threats.reset();
+  await stage('frostbloom');
   const fuel0 = g.state.fuel;
   await new Promise(r => setTimeout(r, 300));
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }));
@@ -149,19 +149,13 @@ await page.screenshot({ path: OUT + '/f-frostbloom.png' });
 
 // --- Brinewyrm: lives in the brine, wakes to thrust, breaches ---
 const wyrm = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  // a small pool with a low room above it: it only notices heat within ~7 tiles
-  room(26, 38, 307, 310);
-  // a sealed pool: rock all round so it cannot wander off into natural brine
-  for (let y = 310; y < 315; y++) for (let x = 27; x < 37; x++) { g.terrain.data[g.terrain.idx(x, y)] = 2; g.chunks.markDirty(x, y); }
-  for (let y = 310; y < 313; y++) for (let x = 29; x < 35; x++) { g.terrain.data[g.terrain.idx(x, y)] = 7; g.chunks.markDirty(x, y); }
-  park(31.5, 309);
-  g.threats.reset();
+  const { g, until, stage } = window.__H();
+  // the stage seals a pool under the pod and the wyrm's own devStage drops it
+  // in the nearest brine — natural spawning refuses anything within 5 tiles
+  await stage('brinewyrm');
   const bw = g.threats.brinewyrm;
-  const spawned = await until(() => { bw.timer = 0; return bw.alive; }, 60);
+  const spawned = bw.alive;
   const phase0 = bw.phase;
-  // it may have picked a natural pool nearby: move it into ours
-  bw.x = bw.poolX = 31.5; bw.y = bw.poolY = -311.5; bw.wanderT = 0; bw.chain.lay(bw.x, bw.y, 1, 0);
   // hover: thrust wakes it
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowUp' }));
   const churned = await until(() => bw.phase !== 'cruise', 200);
@@ -174,12 +168,10 @@ await page.screenshot({ path: OUT + '/f-brinewyrm.png' });
 
 // --- Stillwalkers: still while lit, walk in the dark ---
 const walker = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  room(20, 44, 330, 340);
-  park(31.5, 338);
-  g.threats.reset();
+  const { g, stage } = window.__H();
+  await stage('stillwalkers');
   const sw = g.threats.stillwalkers;
-  const spawned = await until(() => { sw.spawnTimer = 0; return sw.walkers.some(w => w.alive); }, 60);
+  const spawned = sw.walkers.some(w => w.alive);
   const w = sw.walkers.find(w => w.alive);
   if (!w) return { spawned };
   // put it in the wall 5 tiles off and light it
@@ -253,12 +245,10 @@ ok('maelis6 roster', roster3, roster3.polyps && roster3.riptide && roster3.shell
 
 // --- polyps spawn on walls and burst when you get close ---
 const polyps = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  room(20, 44, 150, 160);
-  park(31.5, 158);
-  g.threats.reset();
+  const { g, stage } = window.__H();
+  await stage('polyps');
   const p = g.threats.polyps;
-  const spawned = await until(() => { p.spawnTimer = 0; return p.count > 0; }, 60);
+  const spawned = p.count > 0;
   const c = p.clusters.find(c => c.alive);
   const near = c ? Math.hypot(c.ax - g.ctrl.px, c.ay - g.ctrl.py) : -1;
   return { spawned, count: p.count, near: +near.toFixed(1) };
@@ -268,13 +258,11 @@ await page.screenshot({ path: OUT + '/f-polyps.png' });
 
 // --- the Riptide pulls in open water, not in a shaft ---
 const riptide = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  room(14, 50, 320, 340);
-  park(31.5, 330);
-  g.threats.reset();
+  const { g, room, park, until, stage } = window.__H();
+  // its devStage parks it beside the pod; naturally it arrives 12+ tiles out
+  await stage('riptide');
   const rt = g.threats.riptide;
-  const spawned = await until(() => { rt.timer = 0; return rt.alive; }, 60);
-  rt.x = g.ctrl.px + 4; rt.y = g.ctrl.py; rt.tx = rt.x; rt.ty = rt.y;
+  const spawned = rt.alive;
   const px0 = g.ctrl.px;
   const pulled = await until(() => Math.abs(g.ctrl.px - px0) > 0.3 || g.threats.riptide.grip > 0.1, 60);
   const gripOpen = rt.grip;
@@ -293,13 +281,11 @@ await page.screenshot({ path: OUT + '/f-riptide.png' });
 
 // --- Shellbacks walk your tunnels and seal them with nacre ---
 const shell = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  // a long dug corridor for it to walk
-  for (let x = 10; x < 54; x++) { g.terrain.carve(x, 200); g.terrain.carve(x, 201); }
-  park(31.5, 201);
-  g.threats.reset();
+  const { g, until, stage } = window.__H();
+  // the stage carves the long corridor: they only live in tiles you dug
+  await stage('shellbacks');
   const sb = g.threats.shellbacks;
-  const spawned = await until(() => { sb.spawnTimer = 0; return sb.backs.some(b => b.alive); }, 60);
+  const spawned = sb.backs.some(b => b.alive);
   const b = sb.backs.find(b => b.alive);
   const sealed = await until(() => sb.sealed > 0, 150);
   let nacre = 0;

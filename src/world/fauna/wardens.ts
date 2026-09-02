@@ -169,6 +169,12 @@ export class Wardens implements Creature {
     }
   }
 
+  devStage(_x: number, _y: number): void {
+    // it posts itself the moment you are in a hall (5..18 tiles from a ruin),
+    // so staging is only forgetting that this post was ever felled
+    this.felled.clear();
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, lampOn } = ctx;
     if (this.pendingBlind) { this.pendingBlind = false; ctx.onEvent('warden-blind', this.x, this.y); }

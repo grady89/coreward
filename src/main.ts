@@ -38,6 +38,7 @@ import {
 import { Panels, createTitle } from './ui/panels';
 import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
+import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
 
 type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap';
 
@@ -89,6 +90,10 @@ class Game {
   private saveTimer = 0;
   private dmgFxAt = -9;
   private title: { hide(): void } | null = null;
+  /** the interactive sandbox: null unless ?fauna is in the URL */
+  private sandbox: { card: SandboxCard } | null = null;
+  /** which creature is staged and whether it still needs coaxing alive */
+  private staging: { i: number; prime: number; staged: boolean; settle: number } | null = null;
   private eHeld = false;
   private coreHold = 0;
   private coreActKind: 'extract' | 'seat' | 'offer' | null = null;
@@ -200,11 +205,17 @@ class Game {
     (window as unknown as { __CONTRACT_POOL: unknown }).__CONTRACT_POOL = CONTRACT_POOL;
     (window as unknown as { __acceptContract: unknown }).__acceptContract = acceptContract;
     (window as unknown as { __evaluate: unknown }).__evaluate = evaluate;
+    (window as unknown as { __STAGES: unknown }).__STAGES = STAGES;
 
     // dev harness: ?core drops the pod at the chamber mouth with the rite
     // un-run — press E to walk. ?core=cryos2 targets a specific site.
-    const dev = new URLSearchParams(location.search).get('core');
+    const q = new URLSearchParams(location.search);
+    const dev = q.get('core');
     if (dev !== null) this.devCoreJump(dev);
+    // dev harness: ?fauna cycles every creature staged in its own habitat.
+    // ?fauna=riptide opens on one. See src/dev/sandbox.ts.
+    const fauna = q.get('fauna');
+    if (fauna !== null) this.devSandbox(fauna);
   }
 
   /**
@@ -240,6 +251,132 @@ class Game {
     this.hud.setLamp(this.lampOn);
     this.mode = 'play';
     this.hud.toast(`DEV — COMMUNION TEST · ${ACTIVE.name} · E TO WALK`, 'stratum');
+  }
+
+  // ---------- fauna sandbox (dev) ----------
+
+  /**
+   * ?fauna walks every creature in the game: the right world loaded, its
+   * habitat carved, the creature forced alive beside you, and a card saying
+   * what to watch for. `?fauna=riptide` opens on one. [ ] cycle, \ restage.
+   *
+   * The point is motion — the headless suite can prove a Warden walks, but
+   * only eyes can say whether the gait reads. Staging lives in
+   * src/dev/sandbox.ts and the suite drives the same code.
+   */
+  private devSandbox(want: string): void {
+    this.audio.init();
+    const wake = () => this.audio.resume();
+    addEventListener('pointerdown', wake, { once: true });
+    addEventListener('keydown', wake, { once: true });
+    this.title?.hide();
+    this.title = null;
+    this.sandbox = { card: new SandboxCard(this.ui) };
+    const at = STAGES.findIndex(s => s.id === want);
+    this.devStage(at < 0 ? 0 : at);
+  }
+
+  private stageCtx(): StageCtx {
+    return {
+      terrain: this.terrain,
+      room: (x0, x1, y0, y1) => {
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) this.terrain.carve(x, y);
+      },
+      set: (x, y, t) => {
+        if (x < 0 || x >= this.terrain.w || y < 0 || y >= this.terrain.h) return;
+        this.terrain.data[this.terrain.idx(x, y)] = t;
+        this.chunks.markDirty(x, y);
+      },
+      park: (x, row, zoom = 12.5) => {
+        this.ctrl.drilling = null;
+        this.ctrl.px = x; this.ctrl.py = -row + 0.42;
+        this.ctrl.vx = 0; this.ctrl.vy = 0;
+        this.cam.zoomBias = zoom - 12.5;
+        this.cam.snap(x, -row, zoom);
+      },
+      lamp: on => { this.lampOn = on; this.hud.setLamp(on); },
+      cargo: (...tiles) => {
+        this.state.cargo.clear();
+        for (const t of tiles) this.state.addCargo(t);
+      },
+    };
+  }
+
+  /**
+   * Stage one creature by index or id. Public because the headless suite
+   * stages through it too — one definition of "what this creature needs",
+   * so a staging bug fails a test instead of quietly passing the wrong one.
+   */
+  devStage(which: number | string): string | null {
+    const i = typeof which === 'number' ? which : STAGES.findIndex(s => s.id === which);
+    const s = STAGES[i];
+    if (!s) return null;
+    const st = this.state;
+    // the creature only exists on its own world, so load it first: the
+    // roster in entities.ts is built per world at setupWorld() time
+    if (st.activeWorld !== s.world) {
+      st.activeWorld = s.world;
+      this.setupWorld();
+    }
+    st.endedWorlds.delete(s.world);
+    st.extracted.delete(s.world);
+    // outfitted to stand there and watch without dying of the world itself
+    st.fuel = st.maxFuel;
+    st.hull = st.maxHull;
+    st.upgrades.radiator = Math.max(st.upgrades.radiator, 5);
+    st.upgrades.drill = Math.max(st.upgrades.drill, 5);
+    st.accl[st.activeWorld] = 3;
+    st.flares = Math.max(st.flares, 20);
+    st.charges = Math.max(st.charges, 10);
+
+    if (s.core) this.devCoreJump(s.world);
+    this.mode = 'play';
+    this.hud.show();
+    this.hud.setConsumables(st.flares, st.charges, st.arrestors);
+    // a stage change carries no story: clear the stratum banners and dispatch
+    // chatter the jump itself fires, which otherwise stack over the creature
+    this.comms.clear();
+    this.hud.clearToasts();
+    this.cam.zoomBias = 0;
+    this.threats.reset();
+    this.threats.level = 'full';
+    s.setup(this.stageCtx());
+
+    this.staging = { i, prime: 4, staged: false, settle: 0.6 };
+    this.sandbox?.card.show(s, i, STAGES.length, false);
+    return s.id;
+  }
+
+  /**
+   * Most creatures spawn on their own timer against their own rules; the
+   * sandbox keeps asking for a few seconds until one takes, then leaves it
+   * alone so what you are watching is ordinary behaviour, not a puppet.
+   */
+  private tickSandbox(dt: number): void {
+    const sg = this.staging;
+    if (!sg) return;
+    const s = STAGES[sg.i];
+    // the depth-change banner fires a frame or two after the jump, not during
+    // it, so one clear at stage time never catches it
+    if (sg.settle > 0) {
+      sg.settle -= dt;
+      this.hud.clearToasts();
+    }
+    const alive = s.alive(this.threats);
+    if (alive) {
+      // the window closes the moment one takes. Without this, killing the
+      // thing you staged quietly resurrects it — and 'threats off' would
+      // never be able to clear the field.
+      sg.prime = 0;
+    } else if (sg.prime > 0) {
+      sg.prime -= dt;
+      s.pick(this.threats)?.devStage?.(this.ctrl.px, this.ctrl.py);
+    }
+    if (alive !== sg.staged) {
+      sg.staged = alive;
+      this.sandbox?.card.show(s, sg.i, STAGES.length, alive);
+    }
+    this.sandbox?.card.tick(dt);
   }
 
   /** (re)builds the entire scene for the active world — no page reload */
@@ -476,6 +613,9 @@ class Game {
   }
 
   private saveNow(): void {
+    // the sandbox carves habitats and empties the hold: never write that over
+    // a real save, and the 20s autosave would do exactly that
+    if (this.sandbox) return;
     this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted, this.arrestors.list);
   }
 
@@ -677,6 +817,12 @@ class Game {
         this.exitEva();
         this.hud.toast('RECALLED TO THE POD');
       }
+      if (this.sandbox && this.staging && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+        const d = e.code === 'BracketRight' ? 1 : -1;
+        this.devStage((this.staging.i + d + STAGES.length) % STAGES.length);
+      }
+      if (this.sandbox && this.staging && e.code === 'Backslash') this.devStage(this.staging.i);
+      if (this.sandbox && e.code === 'KeyH') this.sandbox.card.toggle();
       if (e.code === 'KeyM' && this.audio.ready) {
         this.hud.toast(this.audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
       }
@@ -1033,6 +1179,7 @@ class Game {
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
     this.finale.frame(dt, this.time, camRow);
+    if (this.staging) this.tickSandbox(dt);
     this.renderer.render(this.scene, this.cam.camera);
   }
 

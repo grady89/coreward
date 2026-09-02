@@ -116,6 +116,12 @@ export class Stillwalkers implements Creature {
     }
   }
 
+  devStage(x: number, y: number): void {
+    // left where trySpawn puts it, 11+ tiles out inside the rock: the walk
+    // toward you in the dark is the creature, and it needs the distance
+    if (!this.walkers.some(w => w.alive)) this.trySpawn(x, y);
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
     this.spawnTimer -= dt;

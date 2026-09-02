@@ -162,6 +162,22 @@ export class Rimewings implements Creature {
     }
   }
 
+  devStage(x: number, y: number): void {
+    if (this.clusters.some(c => c.alive)) return;
+    this.trySpawn(x, y, 'full');
+    // pull the constellation into thruster range: the whole creature is the
+    // moment the wash reaches it, and at 9+ tiles that never happens
+    const slot = this.clusters.findIndex(c => c.alive);
+    if (slot < 0) return;
+    const c = this.clusters[slot];
+    const ox = c.ax, oy = c.ay;
+    c.ax = x + 4.5; c.ay = y + 1.5;
+    for (const w of this.wings) {
+      if (w.cluster !== slot) continue;
+      w.x += c.ax - ox; w.y += c.ay - oy;
+    }
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY } = ctx;
     const row = Math.floor(-podY);

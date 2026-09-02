@@ -241,6 +241,11 @@ export class Hud {
     setTimeout(() => el.remove(), 3100);
   }
 
+  /** drop every toast still on screen (a dev stage change carries no story) */
+  clearToasts(): void {
+    this.toastsEl.replaceChildren();
+  }
+
   popup(text: string, color: string, sx: number, sy: number): void {
     const el = document.createElement('div');
     el.className = 'popup';

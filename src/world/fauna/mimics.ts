@@ -129,6 +129,13 @@ export class Mimics implements Creature {
     ctx.onEvent('mimic-hatch', c.x, c.y);
   }
 
+  devStage(x: number, y: number): void {
+    // hatches next frame out of the tile beside the pod, and takes the best
+    // thing in the hold — the sandbox stocks cargo first or there is no theft
+    if (this.crabs.some(c => c.alive) || this.pending.length) return;
+    this.hatch(Math.floor(x) + 2, Math.floor(-y));
+  }
+
   update(ctx: ThreatCtx, _level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
     while (this.pending.length) { const p = this.pending.pop()!; this.spawn(p.x, p.y, ctx); }

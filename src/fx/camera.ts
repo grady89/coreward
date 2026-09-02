@@ -18,6 +18,8 @@ export class FollowCam {
   private cy = 4;
   private cz = 17;
   reducedMotion = false;
+  /** dev sandbox pull-back, so a big creature fits the frame. 0 in play. */
+  zoomBias = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(52, aspect, 0.1, 200);
@@ -39,7 +41,7 @@ export class FollowCam {
     const speed = Math.hypot(vx, vy);
     const tx = Math.min(WORLD_W - 9, Math.max(9, x + vx * 0.22));
     const ty = atSurface ? Math.max(y + 1.4, 1.8) : y + vy * 0.16 + (close ? 0.5 : 0);
-    const tz = (close ? 8.5 : atSurface ? 14 : 12.5) + speed * 0.12;
+    const tz = (close ? 8.5 : atSurface ? 14 : 12.5) + speed * 0.12 + this.zoomBias;
 
     const k = Math.min(1, dt * 4.2);
     this.cx += (tx - this.cx) * k;

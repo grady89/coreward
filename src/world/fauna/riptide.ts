@@ -139,6 +139,16 @@ export class Riptide implements Creature {
     this.entered = false;
   }
 
+  devStage(x: number, y: number): void {
+    if (!this.alive && !this.trySpawn(x, y)) return;
+    // it arrives 12+ tiles away and drifts; grip falls off with the square
+    // of distance, so from there you would never feel it at all. Park it
+    // close enough that the pull is the first thing you notice.
+    this.x = this.tx = x + 3.5;
+    this.y = this.ty = y;
+    this.entered = false;
+  }
+
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
     if (!this.alive) {
