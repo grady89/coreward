@@ -9,6 +9,8 @@ export interface Settings {
   master: number;      // 0..1
   sfx: number;         // 0..1
   music: number;       // 0..1 (ambient drone bed)
+  voiceDispatch: number;      // 0..1 — Dispatch's recorded lines
+  voiceLamplighters: number;  // 0..1 — the codex's recorded lines
   shake: boolean;
   hitstop: boolean;
   showFps: boolean;
@@ -23,6 +25,8 @@ const DEFAULTS: Settings = {
   master: 0.5,
   sfx: 1,
   music: 1,
+  voiceDispatch: 1,
+  voiceLamplighters: 1,
   shake: true,
   hitstop: true,
   showFps: false,

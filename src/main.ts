@@ -1022,7 +1022,7 @@ class Game {
   /** push preference changes into the systems that read them */
   private applySettings(): void {
     const s = this.settings;
-    this.audio.setVolumes(s.master, s.sfx, s.music);
+    this.audio.setVolumes(s.master, s.sfx, s.music, s.voiceDispatch, s.voiceLamplighters);
     this.cam.reducedMotion = this.reducedMotion || !s.shake;
     this.hud.setFps(s.showFps ? 0 : null);
     if (this.threats) this.threats.level = this.faunaDead ? 'off' : s.threats;

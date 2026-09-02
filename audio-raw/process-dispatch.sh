@@ -2,7 +2,12 @@
 # Applies the Dispatch comms-radio treatment (DISPATCH.md: band-pass, presence
 # bump, soft saturation, gentle compression, squelch tail) to a raw ElevenLabs
 # take, then peak-normalizes in a second pass (loudnorm's LUFS gating is
-# unreliable on clips this short). Usage: process-dispatch.sh <in.mp3> <out.mp3>
+# unreliable on clips this short).
+#
+# Usage: process-dispatch.sh <in.mp3> <out.mp3>
+# Output belongs under public/audio/dispatch/ — that's the only folder Vite
+# serves/bundles verbatim, in dev and in a packaged build alike. After adding
+# files, regenerate src/audio/voice-manifest.ts (see the comment at its top).
 set -euo pipefail
 
 FF="/c/Users/grady/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.1-full_build/bin/ffmpeg.exe"

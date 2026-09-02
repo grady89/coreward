@@ -809,6 +809,19 @@ body.sm-open #survey {
   font-family: var(--font-display); font-size: 9px;
   letter-spacing: 0.2em; color: var(--ink-dim);
 }
+.tx-head-right { display: flex; align-items: center; gap: 10px; flex: none; }
+
+/* small round replay control — the transcript and the codex both use it */
+.tx-play {
+  flex: none; width: 24px; height: 24px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; color: var(--teal);
+  background: rgba(60, 230, 200, 0.08);
+  border: 1px solid rgba(60, 230, 200, 0.35); border-radius: 50%;
+  cursor: pointer; transition: background 0.15s, transform 0.1s;
+}
+.tx-play:hover { background: rgba(60, 230, 200, 0.2); }
+.tx-play:active { transform: scale(0.9); }
 
 /* unread transmissions: a live dot on the door to the tape */
 .btn.has-unread {
@@ -927,6 +940,7 @@ body.sm-open #survey {
 .codex-row .codex-mark { width: 34px; height: 34px; flex: none; color: #ffd9a0; }
 .codex-row.locked .codex-mark { color: rgba(255, 255, 255, 0.18); }
 .codex-row.locked .r-name, .codex-row.locked .r-sub { opacity: 0.45; font-style: italic; }
+.codex-row .codex-info { flex: 1; min-width: 0; }
 #vault-hud .vh-spark {
   font-size: 20px; margin-top: 6px; color: #2a3038;
   text-shadow: none; transition: color 150ms, text-shadow 150ms;

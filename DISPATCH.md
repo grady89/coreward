@@ -319,11 +319,17 @@ that is happening right now.*
 
 # THE LAMPLIGHTERS — the codex voice
 
-**Status: the nine per-glyph fragments are from [SPEC-GLYPHS.md](SPEC-GLYPHS.md)
-§2, which is PROPOSED — not built yet.** What exists in the game today is only
-the 9/9 assembled reading and the locked line
-([panels.ts:459](src/ui/panels.ts#L459)). Safe to record now: the spec treats
-the fragment texts as final, and the assembled reading is shipped.
+**Status: G1 has shipped.** [SPEC-GLYPHS.md](SPEC-GLYPHS.md) still reads
+PROPOSED at the top, but that's stale — the alphabet is live in
+[world/glyphs.ts](src/world/glyphs.ts) (`GLYPHS`, one `GlyphDef` per stone,
+`id`/`name`/`fragment`), and the assay panel renders a real per-glyph codex
+row plus the 9/9 assembled reading ([panels.ts](src/ui/panels.ts), the
+`codex-row` block). What's still unbuilt is the vault gameplay itself (G2–G4:
+walking in, the worklight pack, the nine rooms) — glyphs are still earned by
+drilling for now. Every id below matches `GlyphDef.id` exactly, so a clip
+named `codex-<id>.mp3` is ready to wire into that row's play button the
+moment it lands in `public/audio/lamplighters/` — see
+[voice-manifest.ts](src/audio/voice-manifest.ts).
 
 ## Who they are
 
@@ -397,7 +403,7 @@ There was a guild for it, once. Someone to walk the dark and keep the small ligh
 ### codex-famine — THE FAMINE (VEIL-3)
 Then light stopped being a thing you could make more of. Call it a famine; the word is close enough. Every lit thing became a spent thing. The sky went first.
 
-### codex-lastshift — THE LAST SHIFT (VEIL-3)
+### codex-shift — THE LAST SHIFT (VEIL-3)
 The others left, or stopped. We stayed, because a shift does not end when it is hopeless. It ends when it is relieved. No one relieved us.
 
 ### codex-vault — THE VAULT (CRYOS-2)

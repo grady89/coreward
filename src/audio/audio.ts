@@ -6,8 +6,15 @@ export class AudioEngine {
   private master!: GainNode;
   private sfxBus!: GainNode;
   private musicBus!: GainNode;
+  private voiceDispatchBus!: GainNode;
+  private voiceLamplightersBus!: GainNode;
   private muted = false;
-  private vol = { master: 0.5, sfx: 1, music: 1 };
+  private vol = { master: 0.5, sfx: 1, music: 1, voiceDispatch: 1, voiceLamplighters: 1 };
+
+  // recorded VO playback (everything else in this file is synthesized)
+  private voiceBufferCache = new Map<string, AudioBuffer>();
+  private voiceSeq = 0;
+  private activeVoiceSrc: AudioBufferSourceNode | null = null;
 
   // continuous voices
   private thrustGain!: GainNode;
@@ -42,6 +49,14 @@ export class AudioEngine {
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = this.vol.music;
     this.musicBus.connect(this.master);
+    // recorded voices get their own buses so Dispatch and the Lamplighters
+    // can be balanced independently of sfx/ambience — and of each other
+    this.voiceDispatchBus = ctx.createGain();
+    this.voiceDispatchBus.gain.value = this.vol.voiceDispatch;
+    this.voiceDispatchBus.connect(this.master);
+    this.voiceLamplightersBus = ctx.createGain();
+    this.voiceLamplightersBus.gain.value = this.vol.voiceLamplighters;
+    this.voiceLamplightersBus.connect(this.master);
 
     // shared noise buffer
     this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -116,12 +131,53 @@ export class AudioEngine {
   }
 
   /** live-apply volume settings (0..1 each) */
-  setVolumes(master: number, sfx: number, music: number): void {
-    this.vol = { master, sfx, music };
+  setVolumes(master: number, sfx: number, music: number, voiceDispatch: number, voiceLamplighters: number): void {
+    this.vol = { master, sfx, music, voiceDispatch, voiceLamplighters };
     if (!this.ctx) return;
     this.master.gain.value = this.muted ? 0 : master;
     this.sfxBus.gain.value = sfx;
     this.musicBus.gain.value = music;
+    this.voiceDispatchBus.gain.value = voiceDispatch;
+    this.voiceLamplightersBus.gain.value = voiceLamplighters;
+  }
+
+  /**
+   * Plays one or more pre-rendered VO clips back to back through a speaker's
+   * bus — the transcript and codex replay buttons use this. A later call (or
+   * stopVoice) cancels whatever is still queued from an earlier one, so
+   * mashing play or switching entries never overlaps two lines.
+   */
+  async playVoice(urls: string[], speaker: 'dispatch' | 'lamplighters'): Promise<void> {
+    if (!this.ctx || urls.length === 0) return;
+    const bus = speaker === 'dispatch' ? this.voiceDispatchBus : this.voiceLamplightersBus;
+    const token = ++this.voiceSeq;
+    this.activeVoiceSrc?.stop();
+    for (const url of urls) {
+      if (token !== this.voiceSeq) return; // superseded by a newer play() or stopVoice()
+      let buf = this.voiceBufferCache.get(url);
+      if (!buf) {
+        const res = await fetch(url);
+        if (!res.ok || token !== this.voiceSeq) return;
+        buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
+        this.voiceBufferCache.set(url, buf);
+      }
+      if (token !== this.voiceSeq || !this.ctx) return;
+      await new Promise<void>(resolve => {
+        const src = this.ctx!.createBufferSource();
+        src.buffer = buf!;
+        src.connect(bus);
+        src.onended = () => resolve();
+        this.activeVoiceSrc = src;
+        src.start();
+      });
+    }
+  }
+
+  /** stops whatever VO line or sequence is currently playing */
+  stopVoice(): void {
+    this.voiceSeq++;
+    this.activeVoiceSrc?.stop();
+    this.activeVoiceSrc = null;
   }
 
   update(dt: number, o: {

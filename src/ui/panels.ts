@@ -17,6 +17,7 @@ import {
 import { ENDING_PAGES, EndingKind, transmissionById } from '../game/narrative';
 import { EXTRACT_OFFER } from '../config';
 import { GLYPHS, glyphSvg } from '../world/glyphs';
+import { DISPATCH_VOICED, LAMPLIGHTERS_VOICED, dispatchVoiceUrl, lamplightersVoiceUrl } from '../audio/voice-manifest';
 
 /** one-line statement of a contract's terms, priced against this pod */
 function describe(c: Contract, maxFuel: number): string {
@@ -518,10 +519,12 @@ export class Panels {
       <div class="forge-head">CODEX<span class="forge-shards">${st.glyphs} / ${GLYPHS_TO_TRANSLATE} stones walked</span></div>
       ${GLYPHS.map(g => {
         const got = st.glyphsSet.has(g.id);
+        const voiced = got && LAMPLIGHTERS_VOICED.has(g.id);
         return `<div class="codex-row ${got ? '' : 'locked'}">
           ${glyphSvg(g, 'codex-mark')}
-          <span><span class="r-name">${got ? g.name : '· · ·'}</span>
+          <span class="codex-info"><span class="r-name">${got ? g.name : '· · ·'}</span>
           <div class="r-sub">${got ? g.fragment : '— untranslated. The stone is a door. —'}</div></span>
+          ${voiced ? `<button class="tx-play" data-codex-play="${g.id}" aria-label="Play fragment" title="Play fragment">▶</button>` : ''}
         </div>`;
       }).join('')}
       ${st.glyphs >= GLYPHS_TO_TRANSLATE ? `
@@ -537,6 +540,13 @@ export class Panels {
     this.body().querySelector('#open-transcript')?.addEventListener('click', () => {
       this.ctx.audio.click();
       this.open('transcript');
+    });
+    this.body().querySelectorAll('button[data-codex-play]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const glyphId = (btn as HTMLElement).dataset.codexPlay!;
+        this.ctx.audio.playVoice([lamplightersVoiceUrl(glyphId)], 'lamplighters');
+      });
     });
     this.body().querySelector('#buy-beacons')?.addEventListener('click', () => {
       if (st.money < BEACON_PRICE) { this.ctx.audio.denied(); return; }
@@ -666,6 +676,16 @@ export class Panels {
     return Math.max(0, this.transmissionLog().length - this.ctx.state.transcriptSeen);
   }
 
+  /** which of a transmission's lines have a recorded take, in play order */
+  private voicedDispatchUrls(txId: string, lineCount: number): string[] {
+    const urls: string[] = [];
+    for (let i = 1; i <= lineCount; i++) {
+      const clipId = `${txId}-${i}`;
+      if (DISPATCH_VOICED.has(clipId)) urls.push(dispatchVoiceUrl(clipId));
+    }
+    return urls;
+  }
+
   /** the assay office's door to the tape, carrying its unread marker */
   private transcriptButton(): string {
     const total = this.transmissionLog().length;
@@ -690,14 +710,20 @@ export class Panels {
         const world = tx.world ? worldById(tx.world)?.name ?? '' : '';
         // the tail of the log is what arrived since the last visit
         return { tx, n: i + 1, world, fresh: i >= log.length - unread };
-      }).reverse().map(({ tx, n, world, fresh }) => `
+      }).reverse().map(({ tx, n, world, fresh }) => {
+        const voiced = this.voicedDispatchUrls(tx.id, tx.lines.length);
+        return `
         <div class="tx-entry${fresh ? ' fresh' : ''}">
           <div class="tx-head">
             <span class="tx-label">◦ DISPATCH</span>
-            <span class="tx-meta">${fresh ? '<b>NEW</b> · ' : ''}TX ${String(n).padStart(3, '0')}${world ? ' · ' + world : ''}</span>
+            <span class="tx-head-right">
+              <span class="tx-meta">${fresh ? '<b>NEW</b> · ' : ''}TX ${String(n).padStart(3, '0')}${world ? ' · ' + world : ''}</span>
+              ${voiced.length ? `<button class="tx-play" data-tx-play="${tx.id}" aria-label="Play transmission" title="Play transmission">▶</button>` : ''}
+            </span>
           </div>
           ${tx.lines.map(l => `<p>${l}</p>`).join('')}
-        </div>`).join('')
+        </div>`;
+      }).join('')
       : `<div class="row"><span class="r-sub">The tape is blank. Dispatch will find you — keep digging.</span></div>`;
     this.body().innerHTML = `
       ${this.header('DISPATCH TRANSCRIPT')}
@@ -706,8 +732,18 @@ export class Panels {
       <button class="btn wide" id="tx-back">BACK TO THE OFFICE</button>
       <div class="hint">Press Esc to leave</div>
     `;
+    this.body().querySelectorAll('button[data-tx-play]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const txId = (btn as HTMLElement).dataset.txPlay!;
+        const tx = log.find(t => t.id === txId);
+        if (!tx) return;
+        this.ctx.audio.playVoice(this.voicedDispatchUrls(tx.id, tx.lines.length), 'dispatch');
+      });
+    });
     this.body().querySelector('#tx-back')?.addEventListener('click', () => {
       this.ctx.audio.click();
+      this.ctx.audio.stopVoice();
       this.open('assay');
     });
   }
@@ -805,7 +841,7 @@ export class Panels {
   // ---------- SETTINGS ----------
   private renderSettings(): void {
     const s = this.ctx.settings;
-    const slider = (key: 'master' | 'sfx' | 'music', label: string) => `
+    const slider = (key: 'master' | 'sfx' | 'music' | 'voiceDispatch' | 'voiceLamplighters', label: string) => `
       <div class="row">
         <span class="r-name">${label}</span>
         <span class="r-right">
@@ -824,6 +860,9 @@ export class Panels {
       ${slider('master', 'Master volume')}
       ${slider('sfx', 'Effects')}
       ${slider('music', 'Ambience')}
+      <div class="forge-head">VOICES</div>
+      ${slider('voiceDispatch', 'Dispatch')}
+      ${slider('voiceLamplighters', 'The Lamplighters')}
       <div class="forge-head">MOTION</div>
       ${toggle('shake', 'Screen shake', 'Camera kick on impacts and drilling')}
       ${toggle('hitstop', 'Impact freeze', 'Momentary pause when ore breaks')}
@@ -849,7 +888,7 @@ export class Panels {
     });
     this.body().querySelectorAll('input[data-vol]').forEach(el => {
       const input = el as HTMLInputElement;
-      const key = input.dataset.vol as 'master' | 'sfx' | 'music';
+      const key = input.dataset.vol as 'master' | 'sfx' | 'music' | 'voiceDispatch' | 'voiceLamplighters';
       input.addEventListener('input', () => {
         s[key] = Number(input.value) / 100;
         (this.body().querySelector('#v-' + key) as HTMLElement).textContent = input.value;
