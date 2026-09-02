@@ -443,10 +443,10 @@ beats are **DRAFT** — write them into the code at G3, or replace them.*
 1. That reading is wrong. That wall is two metres thick.
 
 ### vault-act-veil3 — DRAFT — third VEIL-3 vault translated
-1. Three blackouts, three stones, and you come back out with words. "Maintenance," they called it. …Sixteen years on a dish. I know exactly what they meant.
+1. That's the last stone on this world. "We were never grand. We were maintenance." Sixteen years I've been calling myself support staff. Turns out it's a guild.
 
 ### vault-act-cryos — DRAFT — third CRYOS-2 vault translated
-1. So it was never a strike. It was a deposit. Somebody put the light down there on purpose — and Cindral has been billing us for the withdrawal.
+1. "We took the last whole light and planted it. Deeper than grief." It was put there, Dusklight. On purpose. For safekeeping. I had to stop typing for a minute.
 
 ### vault-act-maelis — DRAFT — third MAELIS-6 vault translated
-1. "The other makes you us." I've read your relay five times now. That's not a warning, Dusklight. I think it's an invitation.
+1. "One of those makes you rich. The other makes you us." Rich I understand — I process the invoices. It's the second offer I can't stop thinking about.
