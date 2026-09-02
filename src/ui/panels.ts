@@ -17,6 +17,7 @@ import {
 import { ENDING_PAGES, EndingKind, transmissionById } from '../game/narrative';
 import { EXTRACT_OFFER } from '../config';
 import { GLYPHS, glyphSvg } from '../world/glyphs';
+import { FAUNA, faunaSeen } from '../game/bestiary';
 import { DISPATCH_VOICED, LAMPLIGHTERS_VOICED, dispatchVoiceUrl, lamplightersVoiceUrl } from '../audio/voice-manifest';
 
 /** one-line statement of a contract's terms, priced against this pod */
@@ -476,6 +477,32 @@ export class Panels {
       </div>`;
     }).join('');
 
+    // the fauna log: a census of everything met, worlds appearing as charted
+    const faunaRow = (f: (typeof FAUNA)[number]): string => {
+      const got = faunaSeen(f, st.firedEvents);
+      const c = '#' + f.color.toString(16).padStart(6, '0');
+      return `<div class="codex-row fauna-row ${got ? '' : 'locked'}">
+        <span class="fauna-dot" style="--fc:${c}"></span>
+        <span class="codex-info">
+          <span class="r-name">${got ? f.name : '· · ·'}</span>
+          <div class="r-sub">${got
+            ? `<em class="fauna-tier">${f.tier}.</em> ${f.desc}<div class="fauna-rule">${f.rule}</div>`
+            : '— unidentified. The deep keeps its own census. —'}</div>
+        </span>
+      </div>`;
+    };
+    const faunaCharted = FAUNA.filter(f => f.world === null
+      || WORLDS.some(w => w.id === f.world && (w.unlockAfter === null || st.endedWorlds.has(w.unlockAfter))));
+    const faunaMet = faunaCharted.filter(f => faunaSeen(f, st.firedEvents)).length;
+    const faunaLog = [
+      ...(['veil3', 'cryos2', 'maelis6'] as const).map(id => {
+        const w = WORLDS.find(w => w.id === id)!;
+        if (w.unlockAfter !== null && !st.endedWorlds.has(w.unlockAfter)) return '';
+        return `<div class="fauna-world">${w.name}</div>` + FAUNA.filter(f => f.world === id).map(faunaRow).join('');
+      }),
+      `<div class="fauna-world">THE CONSTANTS</div>` + FAUNA.filter(f => f.world === null).map(faunaRow).join(''),
+    ].join('');
+
     // logs salvaged from wrecks (shared pool)
     const found = [...st.foundLogs].sort((a, b) => a - b).map(i => `
       <div class="lore-note">
@@ -532,6 +559,8 @@ export class Panels {
         <h4>THE ASSEMBLED READING</h4>
         <p>We were not thieves. We were the last shift, and the light was going out, and we did the only thing anyone could think of: we put it somewhere it would keep. Under a world, where weather could not reach it. We are sorry for the dark we left you standing in. It was meant to be temporary. Everything is meant to be temporary. If you have read this far, then you can put it back — and we are sorry, again, for what that will cost you.</p>
       </div>` : ''}` : ''}
+      <div class="forge-head">FAUNA LOG<span class="forge-shards">${faunaMet} / ${faunaCharted.length} identified</span></div>
+      ${faunaLog}
       <div class="forge-head">ASSAY LOGS — ${ACTIVE.name}</div>
       ${notes}
       ${found ? `<div class="forge-head">FOUND LOGS</div>${found}` : ''}

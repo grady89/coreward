@@ -22,6 +22,7 @@ import { PodController, Input } from './player/controller';
 import { Pilot } from './player/pilot';
 import { GameState } from './game/state';
 import { loadSettings, saveSettings } from './game/settings';
+import { faunaForEvent } from './game/bestiary';
 import {
   evaluate, timeLeft, fuelLeft, accept as acceptContract, POOL as CONTRACT_POOL,
 } from './game/contracts';
@@ -1752,6 +1753,9 @@ class Game {
    * modules stay about the creature.
    */
   private onFaunaEvent(id: FaunaEvent, x = this.ctrl.px, y = this.ctrl.py): void {
+    // every encounter stamps the fauna log — the assay office keeps a census
+    const credit = faunaForEvent(id);
+    if (credit) this.state.firedEvents.add(`fauna:${credit}`);
     const near = Math.hypot(x - this.ctrl.px, y - this.ctrl.py);
     const vol = Math.max(0.15, 1 - near / 18);
     switch (id) {

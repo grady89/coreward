@@ -47,6 +47,7 @@ export interface ThreatCtx {
 }
 
 export type FaunaEvent =
+  | 'swarm-wake'
   | 'longone-emerge' | 'longone-bite' | 'longone-lost'
   | 'rimewing-wake' | 'rimewing-freeze'
   | 'polyp-burst' | 'polyp-seen'

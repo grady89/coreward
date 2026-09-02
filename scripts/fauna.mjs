@@ -353,6 +353,22 @@ const nacreCut = await page.evaluate(async () => {
 });
 ok('nacre cut', nacreCut, nacreCut.cut && nacreCut.gained === 1);
 
+// --- fauna log: encounters are stamped, and the assay census shows them ---
+const faunaLog = await page.evaluate(() => {
+  const g = window.__game;
+  const fired = [...g.state.firedEvents].filter(k => k.startsWith('fauna:'));
+  g.panels.open('assay');
+  const rows = document.querySelectorAll('.fauna-row').length;
+  const locked = document.querySelectorAll('.fauna-row.locked').length;
+  const identified = rows - locked;
+  const head = [...document.querySelectorAll('.forge-head')].some(h => h.textContent.includes('FAUNA LOG'));
+  g.panels.close();
+  return { fired, rows, locked, identified, head };
+});
+ok('fauna log', faunaLog,
+  faunaLog.head && faunaLog.rows === 12 && faunaLog.identified >= 2
+  && faunaLog.fired.includes('fauna:riptide') && faunaLog.fired.includes('fauna:shellbacks'));
+
 // --- threats off: everything stands down ---
 const off = await page.evaluate(async () => {
   const g = window.__game;

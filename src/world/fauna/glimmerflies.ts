@@ -176,7 +176,7 @@ export class Glimmerflies implements Creature {
       const dist = Math.hypot(podX - s.ax, podY - s.ay);
       const flareNear = flare ? Math.hypot(flare.x - s.ax, flare.y - s.ay) < NOTICE_RANGE * 1.6 : false;
       if ((lampOn && dist < NOTICE_RANGE) || flareNear) {
-        if (!s.alerted) { s.alerted = true; s.lash = 0.9; ctx.onAlert(); }
+        if (!s.alerted) { s.alerted = true; s.lash = 0.9; ctx.onAlert(); ctx.onEvent('swarm-wake', s.ax, s.ay); }
         s.darkFor = 0;
       } else if (s.alerted) {
         s.darkFor += dt;
