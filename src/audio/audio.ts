@@ -399,6 +399,14 @@ export class AudioEngine {
     this.tone(f * 0.5 * 0.944, 1.6, 0.03, 'sine', 40); // a flat rub against it
   }
 
+  /** the pod rams through young ice: a crack, a shatter, no drill in it */
+  iceCrack(): void {
+    this.noise(0.22, 0.16, 5200, 500);
+    this.tone(1660, 0.12, 0.07, 'triangle');
+    this.tone(2490, 0.08, 0.04, 'triangle', 25);
+    this.thump(95, 0.14, 0.1);
+  }
+
   /** the Lumen Lance: light spent as ammunition — a struck bell, not a gun */
   lance(): void {
     this.tone(1318.5, 0.5, 0.1, 'sine');

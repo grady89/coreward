@@ -196,6 +196,16 @@ export const EXTRACTED_ORE_MUL = 0.25;
 export const LANCE_SHOT_COST = 120;
 export const LANCE_RANGE = 10;
 
+// ---- the refreeze (CRYOS-2): your dug shafts skin over behind you ----
+/** seconds before an abandoned dug tile skins over, with no acclimation */
+export const RIME_FREEZE_BASE = 40;
+/** each acclimation tier keeps your wake warm this much longer */
+export const RIME_FREEZE_PER_TIER = 50;
+/** Chebyshev tiles around the pod (and pilot) that never skin over */
+export const RIME_KEEP_CLEAR = 8;
+/** upward speed needed to ram through young ice — below this it holds you */
+export const RIME_SMASH_MIN = 5.5;
+
 // ---- arrestors: deployable landing pads for your own shafts ----
 export const ARRESTOR_PRICE = 900;
 export const MAX_ARRESTORS = 4;

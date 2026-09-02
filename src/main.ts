@@ -6,6 +6,7 @@ import {
   TILE_M, WRECK_SPOT_RANGE, WRECK_SALVAGE_RANGE, EVA_O2, CORE_ROW,
   EXTRACT_OFFER, EXTRACT_HOLD, LANCE_SHOT_COST, LANCE_RANGE,
   GLYPHS_TO_TRANSLATE, FORGE,
+  RIME_FREEZE_BASE, RIME_FREEZE_PER_TIER, RIME_KEEP_CLEAR,
 } from './config';
 import { T, def, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
@@ -90,6 +91,9 @@ class Game {
   private faunaDead = false;
   private veinKillAcc = 0;
   private quakeAcc = 6;
+  /** refreeze bookkeeping: seconds each open dug tile has sat unattended */
+  private rimeAge = new Map<number, number>();
+  private rimeAcc = 0;
   private pendingEnding: EndingKind | null = null;
   private endingSnapshot: {
     money: number; carrying: string | null;
@@ -248,9 +252,13 @@ class Game {
     this.buildWorld(ws?.seed ?? ((Math.random() * 0xffffffff) >>> 0));
     if (ws) {
       this.terrain.applyDug(ws.dug);
+      // shafts that had skinned over stay skinned over — and stay rammable
+      for (const i of ws.rime ?? []) this.terrain.data[i] = T.RIME;
       this.ctrl.px = ws.podX;
       this.ctrl.py = ws.podY;
     }
+    this.rimeAge.clear();
+    this.rimeAcc = 0;
     this.wrecks = new WreckField(this.scene, this.terrain, this.looted);
     this.ctrl.looted = this.looted;
     this.arrestors.load(ws?.arrestors ?? []);
@@ -380,6 +388,12 @@ class Game {
         this.hud.toast('THE POD REFUSES — THE LAST METERS ARE WALKED');
         this.audio.denied();
         this.cam.addShake(0.12);
+      },
+      onSmash: (x: number, y: number) => {
+        this.particles.blockBreak(x + 0.5, -(y + 0.5), 0xd8f0fa);
+        this.audio.iceCrack();
+        this.cam.addShake(0.16);
+        if (!this.reducedMotion && this.settings.hitstop) this.hitstop = 0.02;
       },
       onNative: (total: number) => {
         const nat = ACTIVE.native;
@@ -1148,6 +1162,7 @@ class Game {
       ? Math.max(0, 1 - Math.max(0, this.ctrl.row) / CORE_ROW) * 0.7
       : 0;
     this.atmosphere.update(this.ctrl.row - (this.ctrl.py > -2 ? 6 : 0));
+    if (!paused && dt > 0) this.refreezeTick(dt);
 
     const dr = this.ctrl.drilling;
     this.audio.update(dt, {
@@ -1236,6 +1251,58 @@ class Game {
       meta: parts.join(' · '),
       warn: p.failed || (tl !== null && tl < 30) || (fl !== null && fl < 15),
     });
+  }
+
+  /**
+   * The refreeze (CRYOS-2): dug tiles below the hazard line skin over into
+   * young ice once you leave them behind. The working pocket around the pod
+   * (and the pilot) stays thawed; acclimation keeps your wake warm longer —
+   * the job hull upgrades cannot do. Rime is rammable from below by any pod,
+   * so the shaft home is never a wall, only a bill.
+   */
+  private refreezeTick(dt: number): void {
+    if (!ACTIVE.refreeze) return;
+    this.rimeAcc += dt;
+    if (this.rimeAcc < 0.5) return;
+    const step = this.rimeAcc;
+    this.rimeAcc = 0;
+    const freezeAfter = RIME_FREEZE_BASE + this.state.acclTier * RIME_FREEZE_PER_TIER;
+    const startRow = ACTIVE.hazardStartRow;
+    const w = this.terrain.w;
+    const px = Math.floor(this.ctrl.px), py = Math.floor(-this.ctrl.py);
+    const ex = this.mode === 'eva' ? Math.floor(this.pilot.px) : px;
+    const ey = this.mode === 'eva' ? Math.floor(-this.pilot.py) : py;
+    let froze = false;
+    for (const i of this.terrain.dug) {
+      const y = Math.floor(i / w);
+      if (y < startRow) continue;
+      if (this.terrain.data[i] !== T.AIR) { this.rimeAge.delete(i); continue; }
+      const x = i % w;
+      const dPod = Math.max(Math.abs(x - px), Math.abs(y - py));
+      const dPilot = Math.max(Math.abs(x - ex), Math.abs(y - ey));
+      if (Math.min(dPod, dPilot) <= RIME_KEEP_CLEAR) {
+        this.rimeAge.delete(i); // the pod's warmth keeps the pocket open
+        continue;
+      }
+      const age = (this.rimeAge.get(i) ?? 0) + step;
+      if (age >= freezeAfter) {
+        this.rimeAge.delete(i);
+        this.terrain.data[i] = T.RIME;
+        this.chunks.markDirty(x, y);
+        froze = true;
+      } else {
+        this.rimeAge.set(i, age);
+      }
+    }
+    if (froze && !this.state.firedEvents.has('rime-taught')) {
+      this.state.firedEvents.add('rime-taught');
+      this.comms.say([
+        'Your shaft is skinning over behind you. That is not drift — the ice is closing the wound.',
+        'Young ice will not hold a pod. If the way home has healed, put your nose up and RAM through it.',
+        'And fit the acclimation. A warm hull keeps your wake open longer. Not in the manual; it is in the wrecks.',
+      ]);
+      this.state.persist();
+    }
   }
 
   // ---------- Phase 4: the cradle, the climb, the endings ----------
@@ -1580,6 +1647,7 @@ class Game {
       }
     }
 
+    if (!paused && dt > 0) this.refreezeTick(dt);
     this.hud.setEva(rite || ACTIVE.husk ? null : this.pilot.o2);
     this.pod.update(dt, { vx: 0, thrust: 0, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: this.ctrl.row, time: this.time });
     if (rite) {

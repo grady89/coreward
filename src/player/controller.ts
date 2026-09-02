@@ -4,7 +4,7 @@ import {
   HEAT_FULL_ROW, HEAT_DMG, GAS_DMG,
   TILE_M, boulderTierNeeded, stratumIndex, CORE_ROW, WORLD_W,
   DASH_SPEED, DASH_COOLDOWN, PAD_X0, PAD_X1, PAD_ROWS, SPAWN_X, VEINLIGHT_FUEL,
-  WRECK_SPOT_RANGE, CARRY_THRUST_MUL, CARRY_FUEL_MUL,
+  WRECK_SPOT_RANGE, CARRY_THRUST_MUL, CARRY_FUEL_MUL, RIME_SMASH_MIN,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE } from '../world/worlds';
@@ -35,6 +35,8 @@ export interface PodEvents {
   onArrested(impact: number): void;
   /** the pod refuses to carry the pilot closer to an unmet core */
   onCoreBalk(): void;
+  /** the pod rammed through a tile of young ice */
+  onSmash(x: number, y: number): void;
 }
 
 interface Drilling { x: number; y: number; dir: DrillDir; progress: number; hardness: number; }
@@ -415,11 +417,29 @@ export class PodController {
     } else if (dy > 0) {
       const r = Math.floor(-(this.py + HH));
       if (r >= 0) {
+        // young ice cannot hold a pod that rams it. This is not the drill —
+        // it is mass. The way back up through a refrozen shaft is always
+        // open, it just costs momentum and fuel, tile by smashed tile.
+        let blocked = false;
+        let allRime = true;
         for (let c = left; c <= right; c++) {
           if (this.terrain.solidAt(c, r)) {
+            blocked = true;
+            if (this.terrain.get(c, r) !== T.RIME) allRime = false;
+          }
+        }
+        if (blocked) {
+          if (allRime && this.vy >= RIME_SMASH_MIN) {
+            for (let c = left; c <= right; c++) {
+              if (this.terrain.get(c, r) === T.RIME) {
+                this.terrain.carve(c, r);
+                this.ev.onSmash(c, r);
+              }
+            }
+            this.vy = 0; // the ice takes the momentum — build it again
+          } else {
             this.py = -(r + 1) - HH - EPS;
             this.vy = 0;
-            break;
           }
         }
       }

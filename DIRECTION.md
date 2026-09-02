@@ -242,6 +242,44 @@ shallow work, and a good radiator tier discounts the cost by up to 30% — prior
 investment is credited, never confiscated. Dispatch explains the swap on
 arrival so it never reads as an arbitrary wall.
 
+### 8e3. The refreeze (BUILT) — later worlds test your route, not your rig
+
+Playtesting found the truth about the acclimation gate: a hazard that deals
+damage-per-second is measured against a hull pool that grows ×6.5 while drill
+and thrust shrink your time in the zone — so a world-1-rich pod brute-forces
+CRYOS-2's cold by tanking it. The fix is not bigger numbers. It is a gate
+built from something money can't buy: **the way home.**
+
+On CRYOS-2, dug tiles below the hazard line **skin over into young ice**
+(`T.RIME`) once the pod's warmth leaves them (~40s at tier 0). The straight
+shaft you carved down is not the shaft you fly back up — the world heals its
+wound while you are inside it, the passive dialect of MAELIS-6's Shellbacks.
+The yo-yo dies; the return trip becomes a cost you budget *before* you dive,
+which is the game's actual core tension.
+
+Three laws keep it fair:
+
+1. **Young ice is never a wall — it is a bill.** Rime is the one ceiling in
+   the game that gives way to a pod **ramming** it from below (speed ≥ 5.5;
+   the ice takes your momentum, tile by smashed tile). Not the drill — mass.
+   No Ascent Coil required, so a hardlock is impossible by construction; the
+   climb home is just ~4× slower and fuel-hungry. Rime persists in the save
+   as rime, precisely so it stays rammable across sessions.
+2. **The Ascent Coil keeps its prestige.** It drills *rock* overhead,
+   anywhere. Coil owners glide up a refrozen shaft; everyone else bonks
+   through it. Charges still only seal — a purchasable rock-breaker would
+   just be a drill you buy in bulk.
+3. **Acclimation gets the job hull can't do.** Each tier keeps your wake warm
+   longer (40s → 190s at Deep Winter Rig). The rich player who out-tanked the
+   frost still wants the fitted hull, because it is what keeps the route
+   open. Difficulty without confiscating a single upgrade.
+
+Scope guards: only player-dug tiles refreeze (natural caves, wreck pockets
+and the core chamber never close), only below the hazard line (the rime-salt
+beds stay workable), the working pocket around the pod and pilot stays
+thawed, and an extracted world stops healing — the refreeze dies with the
+fragment. Dispatch teaches the RAM verb the first time a shaft skins over.
+
 ### 8f. Survey scanner tiers (BUILT — per dig site)
 
 - **Survey Scanner** (✦1,500, assay office): TAB map of tunnels/caves/fluids,

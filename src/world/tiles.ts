@@ -24,6 +24,7 @@ export enum T {
   CUSTODIAN = 19, // Lamplighter masonry: the only right angles down here
   GLYPH = 20,     // a carved stone; cutting one adds it to the codex
   NATIVE = 21,    // the world's own survival material — identity from ACTIVE
+  RIME = 22,      // young ice: a refrozen shaft — the one tile a pod can RAM through
 }
 
 export interface TileDef {
@@ -64,6 +65,9 @@ export const TILE_DEFS: Record<number, TileDef> = {
   [T.GLYPH]: D('Carved Stone', 1.8, 0, true, false, 0),
   // pays in survivability, never in lumens
   [T.NATIVE]: D('Native Deposit', 0.7, 0, true, true, 0xcfe8ff, 2),
+  // half-set ice over a healed shaft — drills like packed snow, and it is the
+  // only ceiling in the game that gives way to a pod ramming it from below
+  [T.RIME]: D('Young Ice', 0.5, 0, true, false, 0),
 };
 
 /** the active world's name for its native material */
@@ -86,6 +90,8 @@ function bandColor(t: number): number {
   // masonry reads pale and cold against every world's rock
   if (t === T.CUSTODIAN) return 0x9a94ae;
   if (t === T.GLYPH) return 0x7c7694;
+  // young ice reads paler and glassier than any glacier rock around it
+  if (t === T.RIME) return 0xa9d6e6;
   return ACTIVE.rockColors[BAND_OF[t] ?? 1];
 }
 

@@ -1,7 +1,7 @@
 import { TRACKS, TrackKey, START_MONEY, ForgeKey } from '../config';
 import { ActiveContract } from './contracts';
 import { worldById } from '../world/worlds';
-import { oreValue } from '../world/tiles';
+import { oreValue, T } from '../world/tiles';
 import { Terrain } from '../world/terrain';
 
 // v2 save: one pod, many worlds. Money/upgrades/cargo/fuel/hull travel with
@@ -23,6 +23,12 @@ export interface WorldSave {
   looted: number[];   // wreck indexes salvaged
   bestRow: number;    // deepest row reached here — the survey map's reveal line
   arrestors: { x: number; y: number }[];  // deployed landing pads, per world
+  /**
+   * Dug tiles that have skinned over into young ice (CRYOS-2's refreeze).
+   * Persisted so rime stays RAMMABLE across sessions — if it regenerated as
+   * glacier rock, a coil-less pod could wake up sealed under a true ceiling.
+   */
+  rime?: number[];
 }
 
 export class GameState {
@@ -255,6 +261,9 @@ export class GameState {
     terrain: Terrain, podX: number, podY: number,
     looted: Set<number>, arrestors: { x: number; y: number }[] = [],
   ): void {
+    // rime only ever forms on dug tiles, so the dug set is the whole search
+    const rime: number[] = [];
+    for (const i of terrain.dug) if (terrain.data[i] === T.RIME) rime.push(i);
     this.worlds[this.activeWorld] = {
       seed: terrain.seed,
       dug: [...terrain.dug],
@@ -262,6 +271,7 @@ export class GameState {
       looted: [...looted],
       bestRow: this.worldBestRow,
       arrestors: arrestors.map(a => ({ x: a.x, y: a.y })),
+      rime,
     };
     this.persist();
   }

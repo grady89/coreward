@@ -43,6 +43,13 @@ export interface WorldDef {
   gasImpulse: number;
   /** glazed ice: halved grounded traction */
   iceTraction: boolean;
+  /**
+   * The world heals its wound: dug tiles below the hazard line skin over
+   * into young ice behind you. Kills the yo-yo — the way home is a cost you
+   * budget before you dive — without ever hardlocking: young ice is rammable
+   * from below by any pod, no Ascent Coil required.
+   */
+  refreeze?: boolean;
   /** which organ the local swarm evolved to read — the world's dialect */
   swarm: {
     name: string;
@@ -127,6 +134,7 @@ export const WORLDS: WorldDef[] = [
     ],
     hazard: { label: 'FROST', cold: true, cause: 'deep frost' },
     hazardStartRow: 200,
+    refreeze: true,
     native: {
       ore: 'Rime Salt', color: 0xcfe8ff, gear: 'CRYO ACCLIMATION',
       blurb: 'Your radiators shed heat. Down here that is the opposite of help.',
@@ -274,6 +282,8 @@ function grayCss(hexCss: string): string {
 function huskify(def: WorldDef): WorldDef {
   return {
     ...def,
+    // a dead world stops closing its wounds — the refreeze dies with the fragment
+    refreeze: false,
     valueMul: def.valueMul * 0.25,
     rockColors: def.rockColors.map(gray) as WorldDef['rockColors'],
     sky: {
