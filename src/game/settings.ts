@@ -14,6 +14,9 @@ export interface Settings {
   showFps: boolean;
   /** some players are here for the calm digging — let them have it */
   threats: ThreatSetting;
+  /** the Nine Stones, gentler: slower hazards, thriftier jets. The message
+   * is the reward, not the reflex — KINDLE stays reachable with this on. */
+  vaultAssist: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -24,6 +27,7 @@ const DEFAULTS: Settings = {
   hitstop: true,
   showFps: false,
   threats: 'full',
+  vaultAssist: false,
 };
 
 export function loadSettings(): Settings {

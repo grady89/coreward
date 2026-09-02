@@ -1,6 +1,8 @@
 # COREWARD — E2E Implementation Plan (v0.3.3 → 1.0)
 
-> **STATUS 2026-09-01 — Phases 0–4 built, headless suites green.**
+> **STATUS 2026-09-02 — Phases 0–4 built, plus the Nine Stones
+> ([SPEC-GLYPHS.md](SPEC-GLYPHS.md)): glyph vaults, the worklight pack and
+> the earned codex. Headless suites green.**
 > Shipped: the narrative event engine + Dispatch, the Cindral advance, wreck
 > chronology, lamp toggle, the full three-world fauna ([BESTIARY.md](BESTIARY.md)),
 > flares, seismic charges, drill-as-weapon, the Threats setting, Lamplighter

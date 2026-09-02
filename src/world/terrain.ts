@@ -1,6 +1,7 @@
 import { WORLD_W, WORLD_ROWS, CORE_ROW } from '../config';
 import { T, strataSolidForRow } from './tiles';
 import { ACTIVE } from './worlds';
+import { WORLD_GLYPHS } from './glyphs';
 
 // mulberry32 PRNG
 function rng(seed: number): () => number {
@@ -70,6 +71,8 @@ export class Terrain {
   wrecks: { x: number; y: number }[] = [];
   /** Lamplighter chamber centres, for proximity triggers */
   ruins: { x: number; y: number }[] = [];
+  /** the Nine Stones: three carved doors per world, one per early hall */
+  glyphStones: { x: number; y: number; id: string }[] = [];
   onChange: (x: number, y: number) => void = () => {};
 
   constructor(seed: number) {
@@ -163,6 +166,7 @@ export class Terrain {
     // Lamplighter ruins: the only right angles on the planet. Sealed vaults
     // of masonry with carved stones set into the walls.
     this.ruins.length = 0;
+    this.glyphStones.length = 0;
     const ru = rng(this.seed ^ 0x5eed10);
     for (let i = 0; i < 7; i++) {
       const w = 8 + Math.floor(ru() * 6);
@@ -176,15 +180,24 @@ export class Terrain {
           this.data[this.idx(x, y)] = edge ? T.CUSTODIAN : T.AIR;
         }
       }
-      // carved stones set into the interior face of the walls
+      // the old scatter-seeding consumed these rolls; keep consuming them so
+      // every save's world layout survives the Nine Stones rework unchanged
       const glyphs = 1 + Math.floor(ru() * 2);
       for (let g = 0; g < glyphs; g++) {
-        const gx = x0 + 1 + Math.floor(ru() * (w - 2));
-        const onTop = ru() < 0.5;
-        const gy = onTop ? y0 : y0 + h - 1;
-        this.data[this.idx(gx, gy)] = T.GLYPH;
+        ru(); ru();
       }
       this.ruins.push({ x: x0 + w / 2, y: y0 + h / 2 });
+      // exactly one carved stone per hall for the first three halls, set into
+      // the floor at the chamber's middle — a door you stand on, and every
+      // precious thing the Lamplighters kept, they kept DOWN
+      const ri = this.ruins.length - 1;
+      const ids = WORLD_GLYPHS[ACTIVE.id];
+      if (ids && ri < ids.length) {
+        const gx = x0 + Math.floor(w / 2);
+        const gy = y0 + h - 1;
+        this.data[this.idx(gx, gy)] = T.GLYPH;
+        this.glyphStones.push({ x: gx, y: gy, id: ids[ri] });
+      }
     }
 
     // wrecked pods of earlier drillers, seeded through the caves
@@ -264,6 +277,9 @@ export class Terrain {
       this.data[i] = T.AIR;
       this.dug.add(i);
     }
+    // a door cannot be dug away: an old save that once drilled the tile a
+    // stone now occupies gets the stone back, or 9/9 becomes unreachable
+    for (const s of this.glyphStones) this.data[this.idx(s.x, s.y)] = T.GLYPH;
   }
 
   solidAt(x: number, y: number): boolean {

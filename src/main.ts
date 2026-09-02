@@ -39,8 +39,11 @@ import { Panels, createTitle } from './ui/panels';
 import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
 import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
+import { GlyphMarks, glyphById, GLYPHS, WORLD_GLYPHS } from './world/glyphs';
+import { VaultRun } from './game/vault';
+import { vaultByGlyph, VAULTS, parseVault } from './world/vaults';
 
-type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap';
+type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault';
 
 class Game {
   renderer: THREE.WebGLRenderer;
@@ -58,6 +61,7 @@ class Game {
   wrecks!: WreckField;
   threats!: ThreatField;
   arrestors!: ArrestorField;
+  glyphMarks!: GlyphMarks;
   particles!: Particles;
   lampOn = true;
   hud: Hud;
@@ -92,6 +96,8 @@ class Game {
   private title: { hide(): void } | null = null;
   /** the interactive sandbox: null unless ?fauna is in the URL */
   private sandbox: { card: SandboxCard } | null = null;
+  /** a run inside one of the Nine Stones, or null */
+  private vault: VaultRun | null = null;
   /** which creature is staged and whether it still needs coaxing alive */
   private staging: { i: number; prime: number; staged: boolean; settle: number } | null = null;
   private eHeld = false;
@@ -206,6 +212,9 @@ class Game {
     (window as unknown as { __acceptContract: unknown }).__acceptContract = acceptContract;
     (window as unknown as { __evaluate: unknown }).__evaluate = evaluate;
     (window as unknown as { __STAGES: unknown }).__STAGES = STAGES;
+    (window as unknown as { __GLYPHS: unknown }).__GLYPHS = GLYPHS;
+    (window as unknown as { __VAULTS: unknown }).__VAULTS = VAULTS;
+    (window as unknown as { __parseVault: unknown }).__parseVault = parseVault;
 
     // dev harness: ?core drops the pod at the chamber mouth with the rite
     // un-run — press E to walk. ?core=cryos2 targets a specific site.
@@ -216,6 +225,9 @@ class Game {
     // ?fauna=riptide opens on one. See src/dev/sandbox.ts.
     const fauna = q.get('fauna');
     if (fauna !== null) this.devSandbox(fauna);
+    // dev harness: ?vault=wick steps straight into one of the Nine Stones
+    const vault = q.get('vault');
+    if (vault !== null) this.devVault(vault || 'wick');
   }
 
   /**
@@ -379,6 +391,100 @@ class Game {
     this.sandbox?.card.tick(dt);
   }
 
+  // ---------- the Nine Stones ----------
+
+  /** the seeded stone the pilot (or pod) is standing at, or null */
+  private glyphStoneNear(x: number, y: number, range: number): { x: number; y: number; id: string } | null {
+    for (const s of this.terrain.glyphStones) {
+      if (Math.abs(x - (s.x + 0.5)) < range && Math.abs(y - (-(s.y + 0.5))) < range + 1.2) return s;
+    }
+    return null;
+  }
+
+  private enterVault(id: string): void {
+    const def = vaultByGlyph(id);
+    const glyph = glyphById(id);
+    if (!def || !glyph) return;
+    // one stone at a time — a stacked run leaks its scene and its HUD
+    if (this.vault) { this.vault.dispose(); this.vault = null; }
+    this.audio.airlock();
+    this.hud.hide();
+    this.hud.setPrompt(null);
+    this.hud.setEva(null);
+    this.hud.clearToasts();
+    this.comms.clear();
+    this.map.close();
+    this.vault = new VaultRun(def, glyph, ACTIVE.core.body, this.settings.vaultAssist, {
+      sconce: () => this.audio.glyph(),
+      deny: () => this.audio.denied(),
+      reform: () => this.audio.airlock(),
+      complete: () => this.audio.glyph(),
+    }, innerWidth / innerHeight, this.ui);
+    this.mode = 'vault';
+  }
+
+  private closeVault(): void {
+    const v = this.vault;
+    if (!v) return;
+    const completed = v.completed;
+    const id = v.glyphId;
+    v.dispose();
+    this.vault = null;
+    this.audio.airlock();
+    this.mode = 'eva';
+    this.hud.show();
+    if (completed && id && !this.state.glyphsSet.has(id)) {
+      this.state.glyphsSet.add(id);
+      this.hud.toast(`TRANSLATED — ${glyphById(id)?.name} · ${this.state.glyphs}/9`, 'stratum');
+      this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
+      this.saveNow();
+    }
+    // Dispatch never sees inside — her unease is the vaults' only narration
+    if (!this.state.firedEvents.has('vault-first')) {
+      this.state.firedEvents.add('vault-first');
+      this.comms.say([
+        'Telemetry gap. Forty seconds. The suit says you were inside the wall.',
+        'That reading is wrong. That wall is two metres thick.',
+      ]);
+    } else if (completed) {
+      const acts: Record<string, [string, string]> = {
+        shift: ['vault-act1', 'The assay office ran your three stones together. It reads like a rota. A work rota, for a church.'],
+        weather: ['vault-act2', 'Three more stones. They built rooms for a fire and put the weather outside. I keep thinking about who held the tools.'],
+        kindled: ['vault-act3', 'The codex finished itself last night. I read it twice. I don\'t think we\'re miners any more.'],
+      };
+      const worldIds = WORLD_GLYPHS[this.state.activeWorld] ?? [];
+      const actKey = worldIds.length && worldIds.every(g => this.state.glyphsSet.has(g)) ? worldIds[worldIds.length - 1] : null;
+      const beat = actKey ? acts[actKey] : undefined;
+      if (beat && !this.state.firedEvents.has(beat[0])) {
+        this.state.firedEvents.add(beat[0]);
+        this.comms.say([beat[1]]);
+      }
+    }
+  }
+
+  /** ?vault=<id> and the headless suite: straight into one stone's room */
+  devVault(id: string): string | null {
+    const glyph = glyphById(id);
+    if (!glyph) return null;
+    this.audio.init();
+    const wake = () => this.audio.resume();
+    addEventListener('pointerdown', wake, { once: true });
+    addEventListener('keydown', wake, { once: true });
+    const st = this.state;
+    if (st.activeWorld !== glyph.world) {
+      st.activeWorld = glyph.world;
+      this.setupWorld();
+    }
+    this.title?.hide();
+    this.title = null;
+    const stone = this.terrain.glyphStones.find(s => s.id === id);
+    if (stone) {
+      this.pilot.spawnAt(stone.x + 0.5, -(stone.y + 0.5) + 1.2);
+    }
+    this.enterVault(id);
+    return id;
+  }
+
   /** (re)builds the entire scene for the active world — no page reload */
   private setupWorld(): void {
     this.finale?.dispose(); // a prior world's rite must not leave DOM behind
@@ -431,6 +537,8 @@ class Game {
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
     this.arrestors = new ArrestorField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
+    this.glyphMarks = new GlyphMarks(this.scene);
+    this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
   }
 
   private events() {
@@ -507,14 +615,6 @@ class Game {
       onDash: () => {
         this.audio.dash();
         this.particles.oreBurst(this.ctrl.px, this.ctrl.py, 0x6ad8ff);
-      },
-      onGlyph: (x: number, y: number) => {
-        this.state.glyphs++;
-        this.cam.screenPos(x + 0.5, -(y + 0.5), this.screen);
-        this.hud.popup('GLYPH RECOVERED', '#b8aef0', this.screen.sx, this.screen.sy);
-        this.hud.toast(`CARVED STONE ${this.state.glyphs} — ASSAY OFFICE`, 'stratum');
-        this.audio.glyph();
-        this.saveNow();
       },
       onArrested: (impact: number) => {
         this.particles.landingDust(this.ctrl.px, this.ctrl.py - 0.4, impact * 1.4);
@@ -684,11 +784,14 @@ class Game {
     // beside the pod rather than inside it
     let side = this.ctrl.facing;
     const target = this.ctrl.wreckNear;
+    const stone = this.glyphStoneNear(this.ctrl.px, this.ctrl.py, 2.5);
     if (target >= 0) {
       const w = this.terrain.wrecks[target];
       side = Math.sign(w.x + 0.5 - this.ctrl.px) || 1;
     } else if (this.ctrl.coreNear || this.ctrl.coreRevisit) {
       side = Math.sign(this.ember.x - this.ctrl.px) || 1;
+    } else if (stone) {
+      side = Math.sign(stone.x + 0.5 - this.ctrl.px) || 1;
     }
     // step clear of the boarding radius, or E would put you straight back in
     this.pilot.spawnAt(this.ctrl.px + side * 1.35, this.ctrl.py - 0.1);
@@ -988,10 +1091,20 @@ class Game {
       if (shop) { this.audio.click(); this.panels.close(); }
       return;
     }
+    if (this.mode === 'vault') {
+      this.vault?.interact();
+      return;
+    }
     if (this.mode === 'eva') {
       if (this.salvaging) return;
       // at a cradle the E key is a HOLD, managed per-frame — not a press
       if (this.coreActKind) return;
+      // standing at a carved stone: the mark ignites and you step in
+      const stone = this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1);
+      if (stone) {
+        this.enterVault(stone.id);
+        return;
+      }
       // SITE 297: the readables are the whole errand
       if (ACTIVE.husk) {
         const i = HUSK_READABLES.findIndex((r, idx) =>
@@ -1041,6 +1154,11 @@ class Game {
       this.enterEva();
       return;
     }
+    // parked on a carved stone: step out to read it in person
+    if (this.ctrl.grounded && this.glyphStoneNear(this.ctrl.px, this.ctrl.py, 2.5)) {
+      this.enterEva();
+      return;
+    }
     if (this.ctrl.dock) {
       this.audio.click();
       this.panels.open(this.ctrl.dock.key);
@@ -1078,6 +1196,10 @@ class Game {
       this.finale.skip();
       return;
     }
+    if (this.mode === 'vault' && this.vault) {
+      this.vault.abandon();
+      return;
+    }
     if (this.mode !== 'play' && this.mode !== 'eva') return;
     if (this.panels.isOpen) {
       if (this.panels.current !== 'death' && this.panels.current !== 'rescue' && this.panels.current !== 'ending') {
@@ -1108,6 +1230,14 @@ class Game {
     if (this.mode === 'starmap' && this.starmap) {
       this.starmap.frame(Math.min(0.05, raw));
       this.starmap?.render(this.renderer);
+      return;
+    }
+
+    // inside a stone: the world outside is frozen, the suit stops counting
+    if (this.mode === 'vault' && this.vault) {
+      this.vault.frame(Math.min(0.05, raw), this.input(), this.lampOn);
+      this.vault.render(this.renderer);
+      if (this.vault.closed) this.closeVault();
       return;
     }
 
@@ -1176,6 +1306,7 @@ class Game {
     this.pumpNarrative(raw);
     this.particles.update(dt);
     this.wrecks.update(this.time, dt);
+    this.glyphMarks.update(this.time);
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
     this.finale.frame(dt, this.time, camRow);

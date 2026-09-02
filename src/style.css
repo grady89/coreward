@@ -870,3 +870,60 @@ body.sm-open #survey {
 #dev-sandbox { transition: opacity 900ms ease; }
 #dev-sandbox.dim { opacity: 0.18; }
 #dev-sandbox.gone { display: none; }
+
+/* ---- the Nine Stones: in-vault HUD ---- */
+#vault-hud {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+  z-index: 55; text-align: center; pointer-events: none;
+}
+#vault-hud .vh-name {
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.34em; color: var(--ink); opacity: 0.85;
+}
+#vault-hud .vh-meter {
+  width: 220px; height: 7px; margin: 8px auto 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 217, 160, 0.35); border-radius: 3px;
+  overflow: hidden;
+}
+#vault-hud .vh-fill { height: 100%; background: #ffd9a0; transition: width 120ms linear; }
+#vault-hud .vh-hint {
+  font-family: var(--font-display); font-size: 8.5px; letter-spacing: 0.22em;
+  color: var(--ink-dim); margin-top: 7px; opacity: 0.7;
+}
+
+/* the translation, read in the room that taught it */
+#vault-card {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 56; max-width: 480px; padding: 26px 30px; text-align: center;
+  background: rgba(8, 10, 16, 0.92);
+  border: 1px solid rgba(255, 217, 160, 0.4); border-radius: 4px;
+  backdrop-filter: blur(8px); pointer-events: none;
+  animation: vc-in 700ms ease both;
+}
+@keyframes vc-in { from { opacity: 0; transform: translate(-50%, -46%); } }
+#vault-card .vc-svg { width: 64px; height: 64px; color: #ffd9a0; }
+#vault-card .vc-svg .g-light { animation: tx-pulse 2.2s ease-in-out infinite; }
+#vault-card .vc-name {
+  font-family: var(--font-display); font-size: 16px; font-weight: 700;
+  letter-spacing: 0.3em; color: var(--ink); margin: 10px 0 12px;
+}
+#vault-card .vc-text {
+  font-family: var(--font-body); font-size: 13.5px; line-height: 1.65;
+  color: var(--ink);
+}
+#vault-card .vc-hint {
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.24em;
+  color: var(--ink-dim); margin-top: 16px;
+}
+
+/* ---- codex page: the alphabet, one row per stone ---- */
+.codex-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 12px; margin: 4px 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 3px;
+}
+.codex-row .codex-mark { width: 34px; height: 34px; flex: none; color: #ffd9a0; }
+.codex-row.locked .codex-mark { color: rgba(255, 255, 255, 0.18); }
+.codex-row.locked .r-name, .codex-row.locked .r-sub { opacity: 0.45; font-style: italic; }

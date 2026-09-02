@@ -2,6 +2,7 @@ import { TRACKS, TrackKey, START_MONEY, ForgeKey } from '../config';
 import { ActiveContract } from './contracts';
 import { worldById } from '../world/worlds';
 import { oreValue, T } from '../world/tiles';
+import { GLYPH_ORDER } from '../world/glyphs';
 import { Terrain } from '../world/terrain';
 
 // v2 save: one pod, many worlds. Money/upgrades/cargo/fuel/hull travel with
@@ -84,8 +85,17 @@ export class GameState {
   sawRuins = false;
   flares = 0;
   charges = 0;
-  /** carved stones recovered — the codex toward the Lamplighters' message */
-  glyphs = 0;
+  /** the Nine Stones: glyph ids whose vaults have been walked (the truth) */
+  glyphsSet = new Set<string>();
+  /** carved stones translated — the codex toward the Lamplighters' message */
+  get glyphs(): number { return this.glyphsSet.size; }
+  /**
+   * Old saves (and old tests) stored a plain count. Assigning one
+   * grandfathers the first N glyphs in canonical reading order.
+   */
+  set glyphs(n: number) {
+    this.glyphsSet = new Set(GLYPH_ORDER.slice(0, Math.max(0, Math.min(GLYPH_ORDER.length, n))));
+  }
   // ---- Phase 4: the pattern ----
   /** fragment in the hold ('veil3' | 'cryos2' | 'maelis6'), or null */
   carrying: string | null = null;
@@ -248,7 +258,7 @@ export class GameState {
     this.sawRuins = false;
     this.flares = 0;
     this.charges = 0;
-    this.glyphs = 0;
+    this.glyphsSet.clear();
     this.arrestors = 0;
     this.native = {};
     this.accl = {};
@@ -334,6 +344,7 @@ export class GameState {
         flares: this.flares,
         charges: this.charges,
         glyphs: this.glyphs,
+        glyphIds: [...this.glyphsSet],
         arrestors: this.arrestors,
         native: this.native,
         accl: this.accl,
@@ -394,7 +405,7 @@ export class GameState {
         this.sawRuins = !!d.sawRuins;
         this.flares = d.flares ?? 0;
         this.charges = d.charges ?? 0;
-        this.glyphs = d.glyphs ?? 0;
+        this.glyphsSet = new Set(d.glyphIds ?? GLYPH_ORDER.slice(0, d.glyphs ?? 0));
         this.arrestors = d.arrestors ?? 0;
         this.native = d.native ?? {};
         this.accl = d.accl ?? {};

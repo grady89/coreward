@@ -16,6 +16,7 @@ import {
 } from '../game/contracts';
 import { ENDING_PAGES, EndingKind, transmissionById } from '../game/narrative';
 import { EXTRACT_OFFER } from '../config';
+import { GLYPHS, glyphSvg } from '../world/glyphs';
 
 /** one-line statement of a contract's terms, priced against this pod */
 function describe(c: Contract, maxFuel: number): string {
@@ -452,13 +453,20 @@ export class Panels {
       ${starmap}
       <button class="btn primary wide" id="open-starmap">OPEN THE SUNDERING CHART</button>
       ${st.glyphs > 0 ? `
-      <div class="forge-head">CODEX<span class="forge-shards">${st.glyphs} / ${GLYPHS_TO_TRANSLATE} carved stones</span></div>
-      <div class="lore-note ${st.glyphs >= GLYPHS_TO_TRANSLATE ? '' : 'locked'}">
-        <h4>${st.glyphs >= GLYPHS_TO_TRANSLATE ? 'THE LAMPLIGHTERS' : 'UNTRANSLATED'}</h4>
-        <p>${st.glyphs >= GLYPHS_TO_TRANSLATE
-          ? 'We were not thieves. We were the last shift, and the light was going out, and we did the only thing anyone could think of: we put it somewhere it would keep. Under a world, where weather could not reach it. We are sorry for the dark we left you standing in. It was meant to be temporary. Everything is meant to be temporary. If you have read this far, then you can put it back — and we are sorry, again, for what that will cost you.'
-          : 'The marks repeat but the sense will not come. More stones. There must be more stones.'}</p>
-      </div>` : ''}
+      <div class="forge-head">CODEX<span class="forge-shards">${st.glyphs} / ${GLYPHS_TO_TRANSLATE} stones walked</span></div>
+      ${GLYPHS.map(g => {
+        const got = st.glyphsSet.has(g.id);
+        return `<div class="codex-row ${got ? '' : 'locked'}">
+          ${glyphSvg(g, 'codex-mark')}
+          <span><span class="r-name">${got ? g.name : '· · ·'}</span>
+          <div class="r-sub">${got ? g.fragment : '— untranslated. The stone is a door. —'}</div></span>
+        </div>`;
+      }).join('')}
+      ${st.glyphs >= GLYPHS_TO_TRANSLATE ? `
+      <div class="lore-note">
+        <h4>THE ASSEMBLED READING</h4>
+        <p>We were not thieves. We were the last shift, and the light was going out, and we did the only thing anyone could think of: we put it somewhere it would keep. Under a world, where weather could not reach it. We are sorry for the dark we left you standing in. It was meant to be temporary. Everything is meant to be temporary. If you have read this far, then you can put it back — and we are sorry, again, for what that will cost you.</p>
+      </div>` : ''}` : ''}
       <div class="forge-head">ASSAY LOGS — ${ACTIVE.name}</div>
       ${notes}
       ${found ? `<div class="forge-head">FOUND LOGS</div>${found}` : ''}
@@ -743,7 +751,7 @@ export class Panels {
           <span class="r-val" id="v-${key}">${Math.round(s[key] * 100)}</span>
         </span>
       </div>`;
-    const toggle = (key: 'shake' | 'hitstop' | 'showFps', label: string, sub: string) => `
+    const toggle = (key: 'shake' | 'hitstop' | 'showFps' | 'vaultAssist', label: string, sub: string) => `
       <div class="row">
         <span><span class="r-name">${label}</span><div class="r-sub">${sub}</div></span>
         <button class="btn" data-toggle="${key}">${s[key] ? 'ON' : 'OFF'}</button>
@@ -765,6 +773,7 @@ export class Panels {
           : 'Something lives down there.'}</div></span>
         <button class="btn" id="s-threats">${s.threats.toUpperCase()}</button>
       </div>
+      ${toggle('vaultAssist', 'Vault assist', 'The Nine Stones, gentler: slower hazards, thriftier jets')}
       <div class="forge-head">DISPLAY</div>
       ${toggle('showFps', 'Performance counter', 'Show frames per second')}
       <button class="btn wide" id="s-close">BACK</button>
@@ -788,7 +797,7 @@ export class Panels {
     });
     this.body().querySelectorAll('button[data-toggle]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const key = (btn as HTMLElement).dataset.toggle as 'shake' | 'hitstop' | 'showFps';
+        const key = (btn as HTMLElement).dataset.toggle as 'shake' | 'hitstop' | 'showFps' | 'vaultAssist';
         s[key] = !s[key];
         btn.textContent = s[key] ? 'ON' : 'OFF';
         this.ctx.audio.click();

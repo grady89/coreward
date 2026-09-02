@@ -141,12 +141,6 @@ class Chunk {
           gemColor = t === T.FUNGUS ? ACTIVE.gemTint
             : t === T.NATIVE ? (ACTIVE.native?.color ?? d.gem) : d.gem;
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
-        } else if (t === T.GLYPH) {
-          // the carving itself: a fissure-like mark, lit in the world's core hue
-          cls = CRACK_CLASS_0 + Math.floor(cellHash(x, y, 31) * CRACK_VARIANTS) % CRACK_VARIANTS;
-          gemColor = ACTIVE.core.body;
-          gemScale = 1.15;
-          harvestable = false;
         } else if (t === T.EMBERROCK && h > 0.82) {
           // heat fissure in the rock face: one of four branching patterns,
           // rotated per cell, lying flush — never mistakable for a pickup

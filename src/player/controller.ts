@@ -30,7 +30,6 @@ export interface PodEvents {
   onDash(): void;
   onVeinlight(fuel: number): void;
   onNative(total: number): void;
-  onGlyph(x: number, y: number): void;
   onRuinSighted(): void;
   /** an arrestor absorbed a fall that would otherwise have hurt */
   onArrested(impact: number): void;
@@ -320,6 +319,14 @@ export class PodController {
     const t = this.terrain.get(x, y);
     const d = def(t);
     if (!d.solid) return;
+    // the Nine Stones are doors, not ore — a drill has nothing to say to one
+    if (t === T.GLYPH) {
+      if (time - this.blockedMsgAt > 2.5) {
+        this.blockedMsgAt = time;
+        this.ev.onDrillBlocked('THE STONE IS A DOOR — LAND AND STEP OUT');
+      }
+      return;
+    }
     if (t === T.BOULDER && this.state.drillTier < boulderTierNeeded(y)) {
       if (time - this.blockedMsgAt > 2.5) {
         this.blockedMsgAt = time;
@@ -369,8 +376,6 @@ export class PodController {
           this.vy += ACTIVE.gasImpulse * 0.7;
         }
         this.applyDamage(GAS_DMG * (1 + dr.y / 400), 'a gas pocket');
-      } else if (t === T.GLYPH) {
-        this.ev.onGlyph(dr.x, dr.y);
       } else if (t === T.NATIVE || t === T.NACRE) {
         st.addNative();
         this.ev.onNative(st.nativeHeld);

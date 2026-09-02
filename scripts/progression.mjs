@@ -66,7 +66,8 @@ await page.evaluate(async () => {
 });
 await page.waitForTimeout(300); // settle
 await page.keyboard.press('KeyE'); // salvage
-await page.waitForTimeout(4000);
+// SwiftShader runs game time well under wall clock: poll, never wait
+await page.waitForFunction(() => window.__game.looted.size > 0, { timeout: 15000 }).catch(() => {});
 const after = await page.evaluate(() => ({
   looted: window.__game.looted?.size ?? [...window.__game.ctrl.looted].length,
   money: window.__game.state.money, logs: window.__game.state.foundLogs.size, cargo: window.__game.state.cargoCount,
@@ -99,10 +100,11 @@ await page.evaluate(() => {
   g.state.upgrades.radiator = 5;
   g.cam.snap(g.ctrl.px, g.ctrl.py, 12.5);
 });
-await page.waitForTimeout(3000); // let the pod settle on the chamber floor
+// poll for the settle — SwiftShader game time runs well under wall clock
+await page.waitForFunction(() => window.__game.ctrl.coreNear, { timeout: 15000 }).catch(() => {});
 const coreDiag = await page.evaluate(() => {
   const g = window.__game;
-  return { coreNear: g.ctrl.coreNear, row: g.ctrl.row, grounded: g.ctrl.grounded, py: +g.ctrl.py.toFixed(2), mode: g.mode, panel: g.panels.current, hull: +g.state.hull.toFixed(1), fuel: +g.state.fuel.toFixed(1) };
+  return { coreNear: g.ctrl.coreNear, row: g.ctrl.row, grounded: g.ctrl.grounded, px: +g.ctrl.px.toFixed(2), py: +g.ctrl.py.toFixed(2), vx: +g.ctrl.vx.toFixed(1), mode: g.mode, panel: g.panels.current, hull: +g.state.hull.toFixed(1), fuel: +g.state.fuel.toFixed(1) };
 });
 console.log('core proximity:', JSON.stringify(coreDiag), coreDiag.coreNear ? 'OK' : 'FAIL');
 await page.keyboard.press('KeyE'); // EVA — begins the Communion

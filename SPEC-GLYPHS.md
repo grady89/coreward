@@ -1,7 +1,23 @@
 # SPEC — "THE NINE STONES" · glyph vaults, the worklight pack, and the earned codex
 
-Status: **PROPOSED — 2026-09-02.** Nothing here is built. Open decisions are
-marked ⛩ at the end; everything else is proposed as written, with numbers.
+Status: **BUILT — 2026-09-02.** Implemented as written; deltas are marked
+**[as built]** and the ⛩ decisions at the end carry their rulings. Suites:
+`vaults.mjs` (alphabet, seeding, entry, meter, sconces, re-form, all four
+hazard grammars, the Famine economy, completion, codex, grandfathering,
+KINDLE gate), plus reworked `phase3.mjs` and the full regression.
+
+**[as built] highlights:**
+- Vault assist = hazard speed ×0.6 and jet drain ×0.75 (no extra sconces —
+  the maps stay identical in both modes).
+- The Kindled cameo stands in THE RETURN's bottom corridor, and **four**
+  figures face the master stone at the end of THE KINDLED.
+- Stones seed into the **floor** of the first three halls per world —
+  everything the Lamplighters keep, they keep down.
+- A Famine sconce refuses you below cost+8 worklight (a flicker, not a
+  death sentence).
+- Code: [src/world/glyphs.ts](src/world/glyphs.ts) (alphabet + marks),
+  [src/world/vaults.ts](src/world/vaults.ts) (nine ASCII rooms),
+  [src/game/vault.ts](src/game/vault.ts) (runtime). Dev: `?vault=wick`.
 Canon sources: [LORE.md](LORE.md) §7, [DIRECTION.md](DIRECTION.md) §8c,
 [THREATS.md](THREATS.md). Precedent for the format: [SPEC-PHASE4.md](SPEC-PHASE4.md).
 
@@ -253,17 +269,13 @@ scripted inputs) but **cannot judge difficulty**. ⛩ gates below.
   Mitigation: motes falling sideways *before* the zone boundary; the socket
   rendered as a crisp ring, not an omission.
 
-## ⛩ Open decisions
+## ⛩ Decisions (ruled 2026-09-02)
 
-1. **O2 inside vaults:** none (proposed) vs. keep the 45 s clock as a soft
-   speedrun pressure. Proposal: none — repetition is the cost, clocks make
-   it a different (worse) game.
-2. **Re-entry reward:** pure replay (proposed) vs. a Lumen cache on a par
-   time. Proposal: keep money out of the vaults entirely; the message is
-   the loot.
-3. **Pack outside vaults:** never (proposed) vs. post-9/9 the suit keeps a
-   sip of worklight everywhere (a traversal-upgrade ending bonus). Tempting
-   — but it dilutes "only in the rooms they built." Defer to a playtest.
-4. **The Kindled cameo:** should one unlit figure stand, inert, deep in a
-   MAELIS-6 vault before glyph 9 names them? Proposed yes — shown before
-   told is the house rule.
+1. **O2 inside vaults: NONE.** The suit stops counting; repetition is the
+   only cost. Ruled and built.
+2. **Re-entry reward: none.** No money in the vaults, only the lore.
+   Ruled and built.
+3. **Pack outside vaults: not for now.** The jets work only in the rooms
+   they built. Revisit after a playtest if ever.
+4. **The Kindled cameo: YES**, before glyph 9 — built into THE RETURN,
+   with the full four waiting at THE KINDLED's master stone.

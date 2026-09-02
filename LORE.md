@@ -149,15 +149,32 @@ dig site: a dead planet with a Cindral colony still standing, lights on, nobody
 home, and a survey office whose records show the exact same contract you signed.
 Reaching it should recontextualize every hour played before it.
 
-## 7. Custodian glyphs
+## 7. Custodian glyphs — the Nine Stones
 
-Lamplighter ruins carry glyphs. At first they are decoration. Each distinct glyph
-recovered enters a codex in the assay office, and the codex slowly becomes a
-key — the player learns to read, rather than being handed a translation.
+Lamplighter ruins carry glyphs: nine carved stones, three to a world, set
+into the floors of the halls. **The Lamplighters store precious things
+inside worlds** — a star's fragment goes under a mantle, and a message goes
+inside the stone that carries its name. Each stone is a door. The vault
+beyond it is not somewhere else; it is *in there*, folded into the carving,
+larger than the wall that holds it. Dispatch's telemetry blacks out inside,
+and her unease is the only narration the vaults ever get.
+
+The vaults are full of **worklight** — the Lamplighters' ambient working
+glow, still on. A suit's dry maneuvering jets drink from that air, and
+only from that air: light is fuel, money, weaponry, and — in the rooms
+they built — lift. Walking a vault to its master stone is what translates
+that glyph; the codex is earned line by line, in person. The player learns
+to read by going where the words are kept.
 
 At full completion the glyphs resolve into the Lamplighters' final message,
 which is not a warning or a curse. It is an **apology**, and a set of
 instructions for putting the light back.
+
+The ninth stone names the Kindled: Lamplighters who could not leave the
+light they tended, who set down their bodies like tools at the end of a
+shift and stayed. The dark, narrow thing inside each figure in the core
+chambers is what is left of the body. One of them stands, unlit and inert,
+in a vault beneath MAELIS-6 — met before it is ever named.
 
 That message is the gate to the third ending.
 

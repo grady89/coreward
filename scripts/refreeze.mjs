@@ -109,11 +109,14 @@ await page.screenshot({ path: OUT + '/r-smashed.png' });
 // through, shave speed, and the pod lands soft at the bottom of it
 const highway = await page.evaluate(async () => {
   const g = window.__game;
-  // a fresh skinned shaft: rows 260..290 at x=44, solid floor beneath
+  // a fresh skinned shaft: rows 260..290 at x=44, solid floor beneath —
+  // ENFORCED, because on some seeds generation put a cave exactly there
+  // and the pod fell through the bottom of the whole test
   for (let y = 260; y <= 290; y++) {
     g.terrain.carve(44, y);
     if (y >= 266) g.terrain.data[g.terrain.idx(44, y)] = 22; // T.RIME below the drop
   }
+  for (let y = 291; y <= 294; y++) g.terrain.data[g.terrain.idx(44, y)] = 2; // T.ROCK
   g.ctrl.drilling = null;
   g.ctrl.px = 44.5; g.ctrl.py = -(264) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.hull = g.state.maxHull;

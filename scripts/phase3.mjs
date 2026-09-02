@@ -26,7 +26,7 @@ const ruins = await page.evaluate(() => {
   return { chambers: g.terrain.ruins.length, masonry, glyphs, minY };
 });
 console.log('ruins:', JSON.stringify(ruins),
-  ruins.chambers >= 5 && ruins.masonry > 150 && ruins.glyphs >= 5 && ruins.minY >= 330 ? 'OK' : 'FAIL');
+  ruins.chambers >= 5 && ruins.masonry > 150 && ruins.glyphs === 3 && ruins.minY >= 330 ? 'OK' : 'FAIL');
 
 // --- flying near a chamber trips the sighting ---
 const sighted = await page.evaluate(async () => {
@@ -80,38 +80,50 @@ const wardenKill = await page.evaluate(async () => {
   const afterDrill = g.threats.wardens.integrity;
   g.threats.blast(g.threats.wardens.x, g.threats.wardens.y, 3.2);
   g.threats.blast(g.threats.wardens.x, g.threats.wardens.y, 3.2);
-  // it comes down over a second and a half, not in a frame
-  for (let i = 0; i < 80 && g.threats.wardens.alive; i++) await new Promise(r => setTimeout(r, 100));
-  return { before, afterDrill, alive: g.threats.wardens.alive };
+  // it comes down over a second and a half — and a NEIGHBOURING hall may
+  // post a fresh one right after, so the felled ledger is the true check
+  for (let i = 0; i < 80 && g.threats.wardens.felled.size === 0; i++) await new Promise(r => setTimeout(r, 100));
+  return { before, afterDrill, downed: g.threats.wardens.felled.size > 0 };
 });
 console.log('warden armour:', JSON.stringify(wardenKill),
-  wardenKill.afterDrill === wardenKill.before && !wardenKill.alive ? 'OK' : 'FAIL');
+  wardenKill.afterDrill === wardenKill.before && wardenKill.downed ? 'OK' : 'FAIL');
 
-// --- masonry is slow, glyphs are collectible ---
+// --- the stones are doors now: drilling refuses, walking one translates it ---
 const glyph = await page.evaluate(async () => {
   const g = window.__game;
-  // find a glyph tile and park the pod directly above it
-  let gx = -1, gy = -1;
-  for (let y = 330; y < 480 && gy < 0; y++)
-    for (let x = 0; x < 64; x++) if (g.terrain.get(x, y) === 20) { gx = x; gy = y; break; }
-  if (gy < 0) return { err: 'no glyph' };
-  for (let y = gy - 4; y < gy; y++) g.terrain.carve(gx, y);
-  g.ctrl.px = gx + 0.5; g.ctrl.py = -gy + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  const stone = g.terrain.glyphStones[0];
+  if (!stone) return { err: 'no stone' };
+  // a drill has nothing to say to it
+  g.ctrl.drilling = null;
+  for (let y = stone.y - 4; y < stone.y; y++) g.terrain.carve(stone.x, y);
+  g.ctrl.px = stone.x + 0.5; g.ctrl.py = -stone.y + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.upgrades.drill = 5;
-  g.cam.snap(gx, -gy, 12);
-  await new Promise(r => setTimeout(r, 500));
-  const before = g.state.glyphs;
+  await new Promise(r => setTimeout(r, 400));
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }));
-  await new Promise(r => setTimeout(r, 7000));
+  await new Promise(r => setTimeout(r, 1500));
   window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown' }));
-  return { before, after: g.state.glyphs, tile: g.terrain.get(gx, gy) };
+  const undrilled = g.terrain.get(stone.x, stone.y) === 20;
+  // walk it instead: straight to the master stone via the dev door
+  const before = g.state.glyphs;
+  g.devVault(stone.id);
+  const v = g.vault;
+  v.px = 0; v.py = 0; // teleported next line onto the master
+  const m = window.__parseVault(window.__VAULTS.find(x => x.glyph === stone.id));
+  v.px = m.master.x + 0.5; v.py = -(m.master.y + 0.5);
+  let done = false;
+  for (let i = 0; i < 80 && !done; i++) { await new Promise(r => setTimeout(r, 100)); done = v.completed; }
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
+  await new Promise(r => setTimeout(r, 400));
+  return { undrilled, before, after: g.state.glyphs, mode: g.mode };
 });
-console.log('glyph collected:', JSON.stringify(glyph),
-  glyph.after > glyph.before && glyph.tile === 0 ? 'OK' : 'FAIL');
+console.log('glyph vault:', JSON.stringify(glyph),
+  glyph.undrilled && glyph.after > glyph.before ? 'OK' : 'FAIL');
 
 // --- codex appears at the assay office ---
 await page.evaluate(() => {
   const g = window.__game;
+  if (g.mode === 'eva') { g.pilot.hide(); g.mode = 'play'; } // the vault test left us on foot
   g.ctrl.drilling = null; // an in-progress drill blocks docking
   g.ctrl.px = 52; g.ctrl.py = 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.cam.snap(52, 2, 14);

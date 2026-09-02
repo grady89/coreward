@@ -52,6 +52,7 @@ node scripts/phase2.mjs out/       # flares, Long Ones, corridor rule, seismic c
 node scripts/phase3.mjs out/       # ruins, glyphs, codex, Wardens, per-world dialects
 node scripts/fauna.mjs   out/      # every creature on all three worlds
 node scripts/sandbox.mjs out/      # all 12 dev-sandbox stages still come alive
+node scripts/vaults.mjs  out/      # the Nine Stones: alphabet, vault runtime, codex
 ```
 
 ## Look at the fauna (dev)
@@ -61,8 +62,11 @@ Run the game with **`?fauna`** and it cycles every creature — right world,
 habitat carved, creature alive beside you, with a card saying what to watch.
 `[` `]` cycle, `\` restage, `H` hides the card. `?fauna=riptide` opens on
 one. It never writes to your save. `?core=cryos2` still jumps to a chamber
-for the Communion. Roster and staging: [src/dev/sandbox.ts](src/dev/sandbox.ts),
-creature-by-creature notes in [BESTIARY.md](BESTIARY.md).
+for the Communion, and **`?vault=wick`** steps straight into one of the
+Nine Stones (ids: wick famine shift vault ember weather debt return
+kindled — see [SPEC-GLYPHS.md](SPEC-GLYPHS.md)). Roster and staging:
+[src/dev/sandbox.ts](src/dev/sandbox.ts), creature-by-creature notes in
+[BESTIARY.md](BESTIARY.md).
 
 **A headless testing note:** `dt` is clamped at 0.05s/frame so fast falls can
 never tunnel through terrain. Under SwiftShader (~15fps) that makes simulated
