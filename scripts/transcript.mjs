@@ -29,8 +29,15 @@ await page.evaluate(() => {
 await page.waitForTimeout(1100);
 await page.keyboard.press('KeyE'); // assay office
 await page.waitForTimeout(700);
-const btn = await page.evaluate(() => document.querySelector('#open-transcript')?.textContent);
-console.log('assay button:', JSON.stringify(btn), (btn ?? '').includes('ON RECORD') ? 'OK' : 'FAIL');
+const unreadBtn = await page.evaluate(() => ({
+  text: document.querySelector('#open-transcript')?.textContent?.replace(/\s+/g, ' ').trim(),
+  marked: !!document.querySelector('#open-transcript.has-unread'),
+  dot: !!document.querySelector('.tx-dot'),
+}));
+console.log('unread marker:', JSON.stringify(unreadBtn),
+  unreadBtn.marked && unreadBtn.dot && (unreadBtn.text ?? '').includes('3 NEW OF 3')
+    ? 'OK — everything unread on a first visit' : 'FAIL');
+await page.screenshot({ path: OUT + '/tx-unread.png' });
 
 await page.click('#open-transcript');
 await page.waitForTimeout(600);
@@ -51,13 +58,35 @@ console.log('the tape:', JSON.stringify(tape),
 // newest first: the last id added (rime-taught) leads the page
 console.log('newest first:', JSON.stringify(tape.newestMeta),
   (tape.newestText ?? '').includes('skinning over') ? 'OK' : 'FAIL');
+const fresh = await page.evaluate(() => document.querySelectorAll('.tx-entry.fresh').length);
+console.log('entries flagged new:', fresh, fresh === 3 ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/tx-tape.png' });
 
-// back to the office, and the count survives a reload (it is save data)
+// reading the tape clears the mark
 await page.click('#tx-back');
 await page.waitForTimeout(500);
-const back = await page.evaluate(() => window.__game.panels.current);
-console.log('back to the office:', back, back === 'assay' ? 'OK' : 'FAIL');
+const back = await page.evaluate(() => ({
+  panel: window.__game.panels.current,
+  seen: window.__game.state.transcriptSeen,
+  marked: !!document.querySelector('#open-transcript.has-unread'),
+  text: document.querySelector('#open-transcript')?.textContent?.replace(/\s+/g, ' ').trim(),
+}));
+console.log('reading clears it:', JSON.stringify(back),
+  back.panel === 'assay' && back.seen === 3 && !back.marked && (back.text ?? '').includes('3 ON RECORD')
+    ? 'OK' : 'FAIL');
+
+// a NEW transmission re-arms the marker
+const rearm = await page.evaluate(() => {
+  const g = window.__game;
+  g.state.firedEvents.add('v3-d130');
+  g.panels.open('assay');
+  return {
+    marked: !!document.querySelector('#open-transcript.has-unread'),
+    text: document.querySelector('#open-transcript')?.textContent?.replace(/\s+/g, ' ').trim(),
+  };
+});
+console.log('new traffic re-arms:', JSON.stringify(rearm),
+  rearm.marked && (rearm.text ?? '').includes('1 NEW OF 4') ? 'OK' : 'FAIL');
 await page.evaluate(() => window.__game.saveNow());
 await page.reload();
 await page.waitForTimeout(3000);

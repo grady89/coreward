@@ -70,6 +70,13 @@ export class GameState {
   contractOre = 0;
   /** narrative event ids already delivered */
   firedEvents = new Set<string>();
+  /**
+   * Transmissions on the tape the last time the transcript was opened.
+   * The dispatch log only grows, so the unread count is a subtraction —
+   * no per-id bookkeeping, and an old save simply starts with everything
+   * marked unread, which is the honest answer for a first visit.
+   */
+  transcriptSeen = 0;
   wrecksSalvaged = 0;
   veinlightHarvested = 0;
   sawRuins = false;
@@ -221,6 +228,7 @@ export class GameState {
     this.contractDay = 0;
     this.contractOre = 0;
     this.firedEvents.clear();
+    this.transcriptSeen = 0;
     this.wrecksSalvaged = 0;
     this.veinlightHarvested = 0;
     this.sawRuins = false;
@@ -301,6 +309,7 @@ export class GameState {
         contractDay: this.contractDay,
         contractOre: this.contractOre,
         firedEvents: [...this.firedEvents],
+        transcriptSeen: this.transcriptSeen,
         wrecksSalvaged: this.wrecksSalvaged,
         veinlightHarvested: this.veinlightHarvested,
         sawRuins: this.sawRuins,
@@ -361,6 +370,7 @@ export class GameState {
         this.contractDay = d.contractDay ?? 0;
         this.contractOre = d.contractOre ?? 0;
         this.firedEvents = new Set(d.firedEvents ?? []);
+        this.transcriptSeen = d.transcriptSeen ?? 0;
         this.wrecksSalvaged = d.wrecksSalvaged ?? 0;
         this.veinlightHarvested = d.veinlightHarvested ?? 0;
         this.sawRuins = !!d.sawRuins;

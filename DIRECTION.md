@@ -297,6 +297,13 @@ play order, so the tape reconstructs from data plus a registry
 fired outside the trigger engine register in `ADHOC_TRANSMISSIONS` or the
 tape cannot replay them — that is the one rule new content must follow.
 
+An **unread marker** rides the office door: a pulsing teal dot and an
+`N NEW OF M` count whenever transmissions have landed since the last visit,
+with the new entries flagged inside the tape so you can see where you left
+off. It is a subtraction, not a ledger — the log only grows, so one saved
+integer (`transcriptSeen`) carries it, and an old save opens with everything
+marked unread, which is the honest answer for a first visit.
+
 ### 8f. Survey scanner tiers (BUILT — per dig site)
 
 - **Survey Scanner** (✦1,500, assay office): TAB map of tunnels/caves/fluids,

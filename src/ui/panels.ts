@@ -427,7 +427,7 @@ export class Panels {
         <div class="row"><span class="r-name">Blocks cut</span><span class="r-val">${st.blocksDug.toLocaleString()}</span></div>
         <div class="row"><span class="r-name">Hold value</span><span class="r-val">${fmt(st.cargoValue)}</span></div>
       </div>
-      <button class="btn wide" id="open-transcript">DISPATCH TRANSCRIPT · ${this.transmissionLog().length} ON RECORD</button>
+      ${this.transcriptButton()}
       <div class="forge-head">SURVEY — ${ACTIVE.name}<span class="forge-shards">fitted per dig site</span></div>
       <div class="row">
         <span><span class="r-name">SURVEY SCANNER</span><div class="r-sub">${st.hasScanner ? 'Installed — TAB toggles the map · + / − to zoom' : 'A live map of every tunnel you cut · toggled with TAB'}</div></span>
@@ -591,18 +591,40 @@ export class Panels {
     return log;
   }
 
+  /** transmissions relayed since the tape was last opened */
+  private unreadTransmissions(): number {
+    return Math.max(0, this.transmissionLog().length - this.ctx.state.transcriptSeen);
+  }
+
+  /** the assay office's door to the tape, carrying its unread marker */
+  private transcriptButton(): string {
+    const total = this.transmissionLog().length;
+    const unread = this.unreadTransmissions();
+    return `<button class="btn wide ${unread > 0 ? 'has-unread' : ''}" id="open-transcript">
+      ${unread > 0 ? '<span class="tx-dot" aria-hidden="true"></span>' : ''}DISPATCH TRANSCRIPT ·
+      ${unread > 0 ? `<b>${unread} NEW</b> OF ${total}` : `${total} ON RECORD`}
+    </button>`;
+  }
+
   private renderTranscript(): void {
     const log = this.transmissionLog();
+    // opening the tape reads it: the unread mark clears from here on
+    const unread = this.unreadTransmissions();
+    if (this.ctx.state.transcriptSeen !== log.length) {
+      this.ctx.state.transcriptSeen = log.length;
+      this.ctx.saveNow();
+    }
     // newest first: "what did I just miss" is the errand this page exists for
     const entries = log.length
       ? log.map((tx, i) => {
         const world = tx.world ? worldById(tx.world)?.name ?? '' : '';
-        return { tx, n: i + 1, world };
-      }).reverse().map(({ tx, n, world }) => `
-        <div class="tx-entry">
+        // the tail of the log is what arrived since the last visit
+        return { tx, n: i + 1, world, fresh: i >= log.length - unread };
+      }).reverse().map(({ tx, n, world, fresh }) => `
+        <div class="tx-entry${fresh ? ' fresh' : ''}">
           <div class="tx-head">
             <span class="tx-label">◦ DISPATCH</span>
-            <span class="tx-meta">TX ${String(n).padStart(3, '0')}${world ? ' · ' + world : ''}</span>
+            <span class="tx-meta">${fresh ? '<b>NEW</b> · ' : ''}TX ${String(n).padStart(3, '0')}${world ? ' · ' + world : ''}</span>
           </div>
           ${tx.lines.map(l => `<p>${l}</p>`).join('')}
         </div>`).join('')

@@ -798,3 +798,24 @@ body.sm-open #survey {
   font-family: var(--font-display); font-size: 9px;
   letter-spacing: 0.2em; color: var(--ink-dim);
 }
+
+/* unread transmissions: a live dot on the door to the tape */
+.btn.has-unread {
+  border-color: rgba(60, 230, 200, 0.5);
+  color: var(--teal);
+}
+.btn.has-unread b { color: var(--teal); font-weight: 700; }
+.tx-dot {
+  display: inline-block; width: 7px; height: 7px; margin-right: 9px;
+  border-radius: 50%; background: var(--teal);
+  box-shadow: 0 0 8px rgba(60, 230, 200, 0.9);
+  animation: tx-pulse 1.8s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes tx-pulse { 50% { opacity: 0.35; transform: scale(0.82); } }
+.tx-entry.fresh {
+  background: rgba(60, 230, 200, 0.075);
+  border-color: rgba(60, 230, 200, 0.3);
+  border-left-color: var(--teal);
+}
+.tx-entry.fresh .tx-meta b { color: var(--teal); letter-spacing: 0.24em; }
