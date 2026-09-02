@@ -53,6 +53,7 @@ node scripts/phase3.mjs out/       # ruins, glyphs, codex, Wardens, per-world di
 node scripts/fauna.mjs   out/      # every creature on all three worlds
 node scripts/sandbox.mjs out/      # all 12 dev-sandbox stages still come alive
 node scripts/vaults.mjs  out/      # the Nine Stones: alphabet, vault runtime, codex
+node scripts/pilotlook.mjs out/    # the pilot: portrait, gameplay distance, mid-stride
 ```
 
 ## Look at the fauna (dev)
