@@ -54,9 +54,10 @@ is [entities.ts](src/world/entities.ts).
   big. Cut one and it unfolds: six legs, a faceted shell in the stone's own
   colour, and the best thing in your hold held up on its back like a
   trophy, glowing in that ore's colour.
-- **Motion.** Skitter-and-freeze, skitter-and-freeze, up the wall and away.
+- **Motion.** Skitter-and-freeze, skitter-and-freeze, hugging the rock —
+  it has legs, not wings, and only a cornered one launches across open air.
 - **Rule.** Keyed on greed. Kill it before it's gone — drill, lance, blast —
-  and the ore comes back.
+  and the ore comes back. The crushed shell lies where it fell for a moment.
 
 ## CRYOS-2 — reads HEAT
 
@@ -67,9 +68,10 @@ is [entities.ts](src/world/entities.ts).
 - **Motion.** Shiver → shed frost → crack loose one at a time → dart-and-hang
   flight at the nozzle. Cut thrust and they slow, sink, and lock again
   wherever they are.
-- **Rule.** Keyed on thruster wash, not the lamp — the lamp lesson inverted.
-  Counter: cut the engine and drift past cold. The tunnels you burned
-  through fill with new clusters behind you.
+- **Rule.** Keyed on heat, not the lamp — the lamp lesson inverted. Any
+  thruster is warmth, and so is a running drill. Counter: cut the engine
+  and drift past cold. The tunnels you burned through fill with new
+  clusters behind you.
 
 ### The Brinewyrm · hunter · [brinewyrm.ts](src/world/fauna/brinewyrm.ts)
 **First impression:** *the pool is glowing, and the glow is coming up.*
@@ -121,7 +123,7 @@ is [entities.ts](src/world/entities.ts).
   looks at you, and closes.
 - **Motion.** Spiral field re-seeded on each arrival; the eye blinks on a
   cooldown; the pull grows with the open water around you.
-- **Rule.** It doesn't touch you; it *pulls*. Grip = near² · room², so in a
+- **Rule.** It doesn't touch you; it *pulls*. Grip = near · room², so in a
   big cave it will take the pod and in a 1-wide tunnel it can't get hold.
   The counter is the game's own verb: dig into the rock and it loses you.
 
@@ -150,8 +152,10 @@ is [entities.ts](src/world/entities.ts).
   stays dark three minutes after.
 - **Rule.** Tracks luminance only. Run dark and it sweeps past. A fragment
   in the hold is light; a flare is light; the Lumen Lance is *too much*
-  light and blinds it. Contact is overexposure — the world goes white. It
-  takes post as you *approach* a ruin (never when you're already inside).
+  light and blinds it. Contact is overexposure — and so is the beam: held
+  in the narrowed white beam the hull cooks, ramping over a second or so.
+  Break the line of sight or run dark and it cools. It takes post as you
+  *approach* a ruin (never when you're already inside).
 
 ### The Kindled · [kindled.ts](src/world/fauna/kindled.ts)
 **First impression:** *they turned around.*
@@ -162,9 +166,9 @@ is [entities.ts](src/world/entities.ts).
   short, and wait. On foot they give ground as you come, keeping their two
   steps exactly, until the wall is at their back.
 - **Rule.** They do not chase. Corner one on foot and the suit's oxygen is
-  simply gone — blackout, wake in the pod. The pod gets no courtesy: fly
-  into one and it bites hull and throws you clear. When the fragment is
-  gone, so are they.
+  simply gone — blackout, wake in the pod. The pod they merely refuse: fly
+  into one and it throws you clear, unhurt. When the fragment is gone, so
+  are they.
 
 ## The arsenal — light-first, gun-last
 1. **Lamp toggle** — free, instant, the highest-tension mechanic in the game.

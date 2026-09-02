@@ -182,7 +182,8 @@ export class Rimewings implements Creature {
     const { dt, podX, podY } = ctx;
     const row = Math.floor(-podY);
     const flare = this.flares.brightest();
-    const hot = ctx.thrust > 0.05;
+    // engine heat, drill heat — both are warmth. It is in the wrecks.
+    const hot = ctx.thrust > 0.05 || ctx.drilling;
 
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
@@ -209,7 +210,12 @@ export class Rimewings implements Creature {
           if (warmth) { c.phase = 'waking'; c.t = 0; }
           break;
         case 'waking':
-          if (!warmth && c.t < SHIVER * 0.6) { c.phase = 'frozen'; c.t = 0; break; }
+          // warmth ratchets: a cold beat cools the thaw instead of erasing
+          // it, so a pod bursting past on the throttle still wakes them
+          if (!warmth) {
+            c.t = Math.max(0, c.t - dt * 3);
+            if (c.t <= 0) { c.phase = 'frozen'; break; }
+          }
           if (c.t >= SHIVER) {
             c.phase = 'hunting'; c.t = 0; c.coldFor = 0;
             if (!c.woke) { c.woke = true; ctx.onAlert(); }

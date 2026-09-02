@@ -134,6 +134,22 @@ export class Brinewyrm implements Creature {
 
   private brine(x: number, y: number): boolean { return this.terrain.get(x, y) === T.LAVA; }
 
+  /** connected brine tiles from (x, y), counted up to `cap` — a wyrm is six
+   *  tiles of body and will not live in a puddle */
+  private poolSize(x: number, y: number, cap: number): number {
+    const seen = new Set<number>();
+    const stack = [x + y * this.terrain.w];
+    while (stack.length > 0 && seen.size < cap) {
+      const i = stack.pop()!;
+      if (seen.has(i)) continue;
+      const px = i % this.terrain.w, py = Math.floor(i / this.terrain.w);
+      if (!this.brine(px, py)) continue;
+      seen.add(i);
+      stack.push(i - 1, i + 1, i - this.terrain.w, i + this.terrain.w);
+    }
+    return seen.size;
+  }
+
   private trySpawn(podX: number, podY: number): boolean {
     const cx = Math.floor(podX), cy = Math.floor(-podY);
     let best = -1, bx = 0, by = 0;
@@ -142,6 +158,7 @@ export class Brinewyrm implements Creature {
       const y = cy + Math.floor((Math.random() - 0.5) * 26);
       if (x < 1 || x >= this.terrain.w - 1 || y < BAND) continue;
       if (!this.brine(x, y)) continue;
+      if (this.poolSize(x, y, 10) < 10) continue;
       const d = Math.hypot(x + 0.5 - podX, -(y + 0.5) - podY);
       if (d < 5) continue;
       // prefer pools with a free surface above — the ones you fly over

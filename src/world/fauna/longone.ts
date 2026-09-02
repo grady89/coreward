@@ -26,7 +26,7 @@ const BAND = 300;
 const SPEED = 4.8;
 const HUNT = 17;
 const DAMAGE = 26;
-const STILL_TO_LOSE = 2.2;
+const STILL_TO_LOSE = 1.6;
 
 type Phase = 'emerging' | 'hunting' | 'searching' | 'burrowing';
 
@@ -271,11 +271,13 @@ export class LongOne implements Creature {
       moving = 1;
       if (f >= 1) { this.die(); return; }
     } else {
-      // it hears engine, drill and hull. A still pod is a stone.
-      const heard = dist < 5 || (ctx.still < STILL_TO_LOSE && dist < HUNT);
+      // it hears engine, drill and hull. A still pod is a stone — even one
+      // close enough to touch. Distance never overrides stillness: that is
+      // the whole counter, and it has to hold at point-blank or it is a lie.
+      const heard = ctx.still < STILL_TO_LOSE && dist < HUNT;
       if (this.phase === 'hunting') {
         if (!heard) this.lostT += dt; else this.lostT = 0;
-        if (this.lostT > 1.0) {
+        if (this.lostT > 0.5) {
           this.phase = 'searching'; this.phaseT = 0;
           ctx.onEvent('longone-lost', this.x, this.y);
         }
@@ -283,7 +285,7 @@ export class LongOne implements Creature {
         this.phase = 'hunting'; this.phaseT = 0; this.lostT = 0;
       }
 
-      if (dist > 44 || this.life > 90 || this.stuck > 6 || (this.phase === 'searching' && this.phaseT > 9)) {
+      if (dist > 44 || this.life > 90 || this.stuck > 6 || (this.phase === 'searching' && this.phaseT > 6)) {
         // it leaves the way it came: into the nearest rock
         this.phase = 'burrowing'; this.phaseT = 0;
         this.outX = this.x; this.outY = this.y;

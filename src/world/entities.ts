@@ -142,7 +142,13 @@ export class ThreatField {
         if (dx * dx + dy * dy > 3 * 3) continue;
         if (this.terrain.get(tx, ty) !== T.AIR) continue;
         const wx = tx + 0.5, wy = -(ty + 0.5);
-        if (Math.abs(wx - podX) < 0.5 + POD_W / 2 + 0.06 && Math.abs(wy - podY) < 0.5 + POD_H / 2 + 0.06) continue;
+        // spare the tiles the pod is inside — but set the ice FLUSH under its
+        // feet: leave an air gap below and gravity alone beats RIME_SMASH_MIN
+        // over one tile, and the pod chain-punches out the bottom of its own
+        // tomb the moment the bloom goes off. Above, leave a tile of headroom
+        // instead, so "ram up through it" has the run-up it needs to be true.
+        const pad = wy < podY ? -0.18 : 0.7;
+        if (Math.abs(wx - podX) < 0.5 + POD_W / 2 + 0.06 && Math.abs(wy - podY) < 0.5 + POD_H / 2 + pad) continue;
         this.terrain.fill(tx, ty, T.RIME);
         froze++;
       }

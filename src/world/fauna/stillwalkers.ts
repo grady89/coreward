@@ -11,11 +11,17 @@ import { Creature, ThreatCtx, ThreatLevel, limb, clamp01 } from './types';
 // move — not a tremor. Turn the lamp off, and it walks. Through the rock,
 // through the ice, straight at you, with a gait that is almost right.
 //
+// The body is built from black shards — every part an elongated octahedron,
+// so limbs taper to points at the joints and the silhouette reads as
+// something cut from obsidian, not stacked from crates. Two uneven spurs
+// off the shoulders keep the outline wrong at a glance. Walking, the head
+// hangs at a tilt; lit, it straightens — which is worse.
+//
 // The cold worlds' rule inverts here: dark hides you from the Wardens and
 // feeds you to these. Manage your light.
 
 const MAX = 2;
-const HEIGHT = 2.3;
+const HEIGHT = 2.5;
 const SPEED = 2.4;
 const LIT_RANGE = 7.5;
 const BAND = 200;
@@ -38,6 +44,8 @@ interface Walker {
   // joints (local)
   head: THREE.Mesh; torso: THREE.Mesh; pelvis: THREE.Mesh;
   limbs: THREE.Mesh[]; // upperL, foreL, upperR, foreR, thighL, shinL, thighR, shinR
+  spurs: THREE.Mesh[]; // two uneven shoulder shards
+  tilt: number;        // head hang, smoothed
 }
 
 export class Stillwalkers implements Creature {
@@ -47,7 +55,10 @@ export class Stillwalkers implements Creature {
   spawnTimer = 12;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
-    const box = new THREE.BoxGeometry(1, 1, 1);
+    // one shard for everything: an octahedron spanning ±0.5 like the old unit
+    // box, so limb() and the scale math carry over — but every piece now
+    // tapers to a point at both ends instead of ending in a flat face
+    const shard = new THREE.OctahedronGeometry(0.5, 0);
     for (let i = 0; i < MAX; i++) {
       const bodyMat = new THREE.MeshBasicMaterial({ color: 0x04070c, transparent: true, opacity: 1 });
       const rimMat = new THREE.MeshBasicMaterial({ color: 0x9ad0ff, transparent: true, opacity: 0.3, side: THREE.BackSide, depthWrite: false });
@@ -55,8 +66,8 @@ export class Stillwalkers implements Creature {
       const parts: THREE.Mesh[] = [];
       const rims: THREE.Mesh[] = [];
       const mk = (): THREE.Mesh => {
-        const m = new THREE.Mesh(box, bodyMat);
-        const r = new THREE.Mesh(box, rimMat);
+        const m = new THREE.Mesh(shard, bodyMat);
+        const r = new THREE.Mesh(shard, rimMat);
         group.add(m, r);
         parts.push(m); rims.push(r);
         return m;
@@ -64,11 +75,12 @@ export class Stillwalkers implements Creature {
       const head = mk(), torso = mk(), pelvis = mk();
       const limbs: THREE.Mesh[] = [];
       for (let k = 0; k < 8; k++) limbs.push(mk());
+      const spurs = [mk(), mk()];
       group.visible = false;
       scene.add(group);
       this.walkers.push({
         alive: false, x: 0, y: 0, dirX: 1, gait: 0, lit: 0, seen: false, life: 0, sinkT: 0, inRock: true,
-        group, parts, rims, bodyMat, rimMat, head, torso, pelvis, limbs,
+        group, parts, rims, bodyMat, rimMat, head, torso, pelvis, limbs, spurs, tilt: 0,
       });
     }
   }
@@ -155,6 +167,19 @@ export class Stillwalkers implements Creature {
         const sp = SPEED * (level === 'reduced' ? 0.7 : 1);
         w.x += ux * sp * dt;
         w.y += uy * sp * dt * 0.6;
+        // inside rock it wades at any height — that is the horror. In the
+        // open it is a walker, and walkers stand on floors: settle the feet
+        // onto the first rock below so it never strolls across thin air.
+        if (!this.terrain.solidAt(Math.floor(w.x), Math.floor(-w.y))) {
+          const col = Math.floor(w.x);
+          let row = Math.floor(-(w.y - HEIGHT / 2));
+          for (let k = 0; k < 4; k++, row++) {
+            if (this.terrain.solidAt(col, row)) {
+              w.y += (-row + HEIGHT / 2 - w.y) * Math.min(1, dt * 6);
+              break;
+            }
+          }
+        }
         w.dirX = ux > 0 ? 1 : -1;
         w.gait += dt * sp * 2.2;
         dread = Math.max(dread, clamp01(1 - dist / 12));
@@ -186,18 +211,23 @@ export class Stillwalkers implements Creature {
       w.rimMat.color.setHex(0x9ad0ff);
 
       const H = HEIGHT;
-      const hip = -H * 0.05, shoulder = H * 0.3, headY = H * 0.44;
+      const hip = -H * 0.05, shoulder = H * 0.3, headY = H * 0.46;
       const lean = frozen ? 0 : 0.08;
       // a gait that is almost right: too long a stride, arms a beat late
       const sw = Math.sin(w.gait), sw2 = Math.sin(w.gait - 0.7);
       const bob = frozen ? 0 : Math.abs(Math.cos(w.gait)) * 0.05;
+      // the head hangs at a tilt while it walks; lit, it straightens up
+      w.tilt += ((frozen ? 0 : 0.16) - w.tilt) * Math.min(1, dt * 4);
       w.head.position.set(lean * 2, headY + bob, 0);
-      w.head.scale.set(0.2, 0.28, 0.18);
+      w.head.scale.set(0.19, 0.38, 0.17);
+      w.head.rotation.z = -w.tilt;
+      // the torso is one long inverted shard: shoulders wide, waist to a point
       w.torso.position.set(lean, (shoulder + hip) / 2 + bob, 0);
-      w.torso.scale.set(0.3, shoulder - hip, 0.16);
+      w.torso.scale.set(0.4, (shoulder - hip) * 1.2, 0.2);
+      w.torso.rotation.z = -w.tilt * 0.4;
       w.pelvis.position.set(0, hip + bob, 0);
-      w.pelvis.scale.set(0.26, 0.14, 0.15);
-      const stride = 0.55, reach = 0.5;
+      w.pelvis.scale.set(0.3, 0.24, 0.17);
+      const stride = 0.6, reach = 0.56;
       // legs
       for (let s = 0; s < 2; s++) {
         const ph = s === 0 ? sw : -sw;
@@ -205,18 +235,22 @@ export class Stillwalkers implements Creature {
         const hx = 0, hy = hip + bob, hz = (s === 0 ? 1 : -1) * 0.09;
         const fx = ph * stride, fy = -H * 0.5 + kneeLift * 0.6, fz = hz;
         const kx = (hx + fx) / 2 + 0.12 + kneeLift * 0.4, ky = (hy + fy) / 2 + kneeLift * 0.3, kz = hz;
-        limb(w.limbs[4 + s * 2], hx, hy, hz, kx, ky, kz, 0.1);
-        limb(w.limbs[5 + s * 2], kx, ky, kz, fx, fy, fz, 0.08);
+        limb(w.limbs[4 + s * 2], hx, hy, hz, kx, ky, kz, 0.09);
+        limb(w.limbs[5 + s * 2], kx, ky, kz, fx, fy, fz, 0.06);
       }
       // arms: hang long, swing late, past the knee
       for (let s = 0; s < 2; s++) {
         const ph = s === 0 ? -sw2 : sw2;
         const sx = lean, sy = shoulder + bob, sz = (s === 0 ? 1 : -1) * 0.19;
         const ex = ph * reach * 0.5, ey = sy - H * 0.22, ez = sz;
-        const hx = ph * reach, hy = ey - H * 0.24, hz = sz;
-        limb(w.limbs[0 + s * 2], sx, sy, sz, ex, ey, ez, 0.08);
-        limb(w.limbs[1 + s * 2], ex, ey, ez, hx, hy, hz, 0.065);
+        const hx = ph * reach, hy = ey - H * 0.26, hz = sz;
+        limb(w.limbs[0 + s * 2], sx, sy, sz, ex, ey, ez, 0.07);
+        limb(w.limbs[1 + s * 2], ex, ey, ez, hx, hy, hz, 0.05);
       }
+      // shoulder spurs: two uneven shards raked up and back, so the outline
+      // is asymmetric from every angle — nothing alive grows that way
+      limb(w.spurs[0], lean - 0.02, shoulder + bob + 0.02, 0.1, lean - 0.26, shoulder + bob + 0.38, 0.16, 0.05);
+      limb(w.spurs[1], lean - 0.02, shoulder + bob + 0.02, -0.1, lean - 0.16, shoulder + bob + 0.46, -0.14, 0.04);
       // rims mirror the parts, slightly fatter
       for (let i = 0; i < w.parts.length; i++) {
         const p = w.parts[i], r = w.rims[i];

@@ -20,7 +20,7 @@ const MOTES = 1400;
 const RADIUS = 9;
 const BAND = 300;
 const CRUISE = 1.1;
-const PULL = 15;
+const PULL = 26;
 
 export class Riptide implements Creature {
   alive = false;
@@ -141,8 +141,8 @@ export class Riptide implements Creature {
 
   devStage(x: number, y: number): void {
     if (!this.alive && !this.trySpawn(x, y)) return;
-    // it arrives 12+ tiles away and drifts; grip falls off with the square
-    // of distance, so from there you would never feel it at all. Park it
+    // it arrives 12+ tiles away and drifts; grip falls off with distance,
+    // so from there you would barely feel it at all. Park it
     // close enough that the pull is the first thing you notice.
     this.x = this.tx = x + 3.5;
     this.y = this.ty = y;
@@ -195,7 +195,10 @@ export class Riptide implements Creature {
     const podOpen = openness(this.terrain, Math.floor(podX), Math.floor(-podY), 2);
     const room = clamp01((podOpen - 0.2) / 0.6);
     const near = clamp01(1 - dist / RADIUS);
-    const strength = near * near * room * room * (level === 'reduced' ? 0.5 : 1);
+    // linear in distance, square in room: the current reaches out — against
+    // gravity at 21 and thrust at 52, anything less reads as decoration —
+    // but a wall at your back still kills its grip fast
+    const strength = near * room * room * (level === 'reduced' ? 0.5 : 1);
     this.grip += (strength - this.grip) * Math.min(1, dt * 3);
     if (strength > 0.001) {
       const ux = -dx / (dist || 1), uy = -dy / (dist || 1);

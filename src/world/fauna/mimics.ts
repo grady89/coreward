@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { def } from '../tiles';
 import { Particles } from '../../fx/particles';
-import { Creature, ThreatCtx, ThreatLevel, air, limb, lerp, clamp01, ease } from './types';
+import { Creature, ThreatCtx, ThreatLevel, air, onWall, limb, lerp, clamp01, ease } from './types';
 
 // GEODE MIMICS — VEIL-3's thief tier. Keyed on GREED.
 //
@@ -27,6 +27,7 @@ interface Crab {
   stolen: number;
   born: number;
   life: number;
+  deadT: number;      // >0: a crushed shell settling on the floor
   burstT: number;
   pauseT: number;
   dirX: number; dirY: number;
@@ -69,27 +70,31 @@ export class Mimics implements Creature {
       group.visible = false;
       scene.add(group);
       this.crabs.push({
-        alive: false, x: 0, y: 0, vx: 0, vy: 0, stolen: 0, born: 0, life: 0, burstT: 0, pauseT: 0, dirX: 1, dirY: 0,
+        alive: false, x: 0, y: 0, vx: 0, vy: 0, stolen: 0, born: 0, life: 0, deadT: 0, burstT: 0, pauseT: 0, dirX: 1, dirY: 0,
         group, body, gem, gemMat, light, upper, lower, legPhase: 0,
       });
     }
   }
 
   reset(): void {
-    for (const c of this.crabs) { c.alive = false; c.group.visible = false; }
+    for (const c of this.crabs) { c.alive = false; c.deadT = 0; c.group.visible = false; }
     this.pending.length = 0; this.killed.length = 0;
   }
 
   /** a mimic tile was cut at (x, y): something comes out next frame */
   hatch(x: number, y: number): void { this.pending.push({ x, y }); }
 
-  private die(c: Crab): void { c.alive = false; c.group.visible = false; }
+  private die(c: Crab): void { c.alive = false; c.deadT = 0; c.group.visible = false; }
 
   private kill(c: Crab): void {
     this.particles.sparkBurst(c.x, c.y, 0xb266ff, { count: 22, speed: 3.5, up: 2, life: 0.9, gravity: 5, spread: 0.5 });
     this.particles.dustBurst(c.x, c.y, 0x3a2a5a, { count: 14, speed: 3, up: 2, life: 0.8, gravity: 9, spread: 0.5 });
     if (c.stolen) this.killed.push(c.stolen);
-    this.die(c);
+    // it does not vanish: the shell drops, crushed, and lies there a moment
+    c.alive = false;
+    c.deadT = 1.5;
+    c.gem.visible = false;
+    c.light.intensity = 0;
   }
 
   blast(x: number, y: number, radius: number): void {
@@ -114,7 +119,7 @@ export class Mimics implements Creature {
     c.alive = true;
     c.x = x + 0.5; c.y = -(y + 0.5);
     c.vx = 0; c.vy = 0;
-    c.born = 0; c.life = 0; c.burstT = 0; c.pauseT = 0.5;
+    c.born = 0; c.life = 0; c.deadT = 0; c.burstT = 0; c.pauseT = 0.5;
     c.dirX = ctx.podX > c.x ? -1 : 1; c.dirY = 0.3;
     c.stolen = ctx.steal();
     const col = c.stolen ? def(c.stolen).gem : 0x6a4aa0;
@@ -142,6 +147,18 @@ export class Mimics implements Creature {
     while (this.killed.length) { ctx.give(this.killed.pop()!); ctx.onEvent('mimic-killed', podX, podY); }
 
     for (const c of this.crabs) {
+      if (c.deadT > 0 && !c.alive) {
+        // the crushed shell: drop to the floor, lie flat, then crumble away
+        c.deadT -= dt;
+        if (c.deadT <= 0) { this.die(c); continue; }
+        if (!this.terrain.solidAt(Math.floor(c.x), Math.floor(-(c.y - 0.28)))) c.y -= dt * 3;
+        const g = c.group;
+        const crumble = c.deadT < 0.4 ? c.deadT / 0.4 : 1;
+        g.position.set(c.x, c.y - 0.12, 0.25);
+        g.scale.set(crumble, 0.38 * crumble, crumble);
+        g.rotation.z = lerp(g.rotation.z, c.dirX >= 0 ? 0.6 : -0.6, Math.min(1, dt * 6));
+        continue;
+      }
       if (!c.alive) continue;
       c.life += dt; c.born += dt;
       const dx = podX - c.x, dy = podY - c.y;
@@ -171,13 +188,16 @@ export class Mimics implements Creature {
             let ax = -dx / (dist || 1), ay = -dy / (dist || 1);
             const a = Math.atan2(ay, ax) + (Math.random() - 0.5) * 1.4;
             ax = Math.cos(a); ay = Math.sin(a);
-            // prefer open air: probe one tile ahead, fall back to perpendicular
+            // it has legs, not wings: probe one tile ahead and take the first
+            // heading that is open air AND keeps rock under its feet. Only a
+            // fully cornered crab launches across the middle of a room.
             const probe = (px: number, py: number): boolean => air(this.terrain, Math.floor(c.x + px * 1.1), Math.floor(-(c.y + py * 1.1)));
-            if (!probe(ax, ay)) {
-              if (probe(-ay, ax)) { const t = ax; ax = -ay; ay = t; }
-              else if (probe(ay, -ax)) { const t = ax; ax = ay; ay = -t; }
-              else { ax = -ax; ay = -ay; }
-            }
+            const hug = (px: number, py: number): boolean => onWall(this.terrain, Math.floor(c.x + px * 1.1), Math.floor(-(c.y + py * 1.1)));
+            const cand: [number, number][] = [[ax, ay], [-ay, ax], [ay, -ax]];
+            const pick = cand.find(([px, py]) => probe(px, py) && hug(px, py))
+              ?? cand.find(([px, py]) => probe(px, py))
+              ?? [-ax, -ay];
+            [ax, ay] = pick;
             c.dirX = ax; c.dirY = ay;
             c.burstT = 0.25 + Math.random() * 0.2;
             c.pauseT = 0.18 + Math.random() * 0.22;

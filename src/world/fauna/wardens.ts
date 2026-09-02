@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air } from './types';
+import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air, lineOfSight } from './types';
 
 // WARDENS — the constant. Lamplighter machinery, still on post.
 //
@@ -42,6 +42,8 @@ export class Wardens implements Creature {
   engaged = false;
   integrity = 100;
   private blindT = 0;
+  /** 0..1 — how long the white beam has been on the hull. Overexposure. */
+  private exposure = 0;
   private woke = false;
   private flashT = 0;
   private collapseT = 0;
@@ -193,7 +195,7 @@ export class Wardens implements Creature {
           this.alive = true;
           this.homeIdx = i;
           this.x = this.homeX = r.x; this.y = -r.y + 1.2;
-          this.sweep = 0; this.engaged = false; this.integrity = 100; this.blindT = 0; this.woke = false;
+          this.sweep = 0; this.engaged = false; this.integrity = 100; this.blindT = 0; this.woke = false; this.exposure = 0;
           this.collapseT = 0; this.hipY = HIP_H; this.flashT = 0; this.droop = 0;
           this.plantAll();
           this.group.visible = true;
@@ -248,8 +250,9 @@ export class Wardens implements Creature {
     const ty = seesFlare && !seesPod ? flare!.y : podY;
 
     // ---- walk ----
+    const dmgMul = level === 'reduced' ? 0.5 : 1;
     if (this.engaged) {
-      const sp = 1.5 * (level === 'reduced' ? 0.8 : 1) * dt;
+      const sp = 1.9 * (level === 'reduced' ? 0.8 : 1) * dt;
       const nx = this.x + Math.sign(tx - this.x) * sp;
       if (Math.abs(tx - this.x) > 0.4 && air(this.terrain, Math.floor(nx), Math.floor(-(this.y - 1)))) this.x = nx;
       const want = Math.atan2(ty - this.y, tx - this.x);
@@ -257,7 +260,9 @@ export class Wardens implements Creature {
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       this.sweep += da * Math.min(1, dt * 4);
-      if (dist < 1.6) {
+      // contact is the whole machine, legs included — not just the lantern
+      const segY = Math.max(this.y - HIP_H + 0.4, Math.min(podY, this.y + 1));
+      if (Math.hypot(podX - this.x, podY - segY) < 1.3) {
         ctx.hurt((level === 'reduced' ? 16 : 30) * dt, 'a Warden');
         this.flashT -= dt;
         if (this.flashT <= 0) { this.flashT = 0.5; ctx.onEvent('warden-flash', this.x, this.y); }
@@ -267,6 +272,20 @@ export class Wardens implements Creature {
       this.x += (this.homeX - this.x) * Math.min(1, dt * 0.6);
       this.sweep += dt * (this.blindT > 0 ? 0 : 0.7);
     }
+
+    // ---- the beam is the weapon: contact is overexposure, and so is this.
+    // Held in the narrowed white beam, the hull cooks — slowly at first,
+    // then properly. Break the line, or run dark, and it cools.
+    const lanternY = this.y + 1.15;
+    let inBeam = false;
+    if (this.engaged && this.blindT <= 0 && dist < 14) {
+      let da = Math.atan2(podY - lanternY, podX - this.x) - this.sweep;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      inBeam = Math.abs(da) < 0.3 && lineOfSight(this.terrain, this.x, lanternY, podX, podY);
+    }
+    this.exposure = clamp01(this.exposure + (inBeam ? dt / 1.2 : -dt * 1.5));
+    if (this.exposure > 0.2) ctx.hurt(13 * this.exposure * dmgMul * dt, "a Warden's beam");
     // it walks on floors: the hip rides HIP_H above whatever rock is under it
     const floorY = this.floorAt(this.x, this.y - HIP_H + 1.5, 6);
     this.y += (floorY + HIP_H - this.y) * Math.min(1, dt * 3);

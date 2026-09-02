@@ -88,7 +88,7 @@ const longOne = await page.evaluate(async () => {
 ok('long one', longOne, longOne.spawned);
 await page.screenshot({ path: OUT + '/f-longone.png' });
 
-// --- the Kindled stand in the chamber, notice you, and one touch is the suit ---
+// --- the Kindled stand in the chamber, notice you; the pod is thrown, never bitten ---
 const kindled = await page.evaluate(async () => {
   const { g, room, park, until } = window.__H();
   // dev shortcut drops the pod on the chamber floor
@@ -98,13 +98,14 @@ const kindled = await page.evaluate(async () => {
   g.ctrl.px = 24.5; g.ctrl.py = -(500 + 9) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   const noticed = await until(() => g.threats.presence > 0.2, 80);
   const seen = g.state.firedEvents.has('kindled-taught');
-  // fly into one
+  // fly into one: it throws the pod clear without taking hull
   const hull0 = g.state.hull;
-  g.ctrl.px = 22.6; g.ctrl.py = -(500 + 10) + 0.55;
-  const hit = await until(() => g.state.hull < hull0, 60);
-  return { noticed, seen, hit, presence: +g.threats.presence.toFixed(2), mode: g.mode };
+  g.ctrl.px = 22.6; g.ctrl.py = -(500 + 10) + 0.55; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  const thrown = await until(() => Math.abs(g.ctrl.px - 22.6) > 1.2, 60);
+  const hullSafe = g.state.hull >= hull0;
+  return { noticed, seen, thrown, hullSafe, presence: +g.threats.presence.toFixed(2), mode: g.mode };
 });
-ok('kindled', kindled, kindled.noticed && kindled.seen && kindled.hit);
+ok('kindled', kindled, kindled.noticed && kindled.seen && kindled.thrown && kindled.hullSafe);
 await page.screenshot({ path: OUT + '/f-kindled.png' });
 
 // ======================= CRYOS-2 =======================
@@ -289,7 +290,8 @@ const shell = await page.evaluate(async () => {
   const b = sb.backs.find(b => b.alive);
   const sealed = await until(() => sb.sealed > 0, 150);
   let nacre = 0;
-  for (let x = 10; x < 54; x++) for (let y = 200; y < 202; y++) if (g.terrain.get(x, y) === 25) nacre++;
+  // the corridor is rows 200..202 — scan all three or a floor-row seal is missed
+  for (let x = 10; x < 54; x++) for (let y = 200; y < 203; y++) if (g.terrain.get(x, y) === 25) nacre++;
   // kill it: native drops
   const nat0 = Object.values(g.state.native).reduce((a, b) => a + b, 0);
   if (b && b.alive) g.threats.blast(b.x, b.y, 3);

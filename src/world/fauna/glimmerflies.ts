@@ -208,10 +208,10 @@ export class Glimmerflies implements Creature {
       let tx: number, ty: number, speed: number;
       if (s.alerted) {
         tx = flare ? flare.x : podX; ty = flare ? flare.y : podY;
-        speed = 4.4;
+        speed = 3.95;
         if (s.lash > 0.5) {
           // the collapse: for the first half second every fly dives for the anchor
-          tx = s.ax; ty = s.ay; speed = 6;
+          tx = s.ax; ty = s.ay; speed = 5.4;
         }
       } else {
         // resting ring: a slow orbit of the anchor, each on its own radius
@@ -242,7 +242,7 @@ export class Glimmerflies implements Creature {
 
       f.vx += ax * dt; f.vy += ay * dt;
       const sp = Math.hypot(f.vx, f.vy);
-      const cap = s.alerted ? 6.5 : 1.8;
+      const cap = s.alerted ? 5.85 : 1.8;
       if (sp > cap) { f.vx *= cap / sp; f.vy *= cap / sp; }
       const nx = f.x + f.vx * dt, ny = f.y + f.vy * dt;
       if (!this.terrain.solidAt(Math.floor(nx), Math.floor(-ny))) { f.x = nx; f.y = ny; }

@@ -724,6 +724,9 @@ class Game {
         // the cold comes out all at once: the tank takes it, the air sets
         const st = this.state;
         st.fuel = Math.max(0, st.fuel - 18);
+        // the flash-freeze takes your momentum with it: the pod settles onto
+        // the new ice instead of falling through it at smash speed
+        this.ctrl.vx = 0; this.ctrl.vy = 0;
         this.threats.frostbloom(x, y, this.ctrl.px, this.ctrl.py);
         this.audio.iceCrack();
         this.hud.coldFlash();
@@ -1451,7 +1454,9 @@ class Game {
       this.threats.update({
         podX: this.ctrl.px, podY: this.ctrl.py,
         vx: this.ctrl.vx, vy: this.ctrl.vy,
-        lampOn: this.lampOn, thrust: this.ctrl.thrust,
+        // heat is the whole engine, not just the main nozzle — flying
+        // sideways past a wyrm pool reads as thrust too
+        lampOn: this.lampOn, thrust: Math.max(this.ctrl.thrust, Math.abs(this.ctrl.sideThrust) * 0.8),
         drilling: this.ctrl.drilling !== null, grounded: this.ctrl.grounded,
         still: this.ctrl.still,
         carrying: !!this.state.carrying, dt, time: this.time,
@@ -1508,7 +1513,8 @@ class Game {
       // the chamber has residents of its own
       const kh = this.threats.updateChamber(dt, this.time, this.ctrl.px, this.ctrl.py, false, false, (id, x, y) => this.onFaunaEvent(id, x, y));
       if (kh === 'pod') {
-        this.ctrl.hurtFromThreat(40, 'the Kindled');
+        // they are not hostile — the touch throws you clear, nothing more.
+        // The hull is never theirs to bite; only a suit's air interests them.
         this.ctrl.vy += 9;
         this.ctrl.vx = (this.ctrl.px >= this.threats.kindled.touchX ? 1 : -1) * 6;
         this.hud.overexpose();

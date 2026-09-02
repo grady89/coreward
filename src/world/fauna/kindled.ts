@@ -13,9 +13,9 @@ import { clamp01, lerp } from './types';
 //
 // On foot they give ground as you come, keeping their two steps exactly —
 // until the wall is at their back. Corner one and the suit's oxygen is
-// simply gone: blackout, wake in the pod. The pod gets no such courtesy:
-// fly into one and it takes a bite of hull and throws you clear. When the
-// fragment is gone, so are they.
+// simply gone: blackout, wake in the pod. Fly the pod into one and it
+// throws you clear, unhurt — they keep the light company; they do not
+// fight for it. When the fragment is gone, so are they.
 
 const N = 4;
 const PTS = 96;
