@@ -260,8 +260,43 @@ export class Panels {
             : `<button class="btn" data-track="${tr.key}" ${st.money < next.price ? 'disabled' : ''}>${fmt(next.price)}</button>`}
         </div>`;
     }).join('');
+    // Stash: long-term storage, off to one side of the hold — stowed ore
+    // never counts toward cargoCap and is never touched by SELL ALL or a
+    // mimic's grab, so embershards saved for the Forge can ride out a trip
+    // to the trade post untouched.
+    const bayEntries = [...st.cargo.entries()].sort((a, b) => oreValue(b[0]) - oreValue(a[0]))
+      .map(([t, c]) => `
+        <div class="row">
+          <span class="r-left">
+            <img class="ore-icon" src="${oreIcon(t)}" alt="" style="--glow:${oreGlow(t)}" />
+            <span><span class="r-name">${def(t).name}</span><div class="r-sub">in hold${t === T.EMBERSHARD ? ' · ◆ feeds the EMBER FORGE' : ''}</div></span>
+          </span>
+          <span class="r-right">
+            <span class="r-val">× ${c}</span>
+            <button class="btn" data-stow="${t}">STOW</button>
+          </span>
+        </div>`).join('')
+      + [...st.stored.entries()].sort((a, b) => oreValue(b[0]) - oreValue(a[0]))
+      .map(([t, c]) => {
+        const full = st.cargoCount >= st.cargoCap;
+        return `
+        <div class="row">
+          <span class="r-left">
+            <img class="ore-icon" src="${oreIcon(t)}" alt="" style="--glow:${oreGlow(t)}" />
+            <span><span class="r-name">${def(t).name}</span><div class="r-sub">stowed${t === T.EMBERSHARD ? ' · ◆ feeds the EMBER FORGE' : ''}</div></span>
+          </span>
+          <span class="r-right">
+            <span class="r-val">× ${c}</span>
+            <button class="btn" data-retrieve="${t}" ${full ? 'disabled' : ''}>RETRIEVE</button>
+          </span>
+        </div>`;
+      }).join('');
+    const bayRows = `
+      <div class="forge-head">STASH<span class="forge-shards">stowed ore is never sold</span></div>
+      ${bayEntries || `<div class="row"><span class="r-sub">Nothing in the hold or the stash.</span></div>`}`;
     // Ember Forge: lit after the first core is touched; paid in embershards
-    const shards = st.cargo.get(T.EMBERSHARD) ?? 0;
+    // aboard OR stowed in the stash
+    const shards = (st.cargo.get(T.EMBERSHARD) ?? 0) + (st.stored.get(T.EMBERSHARD) ?? 0);
     const forgeRows = st.forgeUnlocked ? `
       <div class="forge-head">EMBER FORGE<span class="forge-shards">◆ ${shards} embershard${shards === 1 ? '' : 's'} aboard</span></div>
       ${FORGE.map(f => `
@@ -286,9 +321,36 @@ export class Panels {
           <button class="btn" id="buy-arrestor" ${st.money < ARRESTOR_PRICE || st.arrestors >= MAX_ARRESTORS ? 'disabled' : ''}>${fmt(ARRESTOR_PRICE)}</button>
         </span>
       </div>
+      ${bayRows}
       ${forgeRows}
       <div class="hint">Press E or Esc to leave</div>
     `;
+    this.body().querySelectorAll('button[data-stow]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = Number((btn as HTMLElement).dataset.stow);
+        const n = st.stowStack(t);
+        if (n > 0) {
+          this.ctx.audio.click();
+          this.ctx.toast(`STOWED × ${n}`, 'stratum');
+          this.ctx.saveNow();
+        }
+        this.renderGarage();
+      });
+    });
+    this.body().querySelectorAll('button[data-retrieve]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = Number((btn as HTMLElement).dataset.retrieve);
+        const n = st.retrieveStack(t);
+        if (n > 0) {
+          this.ctx.audio.click();
+          this.ctx.toast(`RETRIEVED × ${n}`, 'stratum');
+          this.ctx.saveNow();
+        } else {
+          this.ctx.audio.denied();
+        }
+        this.renderGarage();
+      });
+    });
     this.body().querySelector('#fit-accl')?.addEventListener('click', () => {
       if (!st.fitAcclimation()) { this.ctx.audio.denied(); return; }
       const nat = ACTIVE.native!;

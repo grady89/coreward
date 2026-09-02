@@ -40,6 +40,13 @@ export class GameState {
   fuel = trackValue('tank', 0);
   hull = trackValue('hull', 0);
   cargo = new Map<number, number>(); // tile type -> count
+  /**
+   * The garage stash: long-term storage that sits outside the hold.
+   * Stowed ore never counts toward cargoCap, never sells with SELL ALL or a
+   * mimic's grab, and survives a pod loss — the point is a safe place to
+   * park embershards (or anything else) you don't want touched by accident.
+   */
+  stored = new Map<number, number>();
   bestDepthM = 0;
   totalEarned = 0;
   blocksDug = 0;
@@ -219,13 +226,43 @@ export class GameState {
     return total;
   }
 
-  /** spend embershards straight from cargo (the Forge's currency) */
+  /** spend embershards from cargo first, then the stash (the Forge's currency) */
   spendShards(n: number, shardTile: number): boolean {
-    const have = this.cargo.get(shardTile) ?? 0;
-    if (have < n) return false;
-    if (have === n) this.cargo.delete(shardTile);
-    else this.cargo.set(shardTile, have - n);
+    const haveCargo = this.cargo.get(shardTile) ?? 0;
+    const haveStored = this.stored.get(shardTile) ?? 0;
+    if (haveCargo + haveStored < n) return false;
+    const fromCargo = Math.min(haveCargo, n);
+    if (fromCargo > 0) {
+      const left = haveCargo - fromCargo;
+      if (left === 0) this.cargo.delete(shardTile); else this.cargo.set(shardTile, left);
+    }
+    const fromStored = n - fromCargo;
+    if (fromStored > 0) {
+      const left = haveStored - fromStored;
+      if (left === 0) this.stored.delete(shardTile); else this.stored.set(shardTile, left);
+    }
     return true;
+  }
+
+  /** move a whole ore stack from the hold into the stash */
+  stowStack(t: number): number {
+    const c = this.cargo.get(t) ?? 0;
+    if (c === 0) return 0;
+    this.cargo.delete(t);
+    this.stored.set(t, (this.stored.get(t) ?? 0) + c);
+    return c;
+  }
+
+  /** pull a stored stack back into the hold, capped by remaining cargo space */
+  retrieveStack(t: number): number {
+    const have = this.stored.get(t) ?? 0;
+    const room = this.cargoCap - this.cargoCount;
+    const n = Math.min(have, room);
+    if (n <= 0) return 0;
+    const left = have - n;
+    if (left === 0) this.stored.delete(t); else this.stored.set(t, left);
+    this.cargo.set(t, (this.cargo.get(t) ?? 0) + n);
+    return n;
   }
 
   /** back to a brand-new pod: used by NEW EXPEDITION (no page reload needed) */
@@ -235,6 +272,7 @@ export class GameState {
     this.fuel = trackValue('tank', 0);
     this.hull = trackValue('hull', 0);
     this.cargo.clear();
+    this.stored.clear();
     this.bestDepthM = 0;
     this.totalEarned = 0;
     this.blocksDug = 0;
@@ -321,6 +359,7 @@ export class GameState {
         hull: this.hull,
         upgrades: this.upgrades,
         cargo: [...this.cargo.entries()],
+        stored: [...this.stored.entries()],
         bestDepthM: this.bestDepthM,
         totalEarned: this.totalEarned,
         blocksDug: this.blocksDug,
@@ -377,6 +416,7 @@ export class GameState {
         this.upgrades = { ...this.upgrades, ...d.upgrades };
         this.cargo = new Map(d.cargo);
         this.cargo.delete(9); // legacy veinlight in cargo — it is fuel now
+        this.stored = new Map(d.stored ?? []);
         this.bestDepthM = d.bestDepthM; this.totalEarned = d.totalEarned;
         this.blocksDug = d.blocksDug;
         this.milestones = new Set(d.milestones);
