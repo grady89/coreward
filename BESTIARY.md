@@ -16,6 +16,10 @@ Every entry lists the three things that make a creature: **look**, **motion**,
 one file per creature under [src/world/fauna/](src/world/fauna/); the roster
 is [entities.ts](src/world/entities.ts).
 
+> This file is the design intent. For the practical version — triggers,
+> escapes, damage numbers, depths, and the environmental hazards too — see
+> **[THREATS.md](THREATS.md)**.
+
 ---
 
 ## VEIL-3 — reads LIGHT
