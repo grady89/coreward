@@ -32,6 +32,7 @@ import { Comms } from './ui/comms';
 import { SurveyMap } from './ui/map';
 import {
   pick as pickNarrative, WorldStats, HUSK_READABLES, ENDING_PAGES, EndingKind,
+  ADHOC_TRANSMISSIONS,
 } from './game/narrative';
 import { Panels, createTitle } from './ui/panels';
 import { Starmap } from './ui/starmap';
@@ -1302,11 +1303,8 @@ class Game {
     }
     if (froze && !this.state.firedEvents.has('rime-taught')) {
       this.state.firedEvents.add('rime-taught');
-      this.comms.say([
-        'Your shaft is skinning over behind you. That is not drift — the ice is closing the wound.',
-        'Young ice will not hold a pod. If the way home has healed, put your nose up and RAM through it.',
-        'And fit the acclimation. A warm hull keeps your wake open longer. Not in the manual; it is in the wrecks.',
-      ]);
+      // lines live in the transmission registry so the transcript can replay them
+      this.comms.say(ADHOC_TRANSMISSIONS['rime-taught'].lines);
       this.state.persist();
     }
   }

@@ -285,6 +285,18 @@ beds stay workable), the working pocket around the pod and pilot stays
 thawed, and an extracted world stops healing — the refreeze dies with the
 fragment. Dispatch teaches the RAM verb the first time a shaft skins over.
 
+### 8e4. The dispatch transcript (BUILT) — the dish keeps the tape
+
+Dispatch transmissions play once on the comm strip and dismiss themselves —
+which meant a line delivered mid-crisis was gone forever. Now the assay
+office (Dispatch's fiction home) holds the **DISPATCH TRANSCRIPT**: every
+transmission ever relayed, newest first, numbered and tagged with the world
+it played on. Nothing new is saved — `firedEvents` already persists ids in
+play order, so the tape reconstructs from data plus a registry
+(`transmissionById`), and it back-fills for existing saves. Ad-hoc lines
+fired outside the trigger engine register in `ADHOC_TRANSMISSIONS` or the
+tape cannot replay them — that is the one rule new content must follow.
+
 ### 8f. Survey scanner tiers (BUILT — per dig site)
 
 - **Survey Scanner** (✦1,500, assay office): TAB map of tunnels/caves/fluids,

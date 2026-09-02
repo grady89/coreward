@@ -8,13 +8,13 @@ import {
   GLYPHS_TO_TRANSLATE, ARRESTOR_PRICE, MAX_ARRESTORS,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
-import { ACTIVE, WORLDS, nextWorld } from '../world/worlds';
+import { ACTIVE, WORLDS, nextWorld, worldById } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
 import { Settings } from '../game/settings';
 import {
   Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
 } from '../game/contracts';
-import { ENDING_PAGES, EndingKind } from '../game/narrative';
+import { ENDING_PAGES, EndingKind, transmissionById } from '../game/narrative';
 import { EXTRACT_OFFER } from '../config';
 
 /** one-line statement of a contract's terms, priced against this pod */
@@ -30,7 +30,7 @@ function describe(c: Contract, maxFuel: number): string {
   return bits.join(' · ');
 }
 
-export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale';
+export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale' | 'transcript';
 
 interface PanelCtx {
   state: GameState;
@@ -84,7 +84,7 @@ export class Panels {
     this.ui.appendChild(this.scrim);
     // click outside closes shop panels (not fate panels)
     if (kind === 'fuel' || kind === 'trade' || kind === 'garage' || kind === 'assay' ||
-      kind === 'pause' || kind === 'settings' || kind === 'contracts') {
+      kind === 'pause' || kind === 'settings' || kind === 'contracts' || kind === 'transcript') {
       this.scrim.addEventListener('pointerdown', e => {
         if (e.target === this.scrim) { this.ctx.audio.click(); this.close(); }
       });
@@ -109,6 +109,7 @@ export class Panels {
       case 'finale': this.renderFinale(); break;
       case 'settings': this.renderSettings(); break;
       case 'contracts': this.renderContracts(); break;
+      case 'transcript': this.renderTranscript(); break;
     }
   }
 
@@ -426,6 +427,7 @@ export class Panels {
         <div class="row"><span class="r-name">Blocks cut</span><span class="r-val">${st.blocksDug.toLocaleString()}</span></div>
         <div class="row"><span class="r-name">Hold value</span><span class="r-val">${fmt(st.cargoValue)}</span></div>
       </div>
+      <button class="btn wide" id="open-transcript">DISPATCH TRANSCRIPT · ${this.transmissionLog().length} ON RECORD</button>
       <div class="forge-head">SURVEY — ${ACTIVE.name}<span class="forge-shards">fitted per dig site</span></div>
       <div class="row">
         <span><span class="r-name">SURVEY SCANNER</span><div class="r-sub">${st.hasScanner ? 'Installed — TAB toggles the map · + / − to zoom' : 'A live map of every tunnel you cut · toggled with TAB'}</div></span>
@@ -462,6 +464,10 @@ export class Panels {
       ${found ? `<div class="forge-head">FOUND LOGS</div>${found}` : ''}
       <div class="hint">Press E or Esc to leave</div>
     `;
+    this.body().querySelector('#open-transcript')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.open('transcript');
+    });
     this.body().querySelector('#buy-beacons')?.addEventListener('click', () => {
       if (st.money < BEACON_PRICE) { this.ctx.audio.denied(); return; }
       st.money -= BEACON_PRICE;
@@ -572,6 +578,48 @@ export class Panels {
   }
 
   // ---------- CONTRACTS ----------
+  // ---------- DISPATCH TRANSCRIPT ----------
+  // The dish keeps a record. firedEvents persists transmission ids in the
+  // order they played, so a missed dispatch is never lost — walk back to the
+  // assay office and read the tape.
+  private transmissionLog(): { id: string; world?: string; lines: string[] }[] {
+    const log: { id: string; world?: string; lines: string[] }[] = [];
+    for (const id of this.ctx.state.firedEvents) {
+      const tx = transmissionById(id);
+      if (tx) log.push({ id, world: tx.world, lines: tx.lines });
+    }
+    return log;
+  }
+
+  private renderTranscript(): void {
+    const log = this.transmissionLog();
+    // newest first: "what did I just miss" is the errand this page exists for
+    const entries = log.length
+      ? log.map((tx, i) => {
+        const world = tx.world ? worldById(tx.world)?.name ?? '' : '';
+        return { tx, n: i + 1, world };
+      }).reverse().map(({ tx, n, world }) => `
+        <div class="tx-entry">
+          <div class="tx-head">
+            <span class="tx-label">◦ DISPATCH</span>
+            <span class="tx-meta">TX ${String(n).padStart(3, '0')}${world ? ' · ' + world : ''}</span>
+          </div>
+          ${tx.lines.map(l => `<p>${l}</p>`).join('')}
+        </div>`).join('')
+      : `<div class="row"><span class="r-sub">The tape is blank. Dispatch will find you — keep digging.</span></div>`;
+    this.body().innerHTML = `
+      ${this.header('DISPATCH TRANSCRIPT')}
+      <div class="tx-sub">Every transmission the dish has relayed, newest first. The tape does not forget, even when you were busy not dying.</div>
+      ${entries}
+      <button class="btn wide" id="tx-back">BACK TO THE OFFICE</button>
+      <div class="hint">Press Esc to leave</div>
+    `;
+    this.body().querySelector('#tx-back')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.open('assay');
+    });
+  }
+
   private renderContracts(): void {
     const st = this.ctx.state;
 

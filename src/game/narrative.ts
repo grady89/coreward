@@ -312,6 +312,36 @@ export const EVENTS: NarrativeEvent[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// The transcript. Dispatch is the voice on the assay dish, and the dish keeps
+// a record: every transmission ever played can be reread at the assay office.
+// Nothing extra is saved — `firedEvents` already persists the ids in the
+// order they fired, so the transcript reconstructs from data + this registry.
+// ---------------------------------------------------------------------------
+
+/**
+ * Transmissions fired directly by code rather than the trigger engine.
+ * Anything played with comms.say AND recorded in firedEvents must have its
+ * lines registered here, or the transcript cannot replay it.
+ */
+export const ADHOC_TRANSMISSIONS: Record<string, { world?: string; lines: string[] }> = {
+  'rime-taught': {
+    world: 'cryos2',
+    lines: [
+      'Your shaft is skinning over behind you. That is not drift — the ice is closing the wound.',
+      'Young ice will not hold a pod. If the way home has healed, put your nose up and RAM through it.',
+      'And fit the acclimation. A warm hull keeps your wake open longer. Not in the manual; it is in the wrecks.',
+    ],
+  },
+};
+
+/** the transmission behind a fired-event id — null for non-dispatch ids */
+export function transmissionById(id: string): { world?: string; lines: string[] } | null {
+  const e = EVENTS.find(ev => ev.id === id);
+  if (e) return { world: e.world, lines: e.lines };
+  return ADHOC_TRANSMISSIONS[id] ?? null;
+}
+
 /** returns the highest-priority unfired event whose trigger is satisfied */
 export function pick(stats: WorldStats, fired: Set<string>): NarrativeEvent | null {
   let best: NarrativeEvent | null = null;

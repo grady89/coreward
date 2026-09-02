@@ -768,3 +768,33 @@ body.sm-open #survey {
 #title .em-extract { color: #6a6a76; }
 #title .em-return { color: var(--amber); }
 #title .em-kindle { color: #fff2c8; text-shadow: 0 0 14px rgba(255, 230, 160, 0.8); }
+
+/* ---------- the dispatch transcript: the dish keeps a record ---------- */
+.tx-sub {
+  font-size: 11px; color: var(--ink-dim); line-height: 1.6;
+  margin-bottom: 14px; letter-spacing: 0.04em;
+}
+.tx-entry {
+  padding: 12px 14px; margin-bottom: 10px;
+  background: rgba(60, 230, 200, 0.035);
+  border: 1px solid rgba(60, 230, 200, 0.14);
+  border-left: 2px solid rgba(60, 230, 200, 0.45);
+  border-radius: 8px;
+}
+.tx-entry p {
+  font-size: 12.5px; line-height: 1.65; color: var(--ink);
+  margin: 0 0 6px;
+}
+.tx-entry p:last-child { margin-bottom: 0; }
+.tx-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 8px;
+}
+.tx-label {
+  font-family: var(--font-display); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.3em; color: var(--teal);
+}
+.tx-meta {
+  font-family: var(--font-display); font-size: 9px;
+  letter-spacing: 0.2em; color: var(--ink-dim);
+}
