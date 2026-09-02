@@ -67,6 +67,29 @@ await page.screenshot({ path: `${OUT}/pilot-stride.png` });
 await page.keyboard.up('ArrowRight');
 console.log('shot: stride');
 
+// the vault runner wears the same suit — prove it, since it used to have a copy
+await page.goto('http://localhost:4173/?vault=wick');
+await page.waitForTimeout(4200);
+// the vault re-frames its own camera every tick, so pin it per-frame instead
+await page.evaluate(() => {
+  const g = window.__game;
+  // vault mode runs its own FollowCam, not the world one
+  const c = g.vault.cam;
+  c.follow = () => {};
+  c.snap = () => {};
+  const pin = () => {
+    c.camera.position.set(g.vault.px, g.vault.py, 1.15);
+    c.camera.lookAt(g.vault.px, g.vault.py, 0);
+    requestAnimationFrame(pin);
+  };
+  pin();
+});
+await page.waitForTimeout(600);
+await page.screenshot({ path: `${OUT}/pilot-vault.png` });
+console.log('shot: vault', await page.evaluate(() => JSON.stringify({
+  mode: window.__game.mode, parts: window.__game.vault?.pilotGroup?.children.length,
+})));
+
 console.log(await page.evaluate(() => {
   const g = window.__game;
   return JSON.stringify({ mode: g.mode, grounded: g.pilot.grounded, o2: +g.pilot.o2.toFixed(1), visible: g.pilot.group.visible, parts: g.pilot.group.children.length });

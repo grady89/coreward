@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
 import { VaultDef, ParsedVault, parseVault } from '../world/vaults';
+import { Suit, SUIT_R, SUIT_H, buildSuit, animateSuit } from '../player/suit';
 
 // A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
 // second pass). The movement set is discrete now, Celeste-school:
@@ -100,8 +101,7 @@ export class VaultRun {
 
   // visuals
   private pilotGroup = new THREE.Group();
-  private legL!: THREE.Mesh;
-  private legR!: THREE.Mesh;
+  private suit!: Suit;
   private lamp!: THREE.PointLight;
   private sparkMesh!: THREE.Mesh;
   private trail: { mesh: THREE.Mesh; t: number }[] = [];
@@ -412,30 +412,15 @@ export class VaultRun {
       this.scene.add(this.windStreaks);
     }
 
-    // the pilot
-    const suit = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.6, metalness: 0.15 });
-    const accent = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.2 });
-    const visorM = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.15, metalness: 0.5, emissive: 0x0d3a40, emissiveIntensity: 0.6 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.16, 4, 10), suit);
-    body.position.y = 0.04;
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.08), accent);
-    pack.position.set(0, 0.06, -0.13);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), suit);
-    head.position.y = 0.24;
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), visorM);
-    visor.position.set(0, 0.24, 0.05);
-    visor.scale.set(1, 0.85, 0.75);
-    this.legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.1, 3, 6), suit);
-    this.legR = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.1, 3, 6), suit);
-    this.legL.position.set(-0.06, -0.16, 0);
-    this.legR.position.set(0.06, -0.16, 0);
+    // the pilot — same suit the EVA wears, so the two can never drift
+    this.suit = buildSuit();
     // the spark itself rides on the pack, visibly lit or spent
     this.sparkMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.075),
       new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
-    this.sparkMesh.position.set(0, 0.1, -0.2);
+    this.sparkMesh.position.copy(this.suit.packAnchor);
     this.lamp = new THREE.PointLight(0xffe6c0, 6, 6, 1.6);
-    this.lamp.position.set(0, 0.25, 0.4);
-    this.pilotGroup.add(body, pack, head, visor, this.legL, this.legR, this.sparkMesh, this.lamp);
+    this.lamp.position.set(0, 0, 0.35);
+    this.pilotGroup.add(this.suit.group, this.sparkMesh, this.lamp);
     this.scene.add(this.pilotGroup);
   }
 
@@ -471,7 +456,7 @@ export class VaultRun {
     if (dx !== 0) this.facing = Math.sign(dx);
     // the burst leaves a short trail of itself
     for (let i = 0; i < 3; i++) {
-      const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.16, 3, 6),
+      const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(SUIT_R, SUIT_H, 3, 6),
         new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.4 - i * 0.1 }));
       ghost.position.set(this.px - this.dashVX * 0.02 * (i + 1), this.py - this.dashVY * 0.02 * (i + 1), 0.05);
       this.scene.add(ghost);
@@ -1012,9 +997,7 @@ export class VaultRun {
 
     // pilot mesh + spark + camera + hud
     this.walkT += dt * Math.abs(this.vx) * 4;
-    const swing = this.grounded ? Math.sin(this.walkT) * 0.5 : 0.3;
-    this.legL.rotation.x = swing;
-    this.legR.rotation.x = -swing;
+    animateSuit(this.suit, this.walkT, this.grounded, Math.min(1, Math.abs(this.vx) / WALK));
     this.pilotGroup.rotation.y = this.facing > 0 ? 0.35 : -0.35;
     this.pilotGroup.position.set(this.px, this.py, 0.1);
     const sm = this.sparkMesh.material as THREE.MeshBasicMaterial;
