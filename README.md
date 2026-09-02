@@ -64,7 +64,11 @@ habitat carved, creature alive beside you, with a card saying what to watch.
 one. It never writes to your save. `?core=cryos2` still jumps to a chamber
 for the Communion, and **`?vault=wick`** steps straight into one of the
 Nine Stones (ids: wick famine shift vault ember weather debt return
-kindled — see [SPEC-GLYPHS.md](SPEC-GLYPHS.md)). Roster and staging:
+kindled — see [SPEC-GLYPHS.md](SPEC-GLYPHS.md)). Bare **`?vault`** opens
+the **Gallery of Nine** — one hall with every stone in the floor: walk (or
+hop with `[` `]`) to any mark and press E to play its vault; translated
+marks burn brighter, so it doubles as a progress wall. No O2 clock, and
+nothing done there touches your save. Roster and staging:
 [src/dev/sandbox.ts](src/dev/sandbox.ts), creature-by-creature notes in
 [BESTIARY.md](BESTIARY.md).
 

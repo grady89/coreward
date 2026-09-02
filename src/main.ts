@@ -98,6 +98,8 @@ class Game {
   private sandbox: { card: SandboxCard } | null = null;
   /** a run inside one of the Nine Stones, or null */
   private vault: VaultRun | null = null;
+  /** ?vault gallery mode: all nine stones in one dev hall, saves disabled */
+  private vaultGallery = false;
   /** which creature is staged and whether it still needs coaxing alive */
   private staging: { i: number; prime: number; staged: boolean; settle: number } | null = null;
   private eHeld = false;
@@ -225,9 +227,13 @@ class Game {
     // ?fauna=riptide opens on one. See src/dev/sandbox.ts.
     const fauna = q.get('fauna');
     if (fauna !== null) this.devSandbox(fauna);
-    // dev harness: ?vault=wick steps straight into one of the Nine Stones
+    // dev harness: ?vault=wick steps straight into one of the Nine Stones;
+    // bare ?vault opens the Gallery of Nine — every stone in one hall
     const vault = q.get('vault');
-    if (vault !== null) this.devVault(vault || 'wick');
+    if (vault !== null) {
+      if (vault) this.devVault(vault);
+      else this.devVaultGallery();
+    }
   }
 
   /**
@@ -485,6 +491,59 @@ class Game {
     return id;
   }
 
+  /**
+   * ?vault with no id: the Gallery of Nine. One carved hall with all nine
+   * stones set into the floor — walk to any of them and press E. Exists so
+   * the rooms can be PLAYED back to back, not just proven completable: the
+   * marks glow brighter as you translate them, so it doubles as a progress
+   * wall. Dev-only, and nothing done here is ever written to a save.
+   */
+  devVaultGallery(): void {
+    this.audio.init();
+    const wake = () => this.audio.resume();
+    addEventListener('pointerdown', wake, { once: true });
+    addEventListener('keydown', wake, { once: true });
+    this.title?.hide();
+    this.title = null;
+    this.vaultGallery = true;
+
+    // the hall: shallow enough to be out of every spawn band, and the
+    // creatures stand down anyway — this room is a workshop, not a world
+    this.threats.level = 'off';
+    const y0 = 40, x0 = 10, w = 46;
+    for (let y = y0 - 5; y < y0; y++) {
+      for (let x = x0 - 4; x < x0 + w; x++) this.terrain.carve(x, y);
+    }
+    for (let x = x0 - 4; x < x0 + w; x++) {
+      this.terrain.data[this.terrain.idx(x, y0)] = T.ROCK;
+      this.terrain.onChange(x, y0);
+    }
+    // all nine stones, in reading order, five tiles apart
+    this.terrain.glyphStones.length = 0;
+    for (let i = 0; i < GLYPHS.length; i++) {
+      const gx = x0 + 2 + i * 5;
+      this.terrain.data[this.terrain.idx(gx, y0)] = T.GLYPH;
+      this.terrain.onChange(gx, y0);
+      this.terrain.glyphStones.push({ x: gx, y: y0, id: GLYPHS[i].id });
+    }
+    this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
+
+    // pod parked at the door, pilot already on foot in front of the Wick
+    const st = this.state;
+    st.fuel = st.maxFuel;
+    st.hull = st.maxHull;
+    this.ctrl.drilling = null;
+    this.ctrl.px = x0 - 2.5; this.ctrl.py = -y0 + 0.42;
+    this.ctrl.vx = 0; this.ctrl.vy = 0;
+    this.pilot.spawnAt(x0 + 0.5, -y0 + 0.6);
+    // pulled back so a stretch of the wall of marks is always in frame
+    this.cam.zoomBias = 6;
+    this.cam.snap(this.pilot.px, this.pilot.py + 1, 15);
+    this.mode = 'eva';
+    this.hud.show();
+    this.hud.toast('DEV — THE GALLERY OF NINE · WALK A STONE, E TO ENTER', 'stratum');
+  }
+
   /** (re)builds the entire scene for the active world — no page reload */
   private setupWorld(): void {
     this.finale?.dispose(); // a prior world's rite must not leave DOM behind
@@ -713,9 +772,9 @@ class Game {
   }
 
   private saveNow(): void {
-    // the sandbox carves habitats and empties the hold: never write that over
-    // a real save, and the 20s autosave would do exactly that
-    if (this.sandbox) return;
+    // the sandboxes carve habitats, re-seed stones and empty the hold: never
+    // write any of that over a real save, and the 20s autosave would
+    if (this.sandbox || this.vaultGallery) return;
     this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted, this.arrestors.list);
   }
 
@@ -926,6 +985,16 @@ class Game {
       }
       if (this.sandbox && this.staging && e.code === 'Backslash') this.devStage(this.staging.i);
       if (this.sandbox && e.code === 'KeyH') this.sandbox.card.toggle();
+      // gallery: [ ] hop the pilot from stone to stone instead of walking
+      if (this.vaultGallery && this.mode === 'eva' && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+        const stones = this.terrain.glyphStones;
+        const cur = stones.findIndex(s => Math.abs(this.pilot.px - (s.x + 0.5)) < 2.5);
+        const d = e.code === 'BracketRight' ? 1 : -1;
+        const next = stones[((cur < 0 ? (d > 0 ? -1 : 0) : cur) + d + stones.length) % stones.length];
+        this.pilot.px = next.x + 0.5;
+        this.pilot.py = -next.y + 0.6;
+        this.audio.click();
+      }
       if (e.code === 'KeyM' && this.audio.ready) {
         this.hud.toast(this.audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
       }
@@ -2047,6 +2116,9 @@ class Game {
     const paused = this.panels.isOpen;
     const fin = this.finale;
     const rite = fin.isCommunion;
+    // in the gallery the suit stops counting — the walk between doors is
+    // browsing, and a blackout mid-browse teaches nothing
+    if (this.vaultGallery) this.pilot.o2 = EVA_O2;
 
     if (!paused && dt > 0) {
       if (rite) {
