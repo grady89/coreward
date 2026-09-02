@@ -250,9 +250,12 @@ export function createSurface(scene: THREE.Scene): void {
       g.add(lamp);
     }
 
-    // the structure itself — built in structures.ts, planted at dock center
+    // the structure itself — built in structures.ts, planted at dock center.
+    // Pushed back so the plinths clear the tile field: a shaft dug at a dock
+    // column must stay readable from the play camera, not vanish behind a
+    // slab that bridges its mouth.
     const building = STRUCTURE_BUILDERS[dock.key]();
-    building.position.x = cx;
+    building.position.set(cx, 0, -0.45);
     g.add(building);
   }
 
