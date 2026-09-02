@@ -94,6 +94,7 @@ class Game {
   /** refreeze bookkeeping: seconds each open dug tile has sat unattended */
   private rimeAge = new Map<number, number>();
   private rimeAcc = 0;
+  private smashSfxAt = -9;
   private pendingEnding: EndingKind | null = null;
   private endingSnapshot: {
     money: number; carrying: string | null;
@@ -391,9 +392,14 @@ class Game {
       },
       onSmash: (x: number, y: number) => {
         this.particles.blockBreak(x + 0.5, -(y + 0.5), 0xd8f0fa);
-        this.audio.iceCrack();
-        this.cam.addShake(0.16);
-        if (!this.reducedMotion && this.settings.hitstop) this.hitstop = 0.02;
+        // a freefall through a skinned shaft chains ~7 punches a second —
+        // shatter per tile, but ring the crack at a listenable rate
+        if (this.time - this.smashSfxAt > 0.14) {
+          this.smashSfxAt = this.time;
+          this.audio.iceCrack();
+          this.cam.addShake(0.16);
+          if (!this.reducedMotion && this.settings.hitstop) this.hitstop = 0.02;
+        }
       },
       onNative: (total: number) => {
         const nat = ACTIVE.native;

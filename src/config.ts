@@ -203,8 +203,15 @@ export const RIME_FREEZE_BASE = 40;
 export const RIME_FREEZE_PER_TIER = 50;
 /** Chebyshev tiles around the pod (and pilot) that never skin over */
 export const RIME_KEEP_CLEAR = 8;
-/** upward speed needed to ram through young ice — below this it holds you */
+/** speed needed to smash through young ice — below this it holds you */
 export const RIME_SMASH_MIN = 5.5;
+/**
+ * Downward momentum kept per punched layer. Falling through a skinned shaft
+ * chains at ~7.5 tiles/s — your old highway still works going down, and the
+ * layers shave enough speed that you land soft at the bottom of it. Going up
+ * keeps nothing: the climb home is the bill.
+ */
+export const RIME_FALL_KEEP = 0.5;
 
 // ---- arrestors: deployable landing pads for your own shafts ----
 export const ARRESTOR_PRICE = 900;

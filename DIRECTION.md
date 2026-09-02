@@ -259,12 +259,17 @@ which is the game's actual core tension.
 
 Three laws keep it fair:
 
-1. **Young ice is never a wall — it is a bill.** Rime is the one ceiling in
-   the game that gives way to a pod **ramming** it from below (speed ≥ 5.5;
-   the ice takes your momentum, tile by smashed tile). Not the drill — mass.
-   No Ascent Coil required, so a hardlock is impossible by construction; the
-   climb home is just ~4× slower and fuel-hungry. Rime persists in the save
-   as rime, precisely so it stays rammable across sessions.
+1. **Young ice is never a wall — it is a bill, and only going up.** Rime is
+   the one ceiling in the game that gives way to a pod **ramming** it from
+   below (speed ≥ 5.5; the ice takes your momentum, tile by smashed tile).
+   Not the drill — mass. No Ascent Coil required, so a hardlock is impossible
+   by construction; the climb home is just ~4× slower and fuel-hungry. Rime
+   persists in the save as rime, precisely so it stays rammable across
+   sessions. And **your highway still works downward**: free-fall punches
+   through the skin layer by layer, each one shaving half your speed — a
+   skinned main shaft is not lost, it is a fall-arrestor. Step off the top,
+   drop the whole column hands-free, land soft. The scar is gentler than the
+   wound; only the ascent pays.
 2. **The Ascent Coil keeps its prestige.** It drills *rock* overhead,
    anywhere. Coil owners glide up a refrozen shaft; everyone else bonks
    through it. Charges still only seal — a purchasable rock-breaker would

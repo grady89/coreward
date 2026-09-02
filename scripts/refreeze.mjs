@@ -33,8 +33,15 @@ await page.waitForTimeout(2500);
 await page.evaluate(() => {
   const g = window.__game;
   g.comms.clear();
-  // a straight shaft: rows 290..321 at x=30, pod parked at the bottom
-  for (let y = 290; y <= 321; y++) g.terrain.carve(30, y);
+  // a straight shaft: rows 290..321 at x=30, pod parked at the bottom.
+  // carve() skips tiles that were already natural cave air (they never join
+  // the dug set, and only dug tiles refreeze) — force dug membership so the
+  // whole shaft counts as player-cut for this test
+  for (let y = 290; y <= 321; y++) {
+    g.terrain.carve(30, y);
+    g.terrain.data[g.terrain.idx(30, y)] = 0;
+    g.terrain.dug.add(g.terrain.idx(30, y));
+  }
   g.terrain.carve(29, 321); g.terrain.carve(31, 321); // room to stand
   g.ctrl.drilling = null;
   g.ctrl.px = 30.5; g.ctrl.py = -(320) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
@@ -64,7 +71,11 @@ await page.screenshot({ path: OUT + '/r-frozen.png' });
 // 4) acclimation keeps the wake warm longer (tier 2 = 140s threshold)
 const accl = await page.evaluate(async () => {
   const g = window.__game;
-  g.terrain.carve(20, 300); g.terrain.carve(20, 301);
+  for (const y of [300, 301]) {
+    g.terrain.carve(20, y);
+    g.terrain.data[g.terrain.idx(20, y)] = 0;
+    g.terrain.dug.add(g.terrain.idx(20, y)); // natural-air carves skip dug
+  }
   g.state.accl.cryos2 = 2;
   g.rimeAge.set(g.terrain.idx(20, 300), 100); // old enough for tier 0, not tier 2
   g.rimeAge.set(g.terrain.idx(20, 301), 100);
@@ -94,7 +105,38 @@ console.log('coil-less pod rams out:', JSON.stringify({ ...smash, ...out }),
   !smash.updrill && out.row < smash.row0 - 10 ? 'OK — slowed, never sealed' : 'FAIL');
 await page.screenshot({ path: OUT + '/r-smashed.png' });
 
-// 6) rime persists in the save, still rammable next session
+// 6) the highway: free-fall DOWN through your skinned shaft — layers punch
+// through, shave speed, and the pod lands soft at the bottom of it
+const highway = await page.evaluate(async () => {
+  const g = window.__game;
+  // a fresh skinned shaft: rows 260..290 at x=44, solid floor beneath
+  for (let y = 260; y <= 290; y++) {
+    g.terrain.carve(44, y);
+    if (y >= 266) g.terrain.data[g.terrain.idx(44, y)] = 22; // T.RIME below the drop
+  }
+  g.ctrl.drilling = null;
+  g.ctrl.px = 44.5; g.ctrl.py = -(264) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  g.state.hull = g.state.maxHull;
+  g.state.accl.cryos2 = 3; // isolate fall damage from frost damage
+  g.cam.snap(g.ctrl.px, g.ctrl.py, 12.5);
+  const hull0 = g.state.hull;
+  // the chain runs in clamped game time — poll for touchdown, don't guess
+  for (let i = 0; i < 80; i++) {
+    await new Promise(r => setTimeout(r, 250));
+    if (g.ctrl.grounded && g.ctrl.row >= 288) break;
+  }
+  return {
+    hull0: Math.round(hull0),
+    hull: Math.round(g.state.hull),
+    row: g.ctrl.row,
+    grounded: g.ctrl.grounded,
+  };
+});
+console.log('highway freefall:', JSON.stringify(highway),
+  highway.row >= 289 && highway.grounded && highway.hull0 - highway.hull < 8
+    ? 'OK — the healed shaft breaks your fall' : 'FAIL');
+
+// 7) rime persists in the save, still rammable next session
 await page.evaluate(() => window.__game.saveNow());
 const saved = await page.evaluate(() => {
   const ws = window.__game.state.worlds.cryos2;

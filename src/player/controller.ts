@@ -5,6 +5,7 @@ import {
   TILE_M, boulderTierNeeded, stratumIndex, CORE_ROW, WORLD_W,
   DASH_SPEED, DASH_COOLDOWN, PAD_X0, PAD_X1, PAD_ROWS, SPAWN_X, VEINLIGHT_FUEL,
   WRECK_SPOT_RANGE, CARRY_THRUST_MUL, CARRY_FUEL_MUL, RIME_SMASH_MIN,
+  RIME_FALL_KEEP,
 } from '../config';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE } from '../world/worlds';
@@ -137,6 +138,7 @@ export class PodController {
     this.vx = Math.max(-MAX_SIDE * st.thrustMul, Math.min(MAX_SIDE * st.thrustMul, this.vx));
 
     // sub-step so fast falls can never cross a whole tile in one integration
+    this.smashAbsorb = 1;
     const fallSpeed = -this.vy;
     const steps = Math.max(1, Math.ceil(Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt / 0.3));
     const sdt = dt / steps;
@@ -386,6 +388,9 @@ export class PodController {
     }
   }
 
+  /** fraction of this frame's entry speed still live after rime punches */
+  private smashAbsorb = 1;
+
   private moveY(dy: number, fallSpeed: number): void {
     this.py += dy;
     const left = Math.floor(this.px - HW + EPS);
@@ -395,22 +400,43 @@ export class PodController {
 
     if (dy < 0) {
       const r = Math.floor(-(this.py - HH));
+      // young ice under a falling pod: the highway holds its shape. Free-fall
+      // punches through the skin layer by layer, each one shaving speed — a
+      // skinned shaft still works going down, and it breaks your fall doing
+      // it. A gentle landing (below smash speed) stands on it like any floor.
+      let blocked = false;
+      let allRime = true;
       for (let c = left; c <= right; c++) {
         if (this.terrain.solidAt(c, r)) {
-          this.py = -r + HH + EPS;
-          this.vy = 0;
-          this.grounded = true;
-          if (!wasGrounded && this.arrestorCatch >= 0 && fallSpeed > 4) {
-            // the pad takes it — no damage at any speed
-            this.ev.onArrested(fallSpeed);
-          } else if (!wasGrounded && fallSpeed > FALL_SAFE) {
-            const dmg = (fallSpeed - FALL_SAFE) * FALL_DMG;
-            this.applyDamage(dmg, 'a hard landing');
-            this.ev.onLanded(fallSpeed);
-          } else if (!wasGrounded && fallSpeed > 4) {
-            this.ev.onLanded(fallSpeed);
+          blocked = true;
+          if (this.terrain.get(c, r) !== T.RIME) allRime = false;
+        }
+      }
+      if (blocked && allRime && -this.vy >= RIME_SMASH_MIN) {
+        for (let c = left; c <= right; c++) {
+          if (this.terrain.get(c, r) === T.RIME) {
+            this.terrain.carve(c, r);
+            this.ev.onSmash(c, r);
           }
-          break;
+        }
+        this.vy *= RIME_FALL_KEEP;
+        this.smashAbsorb *= RIME_FALL_KEEP;
+      } else if (blocked) {
+        // credit the ice: a landing right after punching skins is charged at
+        // the speed the layers left you with, not the speed you arrived at
+        const eff = fallSpeed * this.smashAbsorb;
+        this.py = -r + HH + EPS;
+        this.vy = 0;
+        this.grounded = true;
+        if (!wasGrounded && this.arrestorCatch >= 0 && eff > 4) {
+          // the pad takes it — no damage at any speed
+          this.ev.onArrested(eff);
+        } else if (!wasGrounded && eff > FALL_SAFE) {
+          const dmg = (eff - FALL_SAFE) * FALL_DMG;
+          this.applyDamage(dmg, 'a hard landing');
+          this.ev.onLanded(eff);
+        } else if (!wasGrounded && eff > 4) {
+          this.ev.onLanded(eff);
         }
       }
       // ground level (surface) — the world above row 0 is open air with an implicit floor at y=0 only where terrain remains
