@@ -114,6 +114,8 @@ await page.evaluate(() => {
   const g = window.__game;
   g.state.endedWorlds.add('veil3');
   g.state.activeWorld = 'cryos2';
+  // dev staging marks the session ephemeral; this save-and-reload is deliberate
+  g.state.ephemeral = false;
   g.state.persist();
 });
 await page.reload();
@@ -230,6 +232,8 @@ await page.evaluate(() => {
   const g = window.__game;
   g.state.endedWorlds.add('cryos2');
   g.state.activeWorld = 'maelis6';
+  // dev staging marks the session ephemeral; this save-and-reload is deliberate
+  g.state.ephemeral = false;
   g.state.persist();
 });
 await page.reload();

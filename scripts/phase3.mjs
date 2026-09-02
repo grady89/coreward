@@ -151,6 +151,8 @@ const heatKey = await page.evaluate(async () => {
   const g = window.__game;
   g.state.endedWorlds.add('veil3');
   g.state.activeWorld = 'cryos2';
+  // the vault walk marked the session ephemeral; this save-and-reload is deliberate
+  g.state.ephemeral = false;
   g.state.persist();
   return true;
 });

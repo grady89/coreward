@@ -162,6 +162,14 @@ export class GameState {
     this.accl[this.activeWorld] = tier + 1;
     return true;
   }
+  /**
+   * Set by the dev harnesses (?core / ?fauna / ?vault): a dev session may
+   * outfit the pod and butcher terrain freely, but none of it may ever reach
+   * the real save. Guarded here because persist() is the one door to
+   * localStorage — the harnesses' handouts (max acclimation, free radiators)
+   * were leaking into normal playthroughs through the autosave.
+   */
+  ephemeral = false;
   /** arrestors in the hold, not yet deployed */
   arrestors = 0;
   activeWorld = 'veil3';
@@ -351,6 +359,7 @@ export class GameState {
   }
 
   persist(): void {
+    if (this.ephemeral) return;
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         v: 2,

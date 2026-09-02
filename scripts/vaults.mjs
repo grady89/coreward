@@ -213,10 +213,16 @@ const shuttle = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 700));
   const p1 = v.shuttlePos(0);
   const moves = Math.abs(p1.x - p0.x) > 0.2;
-  // stand in the rail's path
+  // hold station in the rail's path: there is no floor at rail height, so a
+  // one-shot placement falls out of the kill box before the shuttle arrives —
+  // whether it hit depended on the shuttle's phase at placement time
   const r0 = v.reforms;
-  v.px = 23.5; v.py = -21.5; v.vx = 0; v.vy = 0; v.invuln = 0;
-  const hit = await until(() => v.reforms > r0, 60);
+  let hit = false;
+  for (let i = 0; i < 60 && !hit; i++) {
+    v.px = 23.5; v.py = -21.5; v.vx = 0; v.vy = 0; v.invuln = 0;
+    await new Promise(r => setTimeout(r, 100));
+    hit = v.reforms > r0;
+  }
   return { moves, hit };
 });
 ok('light shuttles', shuttle, shuttle.moves && shuttle.hit);

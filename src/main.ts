@@ -239,8 +239,8 @@ class Game {
 
   /**
    * Jump straight to a world's core chamber to iterate on the Communion.
-   * Dev-only (URL param), and it edits the live save: the target world is
-   * marked un-ended and the pod is outfitted to survive the chamber.
+   * Dev-only (URL param). The session is ephemeral: the pod is outfitted to
+   * survive the chamber, but nothing here is ever written to the real save.
    */
   private devCoreJump(worldId: string): void {
     this.audio.init(); // no user gesture yet, so wake it on the first one
@@ -249,6 +249,7 @@ class Game {
     addEventListener('keydown', wake, { once: true });
 
     const st = this.state;
+    st.ephemeral = true;
     if (WORLDS.some(w => w.id === worldId)) st.activeWorld = worldId;
     st.endedWorlds.delete(st.activeWorld);
     this.setupWorld();
@@ -331,6 +332,7 @@ class Game {
     const s = STAGES[i];
     if (!s) return null;
     const st = this.state;
+    st.ephemeral = true;
     // the creature only exists on its own world, so load it first: the
     // roster in entities.ts is built per world at setupWorld() time
     if (st.activeWorld !== s.world) {
@@ -478,6 +480,7 @@ class Game {
     addEventListener('pointerdown', wake, { once: true });
     addEventListener('keydown', wake, { once: true });
     const st = this.state;
+    st.ephemeral = true;
     if (st.activeWorld !== glyph.world) {
       st.activeWorld = glyph.world;
       this.setupWorld();
@@ -507,6 +510,7 @@ class Game {
     this.title?.hide();
     this.title = null;
     this.vaultGallery = true;
+    this.state.ephemeral = true;
 
     // the hall: shallow enough to be out of every spawn band, and the
     // creatures stand down anyway — this room is a workshop, not a world
