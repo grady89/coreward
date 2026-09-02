@@ -98,14 +98,15 @@ const kindled = await page.evaluate(async () => {
   g.ctrl.px = 24.5; g.ctrl.py = -(500 + 9) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   const noticed = await until(() => g.threats.presence > 0.2, 80);
   const seen = g.state.firedEvents.has('kindled-taught');
-  // fly into one: it throws the pod clear without taking hull
+  // fly into one: it throws the pod clear without taking hull. touchX is
+  // only ever written on a touch, so it is the deterministic tell
   const hull0 = g.state.hull;
   g.ctrl.px = 22.6; g.ctrl.py = -(500 + 10) + 0.55; g.ctrl.vx = 0; g.ctrl.vy = 0;
-  const thrown = await until(() => Math.abs(g.ctrl.px - 22.6) > 1.2, 60);
+  const touched = await until(() => g.threats.kindled.touchX > 0, 60);
   const hullSafe = g.state.hull >= hull0;
-  return { noticed, seen, thrown, hullSafe, presence: +g.threats.presence.toFixed(2), mode: g.mode };
+  return { noticed, seen, touched, hullSafe, presence: +g.threats.presence.toFixed(2), mode: g.mode };
 });
-ok('kindled', kindled, kindled.noticed && kindled.seen && kindled.thrown && kindled.hullSafe);
+ok('kindled', kindled, kindled.noticed && kindled.seen && kindled.touched && kindled.hullSafe);
 await page.screenshot({ path: OUT + '/f-kindled.png' });
 
 // ======================= CRYOS-2 =======================
@@ -300,6 +301,39 @@ const shell = await page.evaluate(async () => {
 });
 ok('shellback', shell, shell.spawned && shell.sealed && shell.nacre >= 1 && shell.dropped);
 await page.screenshot({ path: OUT + '/f-shellback.png' });
+
+// --- a seal never cuts the last way out: the only chimney is refused,
+// --- and the same tile seals fine once a second exit exists ---
+const noTrap = await page.evaluate(async () => {
+  const { g, room, park, until } = window.__H();
+  // a rock sheath first: maelis is riddled with natural caves, and this test
+  // is about a chamber whose ONLY route to the surface is one 1-wide chimney
+  for (let y = 2; y < 223; y++) for (let x = 6; x < 14; x++) { g.terrain.data[g.terrain.idx(x, y)] = 2; g.chunks.markDirty(x, y); }
+  for (let y = 2; y < 221; y++) g.terrain.carve(8, y);
+  room(7, 12, 218, 221);
+  park(9.5, 220);
+  const sb = g.threats.shellbacks;
+  for (const b of sb.backs) b.alive = false;
+  for (let k = 0; k < 30 && !sb.backs.some(b => b.alive); k++) sb.trySpawn(g.ctrl.px, g.ctrl.py);
+  const b = sb.backs.find(b => b.alive);
+  if (!b) return { err: 'no shellback' };
+  // park it in the chamber with nothing to do, and hand it the chimney tile
+  const target = g.terrain.idx(8, 210);
+  const arm = () => {
+    b.x = b.tx = 10.5; b.y = b.ty = -219.5; b.curlT = 0; b.stagger = 0; b.idle = 0;
+    b.trail = [target, target, target, target, target];
+    b.sealT = 0;
+  };
+  arm();
+  await new Promise(r => setTimeout(r, 1200));
+  const refused = g.terrain.get(8, 210) === 0;
+  // open a second chimney: the same seal is now harmless and goes through
+  for (let y = 2; y < 219; y++) g.terrain.carve(10, y);
+  arm();
+  const sealedNow = await until(() => g.terrain.get(8, 210) === 25, 40);
+  return { refused, sealedNow };
+});
+ok('shellback never traps', noTrap, noTrap.refused && noTrap.sealedNow);
 
 // --- nacre is native when cut ---
 const nacreCut = await page.evaluate(async () => {

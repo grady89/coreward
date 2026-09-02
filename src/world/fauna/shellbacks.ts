@@ -150,6 +150,50 @@ export class Shellbacks implements Creature {
     }
   }
 
+  private trapSeen: Uint8Array | null = null;
+
+  /**
+   * True if laying nacre at (x, y) would cut EVERY air path from the pod to
+   * the surface. They want the holes closed, not you buried alive: a seal
+   * that removes the last way out is refused. Only a seal that CAUSES the
+   * cutoff counts — a pod with no route to the surface in the first place
+   * loses nothing to one more plate. Two flood fills at worst, once per
+   * seal attempt (~seconds apart), so the full-cavern case stays cheap.
+   */
+  private wouldTrap(x: number, y: number, podX: number, podY: number): boolean {
+    const t = this.terrain;
+    const px = Math.floor(podX), py = Math.floor(-podY);
+    if (py <= 2 || px < 0 || px >= t.w || py >= t.h) return false;
+    if (this.escapes(px, py, t.idx(x, y))) return false;
+    return this.escapes(px, py, -1);
+  }
+
+  /** air path from (px, py) to the top rows, with tile `sealIdx` pretend-sealed */
+  private escapes(px: number, py: number, sealIdx: number): boolean {
+    const t = this.terrain;
+    const w = t.w, h = t.h;
+    const seen = this.trapSeen ?? (this.trapSeen = new Uint8Array(w * h));
+    seen.fill(0);
+    if (sealIdx >= 0) seen[sealIdx] = 1;   // never the pod's tile: seals keep 2+ tiles off
+    const start = t.idx(px, py);
+    const stack = [start];
+    while (stack.length > 0) {
+      const i = stack.pop()!;
+      if (seen[i]) continue;
+      seen[i] = 1;
+      const cx = i % w, cy = (i / w) | 0;
+      // the pod's own tile counts even mid-drill; everything else must be open
+      if (i !== start && t.get(cx, cy) !== T.AIR) continue;
+      if (cy <= 2) return true;
+      // push up last so the fill climbs first and finds daylight fast
+      if (cy < h - 1) stack.push(i + w);
+      if (cx > 0) stack.push(i - 1);
+      if (cx < w - 1) stack.push(i + 1);
+      if (cy > 0) stack.push(i - w);
+    }
+    return false;
+  }
+
   /** pick the next tunnel tile: away from the pod, toward any flare, never straight back */
   private steer(b: Shellback, podX: number, podY: number): void {
     const cx = Math.floor(b.x), cy = Math.floor(-b.y);
@@ -228,7 +272,8 @@ export class Shellbacks implements Creature {
           if (i !== undefined && this.sealed < SEAL_CAP) {
             const x = i % this.terrain.w, y = Math.floor(i / this.terrain.w);
             const wx = x + 0.5, wy = -(y + 0.5);
-            if (this.terrain.get(x, y) === T.AIR && Math.hypot(wx - podX, wy - podY) > 2 && Math.hypot(wx - b.x, wy - b.y) > 0.9) {
+            if (this.terrain.get(x, y) === T.AIR && Math.hypot(wx - podX, wy - podY) > 2 && Math.hypot(wx - b.x, wy - b.y) > 0.9
+              && !this.wouldTrap(x, y, podX, podY)) {
               this.terrain.fill(x, y, T.NACRE);
               this.sealed++;
               this.particles.sparkBurst(wx, wy, 0xe8dcff, { count: 10, speed: 1.6, up: 1, life: 0.7, gravity: 2, spread: 0.7 });

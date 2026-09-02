@@ -137,7 +137,9 @@ is [entities.ts](src/world/entities.ts).
   touch and waits.
 - **Rule.** They don't want you; they want the holes closed. Nacre is worth
   the world's native back. Blast one and it drops two. Flares lure them:
-  they'll seal a lit tile before they seal yours.
+  they'll seal a lit tile before they seal yours. A seal that would cut the
+  pod's last air path to the surface is refused — they close holes, they do
+  not bury you alive.
 
 ## Constants — the Lamplighters'
 
