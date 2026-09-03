@@ -14,7 +14,7 @@ import {
   STOCK_RIG, RIG_FINISHES, STOCK_SUIT, SUIT_FINISHES, STOCK_FLAME,
   FLAME_STYLES, STOCK_LAMP, LAMP_TINTS, SPARK_STYLES,
 } from '../game/cosmetics';
-import { WINGS, FURNISHINGS, WALL_PALETTES, STOCK_PALETTE, WING_VIVARIUM } from '../game/furnish';
+import { WINGS, FURNISHINGS, WALL_PALETTES, STOCK_PALETTE, WING_VIVARIUM, wingPrereq } from '../game/furnish';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE, WORLDS, nextWorld, worldById } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
@@ -984,14 +984,17 @@ export class Panels {
   /** the outfitter catalog: wings, furnishings and wall palettes */
   private renderCatalog(): void {
     const m = this.ctx.meta;
-    const row = (id: string, name: string, desc: string, cost: number, ownedLabel: string) => {
+    const wingLocked = (id: string) => wingPrereq(id, m.furnishings);
+    const row = (id: string, name: string, desc: string, cost: number, ownedLabel: string, locked = '') => {
       const has = m.furnishings.includes(id);
       return `
       <div class="row">
         <span><span class="r-name">${name}</span><div class="r-sub">${desc}</div></span>
         ${has
           ? `<span class="r-val">${ownedLabel}</span>`
-          : `<button class="btn" data-buy="${id}" ${m.keeplight < cost ? 'disabled' : ''}>${fmtKeep(cost)}</button>`}
+          : locked
+            ? `<span class="r-val dim2">${locked}</span>`
+            : `<button class="btn" data-buy="${id}" ${m.keeplight < cost ? 'disabled' : ''}>${fmtKeep(cost)}</button>`}
       </div>`;
     };
     const palettes = [STOCK_PALETTE, ...WALL_PALETTES].map(p => {
@@ -1012,7 +1015,7 @@ export class Panels {
       ${this.header('OUTFITTER CATALOG', true)}
       <div class="tx-sub">Everything ships from the trade post and finds its own place in the room. Paid in kept light; kept, like everything here, across expeditions.</div>
       <div class="forge-head">WINGS</div>
-      ${WINGS.map(w => row(w.id, w.name, w.desc, w.cost, 'BUILT')).join('')}
+      ${WINGS.map(w => row(w.id, w.name, w.desc, w.cost, 'BUILT', wingLocked(w.id))).join('')}
       <div class="forge-head">FURNISHINGS</div>
       ${FURNISHINGS.map(f => row(f.id, f.name, f.desc, f.cost, 'PLACED')).join('')}
       <div class="forge-head">WALL PALETTES</div>
@@ -1023,7 +1026,7 @@ export class Panels {
       btn.addEventListener('click', () => {
         const id = (btn as HTMLElement).dataset.buy!;
         const item = [...WINGS, ...FURNISHINGS].find(f => f.id === id)!;
-        if (m.keeplight < item.cost || m.furnishings.includes(id)) { this.ctx.audio.denied(); return; }
+        if (m.keeplight < item.cost || m.furnishings.includes(id) || wingLocked(id)) { this.ctx.audio.denied(); return; }
         m.keeplight -= item.cost;
         m.furnishings.push(id);
         saveMeta(m);
@@ -1058,7 +1061,7 @@ export class Panels {
   private renderFaunaLog(): void {
     const st = this.ctx.state;
     const m = this.ctx.meta;
-    const hasVivarium = m.furnishings.includes(WING_VIVARIUM);
+    const hasVivarium = m.furnishings.includes(WING_VIVARIUM) && !wingPrereq(WING_VIVARIUM, m.furnishings);
     const faunaRow = (f: (typeof FAUNA)[number]): string => {
       const got = faunaSeen(f, st.firedEvents);
       const resident = m.sponsored.includes(f.id);

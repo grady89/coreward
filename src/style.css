@@ -254,6 +254,7 @@ input[type="range"].nav-focus {
 }
 .row .r-sub { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
 .row .r-val { color: var(--amber); font-family: var(--font-display); font-weight: 700; white-space: nowrap; }
+.row .r-val.dim2 { color: var(--ink-dim); font-weight: 500; }
 
 button.btn {
   font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.14em;

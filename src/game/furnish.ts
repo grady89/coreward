@@ -12,6 +12,16 @@ export const WINGS: Furnishing[] = [
   { id: WING_VIVARIUM, name: 'THE VIVARIUM', desc: 'A far wing of standing tanks. Room for what lives down there.', cost: 800 },
 ];
 
+/**
+ * The Quarters is one corridor running east: hall, gallery, vivarium. A wing
+ * past an unbuilt one can't be reached, so the catalog won't sell it — returns
+ * the reason it's withheld, or '' when it's for sale.
+ */
+export function wingPrereq(id: string, owned: string[]): string {
+  if (id === WING_VIVARIUM && !owned.includes(WING_GALLERY)) return 'REQUIRES THE GALLERY';
+  return '';
+}
+
 export const FURNISHINGS: Furnishing[] = [
   { id: 'rug', name: 'WOVEN RUG', desc: 'Trade-post wool, dusk colors. The floor stops ringing.', cost: 40 },
   { id: 'lamp', name: 'ARC LAMP', desc: 'A standing lamp with a real filament. Extravagant.', cost: 45 },
