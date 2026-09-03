@@ -682,7 +682,13 @@ censer-ride, beam parked state, global pulse, deadLight visuals).**
 rather than in the nine, which V4/V5 rewrite — wiring new objects into
 rooms that are about to die is paying twice. The legend carries the spark
 ledger and the fiction line per element; every cyclic period is now an
-integer multiple of the 0.85 s pulse.
+integer multiple of the 0.85 s pulse. **Dead surface** (`=`) ships with the
+phase — the table's △ entry, which the first V3 scoping missed: without it a
+spent spark cannot outlast a jump in any floored room, so the brazier and
+the whole famine economy are unauthorable. Placement is per-room by design
+and stays out of the nine until V4/V5 author them. Its rim is cold rather
+than absent, departing from the table's word "rimless": a hole in the
+lattice already means a fang (P2), and dead floor must stay readable.
 *Breaks:* `vaults.mjs` `alphabet` kit census (new counts) and its parse
 walk (new chars `o` `*`); `vaultfit.mjs` AIR set. *Adds:* pulse-ratio lint,
 the P1 spark-classification totality check, a snuffer check (steals without

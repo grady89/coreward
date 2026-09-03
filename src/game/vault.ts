@@ -436,7 +436,10 @@ export class VaultRun {
         // flattened to a constant, because the random grain that sells lit
         // masonry is exactly what muddies a silhouette. Band 3 is true
         // black, and the fog planes give that black its parallax.
-        col.setHex(0x8f89a4).multiplyScalar(band(i));
+        // drank stone is the same masonry with the warmth pulled out of it:
+        // colder, flatter, a shade darker — matte where live stone is not
+        col.setHex(p.dry[i] ? 0x6c7386 : 0x8f89a4)
+          .multiplyScalar(band(i) * (p.dry[i] ? 0.8 : 1));
         inst.setColorAt(k, col);
         k++;
       }
@@ -927,27 +930,45 @@ export class VaultRun {
     // corner junctions. All four are geometry: one buffer, vertex colors,
     // additive — black verts cost nothing.
 
-    // contiguous exposed edges, merged into runs per orientation
-    type Run = { dir: 0 | 1 | 2 | 3; x: number; y: number; len: number }; // top/bottom/left/right
+    // contiguous exposed edges, merged into runs per orientation. A run also
+    // breaks where the stone changes from live to drank, so the two never
+    // share a seam and the boundary between them is a visible joint.
+    type Run = { dir: 0 | 1 | 2 | 3; x: number; y: number; len: number; dry: boolean };
     const runs: Run[] = [];
     for (let y = 0; y < p.h; y++) for (const dir of [0, 1] as const) {
-      let st = -1;
+      let st = -1, sd = false;
       for (let x = 0; x <= p.w; x++) {
         const ok = x < p.w && !!p.solid[y * p.w + x] && open(x, y + (dir === 0 ? -1 : 1));
-        if (ok && st < 0) st = x;
-        if (!ok && st >= 0) { runs.push({ dir, x: st, y, len: x - st }); st = -1; }
+        const dry = ok && !!p.dry[y * p.w + x];
+        if (ok && st < 0) { st = x; sd = dry; }
+        else if (ok && dry !== sd) { runs.push({ dir, x: st, y, len: x - st, dry: sd }); st = x; sd = dry; }
+        if (!ok && st >= 0) { runs.push({ dir, x: st, y, len: x - st, dry: sd }); st = -1; }
       }
     }
     for (let x = 0; x < p.w; x++) for (const dir of [2, 3] as const) {
-      let st = -1;
+      let st = -1, sd = false;
       for (let y = 0; y <= p.h; y++) {
         const ok = y < p.h && !!p.solid[y * p.w + x] && open(x + (dir === 2 ? -1 : 1), y);
-        if (ok && st < 0) st = y;
-        if (!ok && st >= 0) { runs.push({ dir, x, y: st, len: y - st }); st = -1; }
+        const dry = ok && !!p.dry[y * p.w + x];
+        if (ok && st < 0) { st = y; sd = dry; }
+        else if (ok && dry !== sd) { runs.push({ dir, x, y: st, len: y - st, dry: sd }); st = y; sd = dry; }
+        if (!ok && st >= 0) { runs.push({ dir, x, y: st, len: y - st, dry: sd }); st = -1; }
       }
     }
 
-    const hue = new THREE.Color(this.rimHue);
+    /**
+     * Drank stone keeps a rim, and the §III table's word for it — "rimless" —
+     * is not followed here on purpose. The lattice is what makes standable
+     * geometry readable two tiles past the lamp (P2), and a hole in the
+     * lattice already means one thing: an `X` stud, a fang. Giving dead floor
+     * no rim would both hide a floor in the dark and collide with that
+     * grammar. So it gets a rim drained of the world's colour instead — cold,
+     * dim, and mostly dead along its length. The light is still in the shape
+     * of the stone; the colour has been drunk out of it.
+     */
+    const warmRim = new THREE.Color(this.rimHue);
+    const dryRim = new THREE.Color(0x9db0c6).multiplyScalar(0.5);
+    let hue = warmRim;
     const positions: number[] = [];
     const colors: number[] = [];
     const tri = (ax: number, ay: number, ka: number, bx: number, by: number, kb: number, cx2: number, cy2: number, kc: number): void => {
@@ -1029,15 +1050,17 @@ export class VaultRun {
     };
 
     for (const r of runs) {
+      hue = r.dry ? dryRim : warmRim;
       // walk the run in mason's segments with joints between them
       let t = 0.04;
       const L = r.len - 0.04;
       while (t < L) {
         const segLen = Math.min(L - t, 0.6 + rng() * 1.6);
         const gap = 0.08 + rng() * 0.3;
-        const dead = rng() < 0.2;          // some seams gave out centuries ago
+        // some seams gave out centuries ago; on drank stone most of them did
+        const dead = rng() < (r.dry ? 0.5 : 0.2);
         if (!dead && segLen > 0.25) {
-          const ka = 0.45 + rng() * 0.55;
+          const ka = (0.45 + rng() * 0.55) * (r.dry ? 0.38 : 1);
           const kb = ka * (0.45 + rng() * 0.55);   // uneven along its own length
           if (r.dir === 0) seam(r.x + t, -r.y, r.x + t + segLen, -r.y, 0, 1, ka, kb);
           else if (r.dir === 1) seam(r.x + t, -(r.y + 1), r.x + t + segLen, -(r.y + 1), 0, -1, ka, kb);
@@ -1050,6 +1073,8 @@ export class VaultRun {
     // corner pools where two open faces meet on one block
     for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
       if (!p.solid[y * p.w + x]) continue;
+      const drank = !!p.dry[y * p.w + x];
+      hue = drank ? dryRim : warmRim;
       const corners: [boolean, number, number][] = [
         [open(x, y - 1) && open(x - 1, y) && open(x - 1, y - 1), x, -y],
         [open(x, y - 1) && open(x + 1, y) && open(x + 1, y - 1), x + 1, -y],
@@ -1057,7 +1082,9 @@ export class VaultRun {
         [open(x, y + 1) && open(x + 1, y) && open(x + 1, y + 1), x + 1, -(y + 1)],
       ];
       for (const [ok, cx, cy] of corners) {
-        if (ok && rng() < 0.45) pool(cx, cy, 0.45 + rng() * 0.45);
+        if (ok && rng() < (drank ? 0.15 : 0.45)) {
+          pool(cx, cy, (0.45 + rng() * 0.45) * (drank ? 0.35 : 1));
+        }
       }
     }
 
@@ -1379,7 +1406,14 @@ export class VaultRun {
 
     if (wasGrounded && !this.grounded) this.coyoteT = COYOTE;
     if (this.grounded) {
-      this.spark = true;             // stone underfoot relights the breath
+      // stone underfoot relights the breath — unless the famine drank this
+      // course (`=`), which carries you and gives nothing back. `floorTile`
+      // is null when the footing is not masonry at all (a censer's crown),
+      // and bronze holds its charge, so that refunds like live stone.
+      const drank = floorTile
+        ? !!this.p.dry[floorTile[1] * this.p.w + floorTile[0]]
+        : false;
+      if (!drank) this.spark = true;
       this.coyoteT = COYOTE;
     }
 

@@ -76,7 +76,7 @@ await stage('maps', ['nine levels'], async () => {
     // so the census walks the test vaults too — parse, reach and all
     const all = [...window.__VAULTS, ...window.__TEST_VAULTS];
     const kit = { shuttles: 0, censers: 0, crushers: 0, pursuit: 0, doors: 0, beams: 0,
-      snuffers: 0, gates: 0, currents: 0, parked: 0, braziers: 0, motes: 0 };
+      snuffers: 0, gates: 0, currents: 0, parked: 0, braziers: 0, motes: 0, dry: 0 };
     for (const v of all) {
       if (v.shuttles) kit.shuttles++;
       if (v.censers) kit.censers++;
@@ -91,6 +91,7 @@ await stage('maps', ['nine levels'], async () => {
       const p = window.__parseVault(v);
       kit.braziers += p.braziers.length;
       kit.motes += p.motes.length;
+      for (let i = 0; i < p.dry.length; i++) if (p.dry[i]) kit.dry++;
       const seen = new Uint8Array(p.w * p.h);
       const q = [[p.entry.x, p.entry.y]];
       seen[p.entry.y * p.w + p.entry.x] = 1;
@@ -112,7 +113,8 @@ await stage('maps', ['nine levels'], async () => {
     && alphabet.kit.shuttles >= 4 && alphabet.kit.censers >= 4 && alphabet.kit.crushers >= 3
     && alphabet.kit.pursuit === 2 && alphabet.kit.doors >= 3 && alphabet.kit.beams >= 1
     && alphabet.kit.snuffers >= 1 && alphabet.kit.gates >= 1 && alphabet.kit.currents >= 1
-    && alphabet.kit.parked >= 1 && alphabet.kit.braziers >= 1 && alphabet.kit.motes >= 3);
+    && alphabet.kit.parked >= 1 && alphabet.kit.braziers >= 1 && alphabet.kit.motes >= 3
+    && alphabet.kit.dry >= 1);
 });
 
 await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall moves', 're-form', 'corner correction', 'buffer through spark', 'sconce crystal', 'wick translated'], async () => {
@@ -655,7 +657,7 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     && JSON.stringify(voice.poses) === JSON.stringify(['curled', 'fallen', 'kneeling', 'reaching']));
 });
 
-await stage('proving', ['the proving ground', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride'], async () => {
+await stage('proving', ['the proving ground', 'dead surface', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride'], async () => {
   // --- the V3 kit, in its dev room: nothing here touches the nine maps ---
   const enter = await page.evaluate(async () => {
     const { g, until } = window.__H();
@@ -672,6 +674,44 @@ await stage('proving', ['the proving ground', 'brazier relight', 'snuffer steals
   ok('the proving ground', enter, enter.inVault && enter.motes >= 3 && enter.braziers === 2
     && enter.snuffer && enter.gates === 1 && enter.currents === 1 && enter.parked);
   await page.screenshot({ path: OUT + '/v-proving.png' });
+
+  // --- △ dead surface: masonry that carries but never refunds. Safe to
+  // stand on, and the spark you spent stays spent — the only floor in the
+  // game that lets a spent breath outlast a jump (P1: withholds) ---
+  const drank = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const v = g.vault;
+    v.invuln = 999;
+    // live stone: the breath comes back the frame you land. Sampled at the
+    // entry, well clear of the moth's waking ring — the snuffer check below
+    // needs to find it still asleep
+    v.px = 3.5; v.py = -21.0; v.vx = 0; v.vy = 0;
+    await until(() => v.grounded, 30);
+    v.spark = false;
+    const liveRefunds = await until(() => v.spark, 20, 40);
+    // the drank course: walkable, harmless, and it gives nothing
+    v.px = 19.5; v.py = -21.0; v.vx = 0; v.vy = 0;
+    await until(() => v.grounded, 30);
+    const r0 = v.reforms;
+    v.spark = false;
+    await new Promise(r => setTimeout(r, 700));
+    const withholds = !v.spark && v.grounded && v.reforms === r0;
+    // walking it does not quietly re-arm you either
+    v.px = 21.5;
+    await new Promise(r => setTimeout(r, 300));
+    const stillDry = !v.spark && v.grounded;
+    // and the basket overhead is the way out of the debt
+    v.px = 16.5; v.py = -21.0; v.vx = 0; v.vy = 0;
+    await until(() => v.grounded, 30);
+    v.spark = false;
+    v.jumpPress();
+    const bought = await until(() => v.spark && !v.grounded, 25, 30);
+    v.jumpRelease();
+    const tiles = v.p.dry.reduce((n, d) => n + d, 0);
+    return { liveRefunds, withholds, stillDry, bought, tiles };
+  });
+  ok('dead surface', drank, drank.liveRefunds && drank.withholds
+    && drank.stillDry && drank.bought && drank.tiles === 15);
 
   // --- ▲ brazier: refills the spark MID-AIR, and is not a checkpoint ---
   const brazier = await page.evaluate(async () => {
@@ -1019,6 +1059,7 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
     const SC = window.__SPARK_CLASS;
     const els = new Set();
     const CHAR = { S: 'sconce', X: 'stud', d: 'dark', A: 'bridge', b: 'bridge',
+      '=': 'dead-surface',
       R: 'rime', o: 'mote', '*': 'brazier', '^': 'gravity', '>': 'gravity',
       '<': 'gravity', 1: 'door', 2: 'door', 3: 'door', K: 'figure', F: 'figure',
       C: 'figure', N: 'figure', M: 'master' };

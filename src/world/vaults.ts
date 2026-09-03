@@ -16,6 +16,11 @@
 //   ^  air, gravity points UP   >  air, gravity points RIGHT
 //   <  air, gravity points LEFT
 //   1 2  door masonry — melts open once enough sconces burn (def.doorNeeds)
+//   =  DEAD SURFACE — masonry the famine drank. Solid and perfectly safe to
+//      stand on, and it gives NOTHING back: the spark you spent stays spent
+//      while you walk it. Where you put it is a per-room decision, not a
+//      global one — it is the authoring brush that makes a spent spark last
+//      longer than a jump (SPEC-VAULTS-2 §III, precision §2.3)
 //   o  MOTE — a drifting fleck of the world's hue. Pure language, zero
 //      mechanics: it traces jump arcs, marks safe drops, edges shelves in
 //      the dark (SPEC-VAULTS-2 §III)
@@ -32,6 +37,7 @@
 //   element        spark      the guild's line
 //   ------------   --------   ----------------------------------------------
 //   stone floor    refunds    the guild's own masonry still holds a charge
+//   dead surface = withholds  stone the famine drank
 //   sconce         refunds    a light waiting for its keeper
 //   famine sconce  saves      it remembers you; it has nothing to give
 //   brazier *      refunds    ductwork the guild never turned off
@@ -160,6 +166,7 @@ export const PULSE = 0.85;
  */
 export const SPARK_CLASS: Record<string, string> = {
   sconce: 'refunds',
+  'dead-surface': 'withholds',
   'famine-sconce': 'saves',
   brazier: 'refunds',
   mote: 'shapes',
@@ -727,12 +734,13 @@ export const VAULTS: VaultDef[] = [
  * rect. Between: a one-way drop shaft (the curtain) and a rising current
  * column back up.
  *
- * The shaft's brazier is the one that can actually be READ by hand. On a
- * floor the spark comes back the instant you land (stone refunds), so the
- * spent state only exists while airborne — the hall's brazier can be proven
- * by the suite but never felt. The shaft gives eight tiles of falling, which
- * is the only place a player can watch the light go out, stay out, and be
- * handed back by something other than the ground.
+ * Two places show a spent spark, because live stone hands it back the frame
+ * you land and nothing can be read in a fifth of a second. The shaft gives
+ * eight tiles of falling. The hall gives the drank floor: `=` from col 8 to
+ * 22, which is one sentence made of three objects — the moth patrols the
+ * near half and takes your light, the floor will not give it back, and the
+ * basket over col 16 is the only answer. That is THE FAMINE's whole thesis
+ * at the scale of a corridor, and it is what the flat floor could not say.
  */
 export const TEST_VAULTS: VaultDef[] = [
   {
@@ -776,7 +784,7 @@ export const TEST_VAULTS: VaultDef[] = [
       '#..............................................#',
       '#..............................................#',
       '#..@....................S....................M.#',
-      '################################################',
+      '########===============#########################',
       '################################################',
     ],
   },
@@ -796,6 +804,8 @@ export interface ParsedVault {
   solid: Uint8Array;
   kill: Uint8Array;
   dark: Uint8Array;
+  /** solid tiles that do NOT relight the spark underfoot — `=` */
+  dry: Uint8Array;
   gravity: Int8Array;         // 0 down, 1 up, 2 right, 3 left
   doors: { ch: string; tiles: { x: number; y: number }[] }[];
   bridges: { x: number; y: number; group: 0 | 1 }[];
@@ -846,6 +856,7 @@ export function parseVault(def: VaultDef): ParsedVault {
     solid: new Uint8Array(w * h),
     kill: new Uint8Array(w * h),
     dark: new Uint8Array(w * h),
+    dry: new Uint8Array(w * h),
     gravity: new Int8Array(w * h),
     doors: [], bridges: [], rime: [], sconces: [], motes: [], braziers: [], figures: [],
     entry: { x: 2, y: 2 }, master: { x: w - 3, y: 2 },
@@ -865,6 +876,7 @@ export function parseVault(def: VaultDef): ParsedVault {
       const i = y * w + x;
       switch (c) {
         case '#': p.solid[i] = 1; break;
+        case '=': p.solid[i] = 1; p.dry[i] = 1; break;
         case 'X': p.kill[i] = 1; break;
         case 'd': p.dark[i] = 1; break;
         case '^': p.gravity[i] = 1; break;
