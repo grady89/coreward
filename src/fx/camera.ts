@@ -33,10 +33,43 @@ export class FollowCam {
     if (!this.reducedMotion) this.shake = Math.min(0.6, this.shake + a);
   }
 
-  /** hard snap (title pose / respawn) */
+  /** hard snap (title pose / respawn / a chamber cut) */
   snap(x: number, y: number, z: number): void {
     this.cx = x; this.cy = y; this.cz = z;
     this.camera.position.set(x, y, z);
+  }
+
+  /** half the frame's height in world units at distance z */
+  halfH(z = this.cz): number {
+    return z * Math.tan((this.camera.fov * Math.PI) / 360);
+  }
+
+  /** half the frame's width in world units at distance z */
+  halfW(z = this.cz): number {
+    return this.halfH(z) * this.camera.aspect;
+  }
+
+  /** the distance at which `cols` tiles of width fit the frame */
+  distanceForWidth(cols: number): number {
+    return cols / (2 * Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
+  }
+
+  /**
+   * F11 — the camera-locked chamber. `cx`/`cz` frame ONE chamber and are
+   * never interpolated toward a moving body, so the frame cannot pan
+   * sideways: it either holds still or it cuts (`snap`). Vertically it still
+   * follows, because chambers are column splits and the rooms are tall.
+   *
+   * `cz` eases rather than snapping so the sconce chord's push-out (§VI) has
+   * somewhere to live; a chamber CHANGE is a cut, and the caller snaps.
+   */
+  followChamber(dt: number, cx: number, cz: number, y: number, vy: number, yMin: number, yMax: number): void {
+    this.cx = cx;
+    this.cz += (cz - this.cz) * Math.min(1, dt * 3.4);
+    const ty = Math.min(yMax, Math.max(yMin, y + vy * 0.14));
+    this.cy += (ty - this.cy) * Math.min(1, dt * 4.6);
+    this.apply(dt);
+    this.camera.lookAt(this.cx, this.cy, 0);
   }
 
   follow(dt: number, x: number, y: number, vx: number, vy: number, close = false): void {

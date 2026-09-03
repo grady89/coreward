@@ -6,6 +6,9 @@ export class AudioEngine {
   private master!: GainNode;
   private sfxBus!: GainNode;
   private musicBus!: GainNode;
+  /** a duck stage of its own, downstream of the music bus, so a duck in
+   *  flight and the settings panel are never writing the same AudioParam */
+  private musicDuck!: GainNode;
   private voiceDispatchBus!: GainNode;
   private voiceLamplightersBus!: GainNode;
   private muted = false;
@@ -48,7 +51,9 @@ export class AudioEngine {
     this.sfxBus.connect(this.master);
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = this.vol.music;
-    this.musicBus.connect(this.master);
+    this.musicDuck = ctx.createGain();
+    this.musicDuck.gain.value = 1;
+    this.musicBus.connect(this.musicDuck).connect(this.master);
     // recorded voices get their own buses so Dispatch and the Lamplighters
     // can be balanced independently of sfx/ambience — and of each other
     this.voiceDispatchBus = ctx.createGain();
@@ -270,18 +275,29 @@ export class AudioEngine {
     o.start(); o.stop(t + dur + 0.05);
   }
 
-  private noise(dur: number, peak: number, filterFrom: number, filterTo: number): void {
+  private noise(dur: number, peak: number, filterFrom: number, filterTo: number, delayMs = 0): void {
     if (!this.ctx) return;
-    const src = this.ctx.createBufferSource();
-    src.buffer = this.noiseBuf;
-    const f = this.ctx.createBiquadFilter();
-    f.type = 'lowpass';
-    const t = this.ctx.currentTime;
-    f.frequency.setValueAtTime(filterFrom, t);
-    f.frequency.exponentialRampToValueAtTime(Math.max(40, filterTo), t + dur);
-    src.connect(f).connect(this.env(dur, peak));
-    src.start(); src.stop(t + dur + 0.05);
+    const fire = (): void => {
+      if (!this.ctx) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      const t = this.ctx.currentTime;
+      f.frequency.setValueAtTime(filterFrom, t);
+      f.frequency.exponentialRampToValueAtTime(Math.max(40, filterTo), t + dur);
+      src.connect(f).connect(this.env(dur, peak));
+      src.start(); src.stop(t + dur + 0.05);
+    };
+    if (delayMs > 0) setTimeout(fire, delayMs); else fire();
   }
+
+  /**
+   * Every repeated sound in the vaults is detuned +/-12 % so a hundred
+   * gutters do not sound like one sample played a hundred times
+   * (SPEC-VAULTS-2 §VI, atmosphere §5).
+   */
+  private jit(f: number): number { return f * (0.88 + Math.random() * 0.24); }
 
   /** glassy pickup chime — deeper ore = lower, richer note */
   chime(tier: number): void {
@@ -453,6 +469,58 @@ export class AudioEngine {
     const f = scale[Math.min(i, scale.length - 1)];
     this.tone(f * 0.5, 1.6, 0.05, 'sine');
     this.tone(f * 0.5 * 0.944, 1.6, 0.03, 'sine', 40); // a flat rub against it
+  }
+
+  /**
+   * The dash-refresh intake: the breath a sconce takes when it catches. The
+   * same gesture ends the gutter phrase, which is why re-forming sounds like
+   * being lit rather than like dying (atmosphere §5).
+   */
+  sconceIntake(delayMs = 0): void {
+    this.glide(this.jit(150), this.jit(720), 0.24, 0.055, 'sine', delayMs);
+    this.noise(0.2, 0.05, 500, 4200, delayMs);
+  }
+
+  /**
+   * THE SCONCE CHORD — the five-system moment, audio half: the pentatonic
+   * step up, the intake under it, and a fifth above so a lit sconce is the
+   * one consonant sound in the room.
+   */
+  sconceChord(i: number): void {
+    this.sconce(i);
+    this.sconceIntake(40);
+    const scale = [392, 440, 523.3, 587.3, 659.3, 784];
+    this.tone(scale[Math.min(i, scale.length - 1)] * 1.5, 1.8, 0.022, 'sine', 180);
+  }
+
+  /**
+   * THE GUTTER PHRASE — one continuous gesture, never a sting: the flame
+   * collapses, a low tone holds under the dark, and the sconce's intake
+   * arrives as the body re-forms. There is no failure sound in this game
+   * (atmosphere §5).
+   */
+  gutterPhrase(): void {
+    this.noise(0.3, 0.11, 2400, 140);                       // the collapse
+    this.glide(this.jit(210), this.jit(88), 0.42, 0.05, 'sine');
+    this.tone(this.jit(58), 1.2, 0.05, 'sine', 90);          // the held low
+    this.tone(this.jit(87), 1.05, 0.026, 'sine', 130);
+    this.sconceIntake(300);                                  // the re-form
+  }
+
+  /**
+   * The ambience duck. Four moments in the vaults pull the bed down and let
+   * one sound own the room: a sconce lit, the master stone touched, first
+   * entry to a dark zone, and the gutter-out. Nowhere else (atmosphere §5).
+   */
+  duckAmbience(toLinear: number, holdSec: number): void {
+    if (!this.ctx) return;
+    const g = this.musicDuck.gain;
+    const t = this.ctx.currentTime;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(toLinear, t + 0.12);
+    g.setValueAtTime(toLinear, t + holdSec);
+    g.linearRampToValueAtTime(1, t + holdSec + 0.9);
   }
 
   /** the pod rams through young ice: a crack, a shatter, no drill in it */

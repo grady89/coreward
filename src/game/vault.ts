@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
-import { VaultDef, ParsedVault, parseVault } from '../world/vaults';
-import { Suit, SUIT_R, SUIT_H, buildSuit, poseSuit } from '../player/suit';
+import { VaultDef, ParsedVault, parseVault, chamberAt } from '../world/vaults';
+import {
+  Suit, SUIT_R, SUIT_H, buildSuit, poseSuit,
+  FigurePose, poseFigure, figureLampAt, figureNearElbow,
+} from '../player/suit';
 
 // A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
 // second pass). The movement set is discrete now, Celeste-school:
@@ -68,11 +71,82 @@ const BEAM_R = 0.3;
 const REFORM_T = 0.35;
 const INVULN_T = 0.6;
 
+// ---- F11: the camera-locked chamber ----
+/** the closest the frame ever sits: a chamber narrower than this reads intimate */
+const CHAMBER_Z_MIN = 9.5;
+/** and the furthest, for a room that declares no chambers at all */
+const CHAMBER_Z_MAX = 26;
+/** margin of stone left around a chamber so the cut does not clip its walls */
+const CHAMBER_PAD = 1.6;
+/** how far past a boundary the body must be before the frame cuts */
+const CHAMBER_HYST = 0.45;
+
+// ---- the rim-light lattice (§VI) ----
+/** a solid face's constant emissive rim: faint, but readable well past the lamp */
+const RIM_BASE = 0.3;
+/** each lit sconce strengthens the whole lattice a notch — the chord's fifth system */
+const RIM_STEP = 0.03;
+const RIM_MAX = 0.55;
+/** how thick the rim is, across the face, in tiles */
+const RIM_W = 0.11;
+/** and how long — short of the full tile, so the lattice reads as courses of
+ *  stone catching light rather than as one continuous stroke */
+const RIM_L = 0.9;
+
+// ---- the sconce chord (§VI) ----
+/** the chord's envelope: everything it fires decays over this */
+const CHORD_T = 1.4;
+/** the game's ONLY positive screenshake, and it is soft (~2 px) */
+const SHAKE_SCONCE = 0.2;
+/** the one other permitted source in a vault: a piston actually landing */
+const SHAKE_CRUSH = 0.42;
+const AMBIENT_BASE = 0.62;
+
+/** how many spent wicks one room remembers before the oldest is dropped */
+const WICK_CAP = 96;
+
+/**
+ * THE RECORD OF FAILURE — every gutter leaves a wick-smudge where the light
+ * went out, and the room keeps them for the whole session, across re-entries.
+ * By KINDLED's last floor your marks and the guild's dead are drawn in the
+ * same language on purpose (atmosphere §1.4).
+ */
+const SPENT_WICKS = new Map<string, { x: number; y: number }[]>();
+
+/** the guild's voice, one line per posture. Free, skippable, never gating. */
+const GUILD_LINES: Record<FigurePose, string> = {
+  reaching: 'Still reaching. The cup was three fingers past him, and it was three fingers past him for a long time.',
+  fallen: 'She kept it up. Whatever came, she kept the lamp out of the dust. That is the whole of the training.',
+  curled: 'He turned his back. You do that when the thing coming is not something you can face and go on working.',
+  kneeling: 'He set it down first, then he knelt. In that order — which is the order we were taught.',
+};
+
+/** a soft radial alpha, built once: the fog banks and the wick smudges wear it */
+let softDiscTex: THREE.Texture | null = null;
+function softDisc(): THREE.Texture {
+  if (softDiscTex) return softDiscTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.42, 'rgba(255,255,255,0.44)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  softDiscTex = new THREE.CanvasTexture(c);
+  return softDiscTex;
+}
+
 export interface VaultAudio {
-  sconce(): void;
+  /** the sconce chord's audio third: the step up, plus the dash-refresh intake */
+  chord(i: number): void;
   deny(): void;
-  reform(): void;
+  /** the gutter phrase — collapse, held low tone, intake at re-form. No sting. */
+  gutter(): void;
   complete(): void;
+  /** pull the ambience bed to `to` (linear) for `hold` seconds, then back */
+  duck(to: number, hold: number): void;
 }
 
 interface Input { left: boolean; right: boolean; up: boolean; down: boolean; }
@@ -123,6 +197,14 @@ export class VaultRun {
   private pursuitOn = false;
   private pursuitEdge = 0;
   private pursuitDone = false;
+  // chambers, the chord, and the dark
+  /** which camera-locked chamber the frame is holding */
+  chamber = 0;
+  /** the sconce chord's envelope, 1 the frame it fires, 0 when it has settled */
+  private chordT = 0;
+  /** the first dark tile of the run ducks the bed once, and only once */
+  private darkSeen = false;
+  private lampRaise = 0;
 
   // visuals
   private pilotGroup = new THREE.Group();
@@ -141,6 +223,12 @@ export class VaultRun {
   private bridgeMeshes: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: 0 | 1 }[] = [];
   private rimeMeshes: THREE.Mesh[] = [];
   private shuttleMeshes: { bolt: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
+  /** the faint rail behind each bolt — a hazard's visible track (P2) */
+  private shuttleRailMats: THREE.Material[] = [];
+  /** the ember seam and haze every unlight stud wears (P2) */
+  private killMats: THREE.Material[] = [];
+  /** each piston's working face, the seam that says which way it comes (P2) */
+  private crusherFaceMats: THREE.Material[] = [];
   private censerMeshes: { bob: THREE.Group; chain: THREE.Line; light: THREE.PointLight }[] = [];
   private crusherMeshes: THREE.Mesh[] = [];
   private pursuitMesh: THREE.Mesh | null = null;
@@ -149,13 +237,23 @@ export class VaultRun {
   private motes!: THREE.Points;
   private motePos!: Float32Array;
   private windStreaks: THREE.Points | null = null;
+  private ambient!: THREE.AmbientLight;
+  private rimMat!: THREE.MeshBasicMaterial;
+  private fog: { mesh: THREE.Mesh; vx: number; x0: number; x1: number }[] = [];
+  /** the dead's lamps and chest embers: still warm, and they breathe */
+  private figureGlows: { mat: THREE.MeshBasicMaterial; base: number }[] = [];
   private hud: HTMLDivElement;
   private card: HTMLDivElement | null = null;
+  private voice: HTMLDivElement | null = null;
+  private voiceT = 0;
 
   constructor(
     private def: VaultDef,
     private glyph: GlyphDef,
+    /** the world's pale core tint — bridges, rails, the mark on the stone */
     private hue: number,
+    /** the world's one vivid note — the rim lattice and the fog banks wear it */
+    private rimHue: number,
     private assist: boolean,
     private audio: VaultAudio,
     aspect: number,
@@ -171,16 +269,19 @@ export class VaultRun {
     this.doorOpen = this.p.doors.map(() => false);
     this.rimeState = this.p.rime.map(() => ({ t: -1, gone: 0 }));
     this.build();
-    this.cam.zoomBias = 4;
-    this.cam.snap(this.px, this.py + 0.5, 8.5 + this.cam.zoomBias);
+    this.chamber = chamberAt(this.p, Math.floor(this.px));
+    this.cutTo(this.chamber);
 
     this.hud = document.createElement('div');
     this.hud.id = 'vault-hud';
     this.hud.innerHTML = `
       <div class="vh-name">${glyph.name}</div>
       <div class="vh-spark">◆</div>
-      <div class="vh-hint">SHIFT — spend the spark · stone and sconces relight it · walls catch you · Esc leaves</div>`;
+      <div class="vh-hint">SHIFT — spend the spark · stone and sconces relight it · walls catch you · F raises the lamp · Esc leaves</div>`;
     ui.appendChild(this.hud);
+    this.voice = document.createElement('div');
+    this.voice.id = 'vault-voice';
+    ui.appendChild(this.voice);
   }
 
   // ---------------- geometry ----------------
@@ -217,17 +318,75 @@ export class VaultRun {
     }
   }
 
+  // ---------------- F11: camera-locked chambers ----------------
+
+  /**
+   * The frame for one chamber: centred on it, and far enough back that the
+   * whole slice fits with a margin of stone showing. Never closer than the
+   * old vault framing, so nothing about the body's read changes.
+   */
+  private chamberFrame(i: number): { cx: number; cz: number } {
+    const c = this.p.chambers[i];
+    const cols = c.x1 - c.x0 + 1;
+    const cz = Math.max(CHAMBER_Z_MIN,
+      Math.min(CHAMBER_Z_MAX, this.cam.distanceForWidth(cols + CHAMBER_PAD)));
+    // a chamber narrower than the frame gets the frame nudged back inside the
+    // room, so the spare screen shows stone rather than the void past the map
+    const hw = this.cam.halfW(cz);
+    let cx = (c.x0 + c.x1 + 1) / 2;
+    if (hw * 2 < this.p.w) cx = Math.min(this.p.w - hw, Math.max(hw, cx));
+    return { cx, cz };
+  }
+
+  /** the vertical band the frame may travel in without showing past the map */
+  private camYBand(cz: number): [number, number] {
+    const hh = this.cam.halfH(cz);
+    if (hh * 2 >= this.p.h) return [-this.p.h / 2, -this.p.h / 2];
+    return [-this.p.h + hh, -hh];
+  }
+
+  /** the cut: a chamber change is never a pan (P3, precision §4.2) */
+  private cutTo(i: number): void {
+    this.chamber = i;
+    const { cx, cz } = this.chamberFrame(i);
+    const [yMin, yMax] = this.camYBand(cz);
+    this.cam.snap(cx, Math.min(yMax, Math.max(yMin, this.py + 0.5)), cz);
+  }
+
+  /**
+   * Which chamber owns the body right now. Hysteresis of CHAMBER_HYST keeps a
+   * body loitering on a boundary column from strobing the frame between two
+   * chambers — you have to mean it before the room re-frames.
+   */
+  private chamberOf(px: number): number {
+    const c = this.p.chambers[this.chamber];
+    if (px >= c.x0 - CHAMBER_HYST && px <= c.x1 + 1 + CHAMBER_HYST) return this.chamber;
+    return chamberAt(this.p, Math.max(0, Math.min(this.p.w - 1, Math.floor(px))));
+  }
+
   // ---------------- construction ----------------
 
   private build(): void {
     const { p } = this;
     this.scene.background = new THREE.Color(0x05060c);
-    this.scene.add(new THREE.AmbientLight(0xbfc7ff, 0.62));
+    this.ambient = new THREE.AmbientLight(0xbfc7ff, AMBIENT_BASE);
+    this.scene.add(this.ambient);
     const key = new THREE.DirectionalLight(0xfff2d8, 0.35);
     key.position.set(0.4, 1, 0.8);
     this.scene.add(key);
 
-    // masonry
+    // masonry. In a room with any dark in it the whole room is a dark room:
+    // the value a stone takes is a function of how far it stands from the
+    // dark, which is what makes the three bands a RAMP and not a seam one
+    // course deep (P2, atmosphere §2).
+    const distDark = this.darkDistanceField();
+    const band = (i: number): number => {
+      if (!distDark) return 0.85 + Math.random() * 0.3;   // a lit room, as before
+      const d = distDark[i];
+      if (d < 0 || d > 3) return 0.055;                   // band 3 — true black
+      if (d <= 1) return 0.15;                            // band 2 — silhouette
+      return 0.1;
+    };
     let count = 0;
     for (let i = 0; i < p.w * p.h; i++) if (p.solid[i]) count++;
     const box = new THREE.BoxGeometry(1, 1, 1);
@@ -242,16 +401,21 @@ export class VaultRun {
         if (!p.solid[i]) continue;
         m4.makeTranslation(x + 0.5, -(y + 0.5), 0);
         inst.setMatrixAt(k, m4);
-        const nearDark =
-          (p.dark[i - 1] ?? 0) | (p.dark[i + 1] ?? 0) |
-          (p.dark[i - p.w] ?? 0) | (p.dark[i + p.w] ?? 0);
-        col.setHex(0x8f89a4).multiplyScalar(nearDark ? 0.16 : 0.85 + Math.random() * 0.3);
+        // Band 1 is the lamp core, where the standard material still does
+        // its work. Band 2 is the silhouette ring: stone near the dark is
+        // flattened to a constant, because the random grain that sells lit
+        // masonry is exactly what muddies a silhouette. Band 3 is true
+        // black, and the fog planes give that black its parallax.
+        col.setHex(0x8f89a4).multiplyScalar(band(i));
         inst.setColorAt(k, col);
         k++;
       }
     }
     inst.instanceMatrix.needsUpdate = true;
     this.scene.add(inst);
+
+    this.buildRimLattice();
+    this.buildDarkFog();
 
     // unlight
     const killMat = new THREE.MeshBasicMaterial({ color: 0x1a0508 });
@@ -267,6 +431,7 @@ export class VaultRun {
         const haze = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.8),
           new THREE.MeshBasicMaterial({ color: 0x4a1008, transparent: true, opacity: 0.5, depthWrite: false }));
         haze.position.set(x + 0.5, -(y + 0.5), 0.35);
+        this.killMats.push(seam.material as THREE.Material, haze.material as THREE.Material);
         this.scene.add(hole, seam, haze);
       }
     }
@@ -340,6 +505,7 @@ export class VaultRun {
       const bm = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
       const bolt = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? 1.4 : 0.34, horizontal ? 0.34 : 1.4, 0.4), bm);
       this.scene.add(rail, bolt);
+      this.shuttleRailMats.push(rail.material as THREE.Material);
       this.shuttleMeshes.push({ bolt, mat: bm });
     }
 
@@ -369,6 +535,7 @@ export class VaultRun {
         c.dx !== 0 ? 0.1 : c.w * 0.9, c.dx !== 0 ? c.h * 0.9 : 0.1),
         new THREE.MeshBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.5 }));
       face.position.set(c.dx !== 0 ? Math.sign(c.dx) * c.w / 2 : 0, c.dy !== 0 ? -Math.sign(c.dy) * c.h / 2 : 0, 0.51);
+      this.crusherFaceMats.push(face.material as THREE.Material);
       mesh.add(face);
       this.scene.add(mesh);
       this.crusherMeshes.push(mesh);
@@ -388,28 +555,91 @@ export class VaultRun {
       this.scene.add(this.pursuitMesh, this.pursuitEdgeMesh);
     }
 
-    // figures
+    // THE STANDING DEAD — the same rig the player wears, held in one of four
+    // postures, placed so the posture names the hazard ahead (§VI). Their
+    // material is near-black and slightly metallic on purpose: the lamp and
+    // the sconces catch their edges, so what you read is the silhouette and
+    // the rim, which is exactly what the reference sheets are of.
+    const figureMat = new THREE.MeshStandardMaterial({
+      color: 0x14161f, roughness: 0.42, metalness: 0.22, flatShading: true,
+    });
+    // the rim the reference sheets are actually of: a back-faced copy of the
+    // same posed rig, a hair larger, in the world's hue. The figure itself
+    // stays near-black, so what the room shows you is an outline
+    const figureRim = new THREE.MeshBasicMaterial({
+      color: this.rimHue, side: THREE.BackSide, toneMapped: false,
+    });
     for (const f of this.p.figures) {
-      const dark = new THREE.MeshBasicMaterial({ color: 0x05070c });
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.5, 0.2), dark);
-      body.position.set(f.x + 0.5, -(f.y + 1) + 0.75, 0.2);
-      const ember = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6),
-        new THREE.MeshBasicMaterial({ color: 0xff9a3c, transparent: true, opacity: 0.35 }));
-      ember.position.set(f.x + 0.5, -(f.y + 1) + 0.95, 0.31);
-      ember.name = 'figure-ember';
-      this.scene.add(body, ember);
+      const facing = f.x % 2 === 0 ? 1 : -1;
+      const suit = buildSuit();
+      poseFigure(suit, f.pose, facing);
+      suit.group.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) { m.material = figureMat; m.renderOrder = 1; }
+      });
+      const rim = buildSuit();
+      poseFigure(rim, f.pose, facing);
+      rim.group.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) m.material = figureRim;
+      });
+      rim.group.scale.multiplyScalar(1.06);
+      const holder = new THREE.Group();
+      holder.scale.setScalar(BODY);
+      holder.add(rim.group, suit.group);
+      // feet on the floor of the tile below the figure's cell, same as the
+      // body: the char's row is the LOWER of the two rows a figure occupies
+      holder.position.set(f.x + 0.5, -(f.y + 1) + HH, 0.2);
+      this.scene.add(holder);
+      // the lamp the posture is about: still raised out of the dust, or set
+      // down on the stone before he knelt. A hand lamp hangs off the elbow
+      // so it stays IN the hand whatever the roll does to the body; a ground
+      // lamp hangs off the holder so the figure's yaw cannot walk it away.
+      const lamp = figureLampAt(f.pose);
+      if (lamp) {
+        const lampMat = new THREE.MeshBasicMaterial({
+          color: 0xffc078, transparent: true, opacity: 0.95,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        });
+        const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.055, 0.07, 8), figureMat);
+        // the flame sits ON the lantern, not inside it — a wick sunk in the
+        // housing is a lamp nobody can see is still lit
+        const wick = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6), lampMat);
+        wick.position.y = 0.055;
+        shell.add(wick);
+        shell.position.set(...lamp.at);
+        if (lamp.mount === 'hand') figureNearElbow(suit, facing).add(shell);
+        else holder.add(shell);
+        this.figureGlows.push({ mat: lampMat, base: 0.8 });
+      }
+      // the ember in the chest lamp: still warm, and it rides the pose, so a
+      // fallen figure's is on the floor with him instead of hanging in the air
+      const emberMat = new THREE.MeshBasicMaterial({
+        color: 0xff9a3c, transparent: true, opacity: 0.35, toneMapped: false,
+      });
+      const ember = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), emberMat);
+      ember.position.set(facing * 0.036, -0.005, 0.088);
+      suit.group.add(ember);
+      this.figureGlows.push({ mat: emberMat, base: 0.3 });
     }
+
+    // the marks this room already carries from earlier attempts this session
+    for (const w of SPENT_WICKS.get(this.def.glyph) ?? []) this.addWick(w.x, w.y);
 
     // master stone
     this.masterGroup = new THREE.Group();
     const slab = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.8, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x2a2738, roughness: 0.4, metalness: 0.3 }));
     this.masterGroup.add(slab);
-    const mark = buildGlyphMark(this.glyph, 1.1, this.hue, true);
+    // the mark burns the world's own vivid note, the same hue the stone
+    // outside was wearing when you stepped through it
+    const mark = buildGlyphMark(this.glyph, 1.1, this.rimHue, true);
     mark.position.z = 0.25;
     this.masterGroup.add(mark);
-    const glow = new THREE.PointLight(this.hue, 3, 9, 1.6);
-    glow.position.z = 0.8;
+    // the chamber frame sits closer than the old following camera did, so the
+    // stone's own glow is pulled back off the mark to stop it blowing out
+    const glow = new THREE.PointLight(this.rimHue, 1.6, 7, 1.6);
+    glow.position.z = 1.6;
     this.masterGroup.add(glow);
     this.masterGroup.position.set(this.p.master.x + 0.5, -(this.p.master.y + 0.5), 0);
     this.scene.add(this.masterGroup);
@@ -459,6 +689,172 @@ export class VaultRun {
     body.add(this.suit.group, this.lamp);
     this.pilotGroup.add(body);
     this.scene.add(this.pilotGroup);
+  }
+
+  /**
+   * Tiles-to-nearest-dark-tile, 4-connected and blind to walls: the field the
+   * three value bands are cut from. Null when the room has no dark in it at
+   * all, which is the signal to leave its masonry alone.
+   */
+  private darkDistanceField(): Int16Array | null {
+    const { p } = this;
+    const n = p.w * p.h;
+    const d = new Int16Array(n).fill(-1);
+    const q: number[] = [];
+    for (let i = 0; i < n; i++) if (p.dark[i]) { d[i] = 0; q.push(i); }
+    if (!q.length) return null;
+    for (let head = 0; head < q.length; head++) {
+      const i = q[head];
+      if (d[i] >= 6) continue;              // past band 3 nothing changes
+      const x = i % p.w, y = (i / p.w) | 0;
+      const step = (nx: number, ny: number): void => {
+        if (nx < 0 || ny < 0 || nx >= p.w || ny >= p.h) return;
+        const j = ny * p.w + nx;
+        if (d[j] >= 0) return;
+        d[j] = d[i] + 1;
+        q.push(j);
+      };
+      step(x - 1, y); step(x + 1, y); step(x, y - 1); step(x, y + 1);
+    }
+    return d;
+  }
+
+  /**
+   * THE RIM-LIGHT LATTICE (§VI). Every exposed face of solid stone carries a
+   * faint constant emissive edge in the world's own hue — unlit, so it does
+   * not care how far the lamp reaches, and readable a good two tiles past it.
+   * Standable geometry therefore always has a shape in the dark.
+   *
+   * The holes in the lattice are the hazards: an edge that faces an `X` stud
+   * gets no rim, so unlight reads as the place where the guild's light
+   * stops. The studs carry their own ember seam, which is what keeps this
+   * honest against P2 — dark hides floors, never fangs.
+   */
+  private buildRimLattice(): void {
+    const { p } = this;
+    const open = (x: number, y: number): boolean => {
+      if (x < 0 || y < 0 || x >= p.w || y >= p.h) return false;
+      const i = y * p.w + x;
+      return !p.solid[i] && !p.kill[i];
+    };
+    // Act III mounted them in a hurry: crooked, and never struck the
+    // scaffolds (architecture as chronology, atmosphere §3.3)
+    const crooked = this.glyph.world === 'maelis6' ? 0.09 : 0;
+    const edges: { x: number; y: number; sx: number; sy: number }[] = [];
+    for (let y = 0; y < p.h; y++) {
+      for (let x = 0; x < p.w; x++) {
+        if (!p.solid[y * p.w + x]) continue;
+        const cx = x + 0.5, cy = -(y + 0.5);
+        if (open(x, y - 1)) edges.push({ x: cx, y: cy + 0.5 - RIM_W / 2, sx: RIM_L, sy: RIM_W });
+        if (open(x, y + 1)) edges.push({ x: cx, y: cy - 0.5 + RIM_W / 2, sx: RIM_L, sy: RIM_W });
+        if (open(x - 1, y)) edges.push({ x: cx - 0.5 + RIM_W / 2, y: cy, sx: RIM_W, sy: RIM_L });
+        if (open(x + 1, y)) edges.push({ x: cx + 0.5 - RIM_W / 2, y: cy, sx: RIM_W, sy: RIM_L });
+      }
+    }
+    if (!edges.length) return;
+    this.rimMat = new THREE.MeshBasicMaterial({
+      color: this.rimHue, transparent: true, opacity: RIM_BASE,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
+    const inst = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), this.rimMat, edges.length);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+    for (let i = 0; i < edges.length; i++) {
+      const ed = edges[i];
+      e.set(0, 0, crooked ? (Math.random() - 0.5) * crooked : 0);
+      q.setFromEuler(e);
+      pos.set(ed.x, ed.y, 0.505);
+      scl.set(ed.sx, ed.sy, 1);
+      inst.setMatrixAt(i, m4.compose(pos, q, scl));
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    inst.renderOrder = 2;
+    this.scene.add(inst);
+  }
+
+  /**
+   * Band 3 of the dark: two or three additive fog planes at DISTINCT z, so
+   * true black is not a flat void — it parallaxes against itself as the
+   * frame travels (atmosphere §2). Only built where the room is actually
+   * dark; a lit room has no use for it.
+   */
+  private buildDarkFog(): void {
+    const { p } = this;
+    let x0 = p.w, x1 = 0, y0 = p.h, y1 = 0, n = 0;
+    for (let y = 0; y < p.h; y++) {
+      for (let x = 0; x < p.w; x++) {
+        if (!p.dark[y * p.w + x]) continue;
+        n++;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+    }
+    if (n < 40) return;
+    const geo = new THREE.PlaneGeometry(1, 1);
+    // z is the whole point: back of the room, just behind the body, and one
+    // veil in front of everything
+    const layers = [
+      { z: -3.4, count: 10, size: 20, op: 0.15, drift: 0.055 },
+      { z: -0.9, count: 7, size: 15, op: 0.105, drift: 0.1 },
+      { z: 2.3, count: 5, size: 12, op: 0.07, drift: 0.17 },
+    ];
+    for (const L of layers) {
+      const mat = new THREE.MeshBasicMaterial({
+        map: softDisc(), color: this.rimHue, transparent: true, opacity: L.op,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+      });
+      for (let i = 0; i < L.count; i++) {
+        const mesh = new THREE.Mesh(geo, mat);
+        const w = L.size * (0.7 + Math.random() * 0.6);
+        mesh.scale.set(w, w * (0.5 + Math.random() * 0.4), 1);
+        mesh.position.set(
+          x0 + Math.random() * (x1 - x0 + 1),
+          -(y0 + Math.random() * (y1 - y0 + 1)),
+          L.z,
+        );
+        mesh.renderOrder = L.z > 0 ? 3 : 0;
+        this.scene.add(mesh);
+        this.fog.push({
+          mesh, x0: x0 - w, x1: x1 + w,
+          vx: L.drift * (Math.random() < 0.5 ? -1 : 1),
+        });
+      }
+    }
+  }
+
+  /**
+   * A spent wick: the small dark smudge a gutter leaves at the death point,
+   * with the same faint ember the standing dead carry — the marks and the
+   * guild are drawn in one language on purpose.
+   */
+  private addWick(x: number, y: number): void {
+    // soot over black is nothing, so the mark is a dark core with the HEAT
+    // still in its edge: an additive bloom of spent ember around the smudge.
+    // That is what makes a floor of them read at a glance.
+    const smudge = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.05),
+      new THREE.MeshBasicMaterial({
+        map: softDisc(), color: 0x07060a, transparent: true,
+        opacity: 0.85, depthWrite: false,
+      }));
+    smudge.position.set(x, y, 0.3);
+    const bloom = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.4),
+      new THREE.MeshBasicMaterial({
+        map: softDisc(), color: 0x4a1c08, transparent: true, opacity: 0.34,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+      }));
+    bloom.position.set(x, y, 0.29);
+    const emberMat = new THREE.MeshBasicMaterial({
+      color: 0xff9a3c, transparent: true, opacity: 0.34,
+    });
+    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), emberMat);
+    ember.position.set(x, y + 0.14, 0.33);
+    // named so the harness can count the marks a room is carrying
+    ember.name = 'figure-ember';
+    this.figureGlows.push({ mat: emberMat, base: 0.32 });
+    this.scene.add(bloom, smudge, ember);
   }
 
   private seedMote(i: number): void {
@@ -674,7 +1070,7 @@ export class VaultRun {
         this.sconceLit[i] = true;
         this.checkpoint = { x: s.x + 0.5, y: -(s.y + 0.5) - 0.2 };
         if (!this.def.deadLight) this.spark = true;
-        this.audio.sconce();
+        this.sconceChord(i);
         this.openDoors();
       } else if (this.sconceLit[i] && !this.def.deadLight && d < SCONCE_SPARK_R) {
         this.spark = true;
@@ -687,7 +1083,18 @@ export class VaultRun {
       this.phase = 'complete';
       this.phaseT = 0;
       this.vx = 0; this.vy = 0;
+      this.audio.duck(0.08, 3);      // ducking moment 2 of 4 (atmosphere §5)
       return;
+    }
+
+    // ducking moment 3: the first time the dark closes over you, once a run
+    if (!this.darkSeen) {
+      const tx = Math.floor(this.px), ty = Math.floor(-this.py);
+      if (tx >= 0 && ty >= 0 && tx < this.p.w && ty < this.p.h
+        && this.p.dark[ty * this.p.w + tx]) {
+        this.darkSeen = true;
+        this.audio.duck(0.08, 3);
+      }
     }
 
     // hazards
@@ -714,7 +1121,13 @@ export class VaultRun {
     }
     for (let i = 0; i < (this.def.crushers ?? []).length; i++) {
       const r = this.crusherRect(i);
-      if (this.px + HW > r.x0 && this.px - HW < r.x1 && this.py + HH > r.y1 && this.py - HH < r.y0) { this.reform(); return; }
+      if (this.px + HW > r.x0 && this.px - HW < r.x1 && this.py + HH > r.y1 && this.py - HH < r.y0) {
+        // shake fires on exactly two things in this game, and a piston
+        // actually landing on you is one of them (precision §5.2)
+        this.cam.addShake(SHAKE_CRUSH);
+        this.reform();
+        return;
+      }
     }
     if (this.pursuitOn && this.def.pursuit) {
       const pu = this.def.pursuit;
@@ -876,8 +1289,57 @@ export class VaultRun {
     return false;
   }
 
+  /**
+   * THE SCONCE CHORD (§VI). Lighting a sconce is not a pickup sound with a
+   * light attached — five systems fire on the same frame and settle
+   * together:
+   *
+   *   1. a real luminance bump across the whole room, which then settles a
+   *      notch brighter than it was (`ambient`, in the frame block)
+   *   2. the dash-refresh intake, so the room and the body agree that the
+   *      breath came back (`audio.chord`)
+   *   3. the ambience bed ducks ~6 dB for four seconds
+   *   4. the frame eases out ~8 % and settles (`chordT`, in the frame block)
+   *   5. the rim lattice strengthens a notch, permanently
+   *
+   * Plus the game's ONLY positive screenshake, soft. Shake otherwise fires
+   * on a crusher impact and a snuffer's theft, and nowhere else — never on
+   * jump, land, wall-jump, spark or re-form (precision §5.2).
+   */
+  private sconceChord(i: number): void {
+    this.chordT = 1;
+    this.audio.chord(i);
+    this.audio.duck(0.5, 4);
+    this.cam.addShake(SHAKE_SCONCE);
+  }
+
+  /**
+   * F, inside a vault: raise the lamp. Toward one of the dead it buys a line
+   * of the guild's own voice — free, skippable, and it gates nothing
+   * (atmosphere §1.2). Away from them it is just a light lifted.
+   */
+  raiseLamp(): void {
+    if (this.phase !== 'run') return;
+    this.lampRaise = 1;
+    let best = -1;
+    let bd = 4.5;
+    for (let i = 0; i < this.p.figures.length; i++) {
+      const f = this.p.figures[i];
+      const d = Math.hypot(this.px - (f.x + 0.5), this.py + f.y + 1);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best < 0 || !this.voice) return;
+    this.voice.textContent = GUILD_LINES[this.p.figures[best].pose];
+    this.voice.classList.add('on');
+    this.voiceT = 6;
+  }
+
   private reform(): void {
-    this.audio.reform();
+    // ONE continuous phrase: the flame collapses, a low tone holds, and the
+    // sconce's intake lands as the body re-forms. No sting, no failure
+    // sound, and the bed gets out of its way (atmosphere §5).
+    this.audio.gutter();
+    this.audio.duck(0.08, 3);
     this.reforms++;
     if (this.def.pursuit) { this.pursuitOn = false; this.pursuitDone = false; }
     // the gutter stays where you failed — a dark wick of you, briefly —
@@ -890,6 +1352,12 @@ export class VaultRun {
     ghost.position.set(this.px, this.py, 0.05);
     this.scene.add(ghost);
     this.trail.push({ mesh: ghost, t: 0.4 });
+    // the mark stays where the light went out, for the rest of the session
+    let wicks = SPENT_WICKS.get(this.def.glyph);
+    if (!wicks) { wicks = []; SPENT_WICKS.set(this.def.glyph, wicks); }
+    wicks.push({ x: this.px, y: this.py });
+    if (wicks.length > WICK_CAP) wicks.shift();
+    this.addWick(this.px, this.py);
     this.px = this.checkpoint.x;
     this.py = this.checkpoint.y;
     this.vx = 0; this.vy = 0;
@@ -901,7 +1369,9 @@ export class VaultRun {
     this.coyoteT = COYOTE;      // an instant jump off the re-form always works (F8)
     this.invuln = INVULN_T;
     this.reformT = REFORM_T;    // visual only — the body grows in around control
-    this.cam.snap(this.px, this.py + 0.5, 8.5 + this.cam.zoomBias);
+    // the frame cuts to the checkpoint's chamber; still a cut, never a pan,
+    // and still inside the 0.9 s budget (F10)
+    this.cutTo(chamberAt(this.p, Math.floor(this.px)));
   }
 
   private openDoors(): void {
@@ -913,6 +1383,122 @@ export class VaultRun {
         this.audio.complete();
       }
     }
+  }
+
+  // ---------------- P2: dark hides floors, never fangs ----------------
+
+  /**
+   * The dark-hazard census, read off the real scene for `scripts/vaults.mjs`.
+   *
+   * Every hazard's swept VOLUME — not its current position — is walked
+   * against the room's `d` tiles. Anything that reaches into the dark has to
+   * be self-luminous or carry a visible track, or the darkness is hiding a
+   * fang and the room is lying to the player (P2, atmosphere §2).
+   *
+   * "Self-luminous" is read off the material honestly: an unlit material
+   * (Basic/Line/Points) renders at full value no matter how far the lamp is,
+   * as does anything additive-blended or carrying emissive.
+   */
+  darkHazards(): { kind: string; i: number; dark: number; lit: boolean }[] {
+    const { p } = this;
+    const dark = (x: number, y: number): boolean => {
+      const tx = Math.floor(x), ty = Math.floor(-y);
+      if (tx < 0 || ty < 0 || tx >= p.w || ty >= p.h) return false;
+      return !!p.dark[ty * p.w + tx];
+    };
+    const luminous = (mats: (THREE.Material | undefined)[]): boolean =>
+      mats.some(m => {
+        if (!m) return false;
+        const any = m as THREE.Material & { emissiveIntensity?: number; isMeshBasicMaterial?: boolean; isLineBasicMaterial?: boolean; isPointsMaterial?: boolean };
+        return !!any.isMeshBasicMaterial || !!any.isLineBasicMaterial || !!any.isPointsMaterial
+          || m.blending === THREE.AdditiveBlending || (any.emissiveIntensity ?? 0) > 0;
+      });
+    const out: { kind: string; i: number; dark: number; lit: boolean }[] = [];
+    const count = (pts: [number, number][]): number => pts.reduce((n, q) => n + (dark(q[0], q[1]) ? 1 : 0), 0);
+
+    // the unlight studs themselves: their whole point is being in the dark
+    let studDark = 0;
+    for (let y = 0; y < p.h; y++) {
+      for (let x = 0; x < p.w; x++) {
+        if (!p.kill[y * p.w + x]) continue;
+        if (dark(x - 1, -y) || dark(x + 1, -y) || dark(x, -(y - 1)) || dark(x, -(y + 1))) studDark++;
+      }
+    }
+    if (studDark) out.push({ kind: 'stud', i: 0, dark: studDark, lit: luminous(this.killMats) });
+
+    // shuttles: the rail is the track, the bolt is the light
+    const shuttles = this.def.shuttles ?? [];
+    for (let i = 0; i < shuttles.length; i++) {
+      const sh = shuttles[i];
+      const pts: [number, number][] = [];
+      for (let t = 0; t <= 40; t++) {
+        const u = t / 40;
+        pts.push([sh.x0 + 0.5 + (sh.x1 - sh.x0) * u, -(sh.y0 + 0.5) - (sh.y1 - sh.y0) * u]);
+      }
+      out.push({ kind: 'shuttle', i, dark: count(pts),
+        lit: luminous([this.shuttleMeshes[i]?.mat, this.shuttleRailMats[i]]) });
+    }
+
+    // censers: the whole arc, not the lantern's current place on it
+    const censers = this.def.censers ?? [];
+    for (let i = 0; i < censers.length; i++) {
+      const c = censers[i];
+      const pts: [number, number][] = [];
+      for (let t = 0; t <= 24; t++) {
+        const a = -c.arc + (2 * c.arc * t) / 24;
+        pts.push([c.x + Math.sin(a) * c.len, -c.y - Math.cos(a) * c.len]);
+      }
+      const cm = this.censerMeshes[i];
+      const flame = cm?.bob.children.find(o => (o as THREE.Mesh).isMesh
+        && ((o as THREE.Mesh).material as THREE.Material & { isMeshBasicMaterial?: boolean }).isMeshBasicMaterial);
+      out.push({ kind: 'censer', i, dark: count(pts),
+        lit: luminous([(flame as THREE.Mesh | undefined)?.material as THREE.Material | undefined]) });
+    }
+
+    // crushers: rest rect ∪ fully-extended rect
+    const crushers = this.def.crushers ?? [];
+    for (let i = 0; i < crushers.length; i++) {
+      const c = crushers[i];
+      const pts: [number, number][] = [];
+      for (const ext of [0, 1]) {
+        for (let dx = 0; dx < c.w; dx++) {
+          for (let dy = 0; dy < c.h; dy++) {
+            pts.push([c.x + dx + 0.5 + c.dx * ext, -(c.y + dy + 0.5 + c.dy * ext)]);
+          }
+        }
+      }
+      out.push({ kind: 'crusher', i, dark: count(pts), lit: luminous([this.crusherFaceMats[i]]) });
+    }
+
+    // beams: the cone, marched to first stone at every angle it can point
+    const beams = this.def.beams ?? [];
+    for (let i = 0; i < beams.length; i++) {
+      const b = beams[i];
+      const pts: [number, number][] = [];
+      for (let a = 0; a < 36; a++) {
+        const ang = (a / 36) * Math.PI * 2;
+        let ex = b.x, ey = -b.y;
+        for (let st = 0; st < 90; st++) {
+          const nx = ex + Math.cos(ang) * 0.35, ny = ey + Math.sin(ang) * 0.35;
+          if (this.solidTile(Math.floor(nx), Math.floor(-ny))) break;
+          ex = nx; ey = ny;
+          pts.push([ex, ey]);
+        }
+      }
+      out.push({ kind: 'beam', i, dark: count(pts),
+        lit: luminous([this.beamRays[i]?.mesh.material as THREE.Material | undefined]) });
+    }
+
+    // the pursuit: its zone, and its burning leading edge
+    if (this.def.pursuit) {
+      const [zx0, zy0, zx1, zy1] = this.def.pursuit.zone;
+      const pts: [number, number][] = [];
+      for (let x = zx0; x <= zx1; x++) for (let y = zy0; y <= zy1; y++) pts.push([x + 0.5, -(y + 0.5)]);
+      out.push({ kind: 'pursuit', i: 0, dark: count(pts),
+        lit: luminous([this.pursuitEdgeMesh?.material as THREE.Material | undefined]) });
+    }
+
+    return out;
   }
 
   // ---------------- hazard positions ----------------
@@ -1064,7 +1650,7 @@ export class VaultRun {
       this.phaseT += dt;
       const n = Math.floor(this.phaseT / 0.35);
       for (let i = 0; i < Math.min(n, this.sconceLit.length); i++) {
-        if (!this.sconceLit[i]) { this.sconceLit[i] = true; this.audio.sconce(); }
+        if (!this.sconceLit[i]) { this.sconceLit[i] = true; this.sconceChord(i); }
       }
       this.masterGroup.scale.setScalar(1 + Math.sin(this.phaseT * 3) * 0.04);
       if (this.phaseT >= 2.4 && !this.completed) {
@@ -1078,6 +1664,27 @@ export class VaultRun {
     }
 
     // ---------------- visuals ----------------
+    // THE SCONCE CHORD, settling: one envelope drives the luminance bump,
+    // the frame's push-out and the lattice's flare, so the five systems can
+    // never drift out of agreement with each other (§VI).
+    this.chordT = Math.max(0, this.chordT - dt / CHORD_T);
+    const chord = this.chordT * this.chordT;
+    const lit = this.sconceLit.reduce((n, b) => n + (b ? 1 : 0), 0);
+    this.ambient.intensity = AMBIENT_BASE * (1 + 0.055 * lit) + 0.5 * chord;
+    if (this.rimMat) {
+      this.rimMat.opacity = Math.min(RIM_MAX, RIM_BASE + RIM_STEP * lit + 0.12 * chord);
+    }
+    // the fog banks drift, and their distinct z is what makes the black move
+    for (const f of this.fog) {
+      let x = f.mesh.position.x + f.vx * dt;
+      if (x < f.x0) x = f.x1;
+      if (x > f.x1) x = f.x0;
+      f.mesh.position.x = x;
+    }
+    for (let i = 0; i < this.figureGlows.length; i++) {
+      const fg = this.figureGlows[i];
+      fg.mat.opacity = fg.base * (1 + Math.sin(this.time * 1.3 + i) * 0.22);
+    }
     for (let i = 0; i < this.sconceMeshes.length; i++) {
       const sm = this.sconceMeshes[i];
       const lit = this.sconceLit[i];
@@ -1152,17 +1759,13 @@ export class VaultRun {
     // the body is the meter (F12): charged, the suit throws light on the
     // stone around it; spent, the room steps closer. Readable peripherally,
     // and in the dark rooms the meter IS the visibility.
-    const lampTarget = lampOn ? (this.spark ? 6 : 3.2) : (this.spark ? 1.6 : 0.6);
+    const lampTarget = (lampOn ? (this.spark ? 6 : 3.2) : (this.spark ? 1.6 : 0.6))
+      * (1 + 0.5 * this.lampRaise);
     this.lamp.intensity += (lampTarget - this.lamp.intensity) * Math.min(1, dt * 12);
     const reachTarget = (this.spark ? 6 : 4) * BODY;
     this.lamp.distance += (reachTarget - this.lamp.distance) * Math.min(1, dt * 8);
     const dot = this.masterGroup.getObjectByName('glyph-light');
     if (dot) dot.scale.setScalar(1 + Math.sin(this.time * 2.4) * 0.2);
-    for (const obj of this.scene.children) {
-      if (obj.name === 'figure-ember') {
-        (obj as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>).material.opacity = 0.25 + Math.sin(this.time * 0.9) * 0.12;
-      }
-    }
 
     // motes
     const pos = this.motes.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -1199,7 +1802,23 @@ export class VaultRun {
     sm.color.setHex(this.spark ? 0xbfe8ff : 0x2a3038);
     this.sparkMesh.rotation.y += dt * 3;
     this.sparkMesh.scale.setScalar(this.spark ? 1 + Math.sin(this.time * 6) * 0.15 : 0.7);
-    this.cam.follow(dt, this.px, this.py, this.vx, this.vy, true);
+    // F11 — the frame holds one chamber and CUTS when the body leaves it.
+    // Horizontally it never moves at all; vertically it still follows,
+    // because chambers are column splits and these rooms are tall.
+    const want = this.chamberOf(this.px);
+    if (want !== this.chamber) this.cutTo(want);
+    const { cx, cz } = this.chamberFrame(this.chamber);
+    const ez = cz * (1 + 0.08 * chord);
+    const [yMin, yMax] = this.camYBand(ez);
+    this.cam.followChamber(dt, cx, ez, this.py + 0.5, this.vy, yMin, yMax);
+
+    // the raised lamp: the light lifts and reaches while it is held up
+    this.lampRaise = Math.max(0, this.lampRaise - dt * 1.4);
+    this.lamp.position.y = 0.35 * this.lampRaise;
+    if (this.voiceT > 0) {
+      this.voiceT -= dt;
+      if (this.voiceT <= 0) this.voice?.classList.remove('on');
+    }
     const pip = this.hud.querySelector('.vh-spark') as HTMLDivElement | null;
     if (pip) pip.className = 'vh-spark' + (this.spark ? ' lit' : '');
   }
@@ -1213,7 +1832,9 @@ export class VaultRun {
       <div class="vc-glyph">${glyphSvg(this.glyph, 'vc-svg')}</div>
       <div class="vc-name">${this.glyph.name}</div>
       <div class="vc-text">${this.glyph.fragment}</div>
-      <div class="vc-reforms">${this.reforms === 0 ? 'unguttered' : `guttered ×${this.reforms}`}</div>
+      <div class="vc-reforms">${this.reforms === 0
+        ? 'no light spent'
+        : `${this.reforms} ${this.reforms === 1 ? 'light' : 'lights'} spent`}</div>
       <div class="vc-hint">E — STEP BACK THROUGH THE STONE</div>`;
     this.hud.parentElement?.appendChild(this.card);
   }
@@ -1238,6 +1859,7 @@ export class VaultRun {
   dispose(): void {
     this.hud.remove();
     this.card?.remove();
+    this.voice?.remove();
     this.scene.traverse(o => {
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose?.();

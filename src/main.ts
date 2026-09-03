@@ -42,7 +42,7 @@ import { AudioEngine } from './audio/audio';
 import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
 import { GlyphMarks, glyphById, GLYPHS, WORLD_GLYPHS } from './world/glyphs';
 import { VaultRun } from './game/vault';
-import { vaultByGlyph, VAULTS, parseVault } from './world/vaults';
+import { vaultByGlyph, VAULTS, parseVault, CHAMBER_MAX_W } from './world/vaults';
 import { Interior, InteriorPanel } from './game/interior';
 import { loadMeta, lockMeta } from './game/meta';
 import { rigFinish, flameStyle, lampTint, suitFinish, sparkStyle } from './game/cosmetics';
@@ -250,6 +250,7 @@ class Game {
     (window as unknown as { __GLYPHS: unknown }).__GLYPHS = GLYPHS;
     (window as unknown as { __VAULTS: unknown }).__VAULTS = VAULTS;
     (window as unknown as { __parseVault: unknown }).__parseVault = parseVault;
+    (window as unknown as { __CHAMBER_MAX_W: unknown }).__CHAMBER_MAX_W = CHAMBER_MAX_W;
     import('./game/meta').then(m => {
       (window as unknown as { __meta: unknown }).__meta = m;
     });
@@ -460,11 +461,12 @@ class Game {
     this.hud.clearToasts();
     this.comms.clear();
     this.map.close();
-    this.vault = new VaultRun(def, glyph, ACTIVE.core.body, this.settings.vaultAssist, {
-      sconce: () => this.audio.glyph(),
+    this.vault = new VaultRun(def, glyph, ACTIVE.core.body, ACTIVE.glyphHue, this.settings.vaultAssist, {
+      chord: i => this.audio.sconceChord(i),
       deny: () => this.audio.denied(),
-      reform: () => this.audio.airlock(),
+      gutter: () => this.audio.gutterPhrase(),
       complete: () => this.audio.glyph(),
+      duck: (to, hold) => this.audio.duckAmbience(to, hold),
     }, innerWidth / innerHeight, this.ui);
     this.mode = 'vault';
   }
@@ -1037,6 +1039,9 @@ class Game {
       case 'shaftlight': this.placeShaftlight(); break;
       case 'depot': this.placeDepot(); break;
       case 'lamp':
+        // inside a vault the lamp key RAISES the lamp — toward one of the
+        // guild's dead it buys a line of their voice (SPEC-VAULTS-2 §VI)
+        if (this.mode === 'vault') { this.vault?.raiseLamp(); break; }
         if (this.mode !== 'play' && this.mode !== 'eva') break;
         this.lampOn = !this.lampOn;
         this.audio.click();

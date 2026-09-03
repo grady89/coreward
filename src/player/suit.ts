@@ -390,3 +390,124 @@ export function suitPoseYOffset(s: Suit): number {
   return st ? FOOT_Y * (1 - st.sy) : 0;
 }
 
+// ---------------------------------------------------------------------------
+// THE STANDING DEAD — four postures, held (SPEC-VAULTS-2 §VI).
+//
+// Same rig, same sign conventions as poseSuit's targets block above: on a hip
+// NEGATIVE swings the leg forward, on a knee POSITIVE bends the heel back, on
+// a shoulder NEGATIVE raises the arm forward-up, on an elbow NEGATIVE folds
+// the forearm forward. Reference: reference-art/keeper-pose.
+//
+// These are held, not damped — a figure is a statue of a decision, and the
+// posture is signage: it names the hazard the room is about to ask about.
+
+export type FigurePose = 'reaching' | 'fallen' | 'curled' | 'kneeling';
+
+interface HeldPose {
+  turn: number; lean: number;
+  legL: number; legR: number; kneeL: number; kneeR: number;
+  armL: number; armR: number; elbowL: number; elbowR: number;
+  /**
+   * A shoulder roll, about z. The limbs otherwise swing only in the rig's yz
+   * plane, so a body lying on its side cannot raise an arm skyward without
+   * one — this is the joint that gets the lamp out of the dust.
+   */
+  armLZ?: number; armRZ?: number;
+  headX: number;
+  /**
+   * Where the body sits relative to a standing figure's feet, in SUIT-LOCAL
+   * units — callers scale the whole rig by their body size, so one unit here
+   * is one body, not one tile. A standing sole sits at FOOT_Y (-0.26), which
+   * is why a body lying on its side only wants about -0.15.
+   */
+  dropY: number;
+  /** the lamp this posture is about, and what it rides on. null = none. */
+  lamp: { mount: 'hand' | 'ground'; at: [number, number, number] } | null;
+}
+
+// Turn matters more here than any single joint. The rig's limbs swing in its
+// own yz plane, so a figure squared up to the camera foreshortens every reach
+// into nothing: a posture that has to READ from the side is authored near
+// profile (|turn| ~ 1.3, the angle the gait itself reaches at full speed).
+const HELD: Record<FigurePose, HeldPose> = {
+  // reaching: up and out for a cup that was always one hand too far
+  // The helmet is 40 % of this silhouette and the arm, shoulder to hand, is
+  // shorter than the dome is wide: raised straight up the hand never clears
+  // the helmet, and rolled outward it only travels into depth once the
+  // figure is in profile. So the reach goes up and FORWARD at about 45,
+  // which in profile is up-and-across the screen, clear of the torso — and
+  // the map is what names the thing being reached for.
+  reaching: {
+    turn: 1.4, lean: -0.34,
+    legL: -0.32, legR: 0.38, kneeL: 0.54, kneeR: 0.08,
+    armL: -2.4, armR: -0.95, elbowL: 0, elbowR: -0.5,
+    headX: -0.66, dropY: 0, lamp: null,
+  },
+  // fallen, lamp still raised: on his back, one arm up, the light held out of
+  // the dust because the light was the job. The tilt is a screen-plane roll —
+  // a pitch about x would only foreshorten him back into a standing blob.
+  fallen: {
+    turn: 0.3, lean: -1.42,
+    legL: -0.42, legR: -0.16, kneeL: 0.72, kneeR: 0.34,
+    // the body is rolled 81 degrees, so the arm that has to point at the
+    // ceiling points along the body's own -x: that is what armLZ is for
+    armL: -0.14, armR: 0.5, elbowL: -0.16, elbowR: -0.3,
+    armLZ: -1.5,
+    headX: 0.3, dropY: -0.15,
+    lamp: { mount: 'hand', at: [0, -0.062, 0.01] },
+  },
+  // curled away: sat down, knees up, head tucked, shoulder to what is coming
+  curled: {
+    turn: 1.32, lean: 0.2,
+    legL: -1.72, legR: -1.55, kneeL: 2, kneeR: 1.85,
+    armL: -1.1, armR: -0.9, elbowL: -1.8, elbowR: -1.65,
+    headX: 0.66, dropY: -0.09, lamp: null,
+  },
+  // kneeling, lamp set down: the shift ended here, and he set it down first
+  kneeling: {
+    turn: 1.24, lean: -0.06,
+    legL: -1.4, legR: 0.52, kneeL: 2.1, kneeR: 1.6,
+    armL: -0.5, armR: -0.62, elbowL: -1.05, elbowR: -0.95,
+    headX: 0.5, dropY: -0.06,
+    lamp: { mount: 'ground', at: [0.17, -0.2, 0.18] },
+  },
+};
+
+/** the lamp this posture carries, and what to hang it on */
+export function figureLampAt(pose: FigurePose): HeldPose['lamp'] {
+  return HELD[pose].lamp;
+}
+
+/** the elbow of whichever arm ends up nearest the camera once `facing` is
+ *  applied — where a held prop belongs, so it stays in the hand */
+export function figureNearElbow(s: Suit, facing: number): THREE.Group {
+  return facing < 0 ? s.elbowR : s.elbowL;
+}
+
+/**
+ * Hold one of the four postures. `facing` mirrors the whole figure, so a
+ * cluster reads as a group rather than a row of clones.
+ */
+export function poseFigure(s: Suit, pose: FigurePose, facing = 1): void {
+  const h = HELD[pose];
+  s.group.rotation.set(0, h.turn * facing, h.lean * facing);
+  // Mirroring swaps which limb is the CAMERA-SIDE one, and every posture in
+  // the table is authored with its expressive limb on the left. Swap the
+  // pairs when the figure is flipped, or a mirrored reach hides behind its
+  // own torso and reads as a stumble.
+  const flip = facing < 0;
+  const L = <T,>(a: T, b: T): T => (flip ? b : a);
+  s.legL.rotation.x = L(h.legL, h.legR);
+  s.legR.rotation.x = L(h.legR, h.legL);
+  s.kneeL.rotation.x = L(h.kneeL, h.kneeR);
+  s.kneeR.rotation.x = L(h.kneeR, h.kneeL);
+  s.armL.rotation.x = L(h.armL, h.armR);
+  s.armR.rotation.x = L(h.armR, h.armL);
+  s.armL.rotation.z = L(h.armLZ ?? 0, h.armRZ ?? 0) * facing;
+  s.armR.rotation.z = L(h.armRZ ?? 0, h.armLZ ?? 0) * facing;
+  s.elbowL.rotation.x = L(h.elbowL, h.elbowR);
+  s.elbowR.rotation.x = L(h.elbowR, h.elbowL);
+  s.helmet.rotation.x = h.headX;
+  s.group.position.set(0, h.dropY, 0);
+  s.group.scale.set(1, 1, 1);
+}

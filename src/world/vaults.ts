@@ -14,8 +14,16 @@
 //   A  light bridge, group A    b  light bridge, group B (A on while b off)
 //   R  rime shelf — crumbles underfoot, regrows later
 //   ^  air, gravity points UP   >  air, gravity points RIGHT
-//   <  air, gravity points LEFT K  an unlit figure, standing (decor)
+//   <  air, gravity points LEFT
 //   1 2  door masonry — melts open once enough sconces burn (def.doorNeeds)
+//
+// The dead of the guild, one char per posture (SPEC-VAULTS-2 §VI, the figure
+// posture grammar). Posture names the hazard ahead, so these are placed like
+// signage, not scenery:
+//   K  reaching   — the thing above/beyond is the answer, and they died short
+//   F  fallen, lamp still raised — something struck from a direction
+//   C  curled away — do not go this way
+//   N  kneeling, lamp set down — the shift ended here
 //
 // Moving hazards live in the defs: shuttles (bolts of light on a rail),
 // censers (swinging lanterns on chains), crushers (stone pistons still
@@ -64,9 +72,30 @@ export interface WindDef {
   dir: -1 | 1; calm: number; gust: number; force: number;
 }
 
+/** P3: no camera-locked chamber is wider than this many columns */
+export const CHAMBER_MAX_W = 22;
+
+export type FigurePose = 'reaching' | 'fallen' | 'curled' | 'kneeling';
+
 export interface VaultDef {
   glyph: string;
   map: string[];
+  /**
+   * F11 — camera-locked chambers. The columns where the camera CUTS: the room
+   * is partitioned into vertical slices, the camera frames one slice at a
+   * time and hard-cuts when the body crosses a boundary. It never pans
+   * sideways, so the whole question is on screen before it is answered
+   * (P3, precision §4.1).
+   *
+   * Authoring rules, both linted by `scripts/vaults.mjs`:
+   *   · no chamber wider than CHAMBER_MAX_W columns
+   *   · a sconce stands at every boundary column — the checkpoint you light
+   *     before you commit to what the cut reveals
+   *
+   * A boundary column belongs to the chamber BEFORE it, which is also what
+   * keeps a final chamber sconce-free (P4).
+   */
+  chambers?: number[];
   /** the Famine: its sconces checkpoint you but give NOTHING back */
   deadLight?: boolean;
   /** door char → how many lit sconces melt it open */
@@ -90,6 +119,9 @@ export const VAULTS: VaultDef[] = [
   // studs of unlight that force you to change walls.
   {
     glyph: 'wick',
+    // the four sconces already stood where the ideas change: the floor gap,
+    // the floating relight, the chimney mouth, the wick itself
+    chambers: [13, 28, 36, 47],
     map: [
       '########################################################',
       '########################################################',
@@ -116,7 +148,7 @@ export const VAULTS: VaultDef[] = [
       '#......................................................#',
       '#...........................S..........................#',
       '#......................................................#',
-      '#..@.........S......................S..................#',
+      '#..@.........S.........C............S..................#',
       '########XXX####XXXXX####XXXXXXXXX#######################',
       '########################################################',
       '########################################################',
@@ -128,6 +160,9 @@ export const VAULTS: VaultDef[] = [
   // to one spark and a landing. The first shuttle bolts patrol the runs.
   {
     glyph: 'famine',
+    // three halls stacked, each too long to frame whole: cut mid-hall, and
+    // the mid-hall sconce is the one dead light you are glad of
+    chambers: [12, 28, 43],
     deadLight: true,
     shuttles: [
       { x0: 18, y0: 21, x1: 28, y1: 21, period: 2.6, phase: 0 },
@@ -157,7 +192,7 @@ export const VAULTS: VaultDef[] = [
       '############################################...###',
       '#................................................#',
       '#................................................#',
-      '#..@.............................................#',
+      '#..@........................S....................#',
       '############XXXX##############XXXXX###############',
       '##################################################',
       '##################################################',
@@ -169,6 +204,9 @@ export const VAULTS: VaultDef[] = [
   // way down is rimmed with unlight; the last hall swings a censer.
   {
     glyph: 'shift',
+    // each landing is its own chamber; the boundary sconce is the one you
+    // light before the lantern over the next one can see you
+    chambers: [12, 25, 36],
     beams: [
       { x: 25.5, y: 4.2, period: 4.2, phase: 0, spin: true },
       { x: 26.5, y: 13.2, period: 3.4, phase: 0.35, spin: true },
@@ -184,7 +222,7 @@ export const VAULTS: VaultDef[] = [
       '#..................................................#',
       '#..................................................#',
       '#..@.......##..............##...............##.....#',
-      '#..........##..............##.......S.......##.....#',
+      '#..........##..............##.......S.......##N....#',
       '###############################################..###',
       '###############################################..###',
       '###############################################..###',
@@ -226,6 +264,8 @@ export const VAULTS: VaultDef[] = [
   // the second chamber's climb.
   {
     glyph: 'vault',
+    // the metronome hall, cut either side of the great door column
+    chambers: [11, 21, 37],
     doorNeeds: { '1': 2, '2': 3 },
     shuttles: [
       { x0: 38, y0: 10, x1: 38, y1: 25, period: 3.2, phase: 0 },
@@ -265,6 +305,9 @@ export const VAULTS: VaultDef[] = [
   // were only ever young ice. The seed sits in the one calm pocket.
   {
     glyph: 'ember',
+    // a 44-row shaft: the cuts are vertical seams down it, so the drift you
+    // take on the way down decides which chamber you land in
+    chambers: [12, 21, 33],
     censers: [
       { x: 23, y: 12, len: 3.6, arc: 0.95, period: 2.9, phase: 0 },
     ],
@@ -299,7 +342,7 @@ export const VAULTS: VaultDef[] = [
       '########..............................########',
       '########..........RRRR................########',
       '########..............................########',
-      '########....RRRR..............S.......########',
+      '########....RRRR.....S................########',
       '########..............................########',
       '########..............RRRR............########',
       '########..............................########',
@@ -307,7 +350,7 @@ export const VAULTS: VaultDef[] = [
       '########..............................########',
       '########....RRRR......................########',
       '########..............................########',
-      '########..........RRRR.....RRRR.......########',
+      '########..........RRRR.....RRRR..S....########',
       '########..............................########',
       '########......RRRR....................########',
       '########..............................########',
@@ -327,6 +370,9 @@ export const VAULTS: VaultDef[] = [
   // out or not at all.
   {
     glyph: 'weather',
+    // one shelter per chamber: the gust crossing is always exactly as long
+    // as the frame, which is the whole reason the crossing reads
+    chambers: [12, 22, 34, 48],
     wind: { dir: -1, calm: 3.0, gust: 2.4, force: 30 },
     censers: [
       { x: 26, y: 7, len: 5, arc: 0.85, period: 3.1, phase: 0 },
@@ -375,6 +421,9 @@ export const VAULTS: VaultDef[] = [
   // pistons still cycle on both sides — mirrored, out of phase.
   {
     glyph: 'debt',
+    // one cut at the shared wall, one inside the upside-down cell — the
+    // arithmetic is paid twice, so it is framed twice
+    chambers: [20, 37],
     doorNeeds: { '1': 2 },
     crushers: [
       // left cell: pistons emerge from the walls across the ledge climb
@@ -388,7 +437,7 @@ export const VAULTS: VaultDef[] = [
       '######################################################',
       '######################################################',
       '######################################################',
-      '#....................^^^^^^XXX^^^^^^^^XX^^^^^^^^^^^^^#'.slice(0, 53) + '#',
+      '#....................^^^^^^XXX^^^^^^^SXX^^^^^^^^^^^^^'.slice(0, 53) + '#',
       '#....................^^S^^^^^^^^^^^^^^^^^^^^^1^^^M^^^'.slice(0, 53) + '#',
       '#....................^^^^^^^^^^^^^^^^^^^^^^^^1^^^^^^^'.slice(0, 53) + '#',
       '#..............####..#####^^^^^^^^^^^^^^^^^^^1^^^^^^^'.slice(0, 53) + '#',
@@ -403,7 +452,7 @@ export const VAULTS: VaultDef[] = [
       '#....................#####^^^^^^^^^^^^^^^^^^^^^^^^^^^'.slice(0, 53) + '#',
       '#....................#####^^^^^^^^^^^^^^^^^^^^^^^^^^^'.slice(0, 53) + '#',
       '#....................#####^^^^^^^^^^^^^^^^^^^^^^^^^^^'.slice(0, 53) + '#',
-      '#..@.................#####^^^^^^^^^^^^^^^^^^^^^^^^^^^'.slice(0, 53) + '#',
+      '#..@......F.........S#####^^^^^^^^^^^^^^^^^^^^^^^^^^^'.slice(0, 53) + '#',
       '######################################################',
       '######################################################',
       '######################################################',
@@ -415,6 +464,8 @@ export const VAULTS: VaultDef[] = [
   // who stayed and lit the sconce beside it.
   {
     glyph: 'return',
+    // the U walked in full, cut at its three corners
+    chambers: [5, 26, 39],
     doorNeeds: { '1': 2 },
     censers: [
       { x: 6, y: 10, len: 3.2, arc: 1.0, period: 2.5, phase: 0 },
@@ -473,6 +524,9 @@ export const VAULTS: VaultDef[] = [
   // dark itself follows you to the four who stayed.
   {
     glyph: 'kindled',
+    // four movements, four chambers wide enough to hold one each — and the
+    // last one holds the four who stayed and no sconce at all (P4)
+    chambers: [16, 32, 48],
     pursuit: {
       zone: [2, 4, 46, 8],
       dir: 'right',
@@ -499,8 +553,8 @@ export const VAULTS: VaultDef[] = [
       '##########################################################',
       '##dddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
       '##ddddddddddddddddddddddddddddddddddddddddddddddddddddMd##',
-      '##ddSdddddddddddddddddddddddddddddddddddddddddddKKKKdddd##',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '##ddSddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '##dddddddddddddddddddddddddddddddddddddddddddddddKFCNddd##',
       '####ddd#############XXX#########XXX########XX#############',
       '####ddd###################################################',
       '####ddd###################################################',
@@ -532,7 +586,7 @@ export const VAULTS: VaultDef[] = [
       '###################################################ddd####',
       '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
       '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '##d@ddddddddddddSdddddddddddddddddddddddSddddddddddddd####',
+      '##d@ddddddddddddSdddddddddddddddSdddddddSddddddddddddd####',
       '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
       '############XXXX############XXXX##########################',
       '##########################################################',
@@ -547,6 +601,9 @@ export const vaultByGlyph = (id: string): VaultDef | undefined => VAULTS.find(v 
 
 // ---------------------------------------------------------------------------
 
+/** one camera-locked slice of a room, inclusive column bounds */
+export interface Chamber { x0: number; x1: number }
+
 export interface ParsedVault {
   w: number;
   h: number;
@@ -558,9 +615,37 @@ export interface ParsedVault {
   bridges: { x: number; y: number; group: 0 | 1 }[];
   rime: { x: number; y: number }[];
   sconces: { x: number; y: number }[];
-  figures: { x: number; y: number }[];
+  figures: { x: number; y: number; pose: FigurePose }[];
   entry: { x: number; y: number };
   master: { x: number; y: number };
+  /** the camera's slices, left to right; always at least one */
+  chambers: Chamber[];
+  /** the declared boundary columns, sorted — [] when the room is one chamber */
+  cuts: number[];
+}
+
+const FIGURE_CHARS: Record<string, FigurePose> = {
+  K: 'reaching', F: 'fallen', C: 'curled', N: 'kneeling',
+};
+
+/**
+ * Splits → inclusive spans. A boundary column belongs to the chamber BEFORE
+ * it, so `chamberAt` puts the boundary sconce in the chamber you light it
+ * from, and the chamber past the cut starts clean (P3/P4).
+ */
+export function chambersOf(w: number, cuts: number[]): Chamber[] {
+  const cs = [...new Set(cuts)].filter(c => c > 0 && c < w - 1).sort((a, b) => a - b);
+  const out: Chamber[] = [];
+  let x0 = 0;
+  for (const c of cs) { out.push({ x0, x1: c }); x0 = c + 1; }
+  out.push({ x0, x1: w - 1 });
+  return out;
+}
+
+/** which chamber owns this tile column */
+export function chamberAt(p: ParsedVault, tx: number): number {
+  for (let i = 0; i < p.chambers.length; i++) if (tx <= p.chambers[i].x1) return i;
+  return p.chambers.length - 1;
 }
 
 export function parseVault(def: VaultDef): ParsedVault {
@@ -574,6 +659,8 @@ export function parseVault(def: VaultDef): ParsedVault {
     gravity: new Int8Array(w * h),
     doors: [], bridges: [], rime: [], sconces: [], figures: [],
     entry: { x: 2, y: 2 }, master: { x: w - 3, y: 2 },
+    chambers: chambersOf(w, def.chambers ?? []),
+    cuts: [...(def.chambers ?? [])].sort((a, b) => a - b),
   };
   const door = (ch: string): { ch: string; tiles: { x: number; y: number }[] } => {
     let d = p.doors.find(d => d.ch === ch);
@@ -598,7 +685,8 @@ export function parseVault(def: VaultDef): ParsedVault {
         case 'b': p.bridges.push({ x, y, group: 1 }); break;
         case 'R': p.rime.push({ x, y }); break;
         case 'S': p.sconces.push({ x, y }); break;
-        case 'K': p.figures.push({ x, y }); break;
+        case 'K': case 'F': case 'C': case 'N':
+          p.figures.push({ x, y, pose: FIGURE_CHARS[c] }); break;
         case '@': p.entry = { x, y }; break;
         case 'M': p.master = { x, y }; break;
         case '.': break;

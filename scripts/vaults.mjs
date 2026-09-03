@@ -1,7 +1,9 @@
-// THE NINE STONES, second pass: the light-dash movement set (spark, wall
+// THE NINE STONES, third pass: the light-dash movement set (spark, wall
 // moves, coyote/buffer), sconce economy, doors, shuttles, censers,
 // crushers, pursuit, spin-beams with cover, completion, codex, the
-// gallery, grandfathering, the KINDLE gate.
+// gallery, grandfathering, the KINDLE gate — plus the V2 presentation core:
+// camera-locked chambers that CUT, and the three pillar lints (chamber
+// width, sconce-at-boundary, dark-hazard-emissive).
 import { chromium } from 'playwright';
 
 const OUT = process.argv[2] ?? '.';
@@ -81,10 +83,28 @@ const entry = await page.evaluate(async () => {
   const woke = await until(() => g.glyphMarks.chargeOf(s.id) >= 1, 200);
   key('KeyE'); key('KeyE', false);
   const inVault = await until(() => g.mode === 'vault', 20);
-  return { eva, early, woke, inVault, glyph: g.vault?.glyphId, spark: g.vault?.spark };
+  // F11: the frame is chamber-locked from the first frame — centred on the
+  // entry chamber, and far enough back that the whole slice fits. The old
+  // assertion here was that the camera had settled onto the BODY; it now
+  // has to be on the CHAMBER instead.
+  const v = g.vault;
+  const p = v.p;
+  const ch = p.chambers[v.chamber];
+  const cam = v.cam.camera;
+  const halfW = v.cam.halfW();
+  return {
+    eva, early, woke, inVault, glyph: v?.glyphId, spark: v?.spark,
+    chambers: p.chambers.length,
+    chamber: v.chamber,
+    entryInChamber: p.entry.x >= ch.x0 && p.entry.x <= ch.x1,
+    onFrame: Math.abs(cam.position.x - v.chamberFrame(v.chamber).cx) < 0.02,
+    framesChamber: halfW * 2 >= (ch.x1 - ch.x0 + 1),
+  };
 });
 ok('entry on foot', entry, entry.eva && entry.early === false && entry.woke && entry.inVault
-  && entry.glyph === 'wick' && entry.spark === true);
+  && entry.glyph === 'wick' && entry.spark === true
+  && entry.chambers === 5 && entry.chamber === 0 && entry.entryInChamber
+  && entry.onFrame && entry.framesChamber);
 await page.screenshot({ path: OUT + '/v-wick.png' });
 
 // --- the spark: a dash spends it, landing relights it ---
@@ -163,9 +183,16 @@ const reform = await page.evaluate(async () => {
   const atCheckpoint = Math.abs(v.px - cx) < 0.01 && v.phase === 'run';
   v.jumpPress();
   const jumped = await until(() => v.vy > 4, 15, 30);
+  // the cut: the frame is already sitting on the checkpoint's chamber, dead
+  // on its centre — a snap, with no interpolated frame in between (F10/P3)
+  const p = v.p;
+  const want = p.chambers.findIndex(c => Math.floor(cx) <= c.x1);
   return { guttered, atCheckpoint, jumped, retryMs: Math.round(retryMs),
     reforms: v.reforms, spark: v.spark,
-    camCut: Math.abs(g.vault.cam.camera.position.x - cx) < 3 };
+    chamber: v.chamber, want,
+    camCut: v.chamber === want
+      && Math.abs(v.cam.camera.position.x - v.chamberFrame(want).cx) < 0.02,
+    wick: (window.__VAULTS.find(x => x.glyph === 'wick').chambers ?? []).length > 0 };
 });
 ok('re-form', reform, reform.guttered && reform.atCheckpoint && reform.jumped
   && reform.retryMs < 900 && reform.reforms >= 1 && reform.spark && reform.camCut);
@@ -212,23 +239,44 @@ const buffered = await page.evaluate(async () => {
 });
 ok('buffer through spark', buffered, buffered.jumped && buffered.spentAtPress);
 
-// --- a lit sconce relights the spark mid-air ---
+// --- a lit sconce relights the spark mid-air, ACROSS a chamber cut ---
+// The floating sconce of the wick stands on a chamber boundary by authoring
+// rule (P3), so this doubles as the cut's own test: the frame must change
+// chamber and land exactly on the new chamber's centre, and the relight has
+// to survive that. The old version assumed a camera that followed the body.
 const crystal = await page.evaluate(async () => {
   const { g, until, vaultOf, off } = window.__H();
   const v = g.vault;
   const p = vaultOf('wick');
   const si = p.sconces.findIndex(x => x.y === 23); // the floating one
   const s = p.sconces[si];
-  // light it first (touch), then hover past it airborne with the spark spent
+  const boundary = v.p.cuts.includes(s.x);
+  const before = v.p.chambers.findIndex(c => s.x <= c.x1);
   v.px = s.x + 0.5; v.py = -(s.y + 0.5); v.vx = 0; v.vy = 0;
   const lit = await until(() => v.sconceLit[si], 20, 50);
+  await until(() => v.chamber === before, 20, 50);
+  // the chord it just fired put a soft shake on the frame; let that die
+  // before measuring, or the lock reads as a wobble
+  await new Promise(r => setTimeout(r, 400));
+  const camBefore = v.cam.camera.position.x;
   v.dash({ ...off(), up: true });
   await until(() => !v.spark, 10, 50);
   v.px = s.x + 0.5; v.py = -(s.y + 0.5) - 0.4; // back into the glow, airborne
   const relit = await until(() => v.spark, 20, 50);
-  return { lit, relit };
+  // travel a long way INSIDE the chamber: the frame must not budge a pixel
+  v.px = v.p.chambers[before].x0 + 0.6; v.vx = 0; v.vy = 0;
+  await new Promise(r => setTimeout(r, 350));
+  const locked = Math.abs(v.cam.camera.position.x - camBefore) < 0.001;
+  // then step across the boundary: a CUT, never a pan
+  v.px = s.x + 1.6; v.vx = 0; v.vy = 0;
+  const cut = await until(() => v.chamber === before + 1, 20, 50);
+  const camAfter = v.cam.camera.position.x;
+  return { lit, relit, boundary, cut, locked,
+    moved: +Math.abs(camAfter - camBefore).toFixed(2),
+    onFrame: Math.abs(camAfter - v.chamberFrame(v.chamber).cx) < 0.02 };
 });
-ok('sconce crystal', crystal, crystal.lit && crystal.relit);
+ok('sconce crystal', crystal, crystal.lit && crystal.relit && crystal.boundary
+  && crystal.cut && crystal.locked && crystal.onFrame && crystal.moved > 1);
 
 // --- complete the wick: card carries the gutter count, codex fills ---
 const complete = await page.evaluate(async () => {
@@ -412,6 +460,134 @@ const kindled = await page.evaluate(async () => {
 ok('the kindled', kindled, kindled.figures === 4 && kindled.sconces >= 5 && kindled.kit);
 await page.screenshot({ path: OUT + '/v-kindled.png' });
 
+// --- THE SCONCE CHORD: five systems on one frame, settling together ---
+const chord = await page.evaluate(async () => {
+  const { g, until } = window.__H();
+  const v = g.vault;
+  await until(() => v.phase === 'run', 20);
+  // a spy on the audio side of the chord — the bed has to duck too
+  const calls = [];
+  const real = v.audio;
+  v.audio = {
+    chord: i => calls.push('chord' + i), deny: () => calls.push('deny'),
+    gutter: () => calls.push('gutter'), complete: () => calls.push('complete'),
+    duck: (to, hold) => calls.push('duck ' + to + '/' + hold),
+  };
+  // and a spy on the shake channel: it decays inside a frame or two, so the
+  // only honest way to see it is at the source
+  const shakes = [];
+  const realShake = v.cam.addShake.bind(v.cam);
+  v.cam.addShake = a => { shakes.push(+a.toFixed(3)); realShake(a); };
+  const si = v.sconceLit.findIndex(x => !x);
+  const s = v.p.sconces[si];
+  const lum0 = v.ambient.intensity;
+  const rim0 = v.rimMat.opacity;
+  const z0 = v.cam.camera.position.z;
+  v.px = s.x + 0.5; v.py = -(s.y + 0.5); v.vx = 0; v.vy = 0; v.invuln = 999;
+  await until(() => v.sconceLit[si], 20, 50);
+  await new Promise(r => setTimeout(r, 60));
+  const lum1 = v.ambient.intensity;
+  const rim1 = v.rimMat.opacity;
+  // the frame's push-out is an EASE, and headless clamps dt to 50 ms, so a
+  // single read lands wherever the frame happened to fall — watch the whole
+  // gesture and take its furthest point
+  let z1 = v.cam.camera.position.z;
+  for (let i = 0; i < 14; i++) {
+    await new Promise(r => setTimeout(r, 50));
+    z1 = Math.max(z1, v.cam.camera.position.z);
+  }
+  // and then it settles — a notch brighter and a notch stronger than before
+  await new Promise(r => setTimeout(r, 1800));
+  const lum2 = v.ambient.intensity;
+  const rim2 = v.rimMat.opacity;
+  // THE SHAKE BAN (precision §5.2): jump, land, wall-jump, spark and the
+  // gutter must add nothing to that channel. Only the chord did, and softly.
+  // every sconce already burning and clear of them all, so nothing but the
+  // banned verbs can touch the channel from here
+  for (let i = 0; i < v.sconceLit.length; i++) v.sconceLit[i] = true;
+  v.px = 24.5; v.py = -39.5; v.vx = 0; v.vy = 0;
+  await new Promise(r => setTimeout(r, 200));
+  const afterChord = shakes.length;
+  v.jumpPress(); v.jumpRelease();
+  await new Promise(r => setTimeout(r, 250));
+  v.dash({ left: false, right: true, up: false, down: false });
+  await new Promise(r => setTimeout(r, 350));
+  v.reform();
+  await new Promise(r => setTimeout(r, 250));
+  const banned = shakes.length - afterChord;
+  v.cam.addShake = realShake;
+  v.audio = real;
+  return {
+    bump: +(lum1 - lum0).toFixed(3), settledUp: +(lum2 - lum0).toFixed(3),
+    rimFlare: +(rim1 - rim0).toFixed(3), rimNotch: +(rim2 - rim0).toFixed(3),
+    easedOut: +(z1 - z0).toFixed(2), shakes, banned, calls,
+  };
+});
+ok('the sconce chord', chord,
+  chord.bump > 0.2 && chord.settledUp > 0 && chord.settledUp < chord.bump
+  && chord.rimFlare > 0.05 && chord.rimNotch > 0 && chord.rimNotch < chord.rimFlare
+  && chord.easedOut > 0.4 && chord.easedOut < 1.6
+  && chord.shakes.length === 1 && chord.shakes[0] > 0 && chord.shakes[0] <= 0.25
+  && chord.banned === 0
+  && chord.calls.some(c => c.startsWith('chord'))
+  && chord.calls.some(c => c === 'duck 0.5/4'));
+
+// --- THE GUTTER PHRASE: one gesture, no sting, and it leaves a mark that
+// outlives the attempt ---
+const gutter = await page.evaluate(async () => {
+  const { g, until } = window.__H();
+  const v = g.vault;
+  const calls = [];
+  const real = v.audio;
+  v.audio = {
+    chord: () => calls.push('chord'), deny: () => calls.push('deny'),
+    gutter: () => calls.push('gutter'), complete: () => calls.push('complete'),
+    duck: (to, hold) => calls.push('duck ' + to + '/' + hold),
+  };
+  const embers = () => g.vault.scene.children.filter(o => o.name === 'figure-ember').length;
+  const e0 = embers();
+  const r0 = v.reforms;
+  v.invuln = 0;
+  v.reform();
+  await until(() => v.reforms > r0, 20, 30);
+  const marked = embers() - e0;
+  v.audio = real;
+  // the room remembers: step out, step back in, the wick is still there
+  g.devVault('kindled');
+  await until(() => g.mode === 'vault' && g.vault && g.vault.phase === 'run', 40);
+  const kept = g.vault.scene.children.filter(o => o.name === 'figure-ember').length;
+  return { calls, marked, kept, sting: calls.some(c => c === 'deny') };
+});
+ok('the gutter phrase', gutter,
+  gutter.calls[0] === 'gutter' && gutter.calls.includes('duck 0.08/3')
+  && gutter.sting === false && gutter.marked === 1 && gutter.kept >= 1);
+
+// --- THE GUILD'S VOICE: a lamp raised toward one of the dead. Free, and it
+// gates nothing — no phase change, no spark cost ---
+const voice = await page.evaluate(async () => {
+  const { g, until } = window.__H();
+  const v = g.vault;
+  await until(() => v.phase === 'run', 20);
+  const poses = v.p.figures.map(f => f.pose).sort();
+  const el = () => document.querySelector('#vault-voice');
+  const before = el().textContent;
+  // stand well clear of them: the lamp lifts, but nobody answers
+  v.px = 10.5; v.py = -39.5; v.invuln = 999;
+  v.raiseLamp();
+  const quiet = el().textContent === before;
+  // now stand with the four
+  v.px = 50.5; v.py = -7.5;
+  const spark0 = v.spark;
+  v.raiseLamp();
+  const said = el().textContent;
+  return { poses, quiet, said, on: el().classList.contains('on'),
+    freeSpark: v.spark === spark0, stillRunning: v.phase === 'run' };
+});
+ok('the guild voice', voice,
+  voice.quiet && voice.said.length > 20 && voice.on && voice.freeSpark
+  && voice.stillRunning
+  && JSON.stringify(voice.poses) === JSON.stringify(['curled', 'fallen', 'kneeling', 'reaching']));
+
 // --- abandon, gallery, grandfathering, the gate ---
 const abandon = await page.evaluate(async () => {
   const { g, until, key } = window.__H();
@@ -461,6 +637,67 @@ const grandfather = await page.evaluate(() => {
   return { n: four.length, first: four[0], nine };
 });
 ok('grandfather + gate', grandfather, grandfather.n === 4 && grandfather.first === 'wick' && grandfather.nine);
+
+// ===================================================================
+// THE V2 LINTS — a pillar without a lint rule is a wish (§I)
+// ===================================================================
+
+// --- P3a: no chamber is wider than the frame can hold legibly ---
+const chamberW = await page.evaluate(() => {
+  const max = window.__CHAMBER_MAX_W;
+  const rows = window.__VAULTS.map(v => {
+    const p = window.__parseVault(v);
+    const widths = p.chambers.map(c => c.x1 - c.x0 + 1);
+    return { glyph: v.glyph, n: widths.length, worst: Math.max(...widths) };
+  });
+  return { max, worst: Math.max(...rows.map(r => r.worst)),
+    over: rows.filter(r => r.worst > max).map(r => r.glyph + ':' + r.worst),
+    unchambered: rows.filter(r => r.n < 2).map(r => r.glyph) };
+});
+ok('lint · chamber width', chamberW,
+  chamberW.over.length === 0 && chamberW.unchambered.length === 0
+  && chamberW.worst <= chamberW.max);
+
+// --- P3b: a sconce stands at every boundary the camera cuts on ---
+const boundarySconce = await page.evaluate(() => {
+  const bad = [];
+  let cuts = 0;
+  for (const v of window.__VAULTS) {
+    const p = window.__parseVault(v);
+    for (const c of p.cuts) {
+      cuts++;
+      if (!p.sconces.some(s => Math.abs(s.x - c) <= 1)) bad.push(v.glyph + '@' + c);
+    }
+  }
+  return { cuts, bad };
+});
+ok('lint · sconce at boundary', boundarySconce,
+  boundarySconce.cuts >= 24 && boundarySconce.bad.length === 0);
+
+// --- P2: dark hides floors, never fangs. Every hazard VOLUME that reaches
+// into a `d` region has to be self-luminous or carry a visible track — read
+// off the real materials in the real scene, room by room. ---
+const darkFangs = await page.evaluate(async () => {
+  const { g, until } = window.__H();
+  const rows = [];
+  const bad = [];
+  let inDark = 0;
+  for (const def of window.__VAULTS) {
+    g.devVault(def.glyph);
+    await until(() => g.mode === 'vault' && g.vault && g.vault.glyphId === def.glyph, 40);
+    const hz = g.vault.darkHazards();
+    for (const h of hz) {
+      if (h.dark <= 0) continue;
+      inDark++;
+      if (!h.lit) bad.push(def.glyph + '/' + h.kind + h.i);
+    }
+    const n = hz.filter(h => h.dark > 0).length;
+    if (n) rows.push(def.glyph + ':' + n);
+  }
+  return { inDark, bad, rooms: rows.join(' ') };
+});
+ok('lint · dark hazards emissive', darkFangs,
+  darkFangs.inDark > 0 && darkFangs.bad.length === 0);
 
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();

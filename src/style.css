@@ -926,6 +926,18 @@ body.sm-open #survey {
   color: var(--ink-dim); margin-top: 7px; opacity: 0.7;
 }
 
+/* the guild's own voice — a lamp raised toward one of the dead. Free, and it
+   gates nothing, so it sits low and gets out of the way on its own. */
+#vault-voice {
+  position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%);
+  z-index: 55; max-width: 520px; text-align: center; pointer-events: none;
+  font-size: 13px; line-height: 1.55; font-style: italic;
+  color: #ffd9a0; opacity: 0;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
+  transition: opacity 700ms ease;
+}
+#vault-voice.on { opacity: 0.88; }
+
 /* ---- THE QUARTERS: interior chrome ---- */
 #interior-hud {
   position: fixed; top: 18px; left: 50%; transform: translateX(-50%);

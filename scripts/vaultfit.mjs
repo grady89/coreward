@@ -26,7 +26,10 @@ await browser.close();
 
 // door masonry counts as air: it melts open once its sconces burn, and the
 // sconces are reachable — otherwise every doored vault reads as a false block
-const AIR = new Set(['.', 'd', 'S', '@', 'M', 'X', 'A', 'b', 'R', '^', '>', '<', 'K', '1', '2']);
+// the standing dead are decor, one char per posture (K/F/C/N) — a body
+// walks straight through them, so they read as air to the fit walk
+const AIR = new Set(['.', 'd', 'S', '@', 'M', 'X', 'A', 'b', 'R', '^', '>', '<',
+  'K', 'F', 'C', 'N', '1', '2']);
 let bad = 0;
 const table = [];
 for (const { glyph, map: rows } of maps) {
