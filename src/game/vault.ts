@@ -43,7 +43,16 @@ const GRAV = 24;            // heavier than the old float — jumps ARC now
 const MAX_FALL = 13;
 const DASH_V = 14;
 const DASH_T = 0.15;
-const DASH_KEEP = 6.5;      // speed retained when the dash ends
+const DASH_KEEP = 8.0;      // speed retained when the dash ends (SPEC-VAULTS-2 F6)
+const DASH_CARRY = 0.25;    // seconds the kept speed takes to decay to WALK
+const FREEZE_T = 0.05;      // ~3 frames the world holds its breath on ignition (F3);
+                            // the same window is the aim latch (F5)
+const FAST_FALL = 18;       // MAX_FALL while down is held (F7)
+const APEX_BAND = 2.0;      // |vy| under this with jump held: half gravity (F4)
+const CORNER = 0.3;         // head-bonk horizontal forgiveness, tiles (F1)
+const DASH_POP = 0.35;      // dash lip pop / floor snap reach, tiles (F2)
+const WJ_NEAR = 0.4;        // a wall this close counts for a wall-jump (F9)
+const WJ_LATCH = 0.08;      // ~5 frames the wall-jump's push-out cannot be steered against
 const WALL_SLIDE = 2.6;     // max fall speed against a wall
 const WALL_JUMP_UP = 10.5;
 const WALL_JUMP_OUT = 5.6;
@@ -68,7 +77,7 @@ export interface VaultAudio {
 
 interface Input { left: boolean; right: boolean; up: boolean; down: boolean; }
 
-type Phase = 'run' | 'reform' | 'complete';
+type Phase = 'run' | 'complete';
 
 export class VaultRun {
   completed = false;
@@ -121,6 +130,12 @@ export class VaultRun {
   private lamp!: THREE.PointLight;
   private sparkMesh!: THREE.Mesh;
   private trail: { mesh: THREE.Mesh; t: number }[] = [];
+  private freezeT = 0;        // spark ignition freeze; doubles as the aim latch
+  private dashDX = 0;
+  private dashDY = 0;
+  private dashCarryT = 0;     // kept dash speed decaying back to WALK
+  private wallJumpT = 0;      // push-out protection after a wall-jump
+  private reformT = 0;        // visual only — control is already back
   private sconceMeshes: { flame: THREE.Mesh; light: THREE.PointLight; mat: THREE.MeshBasicMaterial }[] = [];
   private doorMeshes: THREE.Mesh[][] = [];
   private bridgeMeshes: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: 0 | 1 }[] = [];
@@ -459,20 +474,32 @@ export class VaultRun {
 
   // ---------------- movement ----------------
 
-  /** Shift pressed: spend the spark on an 8-way burst */
+  /**
+   * Shift pressed: spend the spark. The world freezes for FREEZE_T (~3
+   * frames) — the whole weight of the 2.1-tile burst lives in that hitch —
+   * and inside the freeze the aim can still be corrected (the latch), so
+   * "I sparked into the floor" dies on the keyboard, not in the level.
+   */
   dash(input: Input): void {
-    if (this.phase !== 'run' || !this.spark || this.dashT > 0) return;
+    if (this.phase !== 'run' || !this.spark || this.dashT > 0 || this.freezeT > 0) return;
     let dx = (input.left ? -1 : 0) + (input.right ? 1 : 0);
     let dy = (input.up ? 1 : 0) + (input.down ? -1 : 0);
     if (dx === 0 && dy === 0) dx = this.facing;
-    const len = Math.hypot(dx, dy);
     this.spark = false;
+    this.dashDX = dx;
+    this.dashDY = dy;
+    this.freezeT = FREEZE_T;
+  }
+
+  /** the freeze has run out: the burst actually happens */
+  private igniteDash(): void {
+    const len = Math.hypot(this.dashDX, this.dashDY) || 1;
     this.dashT = DASH_T;
-    this.dashVX = (dx / len) * DASH_V;
-    this.dashVY = (dy / len) * DASH_V;
+    this.dashVX = (this.dashDX / len) * DASH_V;
+    this.dashVY = (this.dashDY / len) * DASH_V;
     this.vx = this.dashVX;
     this.vy = this.dashVY;
-    if (dx !== 0) this.facing = Math.sign(dx);
+    if (this.dashDX !== 0) this.facing = Math.sign(this.dashDX);
     // the burst leaves a short trail of itself
     for (let i = 0; i < 3; i++) {
       const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(SUIT_R * BODY, SUIT_H * BODY, 3, 6),
@@ -492,10 +519,13 @@ export class VaultRun {
     const vertical = gx === 0;
     const gSign = vertical ? Math.sign(-gy) : 0; // 1 = falls down, -1 = falls up
 
-    // timers
+    // timers — the jump buffer does not tick down mid-dash, so a press
+    // during the burst still fires the frame the burst ends (F8)
     this.coyoteT = Math.max(0, this.coyoteT - dt);
-    this.bufferT = Math.max(0, this.bufferT - dt);
+    if (this.dashT <= 0) this.bufferT = Math.max(0, this.bufferT - dt);
     this.wallCoyote = Math.max(0, this.wallCoyote - dt);
+    this.wallJumpT = Math.max(0, this.wallJumpT - dt);
+    this.dashCarryT = Math.max(0, this.dashCarryT - dt);
 
     if (this.dashT > 0) {
       // mid-dash: locked velocity, no gravity — the burst is the burst
@@ -505,37 +535,52 @@ export class VaultRun {
       if (this.dashT <= 0) {
         this.vx = Math.sign(this.vx) * Math.min(Math.abs(this.vx), DASH_KEEP);
         this.vy = Math.sign(this.vy) * Math.min(Math.abs(this.vy), DASH_KEEP);
+        this.dashCarryT = DASH_CARRY;
+        // a spark spent downward never dies to a pixel: snap the last
+        // DASH_POP of air onto the floor it was clearly aimed at (F2)
+        if (this.dashVY < 0 && gSign > 0) this.dashFloorSnap();
       }
     } else {
       // steering
-      const move = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+      let move = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+      // a fresh wall-jump's push-out cannot be steered against for ~5
+      // frames, so mashing toward the wall does not eat the kick (F9)
+      if (this.wallJumpT > 0 && move !== 0 && move === -Math.sign(this.vx)) move = 0;
       if (move !== 0) {
         const accel = this.grounded ? 34 : AIR_CTRL;
         this.vx += move * accel * dt;
-        if (Math.abs(this.vx) > WALK && Math.sign(this.vx) === move && this.grounded) this.vx = move * WALK;
+        const carrying = this.dashCarryT > 0;
+        if (!carrying && Math.abs(this.vx) > WALK && Math.sign(this.vx) === move && this.grounded) this.vx = move * WALK;
         // airborne steering never outruns a dash — the dash is the fast verb
-        if (!this.grounded && Math.sign(this.vx) === move && Math.abs(this.vx) > 5) this.vx = move * 5;
+        if (!carrying && !this.grounded && Math.sign(this.vx) === move && Math.abs(this.vx) > 5) this.vx = move * 5;
         this.facing = move;
-      } else if (this.grounded) {
+      } else if (this.grounded && this.dashCarryT <= 0) {
         this.vx -= this.vx * Math.min(1, 14 * dt);
       }
+      // kept dash speed bleeds back to WALK over DASH_CARRY — the long-tail
+      // window where spark-into-wall-jump chains live (F6)
+      if (this.dashCarryT > 0 && Math.abs(this.vx) > WALK) {
+        const bleed = (DASH_KEEP - WALK) / DASH_CARRY * dt;
+        this.vx = Math.sign(this.vx) * Math.max(WALK, Math.abs(this.vx) - bleed);
+      }
 
-      // gravity
+      // gravity — half strength in the apex band while jump is held: the
+      // ~0.3s crown where every spark decision happens (F4)
       this.vx += gx * dt;
-      this.vy += gy * dt;
+      const crowned = vertical && this.jumpHeld && !this.jumpCut && Math.abs(this.vy) < APEX_BAND;
+      this.vy += gy * (crowned ? 0.5 : 1) * dt;
 
-      // wall slide (vertical gravity only): pressing into a wall catches you
+      // wall slide (vertical gravity only): pressing into a wall catches you.
+      // A wall-jump is more generous — any wall within WJ_NEAR counts,
+      // pressed-into or not, so the wall verbs are unfumbleable and the
+      // spark stays the only scarce thing (F9)
       this.wallDir = 0;
+      let wallNear = 0;
       if (vertical && !this.grounded) {
-        const top = Math.floor(-(this.py + HH - EPS));
-        const bot = Math.floor(-(this.py - HH + EPS));
-        const near = (side: number): boolean => {
-          const c = Math.floor(this.px + side * (HW + 0.06));
-          for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) return true;
-          return false;
-        };
-        if (move === -1 && near(-1)) this.wallDir = -1;
-        else if (move === 1 && near(1)) this.wallDir = 1;
+        if (this.wallAt(-1, WJ_NEAR)) wallNear = -1;
+        else if (this.wallAt(1, WJ_NEAR)) wallNear = 1;
+        if (move === -1 && this.wallAt(-1, 0.06)) this.wallDir = -1;
+        else if (move === 1 && this.wallAt(1, 0.06)) this.wallDir = 1;
         if (this.wallDir !== 0) {
           this.wallCoyote = COYOTE;
           const falling = gSign > 0 ? this.vy < 0 : this.vy > 0;
@@ -554,13 +599,15 @@ export class VaultRun {
           this.coyoteT = 0;
           this.bufferT = 0;
           this.jumpCut = false;
-        } else if (this.wallDir !== 0 || this.wallCoyote > 0) {
-          const away = this.wallDir !== 0 ? -this.wallDir : -Math.sign(this.facing);
+        } else if (this.wallDir !== 0 || wallNear !== 0 || this.wallCoyote > 0) {
+          const off = this.wallDir !== 0 ? this.wallDir : wallNear;
+          const away = off !== 0 ? -off : -Math.sign(this.facing);
           this.vy = WALL_JUMP_UP * gSign;
           this.vx = away * WALL_JUMP_OUT;
           this.facing = away;
           this.bufferT = 0;
           this.wallCoyote = 0;
+          this.wallJumpT = WJ_LATCH;
           this.jumpCut = false;
         }
       }
@@ -582,8 +629,10 @@ export class VaultRun {
         if (!sheltered) this.vx += w.dir * w.force * (this.assist ? 0.6 : 1) * dt;
       }
 
-      // caps
-      this.vy = Math.max(-MAX_FALL, Math.min(MAX_FALL, this.vy));
+      // caps — holding down opens the fall governor (F7)
+      const falling = gSign > 0 ? this.vy < 0 : this.vy > 0;
+      const maxFall = vertical && input.down && !this.grounded && falling ? FAST_FALL : MAX_FALL;
+      this.vy = Math.max(-maxFall, Math.min(maxFall, this.vy));
       this.vx = Math.max(-MAX_FALL, Math.min(MAX_FALL, this.vx));
     }
 
@@ -680,20 +729,99 @@ export class VaultRun {
   }
 
   private moveX(dx: number): void {
+    if (dx === 0) return;
     this.px += dx;
     const top = Math.floor(-(this.py + HH - EPS));
     const bot = Math.floor(-(this.py - HH + EPS));
-    if (dx > 0) {
-      const c = Math.floor(this.px + HW);
-      for (let r = top; r <= bot; r++) {
-        if (this.solidTile(c, r)) { this.px = c - HW - EPS; this.vx = 0; if (this.dashT > 0) this.dashVX = 0; break; }
-      }
-    } else if (dx < 0) {
-      const c = Math.floor(this.px - HW);
-      for (let r = top; r <= bot; r++) {
-        if (this.solidTile(c, r)) { this.px = c + 1 + HW + EPS; this.vx = 0; if (this.dashT > 0) this.dashVX = 0; break; }
+    const dir = Math.sign(dx);
+    const c = Math.floor(this.px + dir * HW);
+    let hit = false;
+    for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) { hit = true; break; }
+    if (!hit) return;
+    // a horizontal spark clipping a ledge lip pops over it instead of
+    // dying to it — up to DASH_POP of vertical forgiveness (F2)
+    if (this.dashT > 0 && this.dashVY === 0 && this.tryDashPop(c, top, bot)) return;
+    this.px = dir > 0 ? c - HW - EPS : c + 1 + HW + EPS;
+    this.vx = 0;
+    if (this.dashT > 0) this.dashVX = 0;
+  }
+
+  /** every tile the body would occupy at (x, y) is air */
+  private boxClearAt(x: number, y: number): boolean {
+    const l = Math.floor(x - HW + EPS), r = Math.floor(x + HW - EPS);
+    const t = Math.floor(-(y + HH - EPS)), b = Math.floor(-(y - HH + EPS));
+    for (let rr = t; rr <= b; rr++) for (let cc = l; cc <= r; cc++) if (this.solidTile(cc, rr)) return false;
+    return true;
+  }
+
+  /** a wall within `reach` tiles of the body's `side` edge */
+  private wallAt(side: number, reach: number): boolean {
+    const top = Math.floor(-(this.py + HH - EPS));
+    const bot = Math.floor(-(this.py - HH + EPS));
+    const c = Math.floor(this.px + side * (HW + reach));
+    for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) return true;
+    return false;
+  }
+
+  /** F2: the lip pop — clear a shallow ledge edge mid-spark, up or down */
+  private tryDashPop(c: number, top: number, bot: number): boolean {
+    const rows: number[] = [];
+    for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) rows.push(r);
+    if (rows.length === 0) return false;
+    if (rows.every(r => r === bot)) {
+      const pen = -bot - (this.py - HH);
+      if (pen > 0 && pen <= DASH_POP && this.boxClearAt(this.px, this.py + pen + EPS)) {
+        this.py += pen + EPS;
+        return true;
       }
     }
+    if (rows.every(r => r === top)) {
+      const pen = this.py + HH + top + 1;
+      if (pen > 0 && pen <= DASH_POP && this.boxClearAt(this.px, this.py - pen - EPS)) {
+        this.py -= pen + EPS;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** F2: a downward spark ending within DASH_POP of a floor lands on it */
+  private dashFloorSnap(): void {
+    const left = Math.floor(this.px - HW + EPS);
+    const right = Math.floor(this.px + HW - EPS);
+    const r0 = Math.floor(-(this.py - HH));
+    const r1 = Math.floor(-(this.py - HH - DASH_POP));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = left; c <= right; c++) {
+        if (this.solidTile(c, r)) {
+          const gap = (this.py - HH) - (-r);
+          if (gap >= 0 && gap <= DASH_POP) {
+            this.py = -r + HH + EPS;
+            this.vy = 0;
+            this.grounded = true;
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * F1: head-bonk corner correction. Rising into a solid corner nudges the
+   * body up to CORNER tiles sideways when that alone saves the jump — a
+   * one-tile body on a tile grid has zero geometric slack without it.
+   */
+  private tryCorner(row: number, left: number, right: number): boolean {
+    const leftSolid = this.solidTile(left, row);
+    const rightSolid = this.solidTile(right, row);
+    if (leftSolid && !rightSolid) {
+      const need = (left + 1) - (this.px - HW) + EPS;
+      if (need <= CORNER && this.boxClearAt(this.px + need, this.py)) { this.px += need; return true; }
+    } else if (rightSolid && !leftSolid) {
+      const need = (this.px + HW) - right + EPS;
+      if (need <= CORNER && this.boxClearAt(this.px - need, this.py)) { this.px -= need; return true; }
+    }
+    return false;
   }
 
   private moveY(dy: number, gSign: number): [number, number] | null {
@@ -705,6 +833,8 @@ export class VaultRun {
       const r = Math.floor(-(this.py - HH));
       for (let c = left; c <= right; c++) {
         if (this.solidTile(c, r)) {
+          // falling up (inverted gravity): a shallow corner clips, nudge past it (F1)
+          if (gSign < 0 && this.tryCorner(r, left, right)) break;
           this.py = -r + HH + EPS;
           this.vy = 0;
           if (this.dashT > 0) this.dashVY = 0;
@@ -717,6 +847,8 @@ export class VaultRun {
       if (r >= 0) {
         for (let c = left; c <= right; c++) {
           if (this.solidTile(c, r)) {
+            // the head-bonk: a rising jump grazing a corner slides past it (F1)
+            if (gSign >= 0 && this.tryCorner(r, left, right)) break;
             this.py = -(r + 1) - HH - EPS;
             this.vy = 0;
             if (this.dashT > 0) this.dashVY = 0;
@@ -744,9 +876,29 @@ export class VaultRun {
   private reform(): void {
     this.audio.reform();
     this.reforms++;
-    this.phase = 'reform';
-    this.phaseT = 0;
     if (this.def.pursuit) { this.pursuitOn = false; this.pursuitDone = false; }
+    // the gutter stays where you failed — a dark wick of you, briefly —
+    // and you are already back at the sconce. Control returns THIS frame;
+    // the re-form animation plays around a body that is yours again, and
+    // the camera cuts, never pans: retry time is difficulty in disguise
+    // (SPEC-VAULTS-2 F10, precision research on SMB retry economics).
+    const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(SUIT_R * BODY, SUIT_H * BODY, 3, 6),
+      new THREE.MeshBasicMaterial({ color: 0x1a1420, transparent: true, opacity: 0.5 }));
+    ghost.position.set(this.px, this.py, 0.05);
+    this.scene.add(ghost);
+    this.trail.push({ mesh: ghost, t: 0.4 });
+    this.px = this.checkpoint.x;
+    this.py = this.checkpoint.y;
+    this.vx = 0; this.vy = 0;
+    this.spark = true;
+    this.dashT = 0;
+    this.freezeT = 0;
+    this.dashCarryT = 0;
+    this.grounded = false;
+    this.coyoteT = COYOTE;      // an instant jump off the re-form always works (F8)
+    this.invuln = INVULN_T;
+    this.reformT = REFORM_T;    // visual only — the body grows in around control
+    this.cam.snap(this.px, this.py + 0.5, 8.5 + this.cam.zoomBias);
   }
 
   private openDoors(): void {
@@ -793,6 +945,16 @@ export class VaultRun {
   // ---------------- frame ----------------
 
   frame(dt: number, input: Input, lampOn: boolean): void {
+    // spark ignition: the world holds its breath — no time, no hazards, no
+    // step — while the latch reads any late aim correction
+    if (this.freezeT > 0) {
+      this.freezeT -= dt;
+      const dx = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+      const dy = (input.up ? 1 : 0) + (input.down ? -1 : 0);
+      if (dx !== 0 || dy !== 0) { this.dashDX = dx; this.dashDY = dy; }
+      if (this.freezeT <= 0) this.igniteDash();
+      return;
+    }
     this.time += dt;
     const hazardMul = this.hazardMul();
 
@@ -895,19 +1057,7 @@ export class VaultRun {
       }
     }
 
-    if (this.phase === 'reform') {
-      this.phaseT += dt;
-      this.pilotGroup.scale.setScalar(Math.max(0.01, 1 - this.phaseT / REFORM_T));
-      if (this.phaseT >= REFORM_T) {
-        this.px = this.checkpoint.x; this.py = this.checkpoint.y;
-        this.vx = 0; this.vy = 0;
-        this.spark = true;
-        this.dashT = 0;
-        this.invuln = INVULN_T;
-        this.phase = 'run';
-        this.pilotGroup.scale.setScalar(1);
-      }
-    } else if (this.phase === 'complete') {
+    if (this.phase === 'complete') {
       this.phaseT += dt;
       const n = Math.floor(this.phaseT / 0.35);
       for (let i = 0; i < Math.min(n, this.sconceLit.length); i++) {
@@ -989,7 +1139,20 @@ export class VaultRun {
       (t.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, t.t * 1.6);
       if (t.t <= 0) { this.scene.remove(t.mesh); this.trail.splice(i, 1); }
     }
-    this.lamp.intensity = lampOn ? 6 : 0.6;
+    // re-form grow-in, cosmetic only — input already works
+    if (this.reformT > 0) {
+      this.reformT = Math.max(0, this.reformT - dt);
+      this.pilotGroup.scale.setScalar(Math.max(0.15, 1 - this.reformT / REFORM_T));
+    } else if (this.pilotGroup.scale.x !== 1) {
+      this.pilotGroup.scale.setScalar(1);
+    }
+    // the body is the meter (F12): charged, the suit throws light on the
+    // stone around it; spent, the room steps closer. Readable peripherally,
+    // and in the dark rooms the meter IS the visibility.
+    const lampTarget = lampOn ? (this.spark ? 6 : 3.2) : (this.spark ? 1.6 : 0.6);
+    this.lamp.intensity += (lampTarget - this.lamp.intensity) * Math.min(1, dt * 12);
+    const reachTarget = (this.spark ? 6 : 4) * BODY;
+    this.lamp.distance += (reachTarget - this.lamp.distance) * Math.min(1, dt * 8);
     const dot = this.masterGroup.getObjectByName('glyph-light');
     if (dot) dot.scale.setScalar(1 + Math.sin(this.time * 2.4) * 0.2);
     for (const obj of this.scene.children) {

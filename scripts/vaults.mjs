@@ -128,7 +128,7 @@ const metrics = await page.evaluate(async () => {
   window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight' }));
   return { jumpH: +jumpH.toFixed(2), dist: +dist.toFixed(2) };
 });
-ok('movement metrics', metrics, metrics.jumpH >= 2.1 && metrics.jumpH <= 3.2 && metrics.dist >= 2.6);
+ok('movement metrics', metrics, metrics.jumpH >= 2.1 && metrics.jumpH <= 3.2 && metrics.dist >= 2.6 && metrics.dist <= 6.5);
 
 // --- wall-jump: pressing into a wall catches you, jump kicks you off it ---
 const walls = await page.evaluate(async () => {
@@ -147,16 +147,70 @@ const walls = await page.evaluate(async () => {
 });
 ok('wall moves', walls, walls.sliding && walls.kicked);
 
-// --- unlight: gutter and re-form at the checkpoint, spark restored ---
+// --- unlight: gutter → control returns the SAME frame, at the checkpoint,
+// spark restored, camera cut done. The old blocking 'reform' phase is gone
+// by design (SPEC-VAULTS-2 F10): the grow-in is cosmetic.
 const reform = await page.evaluate(async () => {
   const { g, until } = window.__H();
   const v = g.vault;
+  const before = v.reforms;
+  const t0 = performance.now();
   v.px = 9.5; v.py = -26.4; v.vx = 0; v.vy = 0; v.invuln = 0;
-  const guttered = await until(() => v.phase === 'reform', 20);
-  const back = await until(() => v.phase === 'run', 20);
-  return { guttered, back, reforms: v.reforms, spark: v.spark };
+  const guttered = await until(() => v.reforms > before, 20);
+  const retryMs = performance.now() - t0;
+  // control is already live: a jump pressed NOW must fire
+  const cx = v.checkpoint.x;
+  const atCheckpoint = Math.abs(v.px - cx) < 0.01 && v.phase === 'run';
+  v.jumpPress();
+  const jumped = await until(() => v.vy > 4, 15, 30);
+  return { guttered, atCheckpoint, jumped, retryMs: Math.round(retryMs),
+    reforms: v.reforms, spark: v.spark,
+    camCut: Math.abs(g.vault.cam.camera.position.x - cx) < 3 };
 });
-ok('re-form', reform, reform.guttered && reform.back && reform.reforms >= 1 && reform.spark);
+ok('re-form', reform, reform.guttered && reform.atCheckpoint && reform.jumped
+  && reform.retryMs < 900 && reform.reforms >= 1 && reform.spark && reform.camCut);
+
+// --- F1: a jump grazing a ceiling corner is nudged past it, not bonked ---
+const corner = await page.evaluate(async () => {
+  const { g } = window.__H();
+  const v = g.vault;
+  // find a ceiling corner: solid at (c,r), air at (c+1,r) and below both
+  const P = v.p;
+  const solid = (x, y) => x < 0 || y < 0 || x >= P.w || y >= P.h || P.solid[y * P.w + x];
+  let spot = null;
+  for (let y = 2; y < P.h - 3 && !spot; y++) for (let x = 2; x < P.w - 3 && !spot; x++) {
+    if (solid(x, y) && !solid(x + 1, y) && !solid(x + 2, y)
+      && !solid(x, y + 1) && !solid(x + 1, y + 1) && !solid(x + 2, y + 1)
+      && !solid(x, y + 2) && !solid(x + 1, y + 2)) spot = [x, y];
+  }
+  if (!spot) return { err: 'no corner found' };
+  const [c, r] = spot;
+  // body top just under the corner, overlapping the solid column by 0.2
+  v.invuln = 3; v.dashT = 0; v.spark = true;
+  v.px = (c + 1) + 0.3 - 0.2; // left edge 0.2 into the solid column
+  v.py = -(r + 1) - 0.52 - 0.08;
+  v.vx = 0; v.vy = 9;
+  const topBefore = v.py + 0.52;
+  await new Promise(res => setTimeout(res, 350));
+  return { rose: (v.py + 0.52) > -(r + 1) + 0.3, nudged: v.px > (c + 1) + 0.1,
+    topBefore: +topBefore.toFixed(2), lip: -(r + 1) };
+});
+ok('corner correction', corner, corner.rose === true && corner.nudged === true);
+
+// --- F8: a jump buffered mid-spark fires the frame the spark ends ---
+const buffered = await page.evaluate(async () => {
+  const { g, until } = window.__H();
+  const v = g.vault;
+  v.px = 5.5; v.py = -25.4; v.vx = 0; v.vy = 0; v.invuln = 3;
+  await until(() => v.grounded, 30);
+  v.dash({ left: false, right: true, up: false, down: false });
+  const spentAtPress = !v.spark; // stone underfoot re-arms it after the burst
+  v.jumpPress();          // pressed during the freeze+burst
+  v.jumpRelease();
+  const jumped = await until(() => v.vy > 4, 20, 30);
+  return { jumped, spentAtPress };
+});
+ok('buffer through spark', buffered, buffered.jumped && buffered.spentAtPress);
 
 // --- a lit sconce relights the spark mid-air ---
 const crystal = await page.evaluate(async () => {
