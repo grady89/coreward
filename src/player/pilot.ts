@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { EVA_O2 } from '../config';
 import { Terrain } from '../world/terrain';
 import { Input } from './controller';
-import { Suit, buildSuit, animateSuit } from './suit';
+import { Suit, buildSuit, poseSuit } from './suit';
 
 // EVA: the pilot on foot. Small AABB, walk + jump, oxygen clock.
 // Exists only for designated moments — wreck salvage and the core walk.
@@ -71,8 +71,11 @@ export class Pilot {
     }
 
     this.walkT += dt * Math.abs(this.vx) * 4;
-    animateSuit(this.suit, this.walkT, this.grounded, Math.min(1, Math.abs(this.vx) / WALK));
-    this.group.rotation.y = this.facing > 0 ? 0.35 : -0.35;
+    poseSuit(this.suit, {
+      dt, walkT: this.walkT,
+      speed01: Math.min(1, Math.abs(this.vx) / WALK),
+      grounded: this.grounded, facing: this.facing, vy: this.vy,
+    });
     this.group.position.set(this.px, this.py, 0.1);
   }
 

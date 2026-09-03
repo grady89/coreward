@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Suit, buildSuit, animateSuit } from '../player/suit';
+import { Suit, buildSuit, poseSuit, suitPoseYOffset } from '../player/suit';
 import { Input } from '../player/controller';
 import { Meta } from './meta';
 import { wallPalette, WING_GALLERY, WING_VIVARIUM } from './furnish';
@@ -546,9 +546,12 @@ export class Interior {
     if (this.py > CEIL - HH) { this.py = CEIL - HH; this.vy = Math.min(0, this.vy); }
 
     this.walkT += dt * Math.abs(this.vx) * 4;
-    animateSuit(this.suit, this.walkT, this.grounded, Math.min(1, Math.abs(this.vx) / WALK));
-    this.suit.group.rotation.y = this.facing > 0 ? 0.35 : -0.35;
-    this.suit.group.position.set(this.px, this.py, 0.1);
+    poseSuit(this.suit, {
+      dt, walkT: this.walkT, time: this.time,
+      speed01: Math.min(1, Math.abs(this.vx) / WALK),
+      grounded: this.grounded, facing: this.facing, vy: this.vy,
+    });
+    this.suit.group.position.set(this.px, this.py + suitPoseYOffset(this.suit), 0.1);
   }
 
   private animate(dt: number): void {

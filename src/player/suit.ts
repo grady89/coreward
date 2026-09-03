@@ -134,11 +134,160 @@ export function buildSuit(): Suit {
  * double time. `walkT` is the caller's phase accumulator, `speed01` its speed
  * as a fraction of full walk.
  */
-export function animateSuit(s: Suit, walkT: number, grounded: boolean, speed01: number): void {
-  const swing = grounded ? Math.sin(walkT) * 0.5 : 0.3;
-  s.legL.rotation.x = swing;
-  s.legR.rotation.x = -swing;
-  s.armL.rotation.x = -swing * 0.7;
-  s.armR.rotation.x = swing * 0.7;
-  s.helmet.position.y = HELMET_Y + Math.sin(walkT * 2) * 0.006 * speed01;
+/** where the boot soles sit in suit-local y — squash pivots on the feet */
+const FOOT_Y = -0.26;
+
+/**
+ * Everything the pose system wants to know about this frame. Callers fill
+ * what they have; everything is optional beyond the basics, so the interior
+ * walker and the EVA pilot share the system with the vault runner.
+ */
+export interface SuitPoseIn {
+  dt: number;
+  walkT: number;
+  /** |vx| / walk speed, 0..1 */
+  speed01: number;
+  grounded: boolean;
+  facing: number;
+  /** vertical velocity, tiles/s, + up */
+  vy?: number;
+  /** wall side while sliding: -1 | 1, else 0 */
+  wall?: number;
+  /** dash direction while mid-burst, else null */
+  dash?: { x: number; y: number } | null;
+  /** grounded + down held */
+  crouch?: boolean;
+  /** airborne + down held */
+  fastFall?: boolean;
+  /** time-of-day for idle breathing; any monotonically rising clock */
+  time?: number;
 }
+
+interface PoseState {
+  turn: number; lean: number;
+  legL: number; legR: number; armL: number; armR: number;
+  headX: number; sx: number; sy: number;
+  landSquash: number; wasGrounded: boolean; lastVy: number;
+}
+
+const poseStates = new WeakMap<Suit, PoseState>();
+
+/**
+ * The suit's body language. One character, many verbs: he leans into his
+ * run, turns his shoulders through it, tucks on the way up, flails on the
+ * way down, presses into a wall knees-bent and looks up the climb,
+ * stretches along a dash like a thrown dart, folds into a crouch, and
+ * lands with a squash that pivots on his boots. Every target is damped, so
+ * poses melt into each other instead of snapping.
+ */
+export function poseSuit(s: Suit, p: SuitPoseIn): void {
+  let st = poseStates.get(s);
+  if (!st) {
+    st = { turn: 0.35, lean: 0, legL: 0, legR: 0, armL: 0, armR: 0, headX: 0, sx: 1, sy: 1, landSquash: 0, wasGrounded: true, lastVy: 0 };
+    poseStates.set(s, st);
+  }
+  const vy = p.vy ?? 0;
+  const wall = p.wall ?? 0;
+  const t = p.time ?? p.walkT;
+
+  // landing: remember how hard the fall was the frame the ground arrives
+  if (p.grounded && !st.wasGrounded) st.landSquash = Math.min(1, Math.abs(st.lastVy) / 13);
+  st.wasGrounded = p.grounded;
+  st.lastVy = vy;
+  st.landSquash = Math.max(0, st.landSquash - p.dt * 6);
+
+  // ---- targets ----
+  const swing = p.grounded ? Math.sin(p.walkT) * 0.5 * Math.max(0.25, p.speed01) : 0;
+  let turn = p.facing * (0.35 + 0.55 * p.speed01);   // shoulders open with speed
+  let lean = -p.facing * 0.14 * p.speed01;           // into the run
+  let legL = swing, legR = -swing;
+  let armL = -swing * 0.7, armR = swing * 0.7;
+  let headX = 0;
+  let sx = 1, sy = 1;
+  let damp = 12;
+
+  if (!p.grounded) {
+    // airborne: tuck rising, trail falling — blended by vy
+    const rise = Math.max(-1, Math.min(1, vy / 8));
+    legL = 0.55 * Math.max(0, rise) + 0.2;
+    legR = -0.25 * Math.max(0, rise) - 0.1 - 0.3 * Math.max(0, -rise);
+    armL = -0.35 * rise - 0.55 * Math.max(0, -rise);
+    armR = 0.25 * rise + 0.75 * Math.max(0, -rise);
+    headX = -rise * 0.18;                            // look where you're going
+    lean = -p.facing * 0.08 * p.speed01;
+  }
+  if (p.fastFall) {
+    // streamlined: a dropped tool
+    legL = 0.06; legR = -0.06; armL = 0.9; armR = 0.9;
+    sy = 1.1; sx = 0.94; headX = 0.28;
+  }
+  if (wall !== 0 && !p.grounded) {
+    // pressed to the wall: face it, knees bent, near arm up the climb
+    turn = wall * 1.15;
+    lean = wall * 0.1;
+    legL = 0.55; legR = 0.28;
+    armL = wall < 0 ? -1.05 : -0.15;
+    armR = wall > 0 ? -1.05 : -0.15;
+    headX = -0.3;                                    // eyes up the wall
+    damp = 16;
+  }
+  if (p.crouch && p.grounded) {
+    legL = 0.5; legR = -0.4; armL = -0.3; armR = 0.3;
+    sy = 0.8; sx = 1.12; headX = 0.22;
+    turn = p.facing * 0.5;
+  }
+  if (p.dash) {
+    // stretched along the burst — x and z together read as "long" under
+    // any shoulder turn, y alone reads as "tall"
+    const horiz = Math.abs(p.dash.x) >= Math.abs(p.dash.y);
+    sx = horiz ? 1.22 : 0.86;
+    sy = horiz ? 0.82 : 1.28;
+    legL = horiz ? 0.85 : 0.15; legR = horiz ? -0.65 : -0.15;
+    armL = horiz ? 0.9 : 1.1; armR = horiz ? -0.9 : 1.1;
+    // nose into the burst: level dash leans 0.2, diving dash noses down
+    // harder, rising dash flattens out
+    const dyN = Math.max(-1, Math.min(1, p.dash.y));
+    lean = -Math.sign(p.dash.x || p.facing) * (horiz ? 0.2 - dyN * 0.2 : 0.05);
+    headX = -Math.max(-1, Math.min(1, p.dash.y)) * 0.25;
+    damp = 26;                                       // the burst poses NOW
+  }
+  // the landing squash rides on top of whatever pose is active
+  sy *= 1 - 0.24 * st.landSquash;
+  sx *= 1 + 0.18 * st.landSquash;
+
+  // ---- damped approach ----
+  const k = Math.min(1, p.dt * damp);
+  st.turn += (turn - st.turn) * k;
+  st.lean += (lean - st.lean) * k;
+  st.legL += (legL - st.legL) * k;
+  st.legR += (legR - st.legR) * k;
+  st.armL += (armL - st.armL) * k;
+  st.armR += (armR - st.armR) * k;
+  st.headX += (headX - st.headX) * k;
+  st.sx += (sx - st.sx) * Math.min(1, p.dt * 18);
+  st.sy += (sy - st.sy) * Math.min(1, p.dt * 18);
+
+  // ---- apply ----
+  s.group.rotation.y = st.turn;
+  s.group.rotation.z = st.lean;
+  s.legL.rotation.x = st.legL;
+  s.legR.rotation.x = st.legR;
+  s.armL.rotation.x = st.armL;
+  s.armR.rotation.x = st.armR;
+  s.helmet.rotation.x = st.headX;
+  s.group.scale.set(st.sx, st.sy, 1 + (st.sx - 1) * 0.8);
+  // squash pivots on the boots, not the belt
+  s.group.position.y = FOOT_Y * (1 - st.sy);
+  // idle breathing + gait bob, so he is never a statue
+  s.helmet.position.y = HELMET_Y
+    + Math.sin(p.walkT * 2) * 0.006 * p.speed01
+    + (p.speed01 < 0.05 && p.grounded ? Math.sin(t * 1.8) * 0.0035 : 0);
+}
+
+/** suit-local y offset the current squash wants — for callers that place
+ *  suit.group absolutely each frame (the interior walker) */
+export function suitPoseYOffset(s: Suit): number {
+  const st = poseStates.get(s);
+  return st ? FOOT_Y * (1 - st.sy) : 0;
+}
+

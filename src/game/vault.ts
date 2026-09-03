@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
 import { VaultDef, ParsedVault, parseVault } from '../world/vaults';
-import { Suit, SUIT_R, SUIT_H, buildSuit, animateSuit } from '../player/suit';
+import { Suit, SUIT_R, SUIT_H, buildSuit, poseSuit } from '../player/suit';
 
 // A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
 // second pass). The movement set is discrete now, Celeste-school:
@@ -453,7 +453,10 @@ export class VaultRun {
     this.lamp.position.set(0, 0, 0.35);
     const body = new THREE.Group();
     body.scale.setScalar(BODY);
-    body.add(this.suit.group, this.sparkMesh, this.lamp);
+    // the spark rides inside the suit group so the pack turns with the
+    // shoulders instead of hanging in the air behind a turned body
+    this.suit.group.add(this.sparkMesh);
+    body.add(this.suit.group, this.lamp);
     this.pilotGroup.add(body);
     this.scene.add(this.pilotGroup);
   }
@@ -1179,8 +1182,17 @@ export class VaultRun {
 
     // pilot mesh + spark + camera + hud
     this.walkT += dt * Math.abs(this.vx) * 4;
-    animateSuit(this.suit, this.walkT, this.grounded, Math.min(1, Math.abs(this.vx) / WALK));
-    this.pilotGroup.rotation.y = this.facing > 0 ? 0.35 : -0.35;
+    const gDown = this.gravityAt(this.px, this.py)[1] < 0;
+    poseSuit(this.suit, {
+      dt, walkT: this.walkT, time: this.time,
+      speed01: Math.min(1, Math.abs(this.vx) / WALK),
+      grounded: this.grounded, facing: this.facing,
+      vy: gDown ? this.vy : -this.vy,
+      wall: this.wallDir,
+      dash: this.dashT > 0 ? { x: this.dashVX / DASH_V, y: this.dashVY / DASH_V } : null,
+      crouch: this.grounded && input.down,
+      fastFall: !this.grounded && input.down && (gDown ? this.vy < 0 : this.vy > 0),
+    });
     this.pilotGroup.position.set(this.px, this.py, 0.1);
     const sm = this.sparkMesh.material as THREE.MeshBasicMaterial;
     sm.color.setHex(this.spark ? 0xbfe8ff : 0x2a3038);
