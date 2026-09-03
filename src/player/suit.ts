@@ -126,7 +126,8 @@ export function buildSuit(): Suit {
   const legR = buildLeg(0.05);
 
   group.add(helmet, neck, torso, belt, chestLamp, pack, armL, armR, legL, legR);
-  return { group, helmet, legL, legR, armL, armR, packAnchor: new THREE.Vector3(0, -0.022, -0.13) };
+  // seated in the pack's back face, so an ornament reads as mounted, not hovering
+  return { group, helmet, legL, legR, armL, armR, packAnchor: new THREE.Vector3(0, -0.01, -0.1) };
 }
 
 /**
@@ -166,7 +167,7 @@ export interface SuitPoseIn {
 interface PoseState {
   turn: number; lean: number;
   legL: number; legR: number; armL: number; armR: number;
-  headX: number; sx: number; sy: number;
+  headX: number; sx: number; sy: number; shiftX: number;
   landSquash: number; wasGrounded: boolean; lastVy: number;
 }
 
@@ -183,7 +184,7 @@ const poseStates = new WeakMap<Suit, PoseState>();
 export function poseSuit(s: Suit, p: SuitPoseIn): void {
   let st = poseStates.get(s);
   if (!st) {
-    st = { turn: 0.35, lean: 0, legL: 0, legR: 0, armL: 0, armR: 0, headX: 0, sx: 1, sy: 1, landSquash: 0, wasGrounded: true, lastVy: 0 };
+    st = { turn: 0.35, lean: 0, legL: 0, legR: 0, armL: 0, armR: 0, headX: 0, sx: 1, sy: 1, shiftX: 0, landSquash: 0, wasGrounded: true, lastVy: 0 };
     poseStates.set(s, st);
   }
   const vy = p.vy ?? 0;
@@ -204,6 +205,7 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   let armL = -swing * 0.7, armR = swing * 0.7;
   let headX = 0;
   let sx = 1, sy = 1;
+  let shiftX = 0;
   let damp = 12;
 
   if (!p.grounded) {
@@ -222,13 +224,15 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
     sy = 1.1; sx = 0.94; headX = 0.28;
   }
   if (wall !== 0 && !p.grounded) {
-    // pressed to the wall: face it, knees bent, near arm up the climb
-    turn = wall * 1.15;
-    lean = wall * 0.1;
-    legL = 0.55; legR = 0.28;
-    armL = wall < 0 ? -1.05 : -0.15;
-    armR = wall > 0 ? -1.05 : -0.15;
-    headX = -0.3;                                    // eyes up the wall
+    // pressed to the wall: three-quarter turn into it, both hands up and
+    // gripping, legs staggered against the face, leaning in, eyes up
+    turn = wall * 0.95;
+    lean = wall * 0.16;
+    shiftX = wall * 0.055;      // the collider touches; the body should too
+    legL = 0.7; legR = 0.2;
+    armL = wall < 0 ? -0.9 : -0.5;
+    armR = wall > 0 ? -0.9 : -0.5;
+    headX = -0.35;
     damp = 16;
   }
   if (p.crouch && p.grounded) {
@@ -266,6 +270,7 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   st.headX += (headX - st.headX) * k;
   st.sx += (sx - st.sx) * Math.min(1, p.dt * 18);
   st.sy += (sy - st.sy) * Math.min(1, p.dt * 18);
+  st.shiftX += (shiftX - st.shiftX) * k;
 
   // ---- apply ----
   s.group.rotation.y = st.turn;
@@ -278,6 +283,7 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   s.group.scale.set(st.sx, st.sy, 1 + (st.sx - 1) * 0.8);
   // squash pivots on the boots, not the belt
   s.group.position.y = FOOT_Y * (1 - st.sy);
+  s.group.position.x = st.shiftX;
   // idle breathing + gait bob, so he is never a statue
   s.helmet.position.y = HELMET_Y
     + Math.sin(p.walkT * 2) * 0.006 * p.speed01

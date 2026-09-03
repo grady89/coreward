@@ -446,7 +446,7 @@ export class VaultRun {
     // the pilot — same suit the EVA wears, so the two can never drift
     this.suit = buildSuit();
     // the spark itself rides on the pack, visibly lit or spent
-    this.sparkMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.075),
+    this.sparkMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.052),
       new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
     this.sparkMesh.position.copy(this.suit.packAnchor);
     this.lamp = new THREE.PointLight(0xffe6c0, 6, 6 * BODY, 1.6);
