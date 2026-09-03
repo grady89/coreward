@@ -744,8 +744,8 @@ export class VaultRun {
       t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-    // Act III mounted everything in a hurry (atmosphere §3.3)
-    const crooked = this.glyph.world === 'maelis6' ? 0.045 : 0;
+    // Act III's cracks bite deeper — the hurry is in the stone (atmosphere §3.3)
+    const crooked = this.glyph.world === 'maelis6' ? 0.05 : 0;
 
     // The reference (reference-art/architecture) reads as light escaping the
     // masonry, and it obeys four rules the first draft ignored: seams run in
@@ -782,20 +782,68 @@ export class VaultRun {
       positions.push(ax, ay, 0.505, bx, by, 0.505, cx2, cy2, 0.505);
       colors.push(hue.r * ka, hue.g * ka, hue.b * ka, hue.r * kb, hue.g * kb, hue.b * kb, hue.r * kc, hue.g * kc, hue.b * kc);
     };
-    /** a seam segment: hairline core on the edge + a soft spill fading into
-     *  the open air; brightness ka at one end, kb at the other */
+    /**
+     * A seam is a CRACK, not a ruler line: a jagged polyline that wanders
+     * off the edge into the stone, flickering in brightness, with the glow
+     * spilling out of it into the open air — and here and there it forks,
+     * a dead-end branch running deeper into the block and going dark.
+     */
+    // a bright crack burns toward white at its heart — pure hue reads as
+    // painted rope, not light escaping under pressure
+    const hot = (k: number): [number, number, number] => {
+      const t = Math.max(0, Math.min(1, (k - 0.95) * 0.9));
+      return [(hue.r + (1 - hue.r) * t) * k, (hue.g + (1 - hue.g) * t) * k, (hue.b + (1 - hue.b) * t) * k];
+    };
+    const strip = (pts: { x: number; y: number; k: number }[], w: number): void => {
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dl = Math.hypot(dx, dy) || 1;
+        // the line thins where it dims — a taper, not a rope
+        const wa = w * (0.45 + 0.55 * Math.min(1, a.k));
+        const wb = w * (0.45 + 0.55 * Math.min(1, b.k));
+        const nxx = -dy / dl, nyy = dx / dl;
+        const ca = hot(a.k), cb = hot(b.k);
+        positions.push(
+          a.x - nxx * wa, a.y - nyy * wa, 0.505, b.x - nxx * wb, b.y - nyy * wb, 0.505, b.x + nxx * wb, b.y + nyy * wb, 0.505,
+          a.x - nxx * wa, a.y - nyy * wa, 0.505, b.x + nxx * wb, b.y + nyy * wb, 0.505, a.x + nxx * wa, a.y + nyy * wa, 0.505);
+        colors.push(...ca, ...cb, ...cb, ...ca, ...cb, ...ca);
+      }
+    };
     const seam = (x0: number, y0: number, x1: number, y1: number, nx: number, ny: number, ka: number, kb: number): void => {
-      const j = crooked ? (rng() - 0.5) * crooked : 0;
-      x0 += j * ny; x1 += j * ny; y0 += j * nx; y1 += j * nx;
-      const core = 0.03, spill = 0.16;
-      // core: a thin hot quad straddling the edge
-      const cx0 = x0 - nx * core, cy0 = y0 - ny * core, cx1 = x1 - nx * core, cy1 = y1 - ny * core;
-      const hx0 = x0 + nx * core, hy0 = y0 + ny * core, hx1 = x1 + nx * core, hy1 = y1 + ny * core;
-      const hA = Math.min(1.1, ka * 1.15), hB = Math.min(1.1, kb * 1.15);
-      tri(cx0, cy0, hA, cx1, cy1, hB, hx1, hy1, hB);
-      tri(cx0, cy0, hA, hx1, hy1, hB, hx0, hy0, hA);
-      // spill: bright at the edge, black at the outer hem
-      const ox0 = x0 + nx * spill, oy0 = y0 + ny * spill, ox1 = x1 + nx * spill, oy1 = y1 + ny * spill;
+      const tx = x1 - x0, ty = y1 - y0;
+      const len = Math.hypot(tx, ty);
+      const steps = Math.max(2, Math.round(len / 0.3));
+      const pts: { x: number; y: number; k: number }[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        // the crack lives IN the rock: it dives into the block and barely
+        // grazes back out, never floating in the air
+        const into = i === 0 || i === steps ? 0.02 : 0.03 + rng() * (0.14 + crooked * 2);
+        const graze = rng() < 0.18 ? 0.025 : 0;
+        const o = graze - into;
+        const flick = 0.7 + rng() * 0.6;
+        pts.push({
+          x: x0 + tx * t + nx * o,
+          y: y0 + ty * t + ny * o,
+          k: Math.min(2.0, (ka + (kb - ka) * t) * flick * 1.4),
+        });
+      }
+      strip(pts, 0.028);
+      // forks: dead-end branches running deeper into the stone, going dark
+      const nForks = Math.floor(len * 0.35 * rng() + (rng() < 0.5 ? 1 : 0));
+      for (let f = 0; f < nForks; f++) {
+        const at = pts[1 + Math.floor(rng() * (pts.length - 2))];
+        if (!at) continue;
+        const drift = (rng() - 0.5) * 1.4;
+        const d1 = 0.12 + rng() * 0.14, d2 = d1 + 0.1 + rng() * 0.12;
+        const bx1 = at.x - nx * d1 + (ny !== 0 ? drift * d1 : 0), by1 = at.y - ny * d1 + (nx !== 0 ? drift * d1 : 0);
+        const bx2 = at.x - nx * d2 + (ny !== 0 ? drift * d2 * 1.6 : 0), by2 = at.y - ny * d2 + (nx !== 0 ? drift * d2 * 1.6 : 0);
+        strip([{ x: at.x, y: at.y, k: at.k * 0.8 }, { x: bx1, y: by1, k: at.k * 0.35 }, { x: bx2, y: by2, k: 0 }], 0.02);
+      }
+      // the glow that escapes: a soft gradient off the edge line into the air
+      const ox0 = x0 + nx * 0.2, oy0 = y0 + ny * 0.2;
+      const ox1 = x1 + nx * 0.2, oy1 = y1 + ny * 0.2;
       tri(x0, y0, ka * 0.3, x1, y1, kb * 0.3, ox1, oy1, 0);
       tri(x0, y0, ka * 0.3, ox1, oy1, 0, ox0, oy0, 0);
     };
