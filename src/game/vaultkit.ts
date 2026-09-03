@@ -1131,17 +1131,32 @@ export function buildRime(seed: number): RimeParts {
   const crust = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 0.94), ice);
   crust.position.y = 0.16;
   g.add(crust);
-  for (let i = 0; i < 7; i++) {
-    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.03 + rnd(i) * 0.02, 0.1 + rnd(i + 9) * 0.14, 4), ice);
-    sp.position.set(-0.42 + i * 0.14, 0.44 + rnd(i + 3) * 0.05, 0.2 - rnd(i + 5) * 0.4);
-    sp.rotation.z = (rnd(i + 7) - 0.5) * 0.5;
-    g.add(sp);
+  // NOTHING ON THIS OBJECT MAY COME TO A POINT.
+  //
+  // The rime shelf demands commitment (§III) — it crumbles, it regrows, and
+  // it never kills. The first dress gave it a fringe of spikes above and
+  // icicles below, and downward spikes are the oldest word in the platformer
+  // language for "this ends you". That is P2 read backwards: the drawing was
+  // advertising a fang the rule does not have, which costs the player the
+  // approach just as surely as hiding one would. So the frost above is a
+  // granular crust of rounded lumps, and what hangs below is meltwater — fat
+  // beads with heavy bottoms, the shape of a drip rather than a tooth.
+  for (let i = 0; i < 9; i++) {
+    const lump = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i) * 0.035, 5, 4), ice);
+    lump.position.set(-0.44 + i * 0.11, 0.4 + rnd(i + 3) * 0.03, 0.24 - rnd(i + 5) * 0.46);
+    lump.scale.set(1, 0.55 + rnd(i + 7) * 0.3, 1);
+    lump.rotation.z = (rnd(i + 7) - 0.5) * 0.6;
+    g.add(lump);
   }
   for (let i = 0; i < 4; i++) {
-    const d = new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.12 + rnd(i + 11) * 0.16, 5), ice);
-    d.rotation.z = Math.PI;
-    d.position.set(-0.34 + i * 0.23, -0.5 - rnd(i + 13) * 0.06, 0.3);
-    g.add(d);
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i + 11) * 0.02, 6, 5), ice);
+    bead.position.set(-0.34 + i * 0.23, -0.46 - rnd(i + 13) * 0.06, 0.3);
+    bead.scale.set(0.8, 1.25, 0.8);
+    g.add(bead);
+    // the neck it hangs from, so the bead reads as running water gone still
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.03, 0.09, 5), ice);
+    neck.position.set(bead.position.x, -0.4, 0.3);
+    g.add(neck);
   }
 
   // the crack web, hidden until it takes your weight
