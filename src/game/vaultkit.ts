@@ -420,8 +420,13 @@ export interface EmitterParts {
   group: THREE.Group;
   /** the head and its counterweight arm, turned to the beam's angle */
   yoke: THREE.Group;
+  /** the pedestal, which reaches to whatever surface the lantern is bolted to */
+  mount: THREE.Group;
   lensMat: THREE.MeshBasicMaterial;
 }
+
+/** the pedestal's natural reach before it is stretched to find its footing */
+export const EMITTER_REACH = 0.75;
 
 /**
  * The watch-lantern, from its own reference sheet: a stone pedestal, a
@@ -435,28 +440,41 @@ export function buildEmitter(): EmitterParts {
   const stone = stoneMat(0x9a978f);
   const bronze = bronzeMat();
 
-  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.09, 10), stone);
-  plinth.position.y = -0.42;
-  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.5, 10), stone);
-  column.position.y = -0.13;
+  // THE MOUNT. The head sits at the def's own point — that is where the ray
+  // is marched from and where the hazard lives — and the pedestal grows OUT
+  // of it toward whatever surface the room actually offers. A watch-light
+  // hanging in mid-air is furniture the fiction cannot explain, and the
+  // guild bolted its lanterns to something.
+  //
+  // Built pointing DOWN from the head at the origin: the run rotates the
+  // whole mount to stand on a floor, hang from a ceiling or bracket off a
+  // wall, and stretches the shaft to reach.
+  const mount = new THREE.Group();
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.07, 10), bronze);
-  collar.position.y = 0.14;
-  g.add(plinth, column, collar);
+  collar.position.y = -0.18;
+  mount.add(collar);
+  // the shaft is a unit column hanging off the collar, scaled to the reach
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1, 10), stone);
+  shaft.position.y = -0.5;
+  shaft.name = 'shaft';
+  const foot = new THREE.Group();
+  foot.name = 'foot';
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.09, 10), stone);
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.38, 0.06, 10), stone);
+  skirt.position.y = -0.07;
+  foot.add(plinth, skirt);
+  mount.add(shaft, foot);
+  g.add(mount);
 
   // the gimbal: two rings, so the head reads as free to turn
   for (const rot of [0, Math.PI / 2]) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.017, 5, 16), bronze);
-    ring.position.y = 0.32;
     ring.rotation.y = rot;
     g.add(ring);
   }
-  const finial = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 6), bronze);
-  finial.position.y = 0.6;
-  g.add(finial);
 
   // the head itself turns; everything on the yoke aims down +x
   const yoke = new THREE.Group();
-  yoke.position.y = 0.32;
   const shell = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), ironMat(0x6d675d));
   yoke.add(shell);
   const lensMat = glowMat(0xffe9b8, 0.9);
@@ -481,35 +499,68 @@ export function buildEmitter(): EmitterParts {
   yoke.add(arm, weight);
   g.add(yoke);
 
-  return { group: g, yoke, lensMat };
+  return { group: g, yoke, mount, lensMat };
 }
 
 /**
- * The cone. A stretched rectangle is a plank of light; a watch-light throws
- * a WEDGE that widens and softens with distance, hot on its axis and gone
- * at its edges. One buffer, vertex colours, additive — the soft edges cost
- * nothing, because black adds nothing.
- *
- * Unit length along +x so the run can scale it to whatever the ray march
- * found; half-width runs 0.1 at the lens to 0.42 at the far end.
+ * Stand the pedestal on a real surface. `dir` is which way the mount points
+ * out of the head (0 down, 1 up, 2 right, 3 left) and `reach` is how far it
+ * has to travel to get there.
  */
-export function coneGeometry(): THREE.BufferGeometry {
-  const N = 18;
+export function seatEmitter(parts: EmitterParts, dir: number, reach: number): void {
+  parts.mount.rotation.z = dir === 0 ? 0 : dir === 1 ? Math.PI
+    : dir === 2 ? -Math.PI / 2 : Math.PI / 2;
+  const L = Math.max(0.35, reach - 0.2);
+  const shaft = parts.mount.getObjectByName('shaft') as THREE.Mesh;
+  const foot = parts.mount.getObjectByName('foot') as THREE.Group;
+  shaft.scale.y = L;
+  shaft.position.y = -0.18 - L / 2;
+  foot.position.y = -0.18 - L;
+}
+
+/**
+ * The beam.
+ *
+ * THE RULE THIS OBEYS: a watch-light bites within `BEAM_R` of its ray and
+ * nowhere else — a line 0.6 tiles wide, not a floodlight. The first dress
+ * pass drew a wedge that widened with distance, which on a long beam painted
+ * a hazard some ELEVEN TIMES the one the rule enforces: unavoidable-looking,
+ * and dishonest in the direction that matters most, because the player reads
+ * the picture and plans against it. The drawn width is therefore capped at
+ * the collision radius and the geometry is built in world units, so the two
+ * cannot drift apart no matter how far the ray reaches.
+ *
+ * What that leaves is a lance, not a cone: a hot thin core down the axis with
+ * a soft halo either side of it, opening only slightly from the lens. Unit
+ * LENGTH along +x, so the run scales x by whatever the march found and leaves
+ * y alone.
+ */
+export function coneGeometry(r: number): THREE.BufferGeometry {
+  const N = 20;
   const pos: number[] = [];
   const col: number[] = [];
-  const halfW = (u: number): number => 0.1 + u * 0.32;
-  // the axis falls away with distance AND dies at the very end: a beam that
-  // stops at a straight cut edge reads as a painted shape, not as reach
-  const axis = (u: number): number => (1 - u * 0.5) * Math.min(1, (1 - u) * 5.5);
+  // barely opens: the lantern is collimated, and the reference sheet's beam
+  // is a shaft you could step over, not a wash you could not
+  const halfW = (u: number): number => r * (0.55 + 0.45 * u);
+  // hot along the axis, and it dies at the very end rather than stopping at a
+  // straight cut edge, which reads as a painted shape instead of reach
+  const axis = (u: number): number => (1 - u * 0.35) * Math.min(1, (1 - u) * 7);
   const push = (u: number, v: number, k: number): void => {
     pos.push(u, v * halfW(u), 0);
     col.push(k, k, k);
   };
+  // The value profile across the beam is what makes it a LANCE rather than a
+  // wash. A linear ramp edge-to-centre paints an even grey column; what reads
+  // as a beam is a hard bright thread with a fast-decaying halo, so the flanks
+  // are split and fall away steeply, and the core is laid down twice — additive,
+  // so the overlap doubles it — leaving the lethal line as the bright line.
   for (let i = 0; i < N; i++) {
     const u0 = i / N, u1 = (i + 1) / N;
-    // three strips: soft flank, hot core, soft flank
-    for (const [a, b] of [[-1, -0.32], [-0.32, 0.32], [0.32, 1]] as [number, number][]) {
-      const ka = Math.abs(a) > 0.9 ? 0 : 1, kb = Math.abs(b) > 0.9 ? 0 : 1;
+    for (const [a, b, ka, kb] of [
+      [-1, -0.45, 0, 0.18], [-0.45, -0.16, 0.18, 1], [-0.16, 0.16, 1, 1],
+      [0.16, 0.45, 1, 0.18], [0.45, 1, 0.18, 0],
+      [-0.16, 0.16, 1, 1],                        // the core again: the thread
+    ] as [number, number, number, number][]) {
       push(u0, a, axis(u0) * ka); push(u1, a, axis(u1) * ka); push(u1, b, axis(u1) * kb);
       push(u0, a, axis(u0) * ka); push(u1, b, axis(u1) * kb); push(u0, b, axis(u0) * kb);
     }
@@ -522,7 +573,7 @@ export function coneGeometry(): THREE.BufferGeometry {
 
 export const coneMaterial = (): THREE.MeshBasicMaterial =>
   new THREE.MeshBasicMaterial({
-    color: 0xfff0c8, vertexColors: true, transparent: true, opacity: 0.5,
+    color: 0xfff2d8, vertexColors: true, transparent: true, opacity: 0.85,
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
   });
 

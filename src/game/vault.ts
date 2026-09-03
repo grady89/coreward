@@ -9,7 +9,7 @@ import {
 import {
   Act, actOf, LATTICE, softDisc, drankStain, glowMat,
   buildSconce, SCONCE_REACH, SCONCE_FLAME_Y, buildBrazier,
-  buildEmitter, coneGeometry, coneMaterial, EmitterParts,
+  buildEmitter, seatEmitter, EMITTER_REACH, coneGeometry, coneMaterial, EmitterParts,
   buildRailPost, buildBolt, BoltParts, buildSnuffer, MothParts,
   buildCenser, CenserParts, buildArcTelegraph, ArcTelegraph, buildChain,
   buildCrusher, buildRime, RimeParts,
@@ -608,9 +608,17 @@ export class VaultRun {
     // The counterweight arm turns with the head, so even a parked emitter
     // tells you which way it is about to look (△ §III).
     for (const b of this.def.beams ?? []) {
-      const mesh = new THREE.Mesh(coneGeometry(), coneMaterial());
+      // the beam is drawn to the radius it actually bites within, never wider
+      const mesh = new THREE.Mesh(coneGeometry(BEAM_R), coneMaterial());
       const em = buildEmitter();
       em.group.position.set(b.x, -b.y, 0.1);
+      // and the lantern is bolted to something: the head stays on the def's
+      // point, where the ray is marched from, and the pedestal reaches out to
+      // the nearest surface the room offers — floor first, then ceiling, then
+      // either wall. A watch-light hanging in mid-air is furniture the
+      // fiction cannot explain.
+      const seat = this.emitterSeat(b.x, b.y);
+      seatEmitter(em, seat.dir, seat.reach);
       this.scene.add(mesh, em.group);
       this.emitters.push(em);
       this.beamRays.push({ ex: b.x, ey: -b.y, mesh });
@@ -1991,6 +1999,41 @@ export class VaultRun {
   }
 
   /**
+   * Where a watch-lantern's pedestal finds its footing: the nearest solid
+   * tile out of the emitter's own point, tried floor first (a lantern
+   * STANDS unless the room says otherwise), then ceiling, then either wall.
+   * Returns the direction the mount points and how far it has to reach.
+   *
+   * Dress only — the ray march and the hazard both still start at the def's
+   * point, so nothing about where the beam bites moves with the pedestal.
+   */
+  private emitterSeat(bx: number, by: number): { dir: number; reach: number } {
+    const tx = Math.floor(bx), ty = Math.floor(by);
+    // dir, tile step, and the world-space face of the tile that stops us
+    const probes: { dir: number; sx: number; sy: number; face: (n: number) => number }[] = [
+      { dir: 0, sx: 0, sy: 1, face: ny => ny - by },          // floor: its top
+      { dir: 1, sx: 0, sy: -1, face: ny => by - (ny + 1) },   // ceiling: its underside
+      { dir: 2, sx: 1, sy: 0, face: nx => nx - bx },          // wall right: its left face
+      { dir: 3, sx: -1, sy: 0, face: nx => bx - (nx + 1) },   // wall left: its right face
+    ];
+    let best: { dir: number; reach: number } | null = null;
+    let bestScore = Infinity;
+    for (const pr of probes) {
+      for (let k = 1; k <= 8; k++) {
+        const nx = tx + pr.sx * k, ny = ty + pr.sy * k;
+        if (!this.solidTile(nx, ny)) continue;
+        const reach = Math.max(0.35, pr.face(pr.sy !== 0 ? ny : nx));
+        // the floor gets the benefit of the doubt: a lantern STANDS unless
+        // the room plainly gives it nothing to stand on
+        const score = reach - (pr.dir === 0 ? 0.6 : 0);
+        if (score < bestScore) { bestScore = score; best = { dir: pr.dir, reach }; }
+        break;
+      }
+    }
+    return best ?? { dir: 0, reach: EMITTER_REACH };
+  }
+
+  /**
    * Which way a shuttle is currently running the wire: +1 outbound from the
    * rail's start, -1 on the return. The bolt is a carriage with a nose and a
    * wake, so it has to be flipped on the way back — a light that runs
@@ -2100,8 +2143,11 @@ export class VaultRun {
       // the ray march found. The march itself still runs from the def's point,
       // so nothing about where the beam bites has moved.
       ray.mesh.position.set(
-        b.x + Math.cos(ang) * 0.16, -b.y + 0.32 + Math.sin(ang) * 0.16, 0.15);
-      ray.mesh.scale.set(len, len, 1);
+        b.x + Math.cos(ang) * 0.16, -b.y + Math.sin(ang) * 0.16, 0.15);
+      // x only: the cone's width is already in world units and capped at the
+      // collision radius, and scaling it with length is what made the first
+      // pass paint a hazard the rule never enforced
+      ray.mesh.scale.set(len, 1, 1);
       ray.mesh.rotation.z = ang;
       // the parked cone is visible but plainly asleep, and so is the lantern
       // that throws it: the head turns to its rest angle and the lens goes
