@@ -83,15 +83,12 @@ const CHAMBER_HYST = 0.45;
 
 // ---- the rim-light lattice (§VI) ----
 /** a solid face's constant emissive rim: faint, but readable well past the lamp */
-const RIM_BASE = 0.3;
+const RIM_BASE = 0.36;
 /** each lit sconce strengthens the whole lattice a notch — the chord's fifth system */
 const RIM_STEP = 0.03;
 const RIM_MAX = 0.55;
-/** how thick the rim is, across the face, in tiles */
-const RIM_W = 0.11;
-/** and how long — short of the full tile, so the lattice reads as courses of
- *  stone catching light rather than as one continuous stroke */
-const RIM_L = 0.9;
+// seam thickness and course lengths live inside buildRimLattice now — the
+// lattice is seeded courses with joints, spill and pools, not uniform strips
 
 // ---- the sconce chord (§VI) ----
 /** the chord's envelope: everything it fires decays over this */
@@ -737,42 +734,124 @@ export class VaultRun {
       const i = y * p.w + x;
       return !p.solid[i] && !p.kill[i];
     };
-    // Act III mounted them in a hurry: crooked, and never struck the
-    // scaffolds (architecture as chronology, atmosphere §3.3)
-    const crooked = this.glyph.world === 'maelis6' ? 0.09 : 0;
-    const edges: { x: number; y: number; sx: number; sy: number }[] = [];
-    for (let y = 0; y < p.h; y++) {
-      for (let x = 0; x < p.w; x++) {
-        if (!p.solid[y * p.w + x]) continue;
-        const cx = x + 0.5, cy = -(y + 0.5);
-        if (open(x, y - 1)) edges.push({ x: cx, y: cy + 0.5 - RIM_W / 2, sx: RIM_L, sy: RIM_W });
-        if (open(x, y + 1)) edges.push({ x: cx, y: cy - 0.5 + RIM_W / 2, sx: RIM_L, sy: RIM_W });
-        if (open(x - 1, y)) edges.push({ x: cx - 0.5 + RIM_W / 2, y: cy, sx: RIM_W, sy: RIM_L });
-        if (open(x + 1, y)) edges.push({ x: cx + 0.5 - RIM_W / 2, y: cy, sx: RIM_W, sy: RIM_L });
+    // seeded per vault, so a room's seams are ITS seams, every visit
+    let seed = 2166136261;
+    for (const c of this.glyph.id) seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0;
+    const rng = (): number => {
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    // Act III mounted everything in a hurry (atmosphere §3.3)
+    const crooked = this.glyph.world === 'maelis6' ? 0.045 : 0;
+
+    // The reference (reference-art/architecture) reads as light escaping the
+    // masonry, and it obeys four rules the first draft ignored: seams run in
+    // long COURSES broken at mason's joints, not per-tile dashes; intensity
+    // is uneven along a seam and some seams are dead; the light SPILLS as a
+    // gradient into the open air off a hot hairline core; and it pools at
+    // corner junctions. All four are geometry: one buffer, vertex colors,
+    // additive — black verts cost nothing.
+
+    // contiguous exposed edges, merged into runs per orientation
+    type Run = { dir: 0 | 1 | 2 | 3; x: number; y: number; len: number }; // top/bottom/left/right
+    const runs: Run[] = [];
+    for (let y = 0; y < p.h; y++) for (const dir of [0, 1] as const) {
+      let st = -1;
+      for (let x = 0; x <= p.w; x++) {
+        const ok = x < p.w && !!p.solid[y * p.w + x] && open(x, y + (dir === 0 ? -1 : 1));
+        if (ok && st < 0) st = x;
+        if (!ok && st >= 0) { runs.push({ dir, x: st, y, len: x - st }); st = -1; }
       }
     }
-    if (!edges.length) return;
+    for (let x = 0; x < p.w; x++) for (const dir of [2, 3] as const) {
+      let st = -1;
+      for (let y = 0; y <= p.h; y++) {
+        const ok = y < p.h && !!p.solid[y * p.w + x] && open(x + (dir === 2 ? -1 : 1), y);
+        if (ok && st < 0) st = y;
+        if (!ok && st >= 0) { runs.push({ dir, x, y: st, len: y - st }); st = -1; }
+      }
+    }
+
+    const hue = new THREE.Color(this.rimHue);
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const tri = (ax: number, ay: number, ka: number, bx: number, by: number, kb: number, cx2: number, cy2: number, kc: number): void => {
+      positions.push(ax, ay, 0.505, bx, by, 0.505, cx2, cy2, 0.505);
+      colors.push(hue.r * ka, hue.g * ka, hue.b * ka, hue.r * kb, hue.g * kb, hue.b * kb, hue.r * kc, hue.g * kc, hue.b * kc);
+    };
+    /** a seam segment: hairline core on the edge + a soft spill fading into
+     *  the open air; brightness ka at one end, kb at the other */
+    const seam = (x0: number, y0: number, x1: number, y1: number, nx: number, ny: number, ka: number, kb: number): void => {
+      const j = crooked ? (rng() - 0.5) * crooked : 0;
+      x0 += j * ny; x1 += j * ny; y0 += j * nx; y1 += j * nx;
+      const core = 0.03, spill = 0.16;
+      // core: a thin hot quad straddling the edge
+      const cx0 = x0 - nx * core, cy0 = y0 - ny * core, cx1 = x1 - nx * core, cy1 = y1 - ny * core;
+      const hx0 = x0 + nx * core, hy0 = y0 + ny * core, hx1 = x1 + nx * core, hy1 = y1 + ny * core;
+      const hA = Math.min(1.1, ka * 1.15), hB = Math.min(1.1, kb * 1.15);
+      tri(cx0, cy0, hA, cx1, cy1, hB, hx1, hy1, hB);
+      tri(cx0, cy0, hA, hx1, hy1, hB, hx0, hy0, hA);
+      // spill: bright at the edge, black at the outer hem
+      const ox0 = x0 + nx * spill, oy0 = y0 + ny * spill, ox1 = x1 + nx * spill, oy1 = y1 + ny * spill;
+      tri(x0, y0, ka * 0.3, x1, y1, kb * 0.3, ox1, oy1, 0);
+      tri(x0, y0, ka * 0.3, ox1, oy1, 0, ox0, oy0, 0);
+    };
+    /** light pooling at a junction: a small fan, hot center, black rim */
+    const pool = (cx: number, cy: number, k: number): void => {
+      const r = 0.1 + rng() * 0.12, n = 8;
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
+        tri(cx, cy, k, cx + Math.cos(a0) * r, cy + Math.sin(a0) * r, 0, cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, 0);
+      }
+    };
+
+    for (const r of runs) {
+      // walk the run in mason's segments with joints between them
+      let t = 0.04;
+      const L = r.len - 0.04;
+      while (t < L) {
+        const segLen = Math.min(L - t, 0.6 + rng() * 1.6);
+        const gap = 0.08 + rng() * 0.3;
+        const dead = rng() < 0.2;          // some seams gave out centuries ago
+        if (!dead && segLen > 0.25) {
+          const ka = 0.45 + rng() * 0.55;
+          const kb = ka * (0.45 + rng() * 0.55);   // uneven along its own length
+          if (r.dir === 0) seam(r.x + t, -r.y, r.x + t + segLen, -r.y, 0, 1, ka, kb);
+          else if (r.dir === 1) seam(r.x + t, -(r.y + 1), r.x + t + segLen, -(r.y + 1), 0, -1, ka, kb);
+          else if (r.dir === 2) seam(r.x, -(r.y + t), r.x, -(r.y + t + segLen), -1, 0, ka, kb);
+          else seam(r.x + 1, -(r.y + t), r.x + 1, -(r.y + t + segLen), 1, 0, ka, kb);
+        }
+        t += segLen + gap;
+      }
+    }
+    // corner pools where two open faces meet on one block
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+      if (!p.solid[y * p.w + x]) continue;
+      const corners: [boolean, number, number][] = [
+        [open(x, y - 1) && open(x - 1, y) && open(x - 1, y - 1), x, -y],
+        [open(x, y - 1) && open(x + 1, y) && open(x + 1, y - 1), x + 1, -y],
+        [open(x, y + 1) && open(x - 1, y) && open(x - 1, y + 1), x, -(y + 1)],
+        [open(x, y + 1) && open(x + 1, y) && open(x + 1, y + 1), x + 1, -(y + 1)],
+      ];
+      for (const [ok, cx, cy] of corners) {
+        if (ok && rng() < 0.45) pool(cx, cy, 0.45 + rng() * 0.45);
+      }
+    }
+
+    if (!positions.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(colors), 3));
     this.rimMat = new THREE.MeshBasicMaterial({
-      color: this.rimHue, transparent: true, opacity: RIM_BASE,
+      color: 0xffffff, vertexColors: true, transparent: true, opacity: RIM_BASE,
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     });
-    const inst = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), this.rimMat, edges.length);
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const e = new THREE.Euler();
-    const pos = new THREE.Vector3();
-    const scl = new THREE.Vector3();
-    for (let i = 0; i < edges.length; i++) {
-      const ed = edges[i];
-      e.set(0, 0, crooked ? (Math.random() - 0.5) * crooked : 0);
-      q.setFromEuler(e);
-      pos.set(ed.x, ed.y, 0.505);
-      scl.set(ed.sx, ed.sy, 1);
-      inst.setMatrixAt(i, m4.compose(pos, q, scl));
-    }
-    inst.instanceMatrix.needsUpdate = true;
-    inst.renderOrder = 2;
-    this.scene.add(inst);
+    const mesh = new THREE.Mesh(geo, this.rimMat);
+    mesh.renderOrder = 2;
+    this.scene.add(mesh);
   }
 
   /**
