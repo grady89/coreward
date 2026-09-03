@@ -54,6 +54,7 @@ node scripts/fauna.mjs   out/      # every creature on all three worlds
 node scripts/sandbox.mjs out/      # all 12 dev-sandbox stages still come alive
 node scripts/vaults.mjs  out/      # the Nine Stones: alphabet, vault runtime, codex
 node scripts/pilotlook.mjs out/    # the pilot: portrait, gameplay distance, stride, vault
+node scripts/gamepad.mjs out/      # a synthetic pad: menus, flight, kit modifier, vault, chart
 ```
 
 ## Look at the fauna (dev)
@@ -98,6 +99,32 @@ hardware at 60fps the clamp never engages.
 | C | Warp Hold remote-sell (forge tech) |
 | Esc | pause / close panel |
 | M | mute |
+
+## Controller
+
+Plug a pad in and the game changes hands mid-sentence — the prompts, the pause
+legend and the kit strip all re-stamp themselves, and touching the keyboard
+hands them straight back. Any standard-mapping pad works (Xbox layout named
+below); nothing needs configuring.
+
+| Button | Action |
+|---|---|
+| left stick / d-pad | thrust sideways · thrust up · drill down (the stick answers everywhere the d-pad does) |
+| A / RT | thrusters — jump during EVA and inside a stone |
+| X | dock at a building · EVA · salvage · board pod · **hold** at a cradle |
+| B | recall to the pod during EVA · back out of a panel or the chart |
+| Y | headlamp on/off |
+| LB | Blink Coil dash · the spark inside a stone |
+| RB | fire the lance |
+| **hold LT** | the kit: **X** flare · **A** seismic charge · **B** arrestor · **Y** shaftlight · **RB** depot |
+| View / Back | survey map (right stick up/down zooms it) |
+| Menu / Start | pause · close a panel |
+| L3 | Warp Hold remote-sell · **R3** mute |
+
+Menus, the title screen and the Sundering Chart are all navigable: the stick
+walks a focus ring, **A** presses what it is on, left/right drags the volume
+sliders, and **B** backs out. Rumble is on by default and can be turned off
+under SETTINGS · MOTION (it also follows the system's reduced-motion setting).
 
 Story canon lives in [LORE.md](LORE.md); the build sequence and status are in
 [PLAN.md](PLAN.md).

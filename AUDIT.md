@@ -50,4 +50,6 @@ Date: 2026-08-31 · Build: `npm run build` (tsc strict, clean) · Verified headl
 - [ ] Capsule art + trailer captures (add a `?cinema` HUD-less mode)
 - [ ] Analytics (web demo only): none wired — decide if wanted
 - [ ] Real Steam wishlist URL in the title screen ghost link
-- [ ] Gamepad support (Deck) — input already funnels through one `Input` struct
+- [x] Gamepad support (Deck) — `src/input/`: one poll a frame into the same
+      `Input` struct, a shared action dispatch, DOM focus ring for the menus,
+      prompts that re-stamp per device, rumble. Suite: `scripts/gamepad.mjs`

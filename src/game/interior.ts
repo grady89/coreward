@@ -6,6 +6,7 @@ import { wallPalette, WING_GALLERY, WING_VIVARIUM } from './furnish';
 import { FAUNA, FaunaEntry } from './bestiary';
 import { GEM_GEOS, gemScaleOf } from '../world/gemshapes';
 import { def as tileDef } from '../world/tiles';
+import { glyphs } from '../input/prompts';
 
 // THE QUARTERS, inside — the one room on VEIL-3 that is yours. A side-view
 // hab the suit walks: stations open panels (the Ledger, the wardrobe, the
@@ -516,7 +517,7 @@ export class Interior {
 
     // prompt
     const near = paused ? null : this.nearestStation();
-    const html = near ? `<span class="key">E</span>${near.label}` : '';
+    const html = near ? glyphs(`<span class="key">E</span>${near.label}`) : '';
     if (html !== this.lastPrompt) {
       this.lastPrompt = html;
       const el = this.hud.querySelector('.ih-prompt') as HTMLDivElement | null;

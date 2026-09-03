@@ -13,6 +13,8 @@ export interface Settings {
   voiceLamplighters: number;  // 0..1 — the codex's recorded lines
   shake: boolean;
   hitstop: boolean;
+  /** controller vibration, for the pads that can do it */
+  rumble: boolean;
   showFps: boolean;
   /** some players are here for the calm digging — let them have it */
   threats: ThreatSetting;
@@ -29,6 +31,7 @@ const DEFAULTS: Settings = {
   voiceLamplighters: 1,
   shake: true,
   hitstop: true,
+  rumble: true,
   showFps: false,
   threats: 'full',
   vaultAssist: false,

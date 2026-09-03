@@ -170,8 +170,11 @@ travel, glyph completion.
 3. Steamworks: achievements mapped to milestones/endings/contracts (the seams
    already exist in `state`), cloud save swap at the localStorage seam, real
    wishlist URL on the title screen.
-4. Gamepad + Steam Deck: map to the single `Input` struct, menu navigation,
-   glyph-friendly button prompts.
+4. ~~Gamepad + Steam Deck: map to the single `Input` struct, menu navigation,
+   glyph-friendly button prompts.~~ **Done** — `src/input/` polls one pad a
+   frame into the same `Input`, walks a focus ring through the DOM panels, and
+   re-stamps every prompt for whichever device last spoke. Deck-specific
+   verification (real hardware, the Deck's own button glyphs) still pending.
 5. Marketing capture: `?capsule` key-art mode and `?cinema` HUD-less trailer
    mode; store page copy drawn from LORE.md.
 

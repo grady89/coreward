@@ -3,6 +3,7 @@ import { CORE_ROW, WORLD_W } from '../config';
 import { ACTIVE, WORLDS } from '../world/worlds';
 import { Ember } from '../world/backdrop';
 import { AudioEngine } from '../audio/audio';
+import { glyphs } from '../input/prompts';
 
 // The Communion — the ending of a world, staged as a rite instead of a dialog.
 //
@@ -298,7 +299,7 @@ export class Finale {
         <div id="f-eyebrow">${page.eyebrow}</div>
         <div id="f-title"></div>
         <div id="f-lines"></div>
-        <div id="f-hint"><span class="key">E</span>GO ON</div>
+        <div id="f-hint">${glyphs('<span class="key">E</span>GO ON')}</div>
       </div>`;
     let li = 0;
     (el.querySelector('#f-title') as HTMLElement).innerHTML = page.title
@@ -408,7 +409,7 @@ export class Finale {
         <div id="f-eyebrow"></div>
         <div id="f-title"></div>
         <div id="f-lines"></div>
-        <div id="f-hint"><span class="key">E</span>GO ON</div>
+        <div id="f-hint">${glyphs('<span class="key">E</span>GO ON')}</div>
       </div>`;
     this.ui.appendChild(el);
     this.overlay = el;

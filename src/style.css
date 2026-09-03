@@ -151,6 +151,26 @@ html, body {
   border: 1px solid var(--amber); color: var(--amber); font-weight: 700;
 }
 
+/* the pad's glyphs live in the same pill, a little rounder and roomier */
+.key.pad {
+  border-radius: 999px; padding-left: 9px; padding-right: 9px; letter-spacing: 0.06em;
+}
+
+/* the focus ring a controller pushes around a panel */
+.nav-focus { outline: none; }
+button.nav-focus, a.nav-focus {
+  box-shadow: 0 0 0 2px var(--amber); border-color: var(--amber) !important;
+}
+/* a 4px track can't carry a ring — light the whole row instead */
+input[type="range"].nav-focus {
+  background: rgba(255, 154, 60, 0.4);
+  box-shadow: 0 0 0 4px rgba(255, 154, 60, 0.16);
+}
+.row:has(.nav-focus) {
+  background: rgba(255, 154, 60, 0.07);
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+
 /* toasts */
 #toasts {
   position: fixed; top: 84px; left: 50%; transform: translateX(-50%);

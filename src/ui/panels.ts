@@ -27,6 +27,12 @@ import { EXTRACT_OFFER } from '../config';
 import { GLYPHS, glyphSvg } from '../world/glyphs';
 import { FAUNA, faunaSeen } from '../game/bestiary';
 import { DISPATCH_VOICED, LAMPLIGHTERS_VOICED, dispatchVoiceUrl, lamplightersVoiceUrl } from '../audio/voice-manifest';
+import { glyphs, PROMPTS } from '../input/prompts';
+
+/** the title screen's one line of teaching, re-stamped when hands change */
+export const CONTROLS_HINT =
+  '<span class="key">←→↑↓</span> fly &amp; drill · ' +
+  '<span class="key">E</span> dock · <span class="key">ESC</span> pause';
 
 /** one-line statement of a contract's terms, priced against this pod */
 function describe(c: Contract, maxFuel: number): string {
@@ -678,13 +684,20 @@ export class Panels {
 
   // ---------- PAUSE ----------
   private renderPause(): void {
-    this.body().innerHTML = `
-      <div class="screen-title good">PAUSED</div>
-      <div class="screen-sub">
+    // the legend follows whichever device is in the player's hands
+    const legend = PROMPTS.pad ? `
+        left stick steer · A / RT thrust · stick down to drill<br/>
+        hold the stick against a wall to drill sideways<br/>
+        X dock / EVA · VIEW survey map · B recall (EVA) · MENU pause<br/>
+        <span style="color:var(--amber)">hold LT:</span> X flare · A charge · B arrestor · Y shaftlight · RB depot<br/>
+        <span style="color:var(--amber)">forge tech:</span> LB dash · hold thrust at a ceiling to drill up · L3 warp-sell` : `
         ← → steer · ↑ / SPACE thrust · ↓ drill down<br/>
         hold ← / → against a wall to drill sideways<br/>
         E dock / EVA · TAB survey map · R recall (EVA) · M mute · ESC pause<br/>
-        <span style="color:var(--amber)">forge tech:</span> SHIFT dash · hold ↑ at a ceiling to drill up · C warp-sell
+        <span style="color:var(--amber)">forge tech:</span> SHIFT dash · hold ↑ at a ceiling to drill up · C warp-sell`;
+    this.body().innerHTML = `
+      <div class="screen-title good">PAUSED</div>
+      <div class="screen-sub">${legend}
       </div>
       <button class="btn primary wide" id="resume">RESUME</button>
       <button class="btn wide" id="to-settings">SETTINGS</button>
@@ -1245,7 +1258,7 @@ export class Panels {
           <span class="r-val" id="v-${key}">${Math.round(s[key] * 100)}</span>
         </span>
       </div>`;
-    const toggle = (key: 'shake' | 'hitstop' | 'showFps' | 'vaultAssist', label: string, sub: string) => `
+    const toggle = (key: 'shake' | 'hitstop' | 'rumble' | 'showFps' | 'vaultAssist', label: string, sub: string) => `
       <div class="row">
         <span><span class="r-name">${label}</span><div class="r-sub">${sub}</div></span>
         <button class="btn" data-toggle="${key}">${s[key] ? 'ON' : 'OFF'}</button>
@@ -1262,6 +1275,7 @@ export class Panels {
       <div class="forge-head">MOTION</div>
       ${toggle('shake', 'Screen shake', 'Camera kick on impacts and drilling')}
       ${toggle('hitstop', 'Impact freeze', 'Momentary pause when ore breaks')}
+      ${toggle('rumble', 'Controller rumble', 'Vibration on impacts, if the pad supports it')}
       <div class="forge-head">THREATS</div>
       <div class="row">
         <span><span class="r-name">Creatures</span><div class="r-sub">${
@@ -1294,7 +1308,7 @@ export class Panels {
     });
     this.body().querySelectorAll('button[data-toggle]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const key = (btn as HTMLElement).dataset.toggle as 'shake' | 'hitstop' | 'showFps' | 'vaultAssist';
+        const key = (btn as HTMLElement).dataset.toggle as 'shake' | 'hitstop' | 'rumble' | 'showFps' | 'vaultAssist';
         s[key] = !s[key];
         btn.textContent = s[key] ? 'ON' : 'OFF';
         this.ctx.audio.click();
@@ -1427,7 +1441,7 @@ export function createTitle(
     </div>
     <div class="advance-line">CINDRAL ADVANCE · ${CUR}40 · RECOVERABLE AGAINST EARNINGS</div>
     <a class="ghost-link" href="https://store.steampowered.com" target="_blank" rel="noopener">WISHLIST ON STEAM →</a>
-    <div class="controls-hint"><span class="key">←→↑↓</span> fly &amp; drill · <span class="key">E</span> dock · <span class="key">ESC</span> pause</div>
+    <div class="controls-hint">${glyphs(CONTROLS_HINT)}</div>
   `;
   ui.appendChild(el);
   // two-step confirm in the button itself — native confirm() is blocked in

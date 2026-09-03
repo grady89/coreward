@@ -3,6 +3,7 @@ import { WORLDS, HUSK, WorldDef } from '../world/worlds';
 import { GameState } from '../game/state';
 import { AudioEngine } from '../audio/audio';
 import { TILE_M } from '../config';
+import { glyphs } from '../input/prompts';
 
 // The Sundering Chart: the assay dish's reconstruction of the catastrophe.
 // One star broke; three fragments fell; three worlds caught them. The chart
@@ -211,7 +212,7 @@ export class Starmap {
       </div>
       <button class="btn sm-close" id="sm-close">CLOSE</button>
       <div class="sm-card" id="sm-card"></div>
-      <div class="sm-hint"><span class="key">←→</span> SELECT SITE · <span class="key">E</span> COMMIT TRANSIT · <span class="key">ESC</span> BACK</div>
+      <div class="sm-hint">${glyphs('<span class="key">←→</span> SELECT SITE · <span class="key">E</span> COMMIT TRANSIT · <span class="key">ESC</span> BACK')}</div>
     `;
     ui.appendChild(this.overlay);
     this.card = this.overlay.querySelector('#sm-card') as HTMLElement;

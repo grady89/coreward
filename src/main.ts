@@ -36,7 +36,7 @@ import {
   pick as pickNarrative, WorldStats, HUSK_READABLES, ENDING_PAGES, EndingKind,
   ADHOC_TRANSMISSIONS,
 } from './game/narrative';
-import { Panels, createTitle } from './ui/panels';
+import { Panels, createTitle, CONTROLS_HINT } from './ui/panels';
 import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
 import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
@@ -48,8 +48,17 @@ import { loadMeta, lockMeta } from './game/meta';
 import { rigFinish, flameStyle, lampTint, suitFinish, sparkStyle } from './game/cosmetics';
 import { applySuitFinish } from './player/suit';
 import { ShaftlightField, DepotField } from './world/keeps';
+import { Pad, PadDir } from './input/gamepad';
+import { MenuNav } from './input/menunav';
+import { PROMPTS, glyphs } from './input/prompts';
 
 type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault' | 'interior';
+
+/** one discrete request from the player, whichever device made it */
+type Action =
+  | 'interact' | 'escape' | 'dash' | 'lance' | 'flare' | 'charge' | 'arrestor'
+  | 'shaftlight' | 'depot' | 'lamp' | 'map' | 'recall' | 'warpsell' | 'mute'
+  | 'zoomin' | 'zoomout';
 
 class Game {
   renderer: THREE.WebGLRenderer;
@@ -99,7 +108,7 @@ class Game {
   private mouseY = 0;
   private saveTimer = 0;
   private dmgFxAt = -9;
-  private title: { hide(): void } | null = null;
+  private title: { hide(): void; el: HTMLElement } | null = null;
   /** the interactive sandbox: null unless ?fauna is in the URL */
   private sandbox: { card: SandboxCard } | null = null;
   /** a run inside one of the Nine Stones, or null */
@@ -114,7 +123,16 @@ class Game {
   private vaultGallery = false;
   /** which creature is staged and whether it still needs coaxing alive */
   private staging: { i: number; prime: number; staged: boolean; settle: number } | null = null;
-  private eHeld = false;
+  /** the second pair of hands — polled once a frame, never event-driven */
+  private pad = new Pad();
+  private nav = new MenuNav();
+  /** the pad's half of the movement input, rebuilt each poll */
+  private padDir: PadDir = { left: false, right: false, up: false, down: false };
+  private padUpWas = false;
+  private padEHeld = false;
+  private padPrompts = false;
+  private padZoomCd = 0;
+  private keyEHeld = false;
   private coreHold = 0;
   private coreActKind: 'extract' | 'seat' | 'offer' | null = null;
   private faunaDead = false;
@@ -698,12 +716,14 @@ class Game {
           this.hud.damageFlash();
           this.audio.damage();
           this.cam.addShake(0.18);
+          this.pad.rumble(0.5, 0.35, 180);
         }
       },
       onDeath: (cause: string) => {
         this.particles.explosion(this.ctrl.px, this.ctrl.py);
         this.audio.explosion();
         this.cam.addShake(0.55);
+        this.pad.rumble(1, 1, 520);
         this.flagDied = true;
         this.panels.open('death', { cause });
       },
@@ -730,12 +750,14 @@ class Game {
         this.particles.explosion(x + 0.5, -(y + 0.5));
         this.audio.explosion();
         this.cam.addShake(0.4);
+        this.pad.rumble(0.75, 0.45, 260);
         this.hud.toast(ACTIVE.gasImpulse > 0 ? 'PRESSURE BURST' : 'GAS POCKET');
       },
       onLanded: (impact: number) => {
         this.particles.landingDust(this.ctrl.px, this.ctrl.py - 0.4, impact);
         this.audio.landing(impact);
         if (impact > 14) this.cam.addShake(Math.min(0.4, impact * 0.02));
+        if (impact > 8) this.pad.rumble(Math.min(0.7, impact * 0.03), 0.2, 140);
       },
       onDrillBlocked: (msg: string) => {
         this.hud.toast(msg);
@@ -990,6 +1012,63 @@ class Game {
   }
 
   // ---------- input ----------
+  /**
+   * Every discrete thing a player can ask for. The keyboard and the pad both
+   * come through here, so a binding only ever has to be written once — and
+   * the guards (a panel is up, you are not in the right mode) live with the
+   * action instead of with whichever device happened to trigger it.
+   */
+  private act(a: Action, repeat = false): void {
+    switch (a) {
+      case 'interact':
+        if (!repeat) this.onInteract();
+        break;
+      case 'escape': this.onEscape(); break;
+      case 'lance': this.fireLance(); break;
+      case 'dash':
+        if (this.panels.isOpen) break;
+        if (this.mode === 'play') this.ctrl.dash();
+        else if (this.mode === 'vault' && !repeat) this.vault?.dash(this.input());
+        break;
+      case 'warpsell': this.warpSell(); break;
+      case 'flare': this.throwFlare(); break;
+      case 'charge': this.placeCharge(); break;
+      case 'arrestor': this.toggleArrestor(); break;
+      case 'shaftlight': this.placeShaftlight(); break;
+      case 'depot': this.placeDepot(); break;
+      case 'lamp':
+        if (this.mode !== 'play' && this.mode !== 'eva') break;
+        this.lampOn = !this.lampOn;
+        this.audio.click();
+        this.hud.setLamp(this.lampOn);
+        if (!this.lampOn) this.hud.toast('RUNNING DARK');
+        break;
+      case 'map': this.toggleMap(); break;
+      case 'zoomin':
+      case 'zoomout':
+        if (!this.map.visible) break;
+        this.map.zoomBy(a === 'zoomin' ? 1 : -1);
+        this.audio.click();
+        break;
+      case 'recall':
+        if (this.mode !== 'eva' || this.salvaging || this.panels.isOpen || this.finale.cinematic) break;
+        if (this.finale.isCommunion) {
+          this.finale.abort();
+          this.hud.show();
+        }
+        this.coreActKind = null;
+        this.coreHold = 0;
+        this.exitEva();
+        this.hud.toast('RECALLED TO THE POD');
+        break;
+      case 'mute':
+        if (this.audio.ready) {
+          this.hud.toast(this.audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
+        }
+        break;
+    }
+  }
+
   private bindInput(): void {
     const map: Record<string, keyof Input> = {
       ArrowLeft: 'left', KeyA: 'left',
@@ -997,7 +1076,18 @@ class Game {
       ArrowUp: 'up', KeyW: 'up', Space: 'up',
       ArrowDown: 'down', KeyS: 'down',
     };
+    const acts: Record<string, Action> = {
+      KeyE: 'interact', Escape: 'escape', KeyX: 'lance',
+      ShiftLeft: 'dash', ShiftRight: 'dash',
+      KeyC: 'warpsell', KeyQ: 'flare', KeyG: 'charge', KeyB: 'arrestor',
+      KeyL: 'shaftlight', KeyN: 'depot', KeyF: 'lamp',
+      Tab: 'map', KeyR: 'recall', KeyM: 'mute',
+      Equal: 'zoomin', NumpadAdd: 'zoomin',
+      Minus: 'zoomout', NumpadSubtract: 'zoomout',
+    };
     addEventListener('keydown', e => {
+      // the keyboard spoke: the prompts go back to key caps
+      this.padPrompt(false);
       // the starmap owns the keyboard while it is open (M mute stays global)
       if (this.mode === 'starmap' && this.starmap) {
         if (this.starmap.handleKey(e.code)) {
@@ -1011,53 +1101,14 @@ class Game {
         // vault jumping is edge-triggered and buffered, Celeste-school
         if (this.mode === 'vault' && map[e.code] === 'up' && !e.repeat) this.vault?.jumpPress();
       }
-      if (e.code === 'KeyE') {
-        if (!e.repeat) this.onInteract();
-        this.eHeld = true;
-      }
-      if (e.code === 'KeyX') this.fireLance();
-      if (e.code === 'Escape') this.onEscape();
-      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !this.panels.isOpen) {
-        if (this.mode === 'play') this.ctrl.dash();
-        else if (this.mode === 'vault' && !e.repeat) this.vault?.dash(this.input());
-      }
-      if (e.code === 'KeyC') this.warpSell();
-      if (e.code === 'KeyQ') this.throwFlare();
-      if (e.code === 'KeyG') this.placeCharge();
-      if (e.code === 'KeyB') this.toggleArrestor();
-      if (e.code === 'KeyL') this.placeShaftlight();
-      if (e.code === 'KeyN') this.placeDepot();
-      if (e.code === 'KeyF' && (this.mode === 'play' || this.mode === 'eva')) {
-        this.lampOn = !this.lampOn;
-        this.audio.click();
-        this.hud.setLamp(this.lampOn);
-        if (!this.lampOn) this.hud.toast('RUNNING DARK');
-      }
-      if (e.code === 'Tab') {
+      if (e.code === 'KeyE') this.keyEHeld = true;
+      if (e.code === 'Tab') e.preventDefault();
+      if (this.map.visible && ['Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract'].includes(e.code)) {
         e.preventDefault();
-        this.toggleMap();
       }
-      if (this.map.visible && (e.code === 'Equal' || e.code === 'NumpadAdd')) {
-        e.preventDefault();
-        this.map.zoomBy(1);
-        this.audio.click();
-      }
-      if (this.map.visible && (e.code === 'Minus' || e.code === 'NumpadSubtract')) {
-        e.preventDefault();
-        this.map.zoomBy(-1);
-        this.audio.click();
-      }
-      if (e.code === 'KeyR' && this.mode === 'eva' && !this.salvaging && !this.panels.isOpen
-        && !this.finale.cinematic) {
-        if (this.finale.isCommunion) {
-          this.finale.abort();
-          this.hud.show();
-        }
-        this.coreActKind = null;
-        this.coreHold = 0;
-        this.exitEva();
-        this.hud.toast('RECALLED TO THE POD');
-      }
+      const a = acts[e.code];
+      if (a !== undefined) this.act(a, e.repeat);
+
       if (this.sandbox && this.staging && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
         const d = e.code === 'BracketRight' ? 1 : -1;
         this.devStage((this.staging.i + d + STAGES.length) % STAGES.length);
@@ -1074,22 +1125,134 @@ class Game {
         this.pilot.py = -next.y + 0.6;
         this.audio.click();
       }
-      if (e.code === 'KeyM' && this.audio.ready) {
-        this.hud.toast(this.audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
-      }
     });
     addEventListener('keyup', e => {
       if (map[e.code] !== undefined) {
         this.keys.delete(map[e.code]);
         if (this.mode === 'vault' && map[e.code] === 'up') this.vault?.jumpRelease();
       }
-      if (e.code === 'KeyE') this.eHeld = false;
+      if (e.code === 'KeyE') this.keyEHeld = false;
     });
     addEventListener('pointermove', e => {
       this.mouseX = (e.clientX / innerWidth - 0.5) * 2;
       this.mouseY = -(e.clientY / innerHeight - 0.5) * 2;
     });
-    addEventListener('blur', () => { this.keys.clear(); this.eHeld = false; });
+    addEventListener('blur', () => {
+      this.keys.clear();
+      this.keyEHeld = false;
+      this.pad.clear();
+    });
+    this.pad.onConnect = on => {
+      this.hud.toast(on ? 'CONTROLLER CONNECTED' : 'CONTROLLER DISCONNECTED');
+      if (!on) this.padPrompt(false);
+    };
+  }
+
+  /** which DOM tree the pad's focus ring should be walking, if any */
+  private menuRoot(): HTMLElement | null {
+    if (this.panels.isOpen) return this.ui.querySelector('.panel-scrim');
+    if (this.mode === 'title' && this.title) return this.title.el;
+    return null;
+  }
+
+  /** the controls changed hands: re-stamp the glyphs already on screen */
+  private padPrompt(on: boolean): void {
+    if (on) this.pad.active = true;
+    else this.pad.yield();
+    if (on === this.padPrompts) return;
+    this.padPrompts = on;
+    PROMPTS.pad = on;
+    this.hud.setLamp(this.lampOn);
+    this.hud.setConsumables(this.state.flares, this.state.charges, this.state.arrestors);
+    // the title screen is built once, long before anyone picks up a pad
+    const hint = this.ui.querySelector('#title .controls-hint');
+    if (hint) hint.innerHTML = glyphs(CONTROLS_HINT);
+  }
+
+  /**
+   * The pad's turn, once a frame, before anything reads an Input. Modal
+   * screens come first — a pad that can fly but cannot buy fuel is not
+   * support — and only then does the world get the sticks.
+   */
+  private padFrame(dt: number): void {
+    const p = this.pad;
+    p.poll(dt);
+    this.padPrompt(p.active);
+    if (!p.connected) {
+      this.padDir = { left: false, right: false, up: false, down: false };
+      this.padEHeld = false;
+      this.nav.blur();
+      return;
+    }
+
+    // the chart is its own screen, and it already speaks in key codes
+    if (this.mode === 'starmap' && this.starmap) {
+      this.padDir = { left: false, right: false, up: false, down: false };
+      if (p.repeated('left')) this.starmap.handleKey('ArrowLeft');
+      if (p.repeated('right')) this.starmap.handleKey('ArrowRight');
+      if (p.pressed('a') || p.pressed('x')) this.starmap.handleKey('KeyE');
+      if (p.pressed('b') || p.pressed('start')) this.starmap.handleKey('Escape');
+      return;
+    }
+
+    // a panel or the title screen: the pad walks a focus ring instead
+    const menu = this.menuRoot();
+    if (menu) {
+      this.padDir = { left: false, right: false, up: false, down: false };
+      this.padEHeld = false;
+      this.padUpWas = false;
+      this.nav.sync(menu);
+      if (p.repeated('up')) this.nav.move(menu, -1);
+      if (p.repeated('down')) this.nav.move(menu, 1);
+      if (p.repeated('left')) this.nav.adjust(menu, -1);
+      if (p.repeated('right')) this.nav.adjust(menu, 1);
+      if (p.pressed('a')) this.nav.activate();
+      if (p.pressed('x')) this.act('interact');
+      if (p.pressed('b') || p.pressed('start')) this.act('escape');
+      return;
+    }
+    this.nav.blur();
+
+    // thrust: the stick, plus A and the right trigger for the hands that
+    // expect a lander to climb on a button. Movement is settled before the
+    // buttons fire, so a dash reads the direction you are holding now.
+    const kit = p.down('lt');
+    const dir = p.dir;
+    const up = dir.up || p.down('rt') || (!kit && p.down('a'));
+    this.padDir = { left: dir.left, right: dir.right, up, down: dir.down };
+    if (this.mode === 'vault') {
+      if (up && !this.padUpWas) this.vault?.jumpPress();
+      else if (!up && this.padUpWas) this.vault?.jumpRelease();
+    }
+    this.padUpWas = up;
+
+    // hold LT and the face buttons become the kit: everything you throw,
+    // place or plant on one modifier, instead of five scattered letters
+    if (kit) {
+      if (p.pressed('x')) this.act('flare');
+      if (p.pressed('a')) this.act('charge');
+      if (p.pressed('b')) this.act('arrestor');
+      if (p.pressed('y')) this.act('shaftlight');
+      if (p.pressed('rb')) this.act('depot');
+    } else {
+      if (p.pressed('x')) this.act('interact');
+      if (p.pressed('b')) this.act('recall');
+      if (p.pressed('y')) this.act('lamp');
+      if (p.pressed('rb')) this.act('lance');
+    }
+    if (p.pressed('lb')) this.act('dash');
+    if (p.pressed('back')) this.act('map');
+    if (p.pressed('l3')) this.act('warpsell');
+    if (p.pressed('r3')) this.act('mute');
+    if (p.pressed('start')) this.act('escape');
+    this.padEHeld = !kit && p.down('x');
+
+    // right stick zooms the survey map — both sticks are free while it is up
+    this.padZoomCd = Math.max(0, this.padZoomCd - dt);
+    if (this.map.visible && this.padZoomCd === 0 && Math.abs(p.ry) > 0.6) {
+      this.act(p.ry < 0 ? 'zoomin' : 'zoomout');
+      this.padZoomCd = 0.22;
+    }
   }
 
   /** push preference changes into the systems that read them */
@@ -1097,6 +1260,7 @@ class Game {
     const s = this.settings;
     this.audio.setVolumes(s.master, s.sfx, s.music, s.voiceDispatch, s.voiceLamplighters);
     this.cam.reducedMotion = this.reducedMotion || !s.shake;
+    this.pad.rumbleOn = s.rumble && !this.reducedMotion;
     this.hud.setFps(s.showFps ? 0 : null);
     if (this.threats) this.threats.level = this.faunaDead ? 'off' : s.threats;
     saveSettings(s);
@@ -1425,12 +1589,16 @@ class Game {
     this.panels.open('pause');
   }
 
+  /** held on either device: the cradle hold reads this, and only this */
+  private get eHeld(): boolean { return this.keyEHeld || this.padEHeld; }
+
   private input(): Input {
+    const d = this.padDir;
     return {
-      left: this.keys.has('left'),
-      right: this.keys.has('right'),
-      up: this.keys.has('up'),
-      down: this.keys.has('down'),
+      left: this.keys.has('left') || d.left,
+      right: this.keys.has('right') || d.right,
+      up: this.keys.has('up') || d.up,
+      down: this.keys.has('down') || d.down,
     };
   }
 
@@ -1439,6 +1607,9 @@ class Game {
     // always drain the clock, or the first frame after unpausing gets a
     // delta the size of however long the panel was open
     const raw = this.clock.getDelta();
+
+    // the pad is polled, not pushed — before anything reads an Input
+    this.padFrame(Math.min(0.05, raw));
 
     // the starmap is its own scene, camera and clock — the world sleeps
     if (this.mode === 'starmap' && this.starmap) {

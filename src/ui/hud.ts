@@ -3,6 +3,7 @@ import { stratumIndex, LOW_FUEL_FRAC, EVA_O2, fmtMoney, CUR_NAME } from '../conf
 import { def } from '../world/tiles';
 import { ACTIVE, worldById } from '../world/worlds';
 import { oreIcon } from './icons';
+import { glyphs, glyph } from '../input/prompts';
 
 // DOM HUD: bars, depth, money, cargo, prompt, toasts, popups, damage flash.
 
@@ -144,13 +145,14 @@ export class Hud {
 
   setConsumables(flares: number, charges: number, arrestors = 0): void {
     this.kitEl.classList.toggle('on', flares > 0 || charges > 0 || arrestors > 0);
-    this.kitFlares.textContent = flares > 0 ? `✦ FLARE ×${flares} · Q` : '';
-    this.kitCharges.textContent = charges > 0 ? `◈ CHARGE ×${charges} · G` : '';
-    this.kitArrestors.textContent = arrestors > 0 ? `▬ ARRESTOR ×${arrestors} · B` : '';
+    this.kitFlares.textContent = flares > 0 ? `✦ FLARE ×${flares} · ${glyph('Q')}` : '';
+    this.kitCharges.textContent = charges > 0 ? `◈ CHARGE ×${charges} · ${glyph('G')}` : '';
+    this.kitArrestors.textContent = arrestors > 0 ? `▬ ARRESTOR ×${arrestors} · ${glyph('B')}` : '';
   }
 
   setLamp(on: boolean): void {
     this.lampEl.classList.toggle('on', !on);
+    this.lampEl.innerHTML = `<span class="pip-dot"></span>LAMP OFF · ${glyph('F')}`;
   }
 
   setFps(v: number | null): void {
@@ -225,7 +227,7 @@ export class Hud {
 
   setPrompt(html: string | null): void {
     if (html) {
-      this.promptEl.innerHTML = html;
+      this.promptEl.innerHTML = glyphs(html);
       this.promptEl.classList.add('visible');
     } else {
       this.promptEl.classList.remove('visible');
