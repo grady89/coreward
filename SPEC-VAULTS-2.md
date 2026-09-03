@@ -723,6 +723,46 @@ Midjourney reference sheets per object family → rebuild → rendered review
 page → approval before ship. *Adds:* nothing mechanical; the P2
 dark-hazard-emissive lint re-verified against final materials.
 
+**DONE 2026-09-03.** The dress lives in
+[src/game/vaultkit.ts](src/game/vaultkit.ts) — constructors and material
+values only, with [src/game/vault.ts](src/game/vault.ts) still owning every
+clock, collision and piece of state. Three rules carry the whole sheet and
+are why the objects read as one guild's work: **stone carries** (pedestals,
+piers, anchor posts, piston housings), **bronze holds** (cups, crowns,
+collars, rails, cages, chains), **light works** (flame, bolt, cone, deck —
+always unlit or additive material, never a lit surface, because a hazard the
+dark can hide is a fang).
+
+*One finding worth recording:* the first pass rendered every fitting as a
+black cutout. A physically-honest metal reflects its surroundings and these
+rooms have no environment to reflect, so metalness 0.9 renders as a hole.
+Bronze is now a warm diffuse alloy at 0.32 — legible before it is correct.
+
+**The censer's arc telegraph shipped** (2b, carried in from V3's
+hand-validation), and `CENSER_RIDE_BAND` was not touched: a trace drawn once
+along the swing whose brightness *and width* follow dwell, so it fattens at
+the apexes and nearly vanishes through the fast bottom; a pad at each apex
+that fills as the lantern arrives, which is the *when* a static trace cannot
+carry; and a short smoke trail off the crown for direction. The crown is now
+a bronze deck with a raised lip and planks, and it brightens as it comes to
+rest. Reviewed in motion across one full period
+(`design-review/v35-censer-arc-0..7.png`), per the phase's own instruction
+that a still screenshot cannot judge it.
+
+**Architecture as chronology landed on the fittings as well as the stone.**
+`LATTICE` in vaultkit holds the rim, dead-seam, crooked and course-length
+values per act; the lattice's GEOMETRY is unchanged, by ruling — it was
+already at bar. The sconce carries the same three ages: Act I keeps its
+carved crown and finial drop, Act II has had the ornament taken off it, Act
+III is mounted crooked and too high.
+
+**The proving ground grew** a plain shuttle, a crusher, three rime shelves,
+two bridge runs and a door: the dev room had no bolt, crusher, rime, bridge
+or door on screen, so those families could not be reviewed at all. The nine
+maps are untouched, as V4/V5 still rewrite them.
+`design-review/v3-review.mjs` was extended rather than replaced and now
+captures every family, the three acts, and the censer strip.
+
 **V4 — Rooms 4–9,** authored in order **5, 4, 6, 7, 8, 9** (EMBER first: it
 stresses the most new kit at once, so its failures are cheapest to learn
 from). ~40–70 h of authoring and iteration; chambers are independently

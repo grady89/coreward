@@ -748,7 +748,16 @@ export const TEST_VAULTS: VaultDef[] = [
     shuttles: [
       // the snuffer: asleep at the rail's left end, 4 pulses a patrol
       { x0: 8, y0: 20, x1: 14, y1: 20, period: 3.4, phase: 0, snuff: true },
+      // and a plain bolt on its own wire, 2 pulses — V3.5 needs the carriage,
+      // the anchor posts and the wake on screen next to the moth that shares
+      // their rail, or the family cannot be reviewed as a family
+      { x0: 5, y0: 17, x1: 15, y1: 17, period: 1.7, phase: 0.25 },
     ],
+    crushers: [
+      // a piston out of the hall's ceiling, 4 pulses: slow extend, fast return
+      { x: 26, y: 16, w: 2, h: 1, dx: 0, dy: 2, period: 3.4, phase: 0 },
+    ],
+    doorNeeds: { 1: 1 },
     censers: [
       { x: 34, y: 16, len: 2.6, arc: 1.0, period: 2.55, phase: 0 },
     ],
@@ -781,9 +790,9 @@ export const TEST_VAULTS: VaultDef[] = [
       '#..............................................#',
       '#........o..o..................................#',
       '#...............*..............................#',
+      '#.....RRR...AAA..bb............................#',
       '#..............................................#',
-      '#..............................................#',
-      '#..@....................S....................M.#',
+      '#..@....................S.....1..............M.#',
       '########===============#########################',
       '################################################',
     ],
