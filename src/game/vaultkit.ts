@@ -695,6 +695,8 @@ export function buildSnuffer(): MothParts {
 
 export interface CenserParts {
   bob: THREE.Group;
+  /** the shackle the chain pulls on — the only part that swings with it */
+  hanger: THREE.Group;
   /** the glass, a direct child of the bob — the lint's handle on this object */
   glass: THREE.Mesh;
   glassMat: THREE.MeshBasicMaterial;
@@ -740,6 +742,32 @@ export function buildCenser(topY: number): CenserParts {
   crownGlow.position.set(0, topY + 0.08, 0);
   bob.add(crownGlow);
 
+  // THE GIMBAL. The crown is a floor and its collision is a flat horizontal
+  // top, so the deck must stay LEVEL through the whole swing — a lantern that
+  // rolls with its chain draws a sloping platform you can stand squarely on,
+  // which is the drawing contradicting the rule. The guild hung its lamps the
+  // way it aimed its watch-lights: on a pin. The fork below the pin belongs to
+  // the lantern and stays level; only the shackle above it turns, so the deck
+  // being level reads as engineering rather than as a mistake.
+  for (const k of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.16, 0.035), bronze);
+    arm.position.set(k * 0.09, topY + 0.09, 0);
+    bob.add(arm);
+  }
+  const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.26, 8), bronze);
+  pin.rotation.x = Math.PI / 2;
+  pin.position.y = topY + 0.17;
+  bob.add(pin);
+  const hanger = new THREE.Group();
+  hanger.position.y = topY + 0.17;
+  const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 5, 12), bronze);
+  hanger.add(shackle);
+  const eye = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.015, 4, 10), bronze);
+  eye.position.y = 0.1;
+  eye.rotation.y = Math.PI / 2;
+  hanger.add(eye);
+  bob.add(hanger);
+
   // the cap under the deck, and the collar through it
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.22, 0.14, 12), bronze);
   cap.position.y = topY - 0.12;
@@ -782,7 +810,7 @@ export function buildCenser(topY: number): CenserParts {
   finial.position.y = topY - 0.93;
   bob.add(band, valve, bowl, finial);
 
-  return { bob, glass, glassMat, flame, crownMat };
+  return { bob, hanger, glass, glassMat, flame, crownMat };
 }
 
 export interface ArcTelegraph {

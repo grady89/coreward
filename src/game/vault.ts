@@ -2335,10 +2335,14 @@ export class VaultRun {
       const cm = this.censerMeshes[i];
       cm.parts.bob.position.set(pos.x, pos.y, 0.2);
       cm.chain.position.set(c.x, -c.y, 0.2);
-      // the chain hangs to the lantern, and the lantern hangs off the chain
+      // the chain hangs to the lantern, and the SHACKLE turns under it — but
+      // the lantern itself stays level. The crown is a floor and its collision
+      // is a flat horizontal top; a deck drawn on the tilt is the picture
+      // arguing with the rule, right at the moment the player is trying to
+      // land on it. The pin is what makes level read as deliberate.
       const swing = Math.atan2(pos.x - c.x, -(pos.y + c.y));
       cm.chain.rotation.z = swing;
-      cm.parts.bob.rotation.z = swing;
+      cm.parts.hanger.rotation.z = swing;
       cm.light.intensity = 2 + Math.sin(this.time * 8 + i) * 0.4;
       cm.parts.flame.scale.set(0.8, 1.5 + Math.sin(this.time * 11 + i) * 0.2, 0.8);
 
