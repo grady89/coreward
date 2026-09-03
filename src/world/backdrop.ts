@@ -158,8 +158,10 @@ function createSkyline(scene: THREE.Scene): void {
 }
 
 // ---------- surface rig: buildings + docking pads ----------
-export interface Dock { key: 'fuel' | 'trade' | 'garage' | 'assay'; label: string; x0: number; x1: number; }
+export interface Dock { key: 'fuel' | 'trade' | 'garage' | 'assay' | 'quarters'; label: string; x0: number; x1: number; }
 export const DOCKS: Dock[] = [
+  // home stands west of the pad — work is everything east of it
+  { key: 'quarters', label: 'THE QUARTERS', x0: 5, x1: 9 },
   { key: 'fuel', label: 'FUEL DEPOT', x0: 17, x1: 22 },
   { key: 'trade', label: 'TRADE POST', x0: 28, x1: 33 },
   { key: 'garage', label: 'GARAGE', x0: 39, x1: 44 },
@@ -264,7 +266,8 @@ export function createSurface(scene: THREE.Scene): void {
   g.add(glowDot(0xffb066, 36.2, 0.5, -3.12, 0.06));
   g.add(halfDome(0.95, BODY, 13.5, 0, -4));
   g.add(glowDot(0xffb066, 13.5, 0.35, -3.07, 0.05));
-  for (const baseX of [7.5, 58.5]) {
+  // the west rack starts at 0.5 so it clears the quarters' slab at x≈4.55
+  for (const baseX of [0.5, 58.5]) {
     for (let i = 0; i < 3; i++) {
       const panel = box(1.35, 0.05, 0.95, PANEL, baseX + i * 1.6, 0.75, -2.6);
       panel.rotation.z = 0.45;

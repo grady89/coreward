@@ -19,6 +19,16 @@ const LENS = new THREE.MeshBasicMaterial({ color: 0xffe6c0, toneMapped: false })
 const R_DOME = 0.108;
 const HELMET_Y = 0.148;
 
+/**
+ * Recolor every walker at once — the materials are shared singletons on
+ * purpose: EVA, vault runner and quarters walker are all the same driller
+ * in the same suit, so one coat covers them all.
+ */
+export function applySuitFinish(f: { suit: number; accent: number }): void {
+  SUIT.color.setHex(f.suit);
+  SUIT_ACCENT.color.setHex(f.accent);
+}
+
 /** the whole character, hip to helmet — a dash ghost sized to match */
 export const SUIT_R = 0.105;
 export const SUIT_H = 0.16;

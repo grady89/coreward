@@ -44,6 +44,9 @@ export class Pilot {
 
   hide(): void { this.group.visible = false; }
 
+  /** the paint locker's lamp tint reaches the suit lamp too */
+  setLampColor(hex: number): void { this.lamp.color.setHex(hex); }
+
   update(dt: number, input: Input): void {
     this.o2 = Math.max(0, this.o2 - dt);
 

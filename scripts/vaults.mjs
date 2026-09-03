@@ -376,8 +376,15 @@ const gallery = await page.evaluate(async () => {
   key('Escape'); key('Escape', false);
   await until(() => g.mode !== 'vault', 20);
   const before = localStorage.getItem('coreward_save_v2');
+  const metaBefore = localStorage.getItem('coreward_meta_v1');
   g.saveNow();
-  return { eva, stones, inVault, id, unsaved: localStorage.getItem('coreward_save_v2') === before };
+  g.meta.keeplight += 9999;
+  window.__meta.saveMeta(g.meta);
+  return {
+    eva, stones, inVault, id,
+    unsaved: localStorage.getItem('coreward_save_v2') === before
+      && localStorage.getItem('coreward_meta_v1') === metaBefore,
+  };
 });
 ok('gallery', gallery, gallery.eva && gallery.stones === 9 && gallery.inVault && gallery.unsaved);
 

@@ -737,10 +737,93 @@ export function buildAssay(): THREE.Group {
   return g;
 }
 
-export type StructureKey = 'fuel' | 'trade' | 'garage' | 'assay';
+// =====================================================================
+// THE QUARTERS — the driller's own hab, west of the pad: a low cream
+// barrel on a slab, orange-banded, one stovepipe, wash on the line.
+// The only structure on the row that isn't Cindral's. Walk in.
+// =====================================================================
+export function buildQuarters(): THREE.Group {
+  const g = new THREE.Group();
+  const FERN = new THREE.MeshStandardMaterial({ color: 0x6e9668, roughness: 0.8 });
+
+  // slab with a short rail and thin front steps
+  g.add(box(4.9, 0.14, 2.6, PLINTH, 0, 0.07, -1.75));
+  g.add(straightRail(1.4, -1.6, 0.14, -0.52));
+  g.add(box(0.85, 0.05, 0.26, GUNMETAL, 0.15, 0.1, -0.4));
+  g.add(box(0.85, 0.05, 0.26, GUNMETAL, 0.15, 0.045, -0.24));
+
+  // hab barrel: a horizontal pressure tube with domed end caps
+  const barrel = cyl(1.02, 2.9, CREAM, 0, 1.16, -1.95, 26);
+  barrel.rotation.z = Math.PI / 2;
+  g.add(barrel);
+  for (const s of [-1, 1]) {
+    const cap = dome(1.0, CREAM, s * 1.45, 1.16, -1.95);
+    cap.rotation.z = s * -Math.PI / 2;
+    g.add(cap);
+  }
+  // painted bands where the tube sections join
+  for (const bx of [-0.95, 0.95]) {
+    const band = stripeBand(1.04, 0.12, ORANGE, bx, 1.16, -1.95);
+    band.rotation.z = Math.PI / 2;
+    g.add(band);
+  }
+  g.add(decal('01', '#c4571f', 0.36, -1.05, 1.55, -0.93));
+
+  // entry vestibule stepping out of the curve, door on a flat face
+  g.add(box(0.95, 1.12, 0.5, CREAM, 0.15, 0.7, -0.82));
+  g.add(box(1.05, 0.07, 0.58, GUNMETAL, 0.15, 1.29, -0.83));
+  g.add(doorway(0.6, 0.96, 0.15, 0.14, -0.56, ORANGE_DK));
+  g.add(glowDot(WARM_GLOW, 0.15, 1.21, -0.56, 0.045));
+  const porch = new THREE.PointLight(0xffd9a0, 5, 5, 2);
+  porch.position.set(0.15, 1.5, -0.4);
+  g.add(porch);
+
+  // portholes flanking the vestibule, on raised bezels
+  for (const s of [-1, 1]) {
+    const bezel = cyl(0.13, 0.16, GUNMETAL, 0.15 + s * 0.98, 1.32, -1.02, 14);
+    bezel.rotation.x = Math.PI / 2;
+    g.add(bezel);
+    g.add(porthole(0.11, 0.15 + s * 0.98, 1.32, -0.94));
+  }
+
+  // stovepipe with a rain cap — somebody cooks here
+  g.add(cyl(0.055, 0.85, DARKPIPE, -0.7, 2.45, -2.2, 10));
+  g.add(cyl(0.09, 0.05, GUNMETAL, -0.7, 2.9, -2.2, 10));
+  g.add(dome(0.085, DARKPIPE, -0.7, 2.93, -2.2, 0.6));
+  g.add(glowDot(WARM_GLOW, -0.7, 2.87, -2.14, 0.028));
+
+  // wash line from the vestibule roof to a post: two towels drying in dusk,
+  // hung forward of the barrel's curve so they actually read from the pad
+  g.add(cyl(0.03, 1.35, DARKPIPE, 1.95, 0.815, -0.75, 6));
+  const line = cyl(0.008, 1.35, DARKPIPE, 1.28, 1.4, -0.72, 4);
+  line.rotation.z = Math.PI / 2 - 0.09;
+  g.add(line);
+  g.add(box(0.26, 0.3, 0.012, TEAL_PAINT, 1.05, 1.28, -0.72));
+  g.add(box(0.2, 0.24, 0.012, ORANGE_DK, 1.5, 1.26, -0.73));
+
+  // planter crate with a fern grown from greenhouse stock
+  g.add(box(0.44, 0.26, 0.34, TEAL_PAINT, -1.35, 0.27, -0.72));
+  g.add(box(0.48, 0.04, 0.38, DARKPIPE, -1.35, 0.42, -0.72));
+  for (const [fx, fh] of [[-1.43, 0.34], [-1.35, 0.44], [-1.27, 0.3]] as const) {
+    const frond = new THREE.Mesh(new THREE.ConeGeometry(0.07, fh, 6), FERN);
+    frond.position.set(fx, 0.4 + fh / 2, -0.72);
+    g.add(frond);
+  }
+
+  // a squat reserve tank tucked at the far end, strapped and banded
+  g.add(cyl(0.34, 0.72, GUNMETAL, -1.95, 0.5, -2.3, 16));
+  g.add(dome(0.34, ORANGE, -1.95, 0.86, -2.3, 0.6));
+  g.add(stripeBand(0.35, 0.05, DARKPIPE, -1.95, 0.62, -2.3));
+
+  g.add(gantrySign('QUARTERS', '#ffc06a', 0.1, 3.3, -0.6, 1.7));
+  return g;
+}
+
+export type StructureKey = 'fuel' | 'trade' | 'garage' | 'assay' | 'quarters';
 export const STRUCTURE_BUILDERS: Record<StructureKey, () => THREE.Group> = {
   fuel: buildFuelDepot,
   trade: buildTradePost,
   garage: buildGarage,
   assay: buildAssay,
+  quarters: buildQuarters,
 };

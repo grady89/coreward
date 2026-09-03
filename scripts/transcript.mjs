@@ -1,5 +1,6 @@
-// The dispatch transcript: a missed transmission is never lost — the assay
-// dish keeps the tape, reconstructed from fired ids in play order.
+// The dispatch transcript: a missed transmission is never lost — the tape,
+// reconstructed from fired ids in play order, now lives at the Quarters'
+// console (SPEC-KEEPING §2); the unread marker rides panels.unreadCount().
 import { chromium } from 'playwright';
 
 const OUT = process.argv[2] ?? '.';
@@ -23,23 +24,25 @@ await page.evaluate(() => {
   g.state.firedEvents.add('swarm-taught:veil3'); // a toast, not dispatch
   g.comms.clear();
   g.ctrl.drilling = null;
-  g.ctrl.px = 52; g.ctrl.py = 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
-  g.cam.snap(52, 2, 14);
 });
-await page.waitForTimeout(1100);
-await page.keyboard.press('KeyE'); // assay office
-await page.waitForTimeout(700);
-const unreadBtn = await page.evaluate(() => ({
-  text: document.querySelector('#open-transcript')?.textContent?.replace(/\s+/g, ' ').trim(),
-  marked: !!document.querySelector('#open-transcript.has-unread'),
-  dot: !!document.querySelector('.tx-dot'),
-}));
-console.log('unread marker:', JSON.stringify(unreadBtn),
-  unreadBtn.marked && unreadBtn.dot && (unreadBtn.text ?? '').includes('3 NEW OF 3')
-    ? 'OK — everything unread on a first visit' : 'FAIL');
-await page.screenshot({ path: OUT + '/tx-unread.png' });
+await page.waitForTimeout(600);
+const unread = await page.evaluate(() => window.__game.panels.unreadCount());
+console.log('unread count:', unread, unread === 3 ? 'OK — everything unread on a first visit' : 'FAIL');
 
-await page.click('#open-transcript');
+// walk into the quarters and read the tape at the console
+const console1 = await page.evaluate(async () => {
+  const g = window.__game;
+  g.ctrl.drilling = null;
+  g.ctrl.px = 7; g.ctrl.py = 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  await new Promise(r => setTimeout(r, 300));
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
+  await new Promise(r => setTimeout(r, 400));
+  return { mode: g.mode };
+});
+console.log('into the quarters:', JSON.stringify(console1), console1.mode === 'interior' ? 'OK' : 'FAIL');
+await page.screenshot({ path: OUT + '/tx-quarters.png' });
+await page.evaluate(() => window.__game.panels.open('transcript'));
 await page.waitForTimeout(600);
 const tape = await page.evaluate(() => {
   const entries = [...document.querySelectorAll('.tx-entry')];
@@ -62,31 +65,29 @@ const fresh = await page.evaluate(() => document.querySelectorAll('.tx-entry.fre
 console.log('entries flagged new:', fresh, fresh === 3 ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/tx-tape.png' });
 
-// reading the tape clears the mark
+// reading the tape clears the mark; SET THE TAPE DOWN closes the panel
 await page.click('#tx-back');
 await page.waitForTimeout(500);
 const back = await page.evaluate(() => ({
   panel: window.__game.panels.current,
+  mode: window.__game.mode,
   seen: window.__game.state.transcriptSeen,
-  marked: !!document.querySelector('#open-transcript.has-unread'),
-  text: document.querySelector('#open-transcript')?.textContent?.replace(/\s+/g, ' ').trim(),
+  unread: window.__game.panels.unreadCount(),
 }));
 console.log('reading clears it:', JSON.stringify(back),
-  back.panel === 'assay' && back.seen === 3 && !back.marked && (back.text ?? '').includes('3 ON RECORD')
+  back.panel === null && back.mode === 'interior' && back.seen === 3 && back.unread === 0
     ? 'OK' : 'FAIL');
 
 // a NEW transmission re-arms the marker
 const rearm = await page.evaluate(() => {
   const g = window.__game;
   g.state.firedEvents.add('v3-d130');
-  g.panels.open('assay');
-  return {
-    marked: !!document.querySelector('#open-transcript.has-unread'),
-    text: document.querySelector('#open-transcript')?.textContent?.replace(/\s+/g, ' ').trim(),
-  };
+  return { unread: g.panels.unreadCount() };
 });
-console.log('new traffic re-arms:', JSON.stringify(rearm),
-  rearm.marked && (rearm.text ?? '').includes('1 NEW OF 4') ? 'OK' : 'FAIL');
+console.log('new traffic re-arms:', JSON.stringify(rearm), rearm.unread === 1 ? 'OK' : 'FAIL');
+// leave the quarters so saveNow runs from play mode
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
 await page.evaluate(() => window.__game.saveNow());
 await page.reload();
 await page.waitForTimeout(3000);

@@ -403,6 +403,31 @@ export const ADHOC_TRANSMISSIONS: Record<string, { world?: string; lines: string
       'They are not guarding it. I think they are waiting for it to be taken. Take it, and see.',
     ],
   },
+  // ---- stipends: the Ledger's only return is that someone made it home ----
+  'stipend-1': {
+    lines: [
+      'Accounting flagged a tow invoice on your ledger that is not yours. Driller out of Ridge Nine, dry tank at 300.',
+      'I processed it. I did not tell them who paid. They cried on the channel anyway.',
+    ],
+  },
+  'stipend-2': {
+    lines: [
+      'Another one of your tows went through. Kid on her first lease, gas pocket took the hull.',
+      'You know Cindral bills me for the paperwork on these? Worth it. I hate writing them up when nobody pays.',
+    ],
+  },
+  'stipend-3': {
+    lines: [
+      'The dispatchers have a name for you now. Not your registry — a name. They call you the Lamplighter.',
+      'I have not told them what that word means down where you dig. Let them have it.',
+    ],
+  },
+  'stipend-4': {
+    lines: [
+      'A letter came through the dish, no registry, routed through six relays. Read it to you? It is short.',
+      '"I do not know who you are. My mother came home. There is a plate for you at our table, whoever you are."',
+    ],
+  },
 };
 
 /** the transmission behind a fired-event id — null for non-dispatch ids */

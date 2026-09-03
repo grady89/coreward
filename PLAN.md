@@ -8,6 +8,14 @@
 > flares, seismic charges, drill-as-weapon, the Threats setting, Lamplighter
 > ruins, the glyph codex, Wardens, the Kindled, the husk, extraction and the
 > three endings.
+> **2026-09-02 — v0.8.5 "THE KEEPING" built** ([SPEC-KEEPING.md](SPEC-KEEPING.md)):
+> the endgame Lumen sinks — Keeplight (❖) banked at the Ledger, THE QUARTERS
+> (fifth dock + walkable interior with stations, wings, furnishings,
+> palettes), the paint locker (rig/suit/flame/lamp/spark finishes), the
+> gemcutter's kept trophies, the vivarium's sponsored light-forms, stipends,
+> shaftlights and metered waystation depots. All legacy state lives in
+> `coreward_meta_v1` and survives NEW EXPEDITION. Suites: `keeping.mjs`,
+> `quarters.mjs`. Colony relighting deliberately deferred — its own phase.
 > **Next: the ⛩ playtest gates below — they need a human, not another suite.**
 > Then Phase 4 (husk world, fragment extraction, three endings, Lumen Lance),
 > and the per-world *hunter* variants still outstanding: Brinewyrm,

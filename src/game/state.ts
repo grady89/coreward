@@ -32,6 +32,10 @@ export interface WorldSave {
   rime?: number[];
   /** dug tiles a Shellback has sealed back up with nacre (MAELIS-6) */
   nacre?: number[];
+  /** permanent shaft fixtures — placed once, lit forever (SPEC-KEEPING §7) */
+  shaftlights?: { x: number; y: number }[];
+  /** waystation depots — metered refuel/repair stations at depth */
+  depots?: { x: number; y: number }[];
 }
 
 export class GameState {
@@ -172,6 +176,12 @@ export class GameState {
   ephemeral = false;
   /** arrestors in the hold, not yet deployed */
   arrestors = 0;
+  /** shaftlight kits in the hold, not yet placed */
+  shaftlights = 0;
+  /** waystation depot kits in the hold, not yet placed */
+  depotKits = 0;
+  /** tow fees underwritten for other drillers this expedition */
+  stipends = 0;
   activeWorld = 'veil3';
   worlds: Record<string, WorldSave> = {};
 
@@ -306,6 +316,9 @@ export class GameState {
     this.charges = 0;
     this.glyphsSet.clear();
     this.arrestors = 0;
+    this.shaftlights = 0;
+    this.depotKits = 0;
+    this.stipends = 0;
     this.native = {};
     this.accl = {};
     this.carrying = null;
@@ -338,6 +351,8 @@ export class GameState {
   save(
     terrain: Terrain, podX: number, podY: number,
     looted: Set<number>, arrestors: { x: number; y: number }[] = [],
+    shaftlights: { x: number; y: number }[] = [],
+    depots: { x: number; y: number }[] = [],
   ): void {
     // rime only ever forms on dug tiles, so the dug set is the whole search
     const rime: number[] = [], nacre: number[] = [];
@@ -354,6 +369,8 @@ export class GameState {
       arrestors: arrestors.map(a => ({ x: a.x, y: a.y })),
       rime,
       nacre,
+      shaftlights: shaftlights.map(s => ({ x: s.x, y: s.y })),
+      depots: depots.map(d => ({ x: d.x, y: d.y })),
     };
     this.persist();
   }
@@ -394,6 +411,9 @@ export class GameState {
         glyphs: this.glyphs,
         glyphIds: [...this.glyphsSet],
         arrestors: this.arrestors,
+        shaftlights: this.shaftlights,
+        depotKits: this.depotKits,
+        stipends: this.stipends,
         native: this.native,
         accl: this.accl,
         carrying: this.carrying,
@@ -456,6 +476,9 @@ export class GameState {
         this.charges = d.charges ?? 0;
         this.glyphsSet = new Set(d.glyphIds ?? GLYPH_ORDER.slice(0, d.glyphs ?? 0));
         this.arrestors = d.arrestors ?? 0;
+        this.shaftlights = d.shaftlights ?? 0;
+        this.depotKits = d.depotKits ?? 0;
+        this.stipends = d.stipends ?? 0;
         this.native = d.native ?? {};
         this.accl = d.accl ?? {};
         this.carrying = d.carrying ?? null;

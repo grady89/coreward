@@ -357,15 +357,16 @@ const nacreCut = await page.evaluate(async () => {
 });
 ok('nacre cut', nacreCut, nacreCut.cut && nacreCut.gained === 1);
 
-// --- fauna log: encounters are stamped, and the assay census shows them ---
+// --- fauna log: encounters are stamped, and the census (now at the fauna
+// desk in the Quarters) shows them ---
 const faunaLog = await page.evaluate(() => {
   const g = window.__game;
   const fired = [...g.state.firedEvents].filter(k => k.startsWith('fauna:'));
-  g.panels.open('assay');
+  g.panels.open('faunalog');
   const rows = document.querySelectorAll('.fauna-row').length;
   const locked = document.querySelectorAll('.fauna-row.locked').length;
   const identified = rows - locked;
-  const head = [...document.querySelectorAll('.forge-head')].some(h => h.textContent.includes('FAUNA LOG'));
+  const head = [...document.querySelectorAll('.forge-head')].some(h => h.textContent.includes('CENSUS'));
   g.panels.close();
   return { fired, rows, locked, identified, head };
 });

@@ -6,7 +6,15 @@ import {
   DEEP_ARRAY_PRICE, BEACON_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE,
   MAX_FLARES_HELD, MAX_CHARGES_HELD,
   GLYPHS_TO_TRANSLATE, ARRESTOR_PRICE, MAX_ARRESTORS,
+  CUT_UNITS, CUT_FEE_MUL, FLAWLESS_CHANCE, STIPEND_PRICE,
+  SHAFTLIGHT_PRICE, MAX_SHAFTLIGHTS, DEPOT_PRICE, MAX_DEPOTS, DEPOT_RATE_MUL,
 } from '../config';
+import { Meta, saveMeta, bank, KEEP_RATE, KEEP, fmtKeep } from '../game/meta';
+import {
+  STOCK_RIG, RIG_FINISHES, STOCK_SUIT, SUIT_FINISHES, STOCK_FLAME,
+  FLAME_STYLES, STOCK_LAMP, LAMP_TINTS, SPARK_STYLES,
+} from '../game/cosmetics';
+import { WINGS, FURNISHINGS, WALL_PALETTES, STOCK_PALETTE, WING_VIVARIUM } from '../game/furnish';
 import { T, def, oreValue } from '../world/tiles';
 import { ACTIVE, WORLDS, nextWorld, worldById } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
@@ -33,14 +41,25 @@ function describe(c: Contract, maxFuel: number): string {
   return bits.join(' · ');
 }
 
-export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale' | 'transcript';
+export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale' | 'transcript'
+  | 'ledger' | 'wardrobe' | 'catalog' | 'faunalog' | 'depot';
+
+/** what a sponsorship costs, by temperament (SPEC-KEEPING §5) */
+const SPONSOR_COST: Record<string, number> = {
+  glimmerflies: 120, rimewings: 120, polyps: 120, frostbloom: 120,
+  longone: 200, brinewyrm: 200, stillwalker: 200, mimic: 200, riptide: 200, shellbacks: 200,
+  warden: 320, kindled: 320,
+};
 
 interface PanelCtx {
   state: GameState;
+  meta: Meta;
   audio: AudioEngine;
   settings: Settings;
   saveNow(): void;
   toast(msg: string, cls?: string): void;
+  /** a legacy purchase changed — recoat the pod/suit, re-dress the quarters */
+  onKeepingChanged(): void;
   onRespawn(): void;
   onRescued(): void;
   /** free lift home after a core is met — no fee, no fuss */
@@ -87,7 +106,8 @@ export class Panels {
     this.ui.appendChild(this.scrim);
     // click outside closes shop panels (not fate panels)
     if (kind === 'fuel' || kind === 'trade' || kind === 'garage' || kind === 'assay' ||
-      kind === 'pause' || kind === 'settings' || kind === 'contracts' || kind === 'transcript') {
+      kind === 'pause' || kind === 'settings' || kind === 'contracts' || kind === 'transcript' ||
+      kind === 'ledger' || kind === 'wardrobe' || kind === 'catalog' || kind === 'faunalog' || kind === 'depot') {
       this.scrim.addEventListener('pointerdown', e => {
         if (e.target === this.scrim) { this.ctx.audio.click(); this.close(); }
       });
@@ -113,11 +133,19 @@ export class Panels {
       case 'settings': this.renderSettings(); break;
       case 'contracts': this.renderContracts(); break;
       case 'transcript': this.renderTranscript(); break;
+      case 'ledger': this.renderLedger(); break;
+      case 'wardrobe': this.renderWardrobe(); break;
+      case 'catalog': this.renderCatalog(); break;
+      case 'faunalog': this.renderFaunaLog(); break;
+      case 'depot': this.renderDepot(); break;
     }
   }
 
-  private header(title: string): string {
-    return `<h2><span>${title}<span class="accent"> ▮</span></span><span class="panel-money">${fmt(this.ctx.state.money)}</span></h2>`;
+  private header(title: string, keep = false): string {
+    const purse = keep
+      ? `<span class="panel-money"><span class="keep">${fmtKeep(this.ctx.meta.keeplight)}</span> · ${fmt(this.ctx.state.money)}</span>`
+      : `<span class="panel-money">${fmt(this.ctx.state.money)}</span>`;
+    return `<h2><span>${title}<span class="accent"> ▮</span></span>${purse}</h2>`;
   }
 
   // ---------- FUEL ----------
@@ -150,6 +178,21 @@ export class Panels {
           <button class="btn" id="buy-charge" ${st.money < CHARGE_PRICE || st.charges >= MAX_CHARGES_HELD ? 'disabled' : ''}>${fmt(CHARGE_PRICE)}</button>
         </span>
       </div>
+      <div class="forge-head">WORKS<span class="forge-shards">permanent, per dig site</span></div>
+      <div class="row">
+        <span><span class="r-name">SHAFTLIGHT KIT</span><div class="r-sub">L — hang a lamp in the shaft, for good. Light where you keep coming back.</div></span>
+        <span class="r-right">
+          <span class="r-val">×${st.shaftlights}</span>
+          <button class="btn" id="buy-shaftlight" ${st.money < SHAFTLIGHT_PRICE || st.shaftlights >= MAX_SHAFTLIGHTS ? 'disabled' : ''}>${fmt(SHAFTLIGHT_PRICE)}</button>
+        </span>
+      </div>
+      <div class="row">
+        <span><span class="r-name">WAYSTATION DEPOT</span><div class="r-sub">N — a serviced silo at depth. Every unit metered at ${DEPOT_RATE_MUL}× — Cindral charges for the drop.</div></span>
+        <span class="r-right">
+          <span class="r-val">×${st.depotKits}</span>
+          <button class="btn" id="buy-depot" ${st.money < DEPOT_PRICE || st.depotKits >= MAX_DEPOTS ? 'disabled' : ''}>${fmt(DEPOT_PRICE)}</button>
+        </span>
+      </div>
       <div class="hint">Press E or Esc to leave</div>
     `;
     this.body().querySelector('#buy-q')?.addEventListener('click', () => this.buyFuel(quarter));
@@ -163,6 +206,17 @@ export class Panels {
       if (st.money < CHARGE_PRICE || st.charges >= MAX_CHARGES_HELD) { this.ctx.audio.denied(); return; }
       st.money -= CHARGE_PRICE; st.charges++;
       this.ctx.audio.buy(); this.ctx.saveNow(); this.renderFuel();
+    });
+    this.body().querySelector('#buy-shaftlight')?.addEventListener('click', () => {
+      if (st.money < SHAFTLIGHT_PRICE || st.shaftlights >= MAX_SHAFTLIGHTS) { this.ctx.audio.denied(); return; }
+      st.money -= SHAFTLIGHT_PRICE; st.shaftlights++;
+      this.ctx.audio.buy(); this.ctx.saveNow(); this.renderFuel();
+    });
+    this.body().querySelector('#buy-depot')?.addEventListener('click', () => {
+      if (st.money < DEPOT_PRICE || st.depotKits >= MAX_DEPOTS) { this.ctx.audio.denied(); return; }
+      st.money -= DEPOT_PRICE; st.depotKits++;
+      this.ctx.audio.buy(); this.ctx.toast('WAYSTATION KIT LOADED — N TO PLANT IT', 'stratum');
+      this.ctx.saveNow(); this.renderFuel();
     });
   }
 
@@ -477,31 +531,26 @@ export class Panels {
       </div>`;
     }).join('');
 
-    // the fauna log: a census of everything met, worlds appearing as charted
-    const faunaRow = (f: (typeof FAUNA)[number]): string => {
-      const got = faunaSeen(f, st.firedEvents);
-      const c = '#' + f.color.toString(16).padStart(6, '0');
-      return `<div class="codex-row fauna-row ${got ? '' : 'locked'}">
-        <span class="fauna-dot" style="--fc:${c}"></span>
-        <span class="codex-info">
-          <span class="r-name">${got ? f.name : '· · ·'}</span>
-          <div class="r-sub">${got
-            ? `<em class="fauna-tier">${f.tier}.</em> ${f.desc}<div class="fauna-rule">${f.rule}</div>`
-            : '— unidentified. The deep keeps its own census. —'}</div>
-        </span>
-      </div>`;
-    };
-    const faunaCharted = FAUNA.filter(f => f.world === null
-      || WORLDS.some(w => w.id === f.world && (w.unlockAfter === null || st.endedWorlds.has(w.unlockAfter))));
-    const faunaMet = faunaCharted.filter(f => faunaSeen(f, st.firedEvents)).length;
-    const faunaLog = [
-      ...(['veil3', 'cryos2', 'maelis6'] as const).map(id => {
-        const w = WORLDS.find(w => w.id === id)!;
-        if (w.unlockAfter !== null && !st.endedWorlds.has(w.unlockAfter)) return '';
-        return `<div class="fauna-world">${w.name}</div>` + FAUNA.filter(f => f.world === id).map(faunaRow).join('');
-      }),
-      `<div class="fauna-world">THE CONSTANTS</div>` + FAUNA.filter(f => f.world === null).map(faunaRow).join(''),
-    ].join('');
+    // the gemcutter: raw ore in, a kept stone out (SPEC-KEEPING §4). The
+    // census and the tape moved home to the Quarters — this office assays.
+    const held = new Map<number, number>();
+    for (const [t, c] of st.cargo) if (def(t).gem) held.set(t, (held.get(t) ?? 0) + c);
+    for (const [t, c] of st.stored) if (def(t).gem) held.set(t, (held.get(t) ?? 0) + c);
+    const cutRows = [...held.entries()].sort((a, b) => oreValue(b[0]) - oreValue(a[0])).map(([t, c], i) => {
+      const kept = this.ctx.meta.trophies.find(tr => tr.t === t);
+      const fee = Math.round(CUT_FEE_MUL * oreValue(t));
+      const status = kept?.grade === 2
+        ? '<span class="r-val">FLAWLESS — KEPT</span>'
+        : `<button class="btn" data-cut="${t}" ${c < CUT_UNITS || st.money < fee ? 'disabled' : ''}>${kept ? 'RECUT' : 'CUT'} · ${fmt(fee)}</button>`;
+      return `
+        <div class="row">
+          <span class="r-left">
+            <img class="ore-icon" src="${oreIcon(t)}" alt="" style="--glow:${oreGlow(t)}; animation-delay:${-(i * 0.7)}s" />
+            <span><span class="r-name">${def(t).name}</span><div class="r-sub">${CUT_UNITS} units + the fee · ×${c} held${kept ? ' · a FINE cut stands in your gallery' : ''}</div></span>
+          </span>
+          ${status}
+        </div>`;
+    }).join('');
 
     // logs salvaged from wrecks (shared pool)
     const found = [...st.foundLogs].sort((a, b) => a - b).map(i => `
@@ -518,7 +567,6 @@ export class Panels {
         <div class="row"><span class="r-name">Blocks cut</span><span class="r-val">${st.blocksDug.toLocaleString()}</span></div>
         <div class="row"><span class="r-name">Hold value</span><span class="r-val">${fmt(st.cargoValue)}</span></div>
       </div>
-      ${this.transcriptButton()}
       <div class="forge-head">SURVEY — ${ACTIVE.name}<span class="forge-shards">fitted per dig site</span></div>
       <div class="row">
         <span><span class="r-name">SURVEY SCANNER</span><div class="r-sub">${st.hasScanner ? 'Installed — TAB toggles the map · + / − to zoom' : 'A live map of every tunnel you cut · toggled with TAB'}</div></span>
@@ -559,16 +607,34 @@ export class Panels {
         <h4>THE ASSEMBLED READING</h4>
         <p>We were not thieves. We were the last shift, and the light was going out, and we did the only thing anyone could think of: we put it somewhere it would keep. Under a world, where weather could not reach it. We are sorry for the dark we left you standing in. It was meant to be temporary. Everything is meant to be temporary. If you have read this far, then you can put it back — and we are sorry, again, for what that will cost you.</p>
       </div>` : ''}` : ''}
-      <div class="forge-head">FAUNA LOG<span class="forge-shards">${faunaMet} / ${faunaCharted.length} identified</span></div>
-      ${faunaLog}
+      <div class="forge-head">GEMCUTTER<span class="forge-shards">${this.ctx.meta.trophies.length} kept</span></div>
+      <div class="tx-sub">Ten units and a fee buys a showpiece cut. It is never sold — it stands in your gallery, across every expedition. The census and the tape live at THE QUARTERS now.</div>
+      ${cutRows || '<div class="row"><span class="r-sub">Nothing gem-grade in the hold or the stash. Bring the assayer something with light in it.</span></div>'}
       <div class="forge-head">ASSAY LOGS — ${ACTIVE.name}</div>
       ${notes}
       ${found ? `<div class="forge-head">FOUND LOGS</div>${found}` : ''}
       <div class="hint">Press E or Esc to leave</div>
     `;
-    this.body().querySelector('#open-transcript')?.addEventListener('click', () => {
-      this.ctx.audio.click();
-      this.open('transcript');
+    this.body().querySelectorAll('button[data-cut]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = Number((btn as HTMLElement).dataset.cut);
+        const fee = Math.round(CUT_FEE_MUL * oreValue(t));
+        const kept = this.ctx.meta.trophies.find(tr => tr.t === t);
+        if (st.money < fee || kept?.grade === 2 || !st.spendShards(CUT_UNITS, t)) {
+          this.ctx.audio.denied();
+          return;
+        }
+        st.money -= fee;
+        const grade = Math.random() < FLAWLESS_CHANCE ? 2 : 1;
+        if (kept) kept.grade = Math.max(kept.grade, grade);
+        else this.ctx.meta.trophies.push({ t, grade, world: st.activeWorld });
+        saveMeta(this.ctx.meta);
+        this.ctx.audio.buy();
+        this.ctx.toast(grade === 2 ? `FLAWLESS — ${def(t).name}, KEPT` : `A FINE CUT — ${def(t).name}, KEPT`, 'stratum');
+        this.ctx.saveNow();
+        this.ctx.onKeepingChanged();
+        this.renderAssay();
+      });
     });
     this.body().querySelectorAll('button[data-codex-play]').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -715,14 +781,9 @@ export class Panels {
     return urls;
   }
 
-  /** the assay office's door to the tape, carrying its unread marker */
-  private transcriptButton(): string {
-    const total = this.transmissionLog().length;
-    const unread = this.unreadTransmissions();
-    return `<button class="btn wide ${unread > 0 ? 'has-unread' : ''}" id="open-transcript">
-      ${unread > 0 ? '<span class="tx-dot" aria-hidden="true"></span>' : ''}DISPATCH TRANSCRIPT ·
-      ${unread > 0 ? `<b>${unread} NEW</b> OF ${total}` : `${total} ON RECORD`}
-    </button>`;
+  /** unread marker for the quarters' console — the tape lives there now */
+  unreadCount(): number {
+    return this.unreadTransmissions();
   }
 
   private renderTranscript(): void {
@@ -758,7 +819,7 @@ export class Panels {
       ${this.header('DISPATCH TRANSCRIPT')}
       <div class="tx-sub">Every transmission the dish has relayed, newest first. The tape does not forget, even when you were busy not dying.</div>
       ${entries}
-      <button class="btn wide" id="tx-back">BACK TO THE OFFICE</button>
+      <button class="btn wide" id="tx-back">SET THE TAPE DOWN</button>
       <div class="hint">Press Esc to leave</div>
     `;
     this.body().querySelectorAll('button[data-tx-play]').forEach(btn => {
@@ -773,7 +834,313 @@ export class Panels {
     this.body().querySelector('#tx-back')?.addEventListener('click', () => {
       this.ctx.audio.click();
       this.ctx.audio.stopVoice();
-      this.open('assay');
+      this.close();
+    });
+  }
+
+  // ---------- THE KEEPING (SPEC-KEEPING.md) ----------
+
+  /** the Ledger: deposits into the bank of kept light, and the stipends */
+  private renderLedger(): void {
+    const st = this.ctx.state;
+    const m = this.ctx.meta;
+    const dep = (amt: number) => Math.floor(Math.min(st.money, amt) / KEEP_RATE) * KEEP_RATE;
+    this.body().innerHTML = `
+      ${this.header('THE LEDGER', true)}
+      <div class="stat-grid">
+        <div class="row"><span class="r-name">Wallet</span><span class="r-val">${fmt(st.money)}</span></div>
+        <div class="row"><span class="r-name">Kept light</span><span class="r-val keep">${fmtKeep(m.keeplight)}</span></div>
+        <div class="row"><span class="r-name">Banked, lifetime</span><span class="r-val">${fmt(m.lifetimeBanked)}</span></div>
+        <div class="row"><span class="r-name">Tows underwritten</span><span class="r-val">${st.stipends} · ${m.stipendsLifetime} ever</span></div>
+      </div>
+      <div class="forge-head">DEPOSIT<span class="forge-shards">${CUR}${KEEP_RATE} → ${KEEP}1 · never withdrawn</span></div>
+      <div class="tx-sub">Light you bank is light you kept. It outlives the pod, the lease, the expedition — kept light is what the wardrobe, the catalog and the vivarium take in trade.</div>
+      <div class="btn-row">
+        <button class="btn" id="dep-1" ${dep(1000) < KEEP_RATE ? 'disabled' : ''}>${fmt(1000)}</button>
+        <button class="btn" id="dep-10" ${dep(10000) < KEEP_RATE ? 'disabled' : ''}>${fmt(10000)}</button>
+        <button class="btn primary" id="dep-all" ${dep(st.money) < KEEP_RATE ? 'disabled' : ''}>ALL · ${fmt(dep(st.money))}</button>
+      </div>
+      <div class="forge-head">STIPENDS</div>
+      <div class="row">
+        <span><span class="r-name">UNDERWRITE A TOW</span><div class="r-sub">Somewhere on this rock a tank just ran dry. The fee lands on your ledger instead of theirs. Nobody is told who paid.</div></span>
+        <button class="btn" id="stipend" ${st.money < STIPEND_PRICE ? 'disabled' : ''}>${fmt(STIPEND_PRICE)}</button>
+      </div>
+      <div class="hint">Press E or Esc to leave</div>
+    `;
+    const deposit = (amt: number) => {
+      const spend = dep(amt);
+      if (spend < KEEP_RATE) { this.ctx.audio.denied(); return; }
+      st.money -= spend;
+      bank(m, spend);
+      this.ctx.audio.buy();
+      this.ctx.toast(`BANKED — ${fmtKeep(spend / KEEP_RATE)} KEPT`, 'stratum');
+      this.ctx.saveNow();
+      this.renderLedger();
+    };
+    this.body().querySelector('#dep-1')?.addEventListener('click', () => deposit(1000));
+    this.body().querySelector('#dep-10')?.addEventListener('click', () => deposit(10000));
+    this.body().querySelector('#dep-all')?.addEventListener('click', () => deposit(st.money));
+    this.body().querySelector('#stipend')?.addEventListener('click', () => {
+      if (st.money < STIPEND_PRICE) { this.ctx.audio.denied(); return; }
+      st.money -= STIPEND_PRICE;
+      st.stipends++;
+      m.stipendsLifetime++;
+      saveMeta(m);
+      this.ctx.audio.buy();
+      this.ctx.toast('THE FEE IS PAID — THEY WILL NEVER KNOW WHO', 'stratum');
+      this.ctx.saveNow();
+      this.renderLedger();
+    });
+  }
+
+  /** the paint locker: every slot has a stock coat and bought ones */
+  private renderWardrobe(): void {
+    const m = this.ctx.meta;
+    const hx = (n: number) => '#' + n.toString(16).padStart(6, '0');
+    interface WItem { id: string; name: string; sub: string; cost: number; colors: number[]; }
+    interface WSlot { key: string; name: string; items: WItem[]; cur: string; set(id: string): void; }
+    const slots: WSlot[] = [
+      {
+        key: 'rig', name: 'RIG FINISH', cur: m.finishRig, set: id => { m.finishRig = id; },
+        items: [STOCK_RIG, ...RIG_FINISHES].map(f => ({ id: f.id, name: f.name, sub: f.desc, cost: f.cost, colors: [f.hull, f.accent] })),
+      },
+      {
+        key: 'suit', name: 'SUIT FINISH', cur: m.finishSuit, set: id => { m.finishSuit = id; },
+        items: [STOCK_SUIT, ...SUIT_FINISHES].map(f => ({ id: f.id, name: f.name, sub: '', cost: f.cost, colors: [f.suit, f.accent] })),
+      },
+      {
+        key: 'flame', name: 'THRUSTER FLAME', cur: m.flame, set: id => { m.flame = id; },
+        items: [STOCK_FLAME, ...FLAME_STYLES].map(f => ({ id: f.id, name: f.name, sub: '', cost: f.cost, colors: [f.inner, f.outer] })),
+      },
+      {
+        key: 'lamp', name: 'LAMP TINT', cur: m.lampTint, set: id => { m.lampTint = id; },
+        items: [STOCK_LAMP, ...LAMP_TINTS].map(f => ({ id: f.id, name: f.name, sub: '', cost: f.cost, colors: [f.color] })),
+      },
+      {
+        key: 'spark', name: 'DRILL SPARK', cur: m.spark, set: id => { m.spark = id; },
+        items: [
+          { id: '', name: 'Rock-True', sub: 'Sparks the color of whatever you cut.', cost: 0, colors: [] },
+          ...SPARK_STYLES.map(f => ({ id: f.id, name: f.name, sub: '', cost: f.cost, colors: [f.color] })),
+        ],
+      },
+    ];
+    const owned = (s: WSlot, it: WItem) => it.cost === 0 || m.owned.includes(`${s.key}:${it.id}`);
+    const sections = slots.map(s => `
+      <div class="forge-head">${s.name}</div>
+      ${s.items.map(it => {
+        const worn = s.cur === it.id;
+        const dots = it.colors.map(c => `<span class="swatch" style="background:${hx(c)}"></span>`).join('');
+        const right = worn
+          ? '<span class="r-val">WORN</span>'
+          : owned(s, it)
+            ? `<button class="btn" data-slot="${s.key}" data-id="${it.id}">WEAR</button>`
+            : `<button class="btn" data-slot="${s.key}" data-id="${it.id}" ${m.keeplight < it.cost ? 'disabled' : ''}>${fmtKeep(it.cost)}</button>`;
+        return `
+        <div class="row">
+          <span><span class="r-name">${dots} ${it.name}</span>${it.sub ? `<div class="r-sub">${it.sub}</div>` : ''}</span>
+          ${right}
+        </div>`;
+      }).join('')}`).join('');
+    this.body().innerHTML = `
+      ${this.header('WARDROBE', true)}
+      <div class="tx-sub">Paint changes nothing but how it feels to come home in it. Coats are bought in kept light and owned forever — every expedition, every pod.</div>
+      ${sections}
+      <div class="hint">Press E or Esc to leave</div>
+    `;
+    this.body().querySelectorAll('button[data-slot]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const el = btn as HTMLElement;
+        const s = slots.find(sl => sl.key === el.dataset.slot)!;
+        const it = s.items.find(i => i.id === (el.dataset.id ?? ''))!;
+        if (!owned(s, it)) {
+          if (m.keeplight < it.cost) { this.ctx.audio.denied(); return; }
+          m.keeplight -= it.cost;
+          m.owned.push(`${s.key}:${it.id}`);
+          this.ctx.audio.buy();
+        } else {
+          this.ctx.audio.click();
+        }
+        s.set(it.id);
+        saveMeta(m);
+        this.ctx.onKeepingChanged();
+        this.renderWardrobe();
+      });
+    });
+  }
+
+  /** the outfitter catalog: wings, furnishings and wall palettes */
+  private renderCatalog(): void {
+    const m = this.ctx.meta;
+    const row = (id: string, name: string, desc: string, cost: number, ownedLabel: string) => {
+      const has = m.furnishings.includes(id);
+      return `
+      <div class="row">
+        <span><span class="r-name">${name}</span><div class="r-sub">${desc}</div></span>
+        ${has
+          ? `<span class="r-val">${ownedLabel}</span>`
+          : `<button class="btn" data-buy="${id}" ${m.keeplight < cost ? 'disabled' : ''}>${fmtKeep(cost)}</button>`}
+      </div>`;
+    };
+    const palettes = [STOCK_PALETTE, ...WALL_PALETTES].map(p => {
+      const id = `palette:${p.id}`;
+      const has = p.cost === 0 || m.furnishings.includes(id);
+      const applied = m.palette === p.id;
+      return `
+      <div class="row">
+        <span><span class="r-name"><span class="swatch" style="background:#${p.wall.toString(16).padStart(6, '0')}"></span> ${p.name}</span></span>
+        ${applied
+          ? '<span class="r-val">ON THE WALLS</span>'
+          : has
+            ? `<button class="btn" data-palette="${p.id}">APPLY</button>`
+            : `<button class="btn" data-palette="${p.id}" ${m.keeplight < p.cost ? 'disabled' : ''}>${fmtKeep(p.cost)}</button>`}
+      </div>`;
+    }).join('');
+    this.body().innerHTML = `
+      ${this.header('OUTFITTER CATALOG', true)}
+      <div class="tx-sub">Everything ships from the trade post and finds its own place in the room. Paid in kept light; kept, like everything here, across expeditions.</div>
+      <div class="forge-head">WINGS</div>
+      ${WINGS.map(w => row(w.id, w.name, w.desc, w.cost, 'BUILT')).join('')}
+      <div class="forge-head">FURNISHINGS</div>
+      ${FURNISHINGS.map(f => row(f.id, f.name, f.desc, f.cost, 'PLACED')).join('')}
+      <div class="forge-head">WALL PALETTES</div>
+      ${palettes}
+      <div class="hint">Press E or Esc to leave</div>
+    `;
+    this.body().querySelectorAll('button[data-buy]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = (btn as HTMLElement).dataset.buy!;
+        const item = [...WINGS, ...FURNISHINGS].find(f => f.id === id)!;
+        if (m.keeplight < item.cost || m.furnishings.includes(id)) { this.ctx.audio.denied(); return; }
+        m.keeplight -= item.cost;
+        m.furnishings.push(id);
+        saveMeta(m);
+        this.ctx.audio.buy();
+        this.ctx.toast(`${item.name} — DELIVERED`, 'stratum');
+        this.ctx.onKeepingChanged();
+        this.renderCatalog();
+      });
+    });
+    this.body().querySelectorAll('button[data-palette]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pid = (btn as HTMLElement).dataset.palette!;
+        const p = [STOCK_PALETTE, ...WALL_PALETTES].find(w => w.id === pid)!;
+        const key = `palette:${p.id}`;
+        if (p.cost > 0 && !m.furnishings.includes(key)) {
+          if (m.keeplight < p.cost) { this.ctx.audio.denied(); return; }
+          m.keeplight -= p.cost;
+          m.furnishings.push(key);
+          this.ctx.audio.buy();
+        } else {
+          this.ctx.audio.click();
+        }
+        m.palette = p.id;
+        saveMeta(m);
+        this.ctx.onKeepingChanged();
+        this.renderCatalog();
+      });
+    });
+  }
+
+  /** the census at its new home, with the vivarium's sponsorship book */
+  private renderFaunaLog(): void {
+    const st = this.ctx.state;
+    const m = this.ctx.meta;
+    const hasVivarium = m.furnishings.includes(WING_VIVARIUM);
+    const faunaRow = (f: (typeof FAUNA)[number]): string => {
+      const got = faunaSeen(f, st.firedEvents);
+      const resident = m.sponsored.includes(f.id);
+      const c = '#' + f.color.toString(16).padStart(6, '0');
+      const cost = SPONSOR_COST[f.id] ?? 200;
+      const right = resident
+        ? '<span class="r-val">RESIDENT</span>'
+        : got
+          ? `<button class="btn" data-sponsor="${f.id}" ${m.keeplight < cost ? 'disabled' : ''}>${fmtKeep(cost)}</button>`
+          : '';
+      return `<div class="codex-row fauna-row ${got ? '' : 'locked'}">
+        <span class="fauna-dot" style="--fc:${c}"></span>
+        <span class="codex-info">
+          <span class="r-name">${got ? f.name : '· · ·'}</span>
+          <div class="r-sub">${got
+            ? `<em class="fauna-tier">${f.tier}.</em> ${f.desc}<div class="fauna-rule">${f.rule}</div>`
+            : '— unidentified. The deep keeps its own census. —'}</div>
+        </span>
+        ${right}
+      </div>`;
+    };
+    const charted = FAUNA.filter(f => f.world === null
+      || WORLDS.some(w => w.id === f.world && (w.unlockAfter === null || st.endedWorlds.has(w.unlockAfter))));
+    const met = charted.filter(f => faunaSeen(f, st.firedEvents)).length;
+    const log = [
+      ...(['veil3', 'cryos2', 'maelis6'] as const).map(id => {
+        const w = WORLDS.find(w => w.id === id)!;
+        if (w.unlockAfter !== null && !st.endedWorlds.has(w.unlockAfter)) return '';
+        return `<div class="fauna-world">${w.name}</div>` + FAUNA.filter(f => f.world === id).map(faunaRow).join('');
+      }),
+      `<div class="fauna-world">THE CONSTANTS</div>` + FAUNA.filter(f => f.world === null).map(faunaRow).join(''),
+    ].join('');
+    this.body().innerHTML = `
+      ${this.header('FAUNA DESK', true)}
+      <div class="forge-head">CENSUS<span class="forge-shards">${met} / ${charted.length} identified</span></div>
+      <div class="tx-sub">Sponsor a species you have met and a light-form of it takes residence in the vivarium — fed, lit, and never drilled at. ${hasVivarium ? 'Residents stand in the far wing.' : 'Residents arrive once THE VIVARIUM is built; the catalog sells the wing.'}</div>
+      ${log}
+      <div class="hint">Press E or Esc to leave</div>
+    `;
+    this.body().querySelectorAll('button[data-sponsor]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = (btn as HTMLElement).dataset.sponsor!;
+        const cost = SPONSOR_COST[id] ?? 200;
+        if (m.keeplight < cost || m.sponsored.includes(id)) { this.ctx.audio.denied(); return; }
+        m.keeplight -= cost;
+        m.sponsored.push(id);
+        saveMeta(m);
+        this.ctx.audio.buy();
+        this.ctx.toast(`${FAUNA.find(f => f.id === id)?.name ?? id} — IN RESIDENCE`, 'stratum');
+        this.ctx.onKeepingChanged();
+        this.renderFaunaLog();
+      });
+    });
+  }
+
+  /** a waystation at depth: everything works, everything is metered */
+  private renderDepot(): void {
+    const st = this.ctx.state;
+    const fuelRate = FUEL_PRICE * DEPOT_RATE_MUL;
+    const repairRate = REPAIR_PRICE * DEPOT_RATE_MUL;
+    const space = st.maxFuel - st.fuel;
+    const quarter = Math.min(space, st.maxFuel * 0.25);
+    const missing = st.maxHull - st.hull;
+    const repairCost = Math.ceil(missing * repairRate);
+    this.body().innerHTML = `
+      ${this.header('WAYSTATION')}
+      <div class="tx-sub">Your silo, Cindral's logistics. Every unit pumped down here is metered at ${DEPOT_RATE_MUL}× the surface rate — the climb out is still the bill, it just takes ${CUR} now.</div>
+      <div class="row"><span class="r-name">Tank</span><span class="r-val">${Math.ceil(st.fuel)} / ${st.maxFuel} · ${fmt(fuelRate)} / unit</span></div>
+      <div class="btn-row">
+        <button class="btn" id="dp-q" ${quarter < 1 || st.money < fuelRate ? 'disabled' : ''}>+25% · ${fmt(Math.min(quarter * fuelRate, st.money))}</button>
+        <button class="btn primary" id="dp-f" ${space < 1 || st.money < fuelRate ? 'disabled' : ''}>FILL · ${fmt(Math.min(space * fuelRate, st.money))}</button>
+      </div>
+      <div class="row"><span class="r-name">Hull</span><span class="r-val">${Math.ceil(st.hull)} / ${st.maxHull} · ${fmt(repairRate)} / point</span></div>
+      <button class="btn wide" id="dp-r" ${missing < 1 || st.money < repairRate ? 'disabled' : ''}>PATCH THE PLATE · ${fmt(Math.min(repairCost, st.money))}</button>
+      <div class="hint">Press E or Esc to leave</div>
+    `;
+    const pump = (units: number) => {
+      const affordable = Math.min(units, st.money / fuelRate);
+      if (affordable < 1) { this.ctx.audio.denied(); return; }
+      st.money -= affordable * fuelRate;
+      st.fuel = Math.min(st.maxFuel, st.fuel + affordable);
+      this.ctx.audio.buy();
+      this.ctx.saveNow();
+      this.renderDepot();
+    };
+    this.body().querySelector('#dp-q')?.addEventListener('click', () => pump(quarter));
+    this.body().querySelector('#dp-f')?.addEventListener('click', () => pump(space));
+    this.body().querySelector('#dp-r')?.addEventListener('click', () => {
+      const afford = Math.min(missing, st.money / repairRate);
+      if (afford < 1) { this.ctx.audio.denied(); return; }
+      st.money -= Math.ceil(afford * repairRate);
+      st.hull = Math.min(st.maxHull, st.hull + afford);
+      this.ctx.audio.buy();
+      this.ctx.saveNow();
+      this.renderDepot();
     });
   }
 

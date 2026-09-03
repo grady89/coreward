@@ -905,6 +905,33 @@ body.sm-open #survey {
   color: var(--ink-dim); margin-top: 7px; opacity: 0.7;
 }
 
+/* ---- THE QUARTERS: interior chrome ---- */
+#interior-hud {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+  z-index: 55; text-align: center; pointer-events: none;
+}
+#interior-hud .ih-name {
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.34em; color: var(--ink); opacity: 0.85;
+}
+#interior-hud .ih-prompt {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.22em;
+  color: var(--ink); margin-top: 10px; min-height: 18px; opacity: 0.9;
+}
+#interior-hud .ih-prompt .key {
+  display: inline-block; padding: 1px 6px; margin-right: 8px;
+  border: 1px solid rgba(255, 217, 160, 0.5); border-radius: 3px;
+  color: #ffd9a0;
+}
+
+/* kept light + paint swatches (the Keeping) */
+.keep { color: #ffd9a0; }
+.swatch {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25); margin-right: 2px;
+  vertical-align: baseline;
+}
+
 /* the translation, read in the room that taught it */
 #vault-card {
   position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);

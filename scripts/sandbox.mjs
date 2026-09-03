@@ -42,12 +42,19 @@ for (const id of ids) {
   await page.screenshot({ path: `${OUT}/sb-${id}.png` });
 }
 
-// the sandbox must never write its butchered terrain over a real save
+// the sandbox must never write its butchered terrain over a real save —
+// and its handouts must never reach the cross-expedition meta store either
 const saveGuard = await page.evaluate(() => {
   const g = window.__game;
   const before = localStorage.getItem('coreward_save_v2');
+  const metaBefore = localStorage.getItem('coreward_meta_v1');
   g.saveNow();
-  return { unchanged: localStorage.getItem('coreward_save_v2') === before };
+  g.meta.keeplight += 9999;
+  window.__meta.saveMeta(g.meta);
+  return {
+    unchanged: localStorage.getItem('coreward_save_v2') === before
+      && localStorage.getItem('coreward_meta_v1') === metaBefore,
+  };
 });
 console.log('save guard:', JSON.stringify(saveGuard), saveGuard.unchanged ? 'OK' : 'FAIL');
 

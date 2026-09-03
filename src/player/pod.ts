@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
 
 // The mining pod: hero object built from primitives, two-tone dusty cream +
 // amber accents, teal visor, animated drill and thruster flames, headlamp.
+// Finishes (the paint locker) recolor a pod's own cloned materials, so a
+// review scene with two pods can wear two coats.
 
 export type DrillDir = 'down' | 'left' | 'right' | 'up';
 
@@ -9,6 +12,29 @@ const HULL = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.55, 
 const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3 });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 const GLASS = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.1, metalness: 0.6, emissive: 0x0d3a40, emissiveIntensity: 0.5 });
+
+/** dazzle patches in the finish's three tones, blobbed like strata contours */
+function camoTexture(tones: [string, string, string]): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = tones[0];
+  g.fillRect(0, 0, 128, 128);
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (const tone of [tones[1], tones[2], tones[1]]) {
+    g.fillStyle = tone;
+    for (let i = 0; i < 9; i++) {
+      g.beginPath();
+      g.ellipse(rnd() * 128, rnd() * 128, 10 + rnd() * 22, 7 + rnd() * 14, rnd() * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
 
 export class Pod {
   group = new THREE.Group();
@@ -19,8 +45,14 @@ export class Pod {
   private headlamp: THREE.SpotLight;
   private glow: THREE.PointLight;
   private drillSpin = 0;
+  // per-pod clones so a finish never bleeds onto another pod in a review scene
+  private hullMat = HULL.clone();
+  private accentMat = ACCENT.clone();
+  private steelMat = STEEL.clone();
+  private camoTex: THREE.CanvasTexture | null = null;
 
   constructor(scene: THREE.Scene) {
+    const HULL = this.hullMat, ACCENT = this.accentMat, STEEL = this.steelMat;
     // body
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 24, 18), HULL);
     body.scale.set(1, 1.06, 0.92);
@@ -108,6 +140,20 @@ export class Pod {
 
   setPos(x: number, y: number): void {
     this.group.position.set(x, y, 0);
+  }
+
+  /** wear a coat from the paint locker — cosmetic only, applied live */
+  applyFinish(rig: RigFinish, flame: FlameStyle, lamp: LampTint): void {
+    this.camoTex?.dispose();
+    this.camoTex = rig.camo ? camoTexture(rig.camo) : null;
+    this.hullMat.map = this.camoTex;
+    this.hullMat.color.setHex(rig.camo ? 0xffffff : rig.hull);
+    this.hullMat.needsUpdate = true;
+    this.accentMat.color.setHex(rig.accent);
+    this.steelMat.color.setHex(rig.steel);
+    (this.flameL.material as THREE.MeshBasicMaterial).color.setHex(flame.inner);
+    (this.flameR.material as THREE.MeshBasicMaterial).color.setHex(flame.outer);
+    this.headlamp.color.setHex(lamp.color);
   }
 
   update(dt: number, opts: {

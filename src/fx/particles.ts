@@ -123,8 +123,8 @@ export class Particles {
     this.dust.spawn(x, y, 0x9a8468, { count: Math.min(20, Math.round(strength * 2)), speed: 2 + strength * 0.2, up: 0.8, life: 0.7, gravity: 6, spread: 0.8 });
   }
 
-  thrusterPuff(x: number, y: number): void {
-    this.sparks.spawn(x, y, 0x6ad8ff, { count: 1, speed: 0.8, up: -3.5, life: 0.35, gravity: -2, spread: 0.16 });
+  thrusterPuff(x: number, y: number, color = 0x6ad8ff): void {
+    this.sparks.spawn(x, y, color, { count: 1, speed: 0.8, up: -3.5, life: 0.35, gravity: -2, spread: 0.16 });
   }
 
   explosion(x: number, y: number): void {

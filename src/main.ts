@@ -43,8 +43,13 @@ import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
 import { GlyphMarks, glyphById, GLYPHS, WORLD_GLYPHS } from './world/glyphs';
 import { VaultRun } from './game/vault';
 import { vaultByGlyph, VAULTS, parseVault } from './world/vaults';
+import { Interior, InteriorPanel } from './game/interior';
+import { loadMeta, lockMeta } from './game/meta';
+import { rigFinish, flameStyle, lampTint, suitFinish, sparkStyle } from './game/cosmetics';
+import { applySuitFinish } from './player/suit';
+import { ShaftlightField, DepotField } from './world/keeps';
 
-type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault';
+type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault' | 'interior';
 
 class Game {
   renderer: THREE.WebGLRenderer;
@@ -99,6 +104,12 @@ class Game {
   private sandbox: { card: SandboxCard } | null = null;
   /** a run inside one of the Nine Stones, or null */
   private vault: VaultRun | null = null;
+  /** everything kept across expeditions (SPEC-KEEPING.md) */
+  meta = loadMeta();
+  /** the walkable Quarters, or null while outside */
+  private interior: Interior | null = null;
+  shaftlightField!: ShaftlightField;
+  depots!: DepotField;
   /** ?vault gallery mode: all nine stones in one dev hall, saves disabled */
   private vaultGallery = false;
   /** which creature is staged and whether it still needs coaxing alive */
@@ -146,7 +157,9 @@ class Game {
     this.map = new SurveyMap(ui);
     this.panels = new Panels(ui, {
       state: this.state,
+      meta: this.meta,
       audio: this.audio,
+      onKeepingChanged: () => this.applyKeeping(),
       settings: this.settings,
       onSettingsChanged: () => this.applySettings(),
       saveNow: () => this.saveNow(),
@@ -192,6 +205,7 @@ class Game {
       this.cam.camera.aspect = innerWidth / innerHeight;
       this.cam.camera.updateProjectionMatrix();
       this.starmap?.resize(innerWidth / innerHeight);
+      this.interior?.resize(innerWidth / innerHeight);
     });
 
     const fade = document.createElement('div');
@@ -218,6 +232,9 @@ class Game {
     (window as unknown as { __GLYPHS: unknown }).__GLYPHS = GLYPHS;
     (window as unknown as { __VAULTS: unknown }).__VAULTS = VAULTS;
     (window as unknown as { __parseVault: unknown }).__parseVault = parseVault;
+    import('./game/meta').then(m => {
+      (window as unknown as { __meta: unknown }).__meta = m;
+    });
 
     // dev harness: ?core drops the pod at the chamber mouth with the rite
     // un-run — press E to walk. ?core=cryos2 targets a specific site.
@@ -250,6 +267,7 @@ class Game {
 
     const st = this.state;
     st.ephemeral = true;
+    lockMeta();
     if (WORLDS.some(w => w.id === worldId)) st.activeWorld = worldId;
     st.endedWorlds.delete(st.activeWorld);
     this.setupWorld();
@@ -333,6 +351,7 @@ class Game {
     if (!s) return null;
     const st = this.state;
     st.ephemeral = true;
+    lockMeta();
     // the creature only exists on its own world, so load it first: the
     // roster in entities.ts is built per world at setupWorld() time
     if (st.activeWorld !== s.world) {
@@ -471,6 +490,37 @@ class Game {
     }
   }
 
+  // ---------- THE QUARTERS ----------
+
+  /** dock at home, walk in — the VaultRun takeover checklist, verbatim */
+  private enterInterior(): void {
+    if (this.interior) { this.interior.dispose(); this.interior = null; }
+    this.audio.airlock();
+    this.hud.hide();
+    this.hud.setPrompt(null);
+    this.hud.setEva(null);
+    this.hud.clearToasts();
+    this.comms.clear();
+    this.map.close();
+    this.interior = new Interior({
+      meta: this.meta,
+      unread: () => this.panels.unreadCount(),
+      openPanel: (k: InteriorPanel) => { this.audio.click(); this.panels.open(k); },
+    }, innerWidth / innerHeight, this.ui);
+    this.mode = 'interior';
+  }
+
+  private closeInterior(): void {
+    const i = this.interior;
+    if (!i) return;
+    i.dispose();
+    this.interior = null;
+    this.audio.airlock();
+    this.mode = 'play';   // you docked from the pod; you step back out to it
+    this.hud.show();
+    this.saveNow();
+  }
+
   /** ?vault=<id> and the headless suite: straight into one stone's room */
   devVault(id: string): string | null {
     const glyph = glyphById(id);
@@ -481,6 +531,7 @@ class Game {
     addEventListener('keydown', wake, { once: true });
     const st = this.state;
     st.ephemeral = true;
+    lockMeta();
     if (st.activeWorld !== glyph.world) {
       st.activeWorld = glyph.world;
       this.setupWorld();
@@ -511,6 +562,7 @@ class Game {
     this.title = null;
     this.vaultGallery = true;
     this.state.ephemeral = true;
+    lockMeta();
 
     // the hall: shallow enough to be out of every spawn band, and the
     // creatures stand down anyway — this room is a workshop, not a world
@@ -576,8 +628,19 @@ class Game {
     this.wrecks = new WreckField(this.scene, this.terrain, this.looted);
     this.ctrl.looted = this.looted;
     this.arrestors.load(ws?.arrestors ?? []);
+    this.shaftlightField.load(ws?.shaftlights ?? []);
+    this.depots.load(ws?.depots ?? []);
     this.charges.length = 0;
     this.hud.setConsumables(this.state.flares, this.state.charges, this.state.arrestors);
+    this.applyKeeping();
+  }
+
+  /** wear what the meta store says: pod coat, suit coat, and the room */
+  private applyKeeping(): void {
+    this.pod?.applyFinish(rigFinish(this.meta.finishRig), flameStyle(this.meta.flame), lampTint(this.meta.lampTint));
+    this.pilot?.setLampColor(lampTint(this.meta.lampTint).color);
+    applySuitFinish(suitFinish(this.meta.finishSuit));
+    this.interior?.rebuild();
   }
 
   private buildWorld(seed: number): void {
@@ -600,6 +663,8 @@ class Game {
     this.threats = new ThreatField(this.scene, this.terrain, this.particles);
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
     this.arrestors = new ArrestorField(this.scene);
+    this.shaftlightField = new ShaftlightField(this.scene);
+    this.depots = new DepotField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
     this.glyphMarks = new GlyphMarks(this.scene);
     this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
@@ -783,7 +848,8 @@ class Game {
     // the sandboxes carve habitats, re-seed stones and empty the hold: never
     // write any of that over a real save, and the 20s autosave would
     if (this.sandbox || this.vaultGallery) return;
-    this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted, this.arrestors.list);
+    this.state.save(this.terrain, this.ctrl.px, this.ctrl.py, this.looted, this.arrestors.list,
+      this.shaftlightField.list, this.depots.list);
   }
 
   /** ASSAY → the Sundering Chart: travel happens inside the 3D starmap */
@@ -959,6 +1025,8 @@ class Game {
       if (e.code === 'KeyQ') this.throwFlare();
       if (e.code === 'KeyG') this.placeCharge();
       if (e.code === 'KeyB') this.toggleArrestor();
+      if (e.code === 'KeyL') this.placeShaftlight();
+      if (e.code === 'KeyN') this.placeDepot();
       if (e.code === 'KeyF' && (this.mode === 'play' || this.mode === 'eva')) {
         this.lampOn = !this.lampOn;
         this.audio.click();
@@ -1047,6 +1115,52 @@ class Game {
     this.state.flares--;
     this.audio.flare();
     this.hud.setConsumables(this.state.flares, this.state.charges);
+  }
+
+  /** L — hang a shaftlight where the pod sits. Permanent: light, kept. */
+  private placeShaftlight(): void {
+    if (this.mode !== 'play' || this.panels.isOpen) return;
+    if (this.state.shaftlights <= 0) {
+      this.hud.toast('NO SHAFTLIGHT KITS — BUY AT THE FUEL DEPOT');
+      this.audio.denied();
+      return;
+    }
+    if (this.ctrl.py > -1) { this.hud.toast('THE SURFACE HAS A SKY — SAVE IT FOR THE DARK'); this.audio.denied(); return; }
+    if (!this.shaftlightField.place(this.ctrl.px, this.ctrl.py)) {
+      this.hud.toast('NO ROOM — A LIGHT ALREADY HANGS HERE');
+      this.audio.denied();
+      return;
+    }
+    this.state.shaftlights--;
+    this.audio.buy();
+    this.hud.toast('SHAFTLIGHT HUNG — IT STAYS');
+    this.saveNow();
+  }
+
+  /** N — plant a waystation depot. Two per site; every refill is metered. */
+  private placeDepot(): void {
+    if (this.mode !== 'play' || this.panels.isOpen) return;
+    if (this.state.depotKits <= 0) {
+      this.hud.toast('NO WAYSTATION KIT — BUY AT THE FUEL DEPOT');
+      this.audio.denied();
+      return;
+    }
+    if (!this.ctrl.grounded) { this.hud.toast('LAND FIRST TO PLANT IT'); this.audio.denied(); return; }
+    if (this.ctrl.py > -1) { this.hud.toast('THE SURFACE ALREADY HAS ONE — IT IS CALLED THE FUEL DEPOT'); this.audio.denied(); return; }
+    if (this.arrestors.blocked(this.ctrl.px, this.ctrl.py - 0.45, this.terrain.wrecks)) {
+      this.hud.toast('BLOCKED — SOMETHING ALREADY LIES HERE');
+      this.audio.denied();
+      return;
+    }
+    if (!this.depots.place(this.ctrl.px, this.ctrl.py)) {
+      this.hud.toast('TWO PER SITE — CINDRAL LOGISTICS WILL NOT STRETCH FURTHER');
+      this.audio.denied();
+      return;
+    }
+    this.state.depotKits--;
+    this.audio.buy();
+    this.hud.toast('WAYSTATION PLANTED — E TO USE IT', 'stratum');
+    this.saveNow();
   }
 
   /** B — deploy an arrestor at your feet, or pick the one here back up */
@@ -1170,12 +1284,17 @@ class Game {
       return;
     }
     if (this.panels.isOpen) {
-      const shop = ['fuel', 'trade', 'garage', 'assay'].includes(this.panels.current ?? '');
+      const shop = ['fuel', 'trade', 'garage', 'assay', 'ledger', 'wardrobe', 'catalog', 'faunalog', 'depot']
+        .includes(this.panels.current ?? '');
       if (shop) { this.audio.click(); this.panels.close(); }
       return;
     }
     if (this.mode === 'vault') {
       this.vault?.interact();
+      return;
+    }
+    if (this.mode === 'interior') {
+      this.interior?.interact();
       return;
     }
     if (this.mode === 'eva') {
@@ -1242,9 +1361,16 @@ class Game {
       this.enterEva();
       return;
     }
+    // parked at a waystation you planted: the pump takes E like a dock does
+    if (this.ctrl.grounded && this.depots.at(this.ctrl.px, this.ctrl.py) >= 0) {
+      this.audio.click();
+      this.panels.open('depot');
+      return;
+    }
     if (this.ctrl.dock) {
       this.audio.click();
-      this.panels.open(this.ctrl.dock.key);
+      if (this.ctrl.dock.key === 'quarters') this.enterInterior();
+      else this.panels.open(this.ctrl.dock.key);
     }
   }
 
@@ -1281,6 +1407,11 @@ class Game {
     }
     if (this.mode === 'vault' && this.vault) {
       this.vault.abandon();
+      return;
+    }
+    if (this.mode === 'interior' && this.interior) {
+      if (this.panels.isOpen) { this.audio.click(); this.panels.close(); return; }
+      this.interior.abandon();
       return;
     }
     if (this.mode !== 'play' && this.mode !== 'eva') return;
@@ -1321,6 +1452,14 @@ class Game {
       this.vault.frame(Math.min(0.05, raw), this.input(), this.lampOn);
       this.vault.render(this.renderer);
       if (this.vault.closed) this.closeVault();
+      return;
+    }
+
+    // home: the world waits outside; a panel over the room pauses the walk
+    if (this.mode === 'interior' && this.interior) {
+      this.interior.frame(Math.min(0.05, raw), this.input(), this.panels.isOpen);
+      this.interior.render(this.renderer);
+      if (this.interior.closed) this.closeInterior();
       return;
     }
 
@@ -1404,12 +1543,13 @@ class Game {
     // tell the controller whether a pad is in position to take this fall
     this.ctrl.arrestorCatch = this.arrestors.catchFall(this.ctrl.px, this.ctrl.py, this.ctrl.vy);
     this.arrestors.update(this.time);
+    this.shaftlightField.update(this.ctrl.px, this.ctrl.py, this.time);
 
     if (!paused && dt > 0) {
       this.ctrl.update(dt, this.input(), this.time);
 
       if (this.ctrl.thrust > 0 && Math.random() < 0.4) {
-        this.particles.thrusterPuff(this.ctrl.px, this.ctrl.py - 0.6);
+        this.particles.thrusterPuff(this.ctrl.px, this.ctrl.py - 0.6, flameStyle(this.meta.flame).inner);
       }
       if (this.ctrl.inLava && Math.random() < 0.3) {
         this.particles.lavaBubble(this.ctrl.px, this.ctrl.py - 0.3);
@@ -1441,6 +1581,8 @@ class Game {
         this.hud.setPrompt(ACTIVE.husk
           ? `<span class="key">E</span>${this.ctrl.dock.key === 'assay' ? 'THE SUNDERING CHART' : this.ctrl.dock.label + ' — OFFLINE'}`
           : `<span class="key">E</span>${this.ctrl.dock.label}`);
+      } else if (this.ctrl.grounded && this.depots.at(this.ctrl.px, this.ctrl.py) >= 0) {
+        this.hud.setPrompt(`<span class="key">E</span>WAYSTATION`);
       } else if (ACTIVE.husk && this.ctrl.grounded) {
         this.hud.setPrompt(`<span class="key">E</span>EVA — WALK THE COLONY`);
       } else {
@@ -1549,7 +1691,9 @@ class Game {
       const d = this.ctrl.drilling;
       this.chunks.chew(d.x, d.y, d.progress, this.time);
       if (Math.random() < 0.5) {
-        this.particles.drillSpray(d.x + 0.5, -(d.y + 0.5), rockColor(this.terrain.get(d.x, d.y), d.x, d.y));
+        const spark = sparkStyle(this.meta.spark);
+        this.particles.drillSpray(d.x + 0.5, -(d.y + 0.5),
+          spark ? spark.color : rockColor(this.terrain.get(d.x, d.y), d.x, d.y));
       }
       this.cam.addShake(0.05);
     }
@@ -1624,6 +1768,13 @@ class Game {
     if (this.finale.active) return; // Dispatch stays quiet through the rite
 
     const st = this.state;
+    // stipend letters: the Ledger's only return, arriving at their own pace
+    for (const [need, id] of [[1, 'stipend-1'], [3, 'stipend-2'], [6, 'stipend-3'], [10, 'stipend-4']] as const) {
+      if (st.stipends >= need && !st.firedEvents.has(id)) {
+        this.teach(id);
+        return;
+      }
+    }
     const stats: WorldStats = {
       world: st.activeWorld,
       depthM: st.bestDepthM,

@@ -213,6 +213,30 @@ export const RIME_SMASH_MIN = 5.5;
  */
 export const RIME_FALL_KEEP = 0.5;
 
+// ---- THE KEEPING (SPEC-KEEPING.md): endgame sinks ----
+/** gemcutter: units of a gem-class ore one showpiece consumes */
+export const CUT_UNITS = 10;
+/** cutting fee = CUT_FEE_MUL × the ore's per-unit value */
+export const CUT_FEE_MUL = 25;
+/** chance a cut comes out FLAWLESS instead of FINE */
+export const FLAWLESS_CHANCE = 0.18;
+/** underwrite one stranded driller's tow at the Ledger */
+export const STIPEND_PRICE = 2500;
+/** permanent shaft fixture, sold at the fuel depot */
+export const SHAFTLIGHT_PRICE = 500;
+export const MAX_SHAFTLIGHTS = 16;
+/** shaftlights carrying a real PointLight at once — the flare budget's law */
+export const SHAFTLIGHT_LIVE = 4;
+/** waystation depot kit; the refills are metered, never free */
+export const DEPOT_PRICE = 18000;
+export const MAX_DEPOTS = 2;
+/**
+ * Deep fuel and plate cost a multiple of surface rates: the depot converts
+ * surplus wealth into safety without ever making the climb out free —
+ * arrestors.ts's law holds. Cindral charges for the drop.
+ */
+export const DEPOT_RATE_MUL = 4;
+
 // ---- arrestors: deployable landing pads for your own shafts ----
 export const ARRESTOR_PRICE = 900;
 export const MAX_ARRESTORS = 4;

@@ -24,7 +24,10 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x2b3339);
-    scene.fog = new THREE.Fog(0x2b3339, 18, 42);
+    // the strip shot stands further back — keep the fog off its shoulders
+    scene.fog = which === 'all'
+      ? new THREE.Fog(0x2b3339, 30, 80)
+      : new THREE.Fog(0x2b3339, 18, 42);
 
     // ground: a barely-lighter disc so structures cast presence, not float
     const ground = new THREE.Mesh(
@@ -55,15 +58,15 @@
 
     if (which === 'all') {
       // the whole colony strip, spaced as on the pads
-      const spacing = 8.5;
-      const keys = ['fuel', 'trade', 'garage', 'assay'];
+      const spacing = 7.2;
+      const keys = ['quarters', 'fuel', 'trade', 'garage', 'assay'];
       keys.forEach((k, i) => {
         const b = STRUCTURE_BUILDERS[k]();
-        b.position.x = (i - 1.5) * spacing;
+        b.position.x = (i - 2) * spacing;
         scene.add(b);
         practical(b.position.x);
       });
-      camera.position.set(0, 4.6, 27);
+      camera.position.set(0, 5.0, 35);
       camera.lookAt(0, 2.6, -2);
     } else {
       const b = STRUCTURE_BUILDERS[which]();
@@ -75,6 +78,7 @@
         trade: { pos: [3.2, 2.5, 8.2], target: 1.9 },
         garage: { pos: [3.4, 2.8, 9.6], target: 2.2 },
         assay: { pos: [3.8, 3.4, 11.6], target: 3.4 },
+        quarters: { pos: [3.0, 2.3, 8.0], target: 1.6 },
       }[which] ?? { pos: [3.2, 2.6, 8.2], target: 2.0 };
       camera.position.set(...view.pos);
       camera.lookAt(0.1, view.target, -1.6);
