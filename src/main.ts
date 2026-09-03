@@ -42,7 +42,7 @@ import { AudioEngine } from './audio/audio';
 import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
 import { GlyphMarks, glyphById, GLYPHS, WORLD_GLYPHS } from './world/glyphs';
 import { VaultRun } from './game/vault';
-import { vaultByGlyph, VAULTS, parseVault, CHAMBER_MAX_W } from './world/vaults';
+import { vaultByGlyph, VAULTS, TEST_VAULTS, parseVault, CHAMBER_MAX_W, SPARK_CLASS, PULSE } from './world/vaults';
 import { Interior, InteriorPanel } from './game/interior';
 import { loadMeta, lockMeta } from './game/meta';
 import { rigFinish, flameStyle, lampTint, suitFinish, sparkStyle } from './game/cosmetics';
@@ -251,6 +251,9 @@ class Game {
     (window as unknown as { __VAULTS: unknown }).__VAULTS = VAULTS;
     (window as unknown as { __parseVault: unknown }).__parseVault = parseVault;
     (window as unknown as { __CHAMBER_MAX_W: unknown }).__CHAMBER_MAX_W = CHAMBER_MAX_W;
+    (window as unknown as { __TEST_VAULTS: unknown }).__TEST_VAULTS = TEST_VAULTS;
+    (window as unknown as { __SPARK_CLASS: unknown }).__SPARK_CLASS = SPARK_CLASS;
+    (window as unknown as { __PULSE: unknown }).__PULSE = PULSE;
     import('./game/meta').then(m => {
       (window as unknown as { __meta: unknown }).__meta = m;
     });
@@ -450,7 +453,10 @@ class Game {
 
   private enterVault(id: string): void {
     const def = vaultByGlyph(id);
-    const glyph = glyphById(id);
+    // a TEST_VAULTS room has no glyph of its own — it borrows the first
+    // one's dressing (world hues, name plate); dev-only, never saved
+    const glyph = glyphById(id)
+      ?? (TEST_VAULTS.some(v => v.glyph === id) ? GLYPHS[0] : undefined);
     if (!def || !glyph) return;
     // one stone at a time — a stacked run leaks its scene and its HUD
     if (this.vault) { this.vault.dispose(); this.vault = null; }
@@ -481,7 +487,7 @@ class Game {
     this.audio.airlock();
     this.mode = 'eva';
     this.hud.show();
-    if (completed && id && !this.state.glyphsSet.has(id)) {
+    if (completed && id && glyphById(id) && !this.state.glyphsSet.has(id)) {
       this.state.glyphsSet.add(id);
       this.hud.toast(`TRANSLATED — ${glyphById(id)?.name} · ${this.state.glyphs}/9`, 'stratum');
       this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.glyphHue, this.state.glyphsSet);
@@ -544,7 +550,7 @@ class Game {
   /** ?vault=<id> and the headless suite: straight into one stone's room */
   devVault(id: string): string | null {
     const glyph = glyphById(id);
-    if (!glyph) return null;
+    if (!glyph && !TEST_VAULTS.some(v => v.glyph === id)) return null;
     this.audio.init();
     const wake = () => this.audio.resume();
     addEventListener('pointerdown', wake, { once: true });
@@ -552,8 +558,9 @@ class Game {
     const st = this.state;
     st.ephemeral = true;
     lockMeta();
-    if (st.activeWorld !== glyph.world) {
-      st.activeWorld = glyph.world;
+    const world = glyph?.world ?? GLYPHS[0].world;
+    if (st.activeWorld !== world) {
+      st.activeWorld = world;
       this.setupWorld();
     }
     this.title?.hide();

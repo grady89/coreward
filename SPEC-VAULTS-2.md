@@ -677,7 +677,12 @@ lint (≤ 22 cols), sconce-at-boundary lint, the P2 dark-hazard-emissive lint.
 
 **V3 — Kit (motes, braziers, snuffers, one-way gates, currents,
 censer-ride, beam parked state, global pulse, deadLight visuals).**
-~18–30 h.
+~18–30 h. **DONE 2026-09-03.** The kit ships in THE PROVING GROUND
+(`TEST_VAULTS` in [src/world/vaults.ts](src/world/vaults.ts), `?vault=proving`)
+rather than in the nine, which V4/V5 rewrite — wiring new objects into
+rooms that are about to die is paying twice. The legend carries the spark
+ledger and the fiction line per element; every cyclic period is now an
+integer multiple of the 0.85 s pulse.
 *Breaks:* `vaults.mjs` `alphabet` kit census (new counts) and its parse
 walk (new chars `o` `*`); `vaultfit.mjs` AIR set. *Adds:* pulse-ratio lint,
 the P1 spark-classification totality check, a snuffer check (steals without

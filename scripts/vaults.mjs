@@ -72,15 +72,25 @@ await stage('maps', ['nine levels'], async () => {
     const worlds = { veil3: 0, cryos2: 0, maelis6: 0 };
     for (const g of gs) worlds[g.world]++;
     let reach = 0;
-    const kit = { shuttles: 0, censers: 0, crushers: 0, pursuit: 0, doors: 0, beams: 0 };
-    for (const v of window.__VAULTS) {
+    // the V3 kit lives in the proving ground until V4 authors it into rooms,
+    // so the census walks the test vaults too — parse, reach and all
+    const all = [...window.__VAULTS, ...window.__TEST_VAULTS];
+    const kit = { shuttles: 0, censers: 0, crushers: 0, pursuit: 0, doors: 0, beams: 0,
+      snuffers: 0, gates: 0, currents: 0, parked: 0, braziers: 0, motes: 0 };
+    for (const v of all) {
       if (v.shuttles) kit.shuttles++;
       if (v.censers) kit.censers++;
       if (v.crushers) kit.crushers++;
       if (v.pursuit) kit.pursuit++;
       if (v.doorNeeds) kit.doors++;
       if (v.beams) kit.beams++;
+      if ((v.shuttles ?? []).some(s => s.snuff)) kit.snuffers++;
+      if (v.gates) kit.gates++;
+      if (v.currents) kit.currents++;
+      if ((v.beams ?? []).some(b => b.parked)) kit.parked++;
       const p = window.__parseVault(v);
+      kit.braziers += p.braziers.length;
+      kit.motes += p.motes.length;
       const seen = new Uint8Array(p.w * p.h);
       const q = [[p.entry.x, p.entry.y]];
       seen[p.entry.y * p.w + p.entry.x] = 1;
@@ -94,11 +104,15 @@ await stage('maps', ['nine levels'], async () => {
       }
       if (seen[p.master.y * p.w + p.master.x] && p.sconces.every(s => seen[s.y * p.w + s.x])) reach++;
     }
-    return { n: gs.length, worlds, vaults: window.__VAULTS.length, reach, kit };
+    return { n: gs.length, worlds, vaults: window.__VAULTS.length,
+      rooms: all.length, reach, kit };
   });
-  ok('nine levels', alphabet, alphabet.n === 9 && alphabet.vaults === 9 && alphabet.reach === 9
+  ok('nine levels', alphabet, alphabet.n === 9 && alphabet.vaults === 9
+    && alphabet.reach === alphabet.rooms && alphabet.rooms === 10
     && alphabet.kit.shuttles >= 4 && alphabet.kit.censers >= 4 && alphabet.kit.crushers >= 3
-    && alphabet.kit.pursuit === 2 && alphabet.kit.doors >= 3 && alphabet.kit.beams >= 1);
+    && alphabet.kit.pursuit === 2 && alphabet.kit.doors >= 3 && alphabet.kit.beams >= 1
+    && alphabet.kit.snuffers >= 1 && alphabet.kit.gates >= 1 && alphabet.kit.currents >= 1
+    && alphabet.kit.parked >= 1 && alphabet.kit.braziers >= 1 && alphabet.kit.motes >= 3);
 });
 
 await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall moves', 're-form', 'corner correction', 'buffer through spark', 'sconce crystal', 'wick translated'], async () => {
@@ -641,6 +655,188 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     && JSON.stringify(voice.poses) === JSON.stringify(['curled', 'fallen', 'kneeling', 'reaching']));
 });
 
+await stage('proving', ['the proving ground', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride'], async () => {
+  // --- the V3 kit, in its dev room: nothing here touches the nine maps ---
+  const enter = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    g.devVault('proving');
+    await until(() => g.mode === 'vault' && g.vault && g.vault.glyphId === 'proving', 40);
+    const v = g.vault;
+    const def = window.__TEST_VAULTS.find(x => x.glyph === 'proving');
+    return {
+      inVault: g.mode === 'vault', motes: v.p.motes.length, braziers: v.p.braziers.length,
+      snuffer: def.shuttles.some(s => s.snuff), gates: (def.gates ?? []).length,
+      currents: (def.currents ?? []).length, parked: def.beams.some(b => b.parked),
+    };
+  });
+  ok('the proving ground', enter, enter.inVault && enter.motes >= 3 && enter.braziers === 1
+    && enter.snuffer && enter.gates === 1 && enter.currents === 1 && enter.parked);
+  await page.screenshot({ path: OUT + '/v-proving.png' });
+
+  // --- ▲ brazier: refills the spark MID-AIR, and is not a checkpoint ---
+  const brazier = await page.evaluate(async () => {
+    const { g, until, off } = window.__H();
+    const v = g.vault;
+    const b = v.p.braziers[0];
+    v.invuln = 999;
+    const cp0 = { ...v.checkpoint };
+    v.px = 6.5; v.py = -18.5; v.vx = 0; v.vy = 0;
+    v.dash({ ...off(), up: true });
+    await until(() => !v.spark, 10, 50);
+    const spent = !v.spark;
+    // hang in the basket's ring, airborne: the light comes back before stone does
+    v.px = b.x + 0.5; v.py = -(b.y + 0.5) - 0.3; v.vx = 0; v.vy = 0;
+    const relitMidAir = await until(() => v.spark && !v.grounded, 20, 40);
+    const sameCheckpoint = v.checkpoint.x === cp0.x && v.checkpoint.y === cp0.y;
+    return { spent, relitMidAir, sameCheckpoint };
+  });
+  ok('brazier relight', brazier, brazier.spent && brazier.relitMidAir && brazier.sameCheckpoint);
+
+  // --- ▲ snuffer: asleep on the wall, wakes on proximity, STEALS the charged
+  // spark and leaves you standing — no gutter, and a spent spark is ignored ---
+  const snuffer = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const v = g.vault;
+    const calls = [];
+    const real = v.audio;
+    v.audio = {
+      chord: () => calls.push('chord'), deny: () => calls.push('deny'),
+      gutter: () => calls.push('gutter'), complete: () => calls.push('complete'),
+      duck: () => calls.push('duck'),
+    };
+    v.invuln = 0;
+    const asleep = !v.snuffState[0].awake;
+    const park = v.shuttlePos(0);
+    // stroll into the waking ring
+    v.px = 6.0; v.py = -21.0; v.vx = 0; v.vy = 0;
+    const woke = await until(() => v.snuffState[0].awake, 20, 50);
+    const patrols = await until(() => Math.abs(v.shuttlePos(0).x - park.x) > 0.4, 40, 100);
+    // stand in its path with the light charged: theft, not death
+    const r0 = v.reforms;
+    v.spark = true;
+    const p2 = v.shuttlePos(0);
+    v.px = p2.x; v.py = p2.y; v.vx = 0; v.vy = 0;
+    const stolen = await until(() => !v.spark, 10, 40);
+    const standing = v.reforms === r0 && Math.abs(v.px - p2.x) < 0.6;
+    const stung = calls.includes('deny') && !calls.includes('gutter');
+    // spent already: the moth has nothing to drink — no second sting. The
+    // sate timer is zeroed each pass so only the spent spark is the shield
+    const denies = calls.filter(c => c === 'deny').length;
+    for (let i = 0; i < 6; i++) {
+      const p3 = v.shuttlePos(0);
+      v.snuffState[0].sate = 0;
+      v.spark = false; v.px = p3.x; v.py = p3.y; v.vx = 0; v.vy = 0;
+      await new Promise(r => setTimeout(r, 40));
+    }
+    const ignored = calls.filter(c => c === 'deny').length === denies && v.reforms === r0;
+    v.audio = real;
+    return { asleep, woke, patrols, stolen, standing, stung, ignored };
+  });
+  ok('snuffer steals', snuffer, snuffer.asleep && snuffer.woke && snuffer.patrols
+    && snuffer.stolen && snuffer.standing && snuffer.stung && snuffer.ignored);
+
+  // --- ▲ one-way gate: passes you down, solid from below ---
+  const gate = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const v = g.vault;
+    const g2 = window.__TEST_VAULTS.find(x => x.glyph === 'proving').gates[0];
+    const plane = -(g2.y1 + 1);
+    v.invuln = 999;
+    // drop through: the curtain passes what enters
+    v.px = g2.x0 + 1; v.py = -(g2.y0 - 1) - 0.5; v.vx = 0; v.vy = 0;
+    const passed = await until(() => v.py < plane - 1, 30, 50);
+    // and refuses it back: an upward launch breaks on the underside
+    v.px = g2.x0 + 1; v.py = plane - 1.6; v.vx = 0; v.vy = 12;
+    let maxTop = -1e9;
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 50));
+      maxTop = Math.max(maxTop, v.py + 0.52);
+    }
+    return { passed, held: maxTop <= plane + 0.02, maxTop: +maxTop.toFixed(2), plane };
+  });
+  ok('one-way gate', gate, gate.passed && gate.held);
+
+  // --- ▲ current: a rising carry, visible and vertical ---
+  const current = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const v = g.vault;
+    const cu = window.__TEST_VAULTS.find(x => x.glyph === 'proving').currents[0];
+    v.invuln = 999;
+    v.px = cu.x0 + 1; v.py = -(cu.y1 + 0.5); v.vx = 0; v.vy = 0;
+    const rose = await until(() => v.vy > 2, 20, 50);
+    const carried = await until(() => -v.py < cu.y0 + 2, 100, 50);
+    // ride the momentum past the column's mouth, drift out at the crest,
+    // and the loft takes you — the spring, completed
+    const crested = await until(() => -v.py < cu.y0 + 0.3, 40, 50);
+    v.px = 44.5; v.vx = 0;
+    const landed = await until(() => v.grounded && -v.py < cu.y0, 60, 50);
+    return { rose, carried, crested, landed, y: +v.py.toFixed(1) };
+  });
+  ok('the current', current, current.rose && current.carried && current.crested && current.landed);
+
+  // --- △ parked beam: dormant furniture until the arm rect wakes it ---
+  const beam = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const v = g.vault;
+    const bd = window.__TEST_VAULTS.find(x => x.glyph === 'proving').beams[0];
+    const parked = v.beamArmed[0] === false;
+    const a0 = { x: v.beamRays[0].ex, y: v.beamRays[0].ey };
+    await new Promise(r => setTimeout(r, 600));
+    const still = Math.hypot(v.beamRays[0].ex - a0.x, v.beamRays[0].ey - a0.y) < 0.01;
+    // inert: the parked cone costs nothing to stand in
+    const r0 = v.reforms;
+    v.invuln = 0;
+    v.px = 36; v.py = -4.5; v.vx = 0; v.vy = 0;
+    await new Promise(r => setTimeout(r, 250));
+    const inert = v.reforms === r0;
+    // cross the arm rect: the rounds begin
+    v.px = bd.arm[0] + 1; v.py = -(bd.arm[1] + 1); v.vx = 0; v.vy = 0;
+    const armed = await until(() => v.beamArmed[0], 20, 50);
+    await new Promise(r => setTimeout(r, 600));
+    const walks = Math.hypot(v.beamRays[0].ex - a0.x, v.beamRays[0].ey - a0.y) > 0.5;
+    // and now it bites: hold station on the ray until it comes around
+    let bit = false;
+    for (let i = 0; i < 50 && !bit; i++) {
+      const b = v.beamRays[0];
+      v.px = (33.5 + b.ex) / 2; v.py = (-4.5 + b.ey) / 2; v.vx = 0; v.vy = 0; v.invuln = 0;
+      await new Promise(r => setTimeout(r, 80));
+      bit = v.reforms > r0;
+    }
+    return { parked, still, inert, armed, walks, bit };
+  });
+  ok('parked beam arms', beam, beam.parked && beam.still && beam.inert
+    && beam.armed && beam.walks && beam.bit);
+
+  // --- △ censer-ride: the crown is standable — the threat converts to
+  // traversal at the top of the swing; the sides still burn ---
+  const ride = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const v = g.vault;
+    await until(() => v.phase === 'run', 20);
+    const r0 = v.reforms;
+    v.invuln = 999;
+    let rode = false;
+    for (let i = 0; i < 40 && !rode; i++) {
+      const p2 = v.censerPos(0);
+      v.px = p2.x; v.py = p2.y + 0.45 + 0.52 + 0.2; v.vx = 0; v.vy = -1;
+      await new Promise(r => setTimeout(r, 80));
+      rode = v.ridingCenser === 0 && v.grounded;
+    }
+    const noKill = v.reforms === r0;
+    const relit = v.spark;    // the bronze reads as footing: it re-arms
+    // side contact is still the lantern's fire
+    let burned = false;
+    for (let i = 0; i < 40 && !burned; i++) {
+      const p2 = v.censerPos(0);
+      v.px = p2.x + 0.45; v.py = p2.y - 0.2; v.vx = 0; v.vy = 0; v.invuln = 0;
+      await new Promise(r => setTimeout(r, 60));
+      burned = v.reforms > r0;
+    }
+    return { rode, noKill, relit, burned };
+  });
+  ok('censer ride', ride, ride.rode && ride.noKill && ride.relit && ride.burned);
+});
+
 await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
   // --- abandon, gallery, grandfathering, the gate ---
   const abandon = await page.evaluate(async () => {
@@ -703,7 +899,7 @@ await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
   // ===================================================================
 });
 
-await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive'], async () => {
+await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification'], async () => {
   // --- P3a: no chamber is wider than the frame can hold legibly ---
   const chamberW = await page.evaluate(() => {
     const max = window.__CHAMBER_MAX_W;
@@ -760,6 +956,75 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
   });
   ok('lint · dark hazards emissive', darkFangs,
     darkFangs.inDark > 0 && darkFangs.bad.length === 0);
+
+  // --- THE BEAT CLOCK (§III): one pulse per room. Every cyclic hazard's
+  // period is an integer multiple of the pulse — bridges 4 (in code),
+  // censers 3, shuttles/snuffers 2–4, crushers 3–4, spin beams 4–8, wind
+  // calm/gust 4/3 — and every phase lands on a quarter-pulse. ---
+  const pulseLint = await page.evaluate(() => {
+    const bad = [];
+    let cyclic = 0;
+    const near = x => Math.abs(x - Math.round(x)) < 1e-3;
+    for (const v of [...window.__VAULTS, ...window.__TEST_VAULTS]) {
+      const pulse = v.clock ?? window.__PULSE;
+      const chk = (arr, kind, lo, hi) => {
+        for (const d of arr ?? []) {
+          cyclic++;
+          const n = d.period / pulse;
+          if (!near(n) || Math.round(n) < lo || Math.round(n) > hi) {
+            bad.push(`${v.glyph}/${kind}:${d.period}s`);
+          } else if (!near((d.phase ?? 0) * Math.round(n) * 4)) {
+            bad.push(`${v.glyph}/${kind}-phase:${d.phase}`);
+          }
+        }
+      };
+      chk(v.shuttles, 'shuttle', 2, 4);
+      chk(v.censers, 'censer', 3, 3);
+      chk(v.crushers, 'crusher', 3, 4);
+      chk(v.beams, 'beam', 4, 8);
+      if (v.wind) {
+        cyclic++;
+        const c = v.wind.calm / pulse, g2 = v.wind.gust / pulse;
+        if (!near(c) || Math.round(c) !== 4 || !near(g2) || Math.round(g2) !== 3) {
+          bad.push(`${v.glyph}/wind:${v.wind.calm}/${v.wind.gust}`);
+        }
+      }
+    }
+    return { cyclic, bad };
+  });
+  ok('lint · pulse ratio', pulseLint, pulseLint.cyclic >= 25 && pulseLint.bad.length === 0);
+
+  // --- P1: one breath of light. The spark ledger must be TOTAL over the
+  // parsed kit — an element that earns no classification is cut or
+  // converted, and the lint is what makes that a rule instead of a wish. ---
+  const sparkClass = await page.evaluate(() => {
+    const SC = window.__SPARK_CLASS;
+    const els = new Set();
+    const CHAR = { S: 'sconce', X: 'stud', d: 'dark', A: 'bridge', b: 'bridge',
+      R: 'rime', o: 'mote', '*': 'brazier', '^': 'gravity', '>': 'gravity',
+      '<': 'gravity', 1: 'door', 2: 'door', 3: 'door', K: 'figure', F: 'figure',
+      C: 'figure', N: 'figure', M: 'master' };
+    for (const v of [...window.__VAULTS, ...window.__TEST_VAULTS]) {
+      for (const row of v.map) {
+        for (const ch of row) {
+          if (ch === 'S' && v.deadLight) els.add('famine-sconce');
+          else if (CHAR[ch]) els.add(CHAR[ch]);
+        }
+      }
+      if (v.beams) els.add('beam');
+      for (const s of v.shuttles ?? []) els.add(s.snuff ? 'snuffer' : 'shuttle');
+      if (v.censers) els.add('censer');
+      if (v.crushers) els.add('crusher');
+      if (v.pursuit) els.add('pursuit');
+      if (v.wind) els.add('wind');
+      if (v.gates) els.add('gate');
+      if (v.currents) els.add('current');
+    }
+    const missing = [...els].filter(e => !SC[e] || !SC[e].length);
+    return { kit: els.size, missing };
+  });
+  ok('lint · spark classification', sparkClass,
+    sparkClass.kit >= 18 && sparkClass.missing.length === 0);
 });
 
 if (!listing) {

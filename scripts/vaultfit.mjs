@@ -21,15 +21,17 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 await page.goto('http://localhost:4173');
 await page.waitForTimeout(3200);
-const maps = await page.evaluate(() => window.__VAULTS.map(v => ({ glyph: v.glyph, map: v.map })));
+const maps = await page.evaluate(() =>
+  [...window.__VAULTS, ...window.__TEST_VAULTS].map(v => ({ glyph: v.glyph, map: v.map })));
 await browser.close();
 
 // door masonry counts as air: it melts open once its sconces burn, and the
 // sconces are reachable — otherwise every doored vault reads as a false block
 // the standing dead are decor, one char per posture (K/F/C/N) — a body
 // walks straight through them, so they read as air to the fit walk
+// motes and braziers hang in the air the body moves through
 const AIR = new Set(['.', 'd', 'S', '@', 'M', 'X', 'A', 'b', 'R', '^', '>', '<',
-  'K', 'F', 'C', 'N', '1', '2']);
+  'K', 'F', 'C', 'N', '1', '2', 'o', '*']);
 let bad = 0;
 const table = [];
 for (const { glyph, map: rows } of maps) {
@@ -78,5 +80,5 @@ for (const { glyph, map: rows } of maps) {
 
 console.log(`BODY ${body}x → ${(HW * 2).toFixed(2)} x ${(HH * 2).toFixed(2)} tiles · needs ${colsNeeded}x${rowsNeeded} clear`);
 console.table(table);
-console.log(bad ? `FAIL — ${bad} vault(s) no longer admit the body` : 'OK — all nine still admit the body');
+console.log(bad ? `FAIL — ${bad} vault(s) no longer admit the body` : 'OK — every room still admits the body');
 process.exit(bad ? 1 : 0);

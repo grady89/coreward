@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
-import { VaultDef, ParsedVault, parseVault, chamberAt } from '../world/vaults';
+import { VaultDef, GateDef, CurrentDef, ParsedVault, parseVault, chamberAt, PULSE } from '../world/vaults';
 import {
   Suit, SUIT_R, SUIT_H, buildSuit, poseSuit,
   FigurePose, poseFigure, figureLampAt, figureNearElbow,
@@ -63,8 +63,19 @@ const COYOTE = 0.1;
 const BUFFER = 0.12;
 const SCONCE_LIGHT_R = 1.0; // touch an unlit sconce to light it
 const SCONCE_SPARK_R = 1.4; // a lit sconce relights the spark from here
-const BRIDGE_HALF = 1.7;
+                            // (a brazier's ring is the same reach — the
+                            // author's refill brush, no checkpoint in it)
+const BRIDGE_PULSES = 4;    // bridges hold one beat-clock pulse × this per side
 const BRIDGE_WARN = 0.35;
+// ---- the V3 kit (SPEC-VAULTS-2 §III) ----
+const SNUFF_WAKE = 3.5;     // a sleeping snuffer stirs when the body comes this close
+const SNUFF_R = 0.5;        // the moth's reach — box half-extent, both axes
+const CENSER_TOP = 0.45;    // the lantern's crown sits this far above the bob centre
+const CENSER_RIDE_BAND = 0.3; // how forgiving the crown is about the landing
+const CURRENT_RISE = 7;     // a current carries — it never outruns the spark (P5)
+const SNUFF_SATE = 1.2;     // a moth that has just fed is sated this long — over
+                            // refill stone the theft would otherwise fire every
+                            // frame the floor re-arms you, sting and all
 const RIME_CRUMBLE = 0.55;
 const RIME_REGROW = 3.5;
 const BEAM_R = 0.3;
@@ -194,6 +205,17 @@ export class VaultRun {
   private pursuitOn = false;
   private pursuitEdge = 0;
   private pursuitDone = false;
+  // the V3 kit's state
+  /** the room's beat-clock pulse, seconds */
+  private pulse: number;
+  /** per shuttle; only a snuffer's entry is ever awake or ticking */
+  private snuffState: { awake: boolean; t: number; sate: number }[] = [];
+  /** which censer's crown the body is standing on, -1 for none */
+  private ridingCenser = -1;
+  private censerPrevX: number[] = [];
+  /** a parked beam is inert until its arm rect is crossed */
+  private beamArmed: boolean[] = [];
+  private beamArmT: number[] = [];
   // chambers, the chord, and the dark
   /** which camera-locked chamber the frame is holding */
   chamber = 0;
@@ -219,7 +241,8 @@ export class VaultRun {
   private doorMeshes: THREE.Mesh[][] = [];
   private bridgeMeshes: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: 0 | 1 }[] = [];
   private rimeMeshes: THREE.Mesh[] = [];
-  private shuttleMeshes: { bolt: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
+  /** a plain shuttle's bolt, or a snuffer's whole moth; mat is what glows */
+  private shuttleMeshes: { bolt: THREE.Object3D; mat: THREE.MeshBasicMaterial }[] = [];
   /** the faint rail behind each bolt — a hazard's visible track (P2) */
   private shuttleRailMats: THREE.Material[] = [];
   /** the ember seam and haze every unlight stud wears (P2) */
@@ -227,6 +250,12 @@ export class VaultRun {
   /** each piston's working face, the seam that says which way it comes (P2) */
   private crusherFaceMats: THREE.Material[] = [];
   private censerMeshes: { bob: THREE.Group; chain: THREE.Line; light: THREE.PointLight }[] = [];
+  /** a snuffer's wings, indexed like shuttles; null for a plain bolt */
+  private snufferWings: ([THREE.Mesh, THREE.Mesh] | null)[] = [];
+  private moteMeshes: { mesh: THREE.Mesh; x: number; y: number; ph: number }[] = [];
+  private brazierFx: { light: THREE.PointLight; embers: THREE.Mesh[]; x: number; y: number }[] = [];
+  private gateMeshes: { curtain: THREE.Mesh; flecks: THREE.Mesh[]; g: GateDef }[] = [];
+  private currentPts: { pts: THREE.Points; c: CurrentDef }[] = [];
   private crusherMeshes: THREE.Mesh[] = [];
   private pursuitMesh: THREE.Mesh | null = null;
   private pursuitEdgeMesh: THREE.Mesh | null = null;
@@ -257,6 +286,10 @@ export class VaultRun {
     ui: HTMLElement,
   ) {
     this.p = parseVault(def);
+    this.pulse = def.clock ?? PULSE;
+    this.snuffState = (def.shuttles ?? []).map(() => ({ awake: false, t: 0, sate: 0 }));
+    this.beamArmed = (def.beams ?? []).map(b => !b.parked);
+    this.beamArmT = (def.beams ?? []).map(() => 0);
     this.cam = new FollowCam(aspect);
     this.cam.xMax = this.p.w;
     this.px = this.p.entry.x + 0.5;
@@ -433,7 +466,10 @@ export class VaultRun {
       }
     }
 
-    // sconces
+    // sconces. A famine room's are DEADLIGHT: the cup cracked through, and
+    // what burns when lit is a guttering blue-white — a light that remembers
+    // you and has nothing to give (§III; atmosphere §3.4)
+    const dead = !!this.def.deadLight;
     for (const s of this.p.sconces) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.14),
         new THREE.MeshStandardMaterial({ color: 0x6f8f88, roughness: 0.4, metalness: 0.7 }));
@@ -441,9 +477,20 @@ export class VaultRun {
       const fm = new THREE.MeshBasicMaterial({ color: 0x342e22 });
       const flame = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), fm);
       flame.position.set(s.x + 0.5, -(s.y + 0.5) + 0.15, 0.3);
-      const light = new THREE.PointLight(0xffd9a0, 0, 7, 1.7);
+      const light = new THREE.PointLight(dead ? 0x9db8ff : 0xffd9a0, 0, 7, 1.7);
       light.position.copy(flame.position);
       this.scene.add(post, flame, light);
+      if (dead) {
+        // the hairline through the cup, and a second bite lower down
+        const crackMat = new THREE.MeshBasicMaterial({ color: 0x0a0910 });
+        const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.028), crackMat);
+        crack.rotation.z = 0.55;
+        crack.position.set(s.x + 0.5, -(s.y + 0.5) + 0.02, 0.42);
+        const crack2 = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.022), crackMat);
+        crack2.rotation.z = -0.8;
+        crack2.position.set(s.x + 0.44, -(s.y + 0.5) - 0.14, 0.42);
+        this.scene.add(crack, crack2);
+      }
       this.sconceMeshes.push({ flame, light, mat: fm });
     }
 
@@ -491,19 +538,48 @@ export class VaultRun {
       this.beamRays.push({ ex: b.x, ey: -b.y, mesh });
     }
 
-    // shuttles — a bolt of light on a rail; the rail itself is drawn faint
+    // shuttles — a bolt of light on a rail; the rail itself is drawn faint.
+    // A snuffer rides the same rail as a slow dark moth instead: near-black
+    // body and wings, every edge rimmed in the unlight's ember un-color —
+    // self-luminous, so the dark can never hide it (P2)
     for (const s of this.def.shuttles ?? []) {
       const railGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(s.x0 + 0.5, -(s.y0 + 0.5), 0.05),
         new THREE.Vector3(s.x1 + 0.5, -(s.y1 + 0.5), 0.05),
       ]);
       const rail = new THREE.Line(railGeo, new THREE.LineBasicMaterial({ color: this.hue, transparent: true, opacity: 0.18 }));
-      const horizontal = Math.abs(s.x1 - s.x0) >= Math.abs(s.y1 - s.y0);
-      const bm = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
-      const bolt = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? 1.4 : 0.34, horizontal ? 0.34 : 1.4, 0.4), bm);
-      this.scene.add(rail, bolt);
       this.shuttleRailMats.push(rail.material as THREE.Material);
-      this.shuttleMeshes.push({ bolt, mat: bm });
+      if (s.snuff) {
+        const moth = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6),
+          new THREE.MeshBasicMaterial({ color: 0x0b0812 }));
+        body.scale.set(0.7, 1.2, 0.7);
+        const rimMat = new THREE.MeshBasicMaterial({
+          color: 0xff5a3c, transparent: true, opacity: 0.55,
+          blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+        });
+        const wingMat = new THREE.MeshBasicMaterial({ color: 0x1c1428, side: THREE.DoubleSide });
+        const wing = (side: number): THREE.Mesh => {
+          const w = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.32), wingMat);
+          w.position.x = side * 0.26;
+          const rim = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.36), rimMat);
+          rim.position.z = -0.005;
+          w.add(rim);
+          return w;
+        };
+        const wl = wing(-1), wr = wing(1);
+        moth.add(body, wl, wr);
+        this.scene.add(rail, moth);
+        this.shuttleMeshes.push({ bolt: moth, mat: rimMat });
+        this.snufferWings.push([wl, wr]);
+      } else {
+        const horizontal = Math.abs(s.x1 - s.x0) >= Math.abs(s.y1 - s.y0);
+        const bm = new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+        const bolt = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? 1.4 : 0.34, horizontal ? 0.34 : 1.4, 0.4), bm);
+        this.scene.add(rail, bolt);
+        this.shuttleMeshes.push({ bolt, mat: bm });
+        this.snufferWings.push(null);
+      }
     }
 
     // censers — a lantern on a chain, still swinging after all this time
@@ -520,8 +596,104 @@ export class VaultRun {
         new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
       const light = new THREE.PointLight(0xffd9a0, 2.2, 7, 1.7);
       bob.add(shell, flame, light);
+      // the crown: a flat bronze lid that says "standable" (the ride, §III)
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 0.1, 10),
+        new THREE.MeshStandardMaterial({ color: 0x8a7a52, roughness: 0.35, metalness: 0.8 }));
+      lid.position.y = CENSER_TOP - 0.04;
+      bob.add(lid);
       this.scene.add(chain, bob);
       this.censerMeshes.push({ bob, chain, light });
+    }
+
+    // braziers — hanging ember baskets: bronze holds, light works. The chain
+    // runs to the first stone above; the embers rise out of the mouth
+    for (const b of this.p.braziers) {
+      let cy = b.y;
+      while (cy > 0 && !p.solid[(cy - 1) * p.w + b.x]) cy--;
+      const chainGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(b.x + 0.5, -cy, 0.3),
+        new THREE.Vector3(b.x + 0.5, -(b.y + 0.5) + 0.2, 0.3),
+      ]);
+      const chain = new THREE.Line(chainGeo, new THREE.LineBasicMaterial({ color: 0x8f89a4, transparent: true, opacity: 0.6 }));
+      const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.17, 0.32, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6f5a3a, roughness: 0.45, metalness: 0.75, flatShading: true }));
+      basket.position.set(b.x + 0.5, -(b.y + 0.5), 0.3);
+      const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7),
+        new THREE.MeshBasicMaterial({
+          map: softDisc(), color: 0xffa050, transparent: true, opacity: 0.75,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        }));
+      mouth.position.set(b.x + 0.5, -(b.y + 0.5) + 0.2, 0.31);
+      const light = new THREE.PointLight(0xffb060, 1.1, 5, 1.7);
+      light.position.set(b.x + 0.5, -(b.y + 0.5) + 0.2, 0.5);
+      const embers: THREE.Mesh[] = [];
+      for (let k = 0; k < 3; k++) {
+        const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5),
+          new THREE.MeshBasicMaterial({
+            color: 0xffc078, transparent: true, opacity: 0.7,
+            blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+          }));
+        embers.push(e);
+        this.scene.add(e);
+      }
+      this.scene.add(chain, basket, mouth, light);
+      this.brazierFx.push({ light, embers, x: b.x, y: b.y });
+    }
+
+    // motes — drifting flecks of the world's hue. Language, never mechanics:
+    // they trace the arc, mark the drop, edge the shelf in the dark
+    for (const mo of this.p.motes) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.24),
+        new THREE.MeshBasicMaterial({
+          map: softDisc(), color: this.rimHue, transparent: true, opacity: 0.6,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        }));
+      this.scene.add(mesh);
+      this.moteMeshes.push({ mesh, x: mo.x, y: mo.y, ph: (mo.x * 7 + mo.y * 13) % 6.28 });
+    }
+
+    // one-way gates — a falling curtain of light across the doorway, with
+    // flecks streaming the way it will pass you
+    for (const g2 of this.def.gates ?? []) {
+      const gw = g2.x1 - g2.x0 + 1, gh = g2.y1 - g2.y0 + 1;
+      const curtain = new THREE.Mesh(new THREE.PlaneGeometry(gw * 0.96, gh + 0.9),
+        new THREE.MeshBasicMaterial({
+          map: softDisc(), color: this.hue, transparent: true, opacity: 0.42,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        }));
+      curtain.position.set(g2.x0 + gw / 2, -(g2.y0 + gh / 2), 0.25);
+      this.scene.add(curtain);
+      const flecks: THREE.Mesh[] = [];
+      for (let k = 0; k < 6; k++) {
+        const f = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.2),
+          new THREE.MeshBasicMaterial({
+            color: this.hue, transparent: true, opacity: 0.7,
+            blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+          }));
+        flecks.push(f);
+        this.scene.add(f);
+      }
+      this.gateMeshes.push({ curtain, flecks, g: g2 });
+    }
+
+    // currents — the visible rising column: motes going the wrong way,
+    // warmer than the room's falling ones, so the carrier and the fighter
+    // can never be confused (grammar §2)
+    for (const cu of this.def.currents ?? []) {
+      const n = 26;
+      const cp = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        cp[i * 3] = cu.x0 + Math.random() * (cu.x1 - cu.x0 + 1);
+        cp[i * 3 + 1] = -(cu.y0 + Math.random() * (cu.y1 - cu.y0 + 1));
+        cp[i * 3 + 2] = 0.15;
+      }
+      const geo2 = new THREE.BufferGeometry();
+      geo2.setAttribute('position', new THREE.BufferAttribute(cp, 3));
+      const pts = new THREE.Points(geo2, new THREE.PointsMaterial({
+        color: 0xffe6c0, size: 0.14, transparent: true, opacity: 0.75, depthWrite: false,
+      }));
+      this.scene.add(pts);
+      this.currentPts.push({ pts, c: cu });
     }
 
     // crushers — pistons of the same stone, ember-seamed on the working face
@@ -1155,6 +1327,16 @@ export class VaultRun {
         if (!sheltered) this.vx += w.dir * w.force * (this.assist ? 0.6 : 1) * dt;
       }
 
+      // CURRENTS — the rising updraft: a vertical carry, capped so it lifts
+      // like a breath and never fires like a cannon (P5). The generosity
+      // object: wind was the enemy; this one wind is the road
+      for (const cu of this.def.currents ?? []) {
+        if (this.px > cu.x0 && this.px < cu.x1 + 1
+          && -this.py > cu.y0 && -this.py < cu.y1 + 1 && this.vy < CURRENT_RISE) {
+          this.vy = Math.min(CURRENT_RISE, this.vy + cu.force * dt);
+        }
+      }
+
       // caps — holding down opens the fall governor (F7)
       const falling = gSign > 0 ? this.vy < 0 : this.vy > 0;
       const maxFall = vertical && input.down && !this.grounded && falling ? FAST_FALL : MAX_FALL;
@@ -1173,6 +1355,28 @@ export class VaultRun {
       const r = this.moveY(this.vy * sdt, gSign);
       if (r) floorTile = r;
     }
+    // CENSER-RIDE (△ §III): the lantern's crown is standable — the threat
+    // converts to traversal at the top of its swing, and the body reads the
+    // bronze lid as footing (so it re-arms the spark like any floor). The
+    // sides still burn; that check below knows to spare the crown.
+    this.ridingCenser = -1;
+    const cds = this.def.censers ?? [];
+    for (let i = 0; i < cds.length; i++) {
+      const pos = this.censerPos(i);
+      if (vertical && gSign > 0) {
+        const top = pos.y + CENSER_TOP;
+        if (this.vy <= 0.5 && Math.abs(this.px - pos.x) < 0.5
+          && this.py - HH >= top - CENSER_RIDE_BAND && this.py - HH <= top + CENSER_RIDE_BAND) {
+          this.px += pos.x - (this.censerPrevX[i] ?? pos.x);  // carried with the swing
+          this.py = top + HH + EPS;
+          this.vy = 0;
+          this.grounded = true;
+          this.ridingCenser = i;
+        }
+      }
+      this.censerPrevX[i] = pos.x;
+    }
+
     if (wasGrounded && !this.grounded) this.coyoteT = COYOTE;
     if (this.grounded) {
       this.spark = true;             // stone underfoot relights the breath
@@ -1204,6 +1408,16 @@ export class VaultRun {
       }
     }
 
+    // BRAZIERS (▲ §III): the ember basket refills the spark mid-air within
+    // its ring, and is NOT a checkpoint — the author's refill brush without
+    // checkpoint inflation. Even the famine cannot starve ductwork
+    for (const b of this.p.braziers) {
+      if (!this.spark
+        && Math.hypot(this.px - (b.x + 0.5), this.py + b.y + 0.5) < SCONCE_SPARK_R) {
+        this.spark = true;
+      }
+    }
+
     // the master stone
     const m = this.p.master;
     if (Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5) < 1.5) {
@@ -1230,6 +1444,8 @@ export class VaultRun {
     for (const b of this.beamRays) {
       const bd = (this.def.beams ?? [])[this.beamRays.indexOf(b)];
       if (!bd) continue;
+      // a parked beam is furniture until its arm rect wakes it (△ §III)
+      if (!this.beamArmed[this.beamRays.indexOf(b)]) continue;
       const bx = bd.x, by = -bd.y;
       const dx = b.ex - bx, dy = b.ey - by;
       const len2 = dx * dx + dy * dy || 1;
@@ -1237,13 +1453,30 @@ export class VaultRun {
       if (Math.hypot(this.px - (bx + dx * t), this.py - (by + dy * t)) < BEAM_R) { this.reform(); return; }
     }
     for (let i = 0; i < (this.def.shuttles ?? []).length; i++) {
+      const sdef = this.def.shuttles![i];
       const pos = this.shuttlePos(i);
-      const horizontal = Math.abs((this.def.shuttles![i].x1 - this.def.shuttles![i].x0)) >= Math.abs((this.def.shuttles![i].y1 - this.def.shuttles![i].y0));
+      if (sdef.snuff) {
+        // SNUFFER (▲ §III): it STEALS a charged spark and leaves you
+        // standing — no gutter, no re-form; the body-as-meter dims on its
+        // own the frame the light goes. A spent spark it ignores.
+        if (this.snuffState[i].awake && this.spark && this.snuffState[i].sate <= 0
+          && Math.abs(this.px - pos.x) < SNUFF_R + HW
+          && Math.abs(this.py - pos.y) < SNUFF_R + HH) {
+          this.spark = false;
+          this.snuffState[i].sate = SNUFF_SATE;
+          this.audio.deny();               // the sting — never the gutter phrase
+          this.cam.addShake(SHAKE_CRUSH);  // theft is the other permitted shake (§VI)
+        }
+        continue;
+      }
+      const horizontal = Math.abs(sdef.x1 - sdef.x0) >= Math.abs(sdef.y1 - sdef.y0);
       const hw = horizontal ? 0.7 : 0.17, hh = horizontal ? 0.17 : 0.7;
       if (Math.abs(this.px - pos.x) < hw + HW && Math.abs(this.py - pos.y) < hh + HH) { this.reform(); return; }
     }
     for (let i = 0; i < (this.def.censers ?? []).length; i++) {
+      if (this.ridingCenser === i) continue;             // standing on the crown
       const pos = this.censerPos(i);
+      if (this.py - HH >= pos.y + CENSER_TOP - CENSER_RIDE_BAND) continue; // approaching it
       if (Math.hypot(this.px - pos.x, this.py - pos.y) < 0.55 + HW) { this.reform(); return; }
     }
     for (let i = 0; i < (this.def.crushers ?? []).length; i++) {
@@ -1367,8 +1600,36 @@ export class VaultRun {
     return false;
   }
 
+  /**
+   * ONE-WAY GATES (▲ §III): a falling curtain of light in a doorway. The
+   * body passes with the fall freely; against it the curtain's underside is
+   * stone — the vault keeps what enters. Checked per substep, before the
+   * tile resolve, so a dash cannot tunnel it.
+   */
+  private gateBlock(dy: number): void {
+    for (const g of this.def.gates ?? []) {
+      if (this.px + HW <= g.x0 || this.px - HW >= g.x1 + 1) continue;
+      if ((g.dir ?? 'down') === 'down') {
+        const plane = -(g.y1 + 1);          // the curtain's underside
+        if (dy > 0 && this.py + HH > plane && this.py + HH - dy <= plane + EPS) {
+          this.py = plane - HH - EPS;
+          this.vy = 0;
+          if (this.dashT > 0) this.dashVY = 0;
+        }
+      } else {
+        const plane = -g.y0;                // an 'up' gate seals from above
+        if (dy < 0 && this.py - HH < plane && this.py - HH - dy >= plane - EPS) {
+          this.py = plane + HH + EPS;
+          this.vy = 0;
+          if (this.dashT > 0) this.dashVY = 0;
+        }
+      }
+    }
+  }
+
   private moveY(dy: number, gSign: number): [number, number] | null {
     this.py += dy;
+    if (this.def.gates) this.gateBlock(dy);
     const left = Math.floor(this.px - HW + EPS);
     const right = Math.floor(this.px + HW - EPS);
     let floorTile: [number, number] | null = null;
@@ -1632,7 +1893,12 @@ export class VaultRun {
 
   private shuttlePos(i: number): { x: number; y: number } {
     const s = this.def.shuttles![i];
-    const u = (this.time / (s.period / this.hazardMul()) + s.phase) % 1;
+    // a snuffer sleeps parked at the rail's start; its own clock only runs
+    // once it wakes, so the patrol always begins from where it slept
+    const st = this.snuffState[i];
+    if (s.snuff && !st.awake) return { x: s.x0 + 0.5, y: -(s.y0 + 0.5) };
+    const t = s.snuff ? st.t : this.time;
+    const u = (t / (s.period / this.hazardMul()) + (s.snuff ? 0 : s.phase)) % 1;
     const ping = u < 0.5 ? u * 2 : 2 - u * 2;
     return {
       x: s.x0 + 0.5 + (s.x1 - s.x0) * ping,
@@ -1674,23 +1940,50 @@ export class VaultRun {
     this.time += dt;
     const hazardMul = this.hazardMul();
 
-    // bridges
-    const cycle = (BRIDGE_HALF * 2) / hazardMul;
+    // bridges — on the beat clock: BRIDGE_PULSES of the room's pulse per
+    // full A/b cycle. Assist stretches the pulse, so the ratios survive
+    const cycle = (BRIDGE_PULSES * this.pulse) / hazardMul;
     const half = cycle / 2;
     const tc = this.time % cycle;
     this.bridgeOn[0] = tc < half;
     this.bridgeOn[1] = !this.bridgeOn[0];
     const warn = (tc % half) > half - BRIDGE_WARN;
 
-    // beams
+    // snuffers — asleep on the wall until the body crosses the waking ring,
+    // then the slow patrol begins, on its own clock (so it always starts
+    // from where it slept)
+    const sdefs = this.def.shuttles ?? [];
+    for (let i = 0; i < sdefs.length; i++) {
+      const sd = sdefs[i];
+      if (!sd.snuff) continue;
+      const st = this.snuffState[i];
+      st.sate = Math.max(0, st.sate - dt);
+      if (st.awake) st.t += dt;
+      else if (this.phase === 'run'
+        && Math.hypot(this.px - (sd.x0 + 0.5), this.py + sd.y0 + 0.5) < SNUFF_WAKE) {
+        st.awake = true;
+      }
+    }
+
+    // beams — a PARKED one is dormant furniture: cone drawn dim, pointing
+    // at its rest angle, until the body crosses its arm rect (△ §III); its
+    // clock starts at the arming, so the rounds begin from rest
     const bdefs = this.def.beams ?? [];
     for (let i = 0; i < bdefs.length; i++) {
       const b = bdefs[i];
+      if (!this.beamArmed[i] && this.phase === 'run' && b.arm) {
+        const [ax0, ay0, ax1, ay1] = b.arm;
+        if (this.px > ax0 && this.px < ax1 + 1 && -this.py > ay0 && -this.py < ay1 + 1) {
+          this.beamArmed[i] = true;
+          this.beamArmT[i] = this.time;
+        }
+      }
+      const bt = this.beamArmed[i] ? this.time - this.beamArmT[i] : 0;
       let ang: number;
       if (b.spin) {
-        ang = Math.PI * 2 * ((this.time / (b.period / hazardMul) + b.phase) % 1);
+        ang = Math.PI * 2 * ((bt / (b.period / hazardMul) + b.phase) % 1);
       } else {
-        const u = (this.time / (b.period / hazardMul) + b.phase) % 1;
+        const u = (bt / (b.period / hazardMul) + b.phase) % 1;
         const ping = u < 0.5 ? u * 2 : 2 - u * 2;
         ang = (b.a0 ?? -2.35) + ((b.a1 ?? -0.79) - (b.a0 ?? -2.35)) * ping;
       }
@@ -1707,6 +2000,8 @@ export class VaultRun {
       ray.mesh.position.set((b.x + ex) / 2, (-b.y + ey) / 2, 0.15);
       ray.mesh.scale.set(len, 1, 1);
       ray.mesh.rotation.z = Math.atan2(ey + b.y, ex - b.x);
+      // the parked cone is visible but plainly asleep
+      (ray.mesh.material as THREE.MeshBasicMaterial).opacity = this.beamArmed[i] ? 0.5 : 0.14;
     }
 
     // wind
@@ -1812,12 +2107,24 @@ export class VaultRun {
       const fg = this.figureGlows[i];
       fg.mat.opacity = fg.base * (1 + Math.sin(this.time * 1.3 + i) * 0.22);
     }
+    const deadRoom = !!this.def.deadLight;
     for (let i = 0; i < this.sconceMeshes.length; i++) {
       const sm = this.sconceMeshes[i];
       const lit = this.sconceLit[i];
-      sm.light.intensity = lit ? 2.4 + Math.sin(this.time * 7 + i) * 0.4 : 0;
-      sm.mat.color.setHex(lit ? 0xffd9a0 : 0x342e22);
-      sm.flame.scale.setScalar(lit ? 1 + Math.sin(this.time * 9 + i) * 0.15 : 0.8);
+      if (deadRoom) {
+        // DEADLIGHT (§III): what burns in the cracked cup is a guttering
+        // blue-white — it dips near to nothing and claws back, a flame
+        // that saves your place and has nothing else left
+        const gut = Math.max(0.06,
+          Math.sin(this.time * 13 + i) * Math.sin(this.time * 7.3 + i * 2.1));
+        sm.light.intensity = lit ? 0.7 + gut * 1.3 : 0;
+        sm.mat.color.setHex(lit ? 0x9db8ff : 0x342e22);
+        sm.flame.scale.set(0.7, lit ? 0.55 + gut * 0.55 : 0.8, 0.7);
+      } else {
+        sm.light.intensity = lit ? 2.4 + Math.sin(this.time * 7 + i) * 0.4 : 0;
+        sm.mat.color.setHex(lit ? 0xffd9a0 : 0x342e22);
+        sm.flame.scale.setScalar(lit ? 1 + Math.sin(this.time * 9 + i) * 0.15 : 0.8);
+      }
     }
     for (let d = 0; d < this.doorMeshes.length; d++) {
       for (const m of this.doorMeshes[d]) {
@@ -1835,7 +2142,19 @@ export class VaultRun {
     for (let i = 0; i < this.shuttleMeshes.length; i++) {
       const pos = this.shuttlePos(i);
       this.shuttleMeshes[i].bolt.position.set(pos.x, pos.y, 0.15);
-      this.shuttleMeshes[i].mat.opacity = 0.75 + Math.sin(this.time * 24 + i) * 0.2;
+      const wings = this.snufferWings[i];
+      if (wings) {
+        // the moth: wings folded high asleep, a slow deep beat awake; the
+        // rim dims to an ember while it sleeps
+        const awake = this.snuffState[i].awake;
+        const flap = awake ? 0.5 + Math.sin(this.time * 7 + i) * 0.55 : 1.25;
+        wings[0].rotation.y = flap;
+        wings[1].rotation.y = -flap;
+        this.shuttleMeshes[i].mat.opacity = awake
+          ? 0.55 + Math.sin(this.time * 5 + i) * 0.15 : 0.22;
+      } else {
+        this.shuttleMeshes[i].mat.opacity = 0.75 + Math.sin(this.time * 24 + i) * 0.2;
+      }
     }
     for (let i = 0; i < this.censerMeshes.length; i++) {
       const c = this.def.censers![i];
@@ -1845,6 +2164,57 @@ export class VaultRun {
       cm.chain.position.set(c.x, -c.y, 0.2);
       cm.chain.rotation.z = Math.atan2(pos.x - c.x, -(pos.y + c.y));
       cm.light.intensity = 2 + Math.sin(this.time * 8 + i) * 0.4;
+    }
+    // motes — each fleck drifts a slow private orbit around its tile
+    for (const mo of this.moteMeshes) {
+      mo.mesh.position.set(
+        mo.x + 0.5 + Math.sin(this.time * 0.7 + mo.ph) * 0.34,
+        -(mo.y + 0.5) + Math.sin(this.time * 0.53 + mo.ph * 1.7) * 0.28,
+        0.25);
+      (mo.mesh.material as THREE.MeshBasicMaterial).opacity =
+        0.45 + Math.sin(this.time * 1.3 + mo.ph) * 0.22;
+    }
+    // braziers — embers climb out of the mouth and die a tile up
+    for (const bf of this.brazierFx) {
+      bf.light.intensity = 1.1 + Math.sin(this.time * 6 + bf.x) * 0.25;
+      for (let k = 0; k < bf.embers.length; k++) {
+        const u = (this.time * 0.4 + k * 0.37 + bf.x * 0.13) % 1;
+        const e = bf.embers[k];
+        e.position.set(
+          bf.x + 0.5 + Math.sin((u + k) * 9) * 0.13,
+          -(bf.y + 0.5) + 0.25 + u * 1.05,
+          0.32);
+        (e.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - u);
+      }
+    }
+    // one-way gates — the curtain shimmers; the flecks stream the pass way
+    for (const gm of this.gateMeshes) {
+      (gm.curtain.material as THREE.MeshBasicMaterial).opacity =
+        0.36 + Math.sin(this.time * 2.1) * 0.08;
+      const gw = gm.g.x1 - gm.g.x0 + 1;
+      const down = (gm.g.dir ?? 'down') === 'down';
+      for (let k = 0; k < gm.flecks.length; k++) {
+        const u = (this.time * 0.9 + k * 0.167) % 1;
+        const fy = down ? -(gm.g.y0 - 0.6) - u * 2.6 : -(gm.g.y1 + 1.6) + u * 2.6;
+        gm.flecks[k].position.set(
+          gm.g.x0 + 0.25 + ((k * 0.37) % 1) * (gw - 0.5), fy, 0.26);
+        (gm.flecks[k].material as THREE.MeshBasicMaterial).opacity =
+          0.7 * Math.sin(u * Math.PI);
+      }
+    }
+    // currents — the column's motes rise and wrap; the fighter falls, the
+    // carrier climbs, and the eye tells them apart at a glance
+    for (const { pts, c } of this.currentPts) {
+      const cpos = pts.geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < cpos.count; i++) {
+        let y = cpos.getY(i) + (3 + (i % 5) * 0.6) * dt;
+        if (y > -c.y0) {
+          y = -(c.y1 + 1);
+          cpos.setX(i, c.x0 + Math.random() * (c.x1 - c.x0 + 1));
+        }
+        cpos.setY(i, y);
+      }
+      cpos.needsUpdate = true;
     }
     for (let i = 0; i < this.crusherMeshes.length; i++) {
       const r = this.crusherRect(i);
