@@ -712,16 +712,22 @@ so that a bad chamber dies alone.
 
 ---
 
-## ⛩ Decisions (proposed for ruling)
+## ⛩ Decisions (RULED 2026-09-03)
 
 1. **Room count: nine.** The acts are a nine-word sentence; the codex is
-   built for it. Ruled here; overturn only with a tenth word worth saying.
+   built for it. Ruled — and the tenth word has a home: a future **deep
+   vault** layer, one per world, sunk under the bottom of each mine and
+   unlockable, is liked and banked (see 5).
 2. **Held sconce commit: NO.** Reaching-cost in Act III instead. (§II.)
-3. **Walk speed and dash length: unchanged.** Structure, not physics. (§II.)
-4. **Assist gains +1 authored sconce per room,** superseding the
-   second pass's speed-only ruling. (§V.)
-5. **Reflectors, strobes, dream-plates: cut.** A future deep-vault layer is
-   the home for redirect puzzles and frame-tight chains, behind an opt-in
-   gate, never on the main path (precision §4.4).
+3. **Walk speed and dash length: unchanged.** Structure, not physics.
+   Tune only if play demands it. (§II.)
+4. **Assist: +1 authored sconce per room,** superseding the second pass's
+   speed-only ruling. Further assist dials can come later if needed. (§V.)
+5. **Reflectors, strobes, dream-plates: reserved for the deep vaults.**
+   Ruled with a standard attached: **the main path is difficult — the lore
+   is fought for.** The nine rooms must reach that bar with the shipped kit
+   alone; the reserved elements are the deep vaults' dialect, behind an
+   opt-in unlock, never on the main path (precision §4.4). Tuning passes
+   err toward teeth, not mercy — assist is the mercy.
 6. **Ghost-thread replays: deferred.** Spent-wick decals ship now; threads
    are a polish pass if the decals prove the appetite.
