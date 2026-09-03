@@ -756,6 +756,23 @@ already at bar. The sconce carries the same three ages: Act I keeps its
 carved crown and finial drop, Act II has had the ornament taken off it, Act
 III is mounted crooked and too high.
 
+**One mechanical change, against the phase's own rule, and it is worth the
+exception.** Bridge decks and rime shelves are drawn as panels a third of a
+tile deep, because that is what they are — a floor that comes and goes, not
+architecture. The collision grid is tile-granular, so the whole tile was
+solid and a jump under a shelf bonked on open air two thirds of a tile below
+the ice. That is the same fault as a beam drawn wider than it bites, in the
+place it is most insulting: the player can SEE there is nothing there. Thin
+tiles are now solid only across `THIN_BAND` (0.34), measured down from the
+tile's top, via `bodySolid` — the ray marches and `vaultfit`'s walk still ask
+`solidTile`, so nothing outside the body's own collision moved. **Landing is
+untouched**: the panel's top is the tile's top, which is what every authored
+jump was tuned against, and the substep cap (0.2 tiles) is safely under the
+band. Passing up through a deck from below now works, which is strictly more
+permissive — `vaultfit` already treated `A` `b` `R` as air. *Adds:* the
+`thin platforms` check, which proves the head stops on the ice and the feet
+still land on the tile top, for both a shelf and a deck.
+
 **The proving ground grew** a plain shuttle, a crusher, three rime shelves,
 two bridge runs and a door: the dev room had no bolt, crusher, rime, bridge
 or door on screen, so those families could not be reviewed at all. The nine

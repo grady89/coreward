@@ -657,7 +657,7 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     && JSON.stringify(voice.poses) === JSON.stringify(['curled', 'fallen', 'kneeling', 'reaching']));
 });
 
-await stage('proving', ['the proving ground', 'dead surface', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride'], async () => {
+await stage('proving', ['the proving ground', 'dead surface', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride', 'thin platforms'], async () => {
   // --- the V3 kit, in its dev room: nothing here touches the nine maps ---
   const enter = await page.evaluate(async () => {
     const { g, until } = window.__H();
@@ -893,6 +893,65 @@ await stage('proving', ['the proving ground', 'dead surface', 'brazier relight',
     return { rode, noKill, relit, burned };
   });
   ok('censer ride', ride, ride.rode && ride.noKill && ride.relit && ride.burned);
+
+  // --- thin platforms: a bridge deck and a rime shelf are DRAWN as panels a
+  // third of a tile deep, so that is all the body may collide with. Before
+  // V3.5's band the whole tile was solid and a jump under a shelf bonked on
+  // open air two thirds of a tile below the ice — the drawing and the rule
+  // disagreeing where the player can plainly see it. Landing is the half that
+  // must NOT move: the panel's top is the tile's top, which is what every
+  // authored jump in the nine rooms was tuned against.
+  const thin = await page.evaluate(async () => {
+    const { g } = window.__H();
+    const v = g.vault;
+    const NONE = { left: false, right: false, up: false, down: false };
+    const HH = 0.52;
+    // A bridge deck spends half the beat clock switched off and frame()
+    // recomputes that phase itself, so the probe cannot pin it — it waits for
+    // an on-window and works inside one. Short throws keep both halves well
+    // within a single window.
+    const probe = (tx, ty, wait) => {
+      const top = -ty;
+      const settle = () => {
+        if (!wait) return true;
+        for (let i = 0; i < 400; i++) {
+          if (wait()) return true;
+          v.frame(1 / 60, NONE, false);
+        }
+        return false;
+      };
+      v.invuln = 999;
+      // rise into the underside
+      if (!settle()) return { under: null, lands: false };
+      v.px = tx + 0.5; v.py = top - 1.2; v.vx = 0; v.vy = 0;
+      let head = null;
+      for (let i = 0; i < 30; i++) {
+        v.vy = 9;
+        v.frame(1 / 60, NONE, false);
+        if (v.vy === 0) { head = v.py + HH; break; }
+      }
+      // then fall onto the top face
+      if (!settle()) return { under: null, lands: false };
+      v.px = tx + 0.5; v.py = top + 0.9; v.vx = 0; v.vy = 0;
+      let feet = null;
+      for (let i = 0; i < 40; i++) {
+        v.frame(1 / 60, NONE, false);
+        if (v.grounded) { feet = v.py - HH; break; }
+      }
+      return {
+        under: head === null ? null : +(top - head).toFixed(3),
+        lands: feet !== null && Math.abs(feet - top) < 0.02,
+      };
+    };
+    const R = v.p.rime[1];
+    const B = v.p.bridges.find(b => b.group === 0);
+    return {
+      rime: probe(R.x, R.y),
+      bridge: probe(B.x, B.y, () => v.bridgeOn[B.group]),
+    };
+  });
+  const bandOk = r => r.under !== null && r.under > 0.3 && r.under < 0.4 && r.lands;
+  ok('thin platforms', thin, bandOk(thin.rime) && bandOk(thin.bridge));
 });
 
 await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {

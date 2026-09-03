@@ -90,6 +90,26 @@ const SNUFF_SATE = 1.2;     // a moth that has just fed is sated this long — o
 const RIME_CRUMBLE = 0.55;
 const RIME_REGROW = 3.5;
 const BEAM_R = 0.3;
+/**
+ * THIN PLATFORMS — bridge decks and rime shelves.
+ *
+ * Both are drawn as panels a third of a tile deep, because that is what they
+ * are: a floor that comes and goes, not architecture. The collision grid is
+ * tile-granular, though, so for as long as the whole tile was solid the body
+ * bonked its head on empty air two thirds of a tile below the ice. That is
+ * the same fault as a beam drawn wider than it bites, in the place it is most
+ * insulting: the player can SEE there is nothing there.
+ *
+ * So a thin tile is solid only in the band it is drawn in, measured down from
+ * the tile's top. Landing is untouched — the panel's top IS the tile's top,
+ * which is what every authored jump in the nine rooms was tuned against — and
+ * passing up through one from below now works, because that is what the
+ * picture has been promising all along.
+ *
+ * The substep cap is 0.2 tiles, comfortably under the band, so nothing can
+ * tunnel through a panel in one step.
+ */
+const THIN_BAND = 0.34;
 const REFORM_T = 0.35;
 const INVULN_T = 0.6;
 
@@ -364,6 +384,26 @@ export class VaultRun {
     return false;
   }
 
+  /** bridge decks and rime shelves: solid, but only across THIN_BAND */
+  private thinTile(x: number, y: number): boolean {
+    for (const br of this.p.bridges) if (br.x === x && br.y === y) return true;
+    for (const rm of this.p.rime) if (rm.x === x && rm.y === y) return true;
+    return false;
+  }
+
+  /**
+   * Solid to a BODY whose centre sits at world `cy`. Everything that resolves
+   * the player against the room asks this; the ray marches and the fit walk
+   * still ask `solidTile`, because a beam stopping at a bridge is a whole
+   * tile's business and never depended on where the body happened to be.
+   */
+  private bodySolid(x: number, y: number, cy: number): boolean {
+    if (!this.solidTile(x, y)) return false;
+    if (!this.thinTile(x, y)) return true;
+    const top = -y;                       // the panel's top is the tile's top
+    return cy + HH > top - THIN_BAND && cy - HH < top;
+  }
+
   private gravityAt(x: number, y: number): [number, number] {
     const tx = Math.floor(x), ty = Math.floor(-y);
     if (tx < 0 || ty < 0 || tx >= this.p.w || ty >= this.p.h) return [0, -GRAV];
@@ -576,7 +616,9 @@ export class VaultRun {
     // lamps, not a bar appearing out of nowhere.
     for (const b of this.p.bridges) {
       const parts = buildDeck(this.hue);
-      parts.group.position.set(b.x + 0.5, -(b.y + 0.5) + 0.3, 0);
+      // the deck's TOP is the tile's top: that is the surface every authored
+      // jump was tuned against, and now also where the collision band starts
+      parts.group.position.set(b.x + 0.5, -(b.y + 0.5) + 0.33, 0);
       this.scene.add(parts.group);
       this.bridgeMeshes.push({ mesh: parts.deck, mat: parts.deckMat, group: b.group, parts });
     }
@@ -1601,7 +1643,7 @@ export class VaultRun {
     const dir = Math.sign(dx);
     const c = Math.floor(this.px + dir * HW);
     let hit = false;
-    for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) { hit = true; break; }
+    for (let r = top; r <= bot; r++) if (this.bodySolid(c, r, this.py)) { hit = true; break; }
     if (!hit) return;
     // a horizontal spark clipping a ledge lip pops over it instead of
     // dying to it — up to DASH_POP of vertical forgiveness (F2)
@@ -1615,7 +1657,7 @@ export class VaultRun {
   private boxClearAt(x: number, y: number): boolean {
     const l = Math.floor(x - HW + EPS), r = Math.floor(x + HW - EPS);
     const t = Math.floor(-(y + HH - EPS)), b = Math.floor(-(y - HH + EPS));
-    for (let rr = t; rr <= b; rr++) for (let cc = l; cc <= r; cc++) if (this.solidTile(cc, rr)) return false;
+    for (let rr = t; rr <= b; rr++) for (let cc = l; cc <= r; cc++) if (this.bodySolid(cc, rr, y)) return false;
     return true;
   }
 
@@ -1624,14 +1666,14 @@ export class VaultRun {
     const top = Math.floor(-(this.py + HH - EPS));
     const bot = Math.floor(-(this.py - HH + EPS));
     const c = Math.floor(this.px + side * (HW + reach));
-    for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) return true;
+    for (let r = top; r <= bot; r++) if (this.bodySolid(c, r, this.py)) return true;
     return false;
   }
 
   /** F2: the lip pop — clear a shallow ledge edge mid-spark, up or down */
   private tryDashPop(c: number, top: number, bot: number): boolean {
     const rows: number[] = [];
-    for (let r = top; r <= bot; r++) if (this.solidTile(c, r)) rows.push(r);
+    for (let r = top; r <= bot; r++) if (this.bodySolid(c, r, this.py)) rows.push(r);
     if (rows.length === 0) return false;
     if (rows.every(r => r === bot)) {
       const pen = -bot - (this.py - HH);
@@ -1677,8 +1719,8 @@ export class VaultRun {
    * one-tile body on a tile grid has zero geometric slack without it.
    */
   private tryCorner(row: number, left: number, right: number): boolean {
-    const leftSolid = this.solidTile(left, row);
-    const rightSolid = this.solidTile(right, row);
+    const leftSolid = this.bodySolid(left, row, this.py);
+    const rightSolid = this.bodySolid(right, row, this.py);
     if (leftSolid && !rightSolid) {
       const need = (left + 1) - (this.px - HW) + EPS;
       if (need <= CORNER && this.boxClearAt(this.px + need, this.py)) { this.px += need; return true; }
@@ -1725,29 +1767,35 @@ export class VaultRun {
     if (dy < 0) {
       const r = Math.floor(-(this.py - HH));
       for (let c = left; c <= right; c++) {
-        if (this.solidTile(c, r)) {
-          // falling up (inverted gravity): a shallow corner clips, nudge past it (F1)
-          if (gSign < 0 && this.tryCorner(r, left, right)) break;
-          this.py = -r + HH + EPS;
-          this.vy = 0;
-          if (this.dashT > 0) this.dashVY = 0;
-          if (gSign > 0) { this.grounded = true; floorTile = [c, r]; }
-          break;
-        }
+        if (!this.solidTile(c, r)) continue;
+        // a thin panel catches the feet on its top face and nowhere else: a
+        // body already below it is inside open air and keeps falling
+        if (this.thinTile(c, r) && this.py - HH < -r - THIN_BAND) continue;
+        // falling up (inverted gravity): a shallow corner clips, nudge past it (F1)
+        if (gSign < 0 && this.tryCorner(r, left, right)) break;
+        this.py = -r + HH + EPS;
+        this.vy = 0;
+        if (this.dashT > 0) this.dashVY = 0;
+        if (gSign > 0) { this.grounded = true; floorTile = [c, r]; }
+        break;
       }
     } else if (dy > 0) {
       const r = Math.floor(-(this.py + HH));
       if (r >= 0) {
         for (let c = left; c <= right; c++) {
-          if (this.solidTile(c, r)) {
-            // the head-bonk: a rising jump grazing a corner slides past it (F1)
-            if (gSign >= 0 && this.tryCorner(r, left, right)) break;
-            this.py = -(r + 1) - HH - EPS;
-            this.vy = 0;
-            if (this.dashT > 0) this.dashVY = 0;
-            if (gSign < 0) { this.grounded = true; floorTile = [c, r]; }
-            break;
-          }
+          if (!this.solidTile(c, r)) continue;
+          // the head stops where the stone actually is: the underside of a
+          // thin panel, or the underside of the tile for everything else
+          const thin = this.thinTile(c, r);
+          const plane = thin ? -r - THIN_BAND : -(r + 1);
+          if (thin && this.py + HH <= plane) continue;
+          // the head-bonk: a rising jump grazing a corner slides past it (F1)
+          if (gSign >= 0 && this.tryCorner(r, left, right)) break;
+          this.py = plane - HH - EPS;
+          this.vy = 0;
+          if (this.dashT > 0) this.dashVY = 0;
+          if (gSign < 0) { this.grounded = true; floorTile = [c, r]; }
+          break;
         }
       }
     }

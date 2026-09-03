@@ -1116,89 +1116,92 @@ export function buildRime(seed: number): RimeParts {
     const s = Math.sin(seed * 97.3 + n * 41.7) * 43758.5453;
     return s - Math.floor(s);
   };
-  // ICE ALL THE WAY DOWN.
+
+  // A PANEL, AND IT IS ICE ALL THE WAY THROUGH.
   //
-  // The whole tile goes when this shelf gives — the group is what gets hidden,
-  // every part of it — so a masonry course drawn under the crust promises a
-  // base that will still be there to stand on. Nothing is. "Young ice over old
-  // work" is where the shelf SITS, in the gaps of the guild's stone, not what
-  // it is made of one tile at a time.
+  // Two rules meet on this object and both were got wrong once.
   //
-  // What gives the block its depth instead is ice of two ages: clear young ice
-  // at the top, and older ice compacted denser and bluer below it, with a few
-  // fracture planes caught between them. All of it reads as one substance, and
-  // all of it is the substance that leaves.
-  // young ice against old stone: the point of the shelf is that you can see
-  // at a glance it is NOT masonry, so it is lifted well clear of the course
-  // it sits on and carries its own faint inner light
+  // Ice all through: the whole tile goes when the shelf gives — the group is
+  // what gets hidden, every part of it — so a masonry course drawn under a
+  // crust promises a base that will still be there to stand on. Nothing is.
+  // "Young ice over old work" is where the shelf SITS, in the gaps of the
+  // guild's stone; it is not what one tile is made of.
+  //
+  // A panel: the shelf is a thing you land on and lose, and it is read
+  // against the bridge decks, which are the room's other come-and-go floor.
+  // A slab a whole tile deep reads as architecture — as wall — and a wall is
+  // the one thing this is not. So it takes the deck's proportions and sits
+  // where the deck sits, in the top of its tile.
   const ice = new THREE.MeshStandardMaterial({
     color: 0xdff2fb, roughness: 0.18, metalness: 0.02,
     emissive: 0x2a4a5e, emissiveIntensity: 0.55,
     transparent: true, opacity: 0.92, flatShading: true,
   });
-  const crust = new THREE.Mesh(new THREE.BoxGeometry(1, 0.98, 0.94), ice);
-  crust.position.y = -0.02;
-  g.add(crust);
-  // the old ice below: same substance, packed tighter and gone blue with it
-  const old = new THREE.MeshStandardMaterial({
-    color: 0x9fc4d8, roughness: 0.3, metalness: 0.02,
-    emissive: 0x1d3a4c, emissiveIntensity: 0.5,
-    transparent: true, opacity: 0.85, flatShading: true,
-  });
-  const deep = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.4, 0.8), old);
-  deep.position.y = -0.26;
+  const TOP = 0.33;         // top face flush with the tile top, like the deck
+  const TH = 0.34;          // and near enough the deck's own thickness
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(1, TH, 0.86), ice);
+  slab.position.y = TOP;
+  g.add(slab);
+  // older ice packed into the underside: the same substance gone blue with
+  // the weight of itself, so the panel has two ages without having two
+  // materials
+  const deep = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.12, 0.8),
+    new THREE.MeshStandardMaterial({
+      color: 0x9fc4d8, roughness: 0.3, metalness: 0.02,
+      emissive: 0x1d3a4c, emissiveIntensity: 0.5,
+      transparent: true, opacity: 0.85, flatShading: true,
+    }));
+  deep.position.y = TOP - 0.13;
   g.add(deep);
-  // and the fracture planes trapped between the two ages
+  // the fracture planes caught between the two ages
   const seamMat = new THREE.MeshBasicMaterial({
-    color: 0xdff4ff, transparent: true, opacity: 0.22,
+    color: 0xdff4ff, transparent: true, opacity: 0.2,
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
-  for (let i = 0; i < 3; i++) {
-    const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.86 - rnd(i + 31) * 0.3, 0.014), seamMat);
-    seam.position.set((rnd(i + 33) - 0.5) * 0.2, 0.06 - i * 0.19, 0.48);
-    seam.rotation.z = (rnd(i + 35) - 0.5) * 0.16;
+  for (let i = 0; i < 2; i++) {
+    const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.8 - rnd(i + 31) * 0.3, 0.012), seamMat);
+    seam.position.set((rnd(i + 33) - 0.5) * 0.2, TOP + 0.06 - i * 0.13, 0.44);
+    seam.rotation.z = (rnd(i + 35) - 0.5) * 0.12;
     g.add(seam);
   }
-  // NOTHING ON THIS OBJECT MAY COME TO A POINT.
+
+  // NOTHING ON THIS OBJECT MAY COME TO A POINT, and nothing on it dangles.
   //
-  // The rime shelf demands commitment (§III) — it crumbles, it regrows, and
-  // it never kills. The first dress gave it a fringe of spikes above and
-  // icicles below, and downward spikes are the oldest word in the platformer
-  // language for "this ends you". That is P2 read backwards: the drawing was
-  // advertising a fang the rule does not have, which costs the player the
-  // approach just as surely as hiding one would. So the frost above is a
-  // granular crust of rounded lumps, and what hangs below is meltwater — fat
-  // beads with heavy bottoms, the shape of a drip rather than a tooth.
-  for (let i = 0; i < 9; i++) {
-    const lump = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i) * 0.035, 5, 4), ice);
-    lump.position.set(-0.44 + i * 0.11, 0.46 + rnd(i + 3) * 0.03, 0.24 - rnd(i + 5) * 0.46);
-    lump.scale.set(1, 0.55 + rnd(i + 7) * 0.3, 1);
-    lump.rotation.z = (rnd(i + 7) - 0.5) * 0.6;
+  // The shelf demands commitment (III) — it crumbles, it regrows, and it
+  // never kills. Icicles under it read as a spike trap, which is P2 backwards:
+  // the drawing advertising a fang the rule does not have. But hanging beads
+  // in their place only traded a threat for a cartoon. What a wet, half-gone
+  // panel of ice actually has is an EDGE — thinned, scalloped, running out at
+  // the corners — so the melt is in the silhouette of the thing rather than
+  // in ornaments stuck to it.
+  for (let i = 0; i < 8; i++) {
+    const lump = new THREE.Mesh(new THREE.SphereGeometry(0.038 + rnd(i) * 0.022, 5, 4), ice);
+    lump.position.set(-0.42 + i * 0.12, TOP + TH / 2 - 0.01, 0.2 - rnd(i + 5) * 0.4);
+    lump.scale.set(1, 0.42 + rnd(i + 7) * 0.22, 1);
+    lump.rotation.z = (rnd(i + 7) - 0.5) * 0.5;
     g.add(lump);
   }
-  for (let i = 0; i < 4; i++) {
-    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i + 11) * 0.02, 6, 5), ice);
-    bead.position.set(-0.34 + i * 0.23, -0.58 - rnd(i + 13) * 0.06, 0.3);
-    bead.scale.set(0.8, 1.25, 0.8);
-    g.add(bead);
-    // the neck it hangs from, so the bead reads as running water gone still
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.03, 0.1, 5), ice);
-    neck.position.set(bead.position.x, -0.51, 0.3);
-    g.add(neck);
+  // the underside, eaten away in shallow scallops rather than hung with drips
+  for (let i = 0; i < 5; i++) {
+    const bite = new THREE.Mesh(new THREE.SphereGeometry(0.075 + rnd(i + 11) * 0.03, 7, 5), ice);
+    bite.position.set(-0.4 + i * 0.2, TOP - TH / 2 + 0.015, 0.28);
+    bite.scale.set(1.1, 0.32, 0.5);
+    g.add(bite);
   }
 
-  // the crack web, hidden until it takes your weight
+  // the crack web, hidden until it takes your weight. Built around its own
+  // origin so the spread scales from the middle of the panel outward.
   const pos: number[] = [];
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + rnd(i + 21);
-    const r0 = 0.06 + rnd(i + 23) * 0.06;
-    const r1 = 0.2 + rnd(i + 27) * 0.24;
+    const r0 = 0.05 + rnd(i + 23) * 0.05;
+    const r1 = 0.18 + rnd(i + 27) * 0.22;
     const bend = (rnd(i + 29) - 0.5) * 0.7;
     const px = (r: number, ang: number): number => Math.cos(ang) * r;
-    const py = (r: number, ang: number): number => 0.06 + Math.sin(ang) * r * 0.5;
-    pos.push(px(r0, a), py(r0, a), 0.5, px(r1, a + bend), py(r1, a + bend), 0.5);
-    pos.push(px(r1, a + bend), py(r1, a + bend), 0.5,
-      px(r1 + 0.16, a + bend * 2), py(r1 + 0.16, a + bend * 2), 0.5);
+    const py = (r: number, ang: number): number => Math.sin(ang) * r * 0.34;
+    pos.push(px(r0, a), py(r0, a), 0, px(r1, a + bend), py(r1, a + bend), 0);
+    pos.push(px(r1, a + bend), py(r1, a + bend), 0,
+      px(r1 + 0.15, a + bend * 2), py(r1 + 0.15, a + bend * 2), 0);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -1207,6 +1210,7 @@ export function buildRime(seed: number): RimeParts {
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
   const cracks = new THREE.LineSegments(geo, crackMat);
+  cracks.position.set(0, TOP, 0.45);
   g.add(cracks);
   return { group: g, cracks, crackMat };
 }
@@ -1258,7 +1262,7 @@ export function buildDeck(hue: number): DeckParts {
   const deckMat = new THREE.MeshBasicMaterial({
     color: hue, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false,
   });
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(1, 0.3, 0.62), deckMat);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(1, 0.34, 0.62), deckMat);
   g.add(deck);
   // the course joints, so a run reads as masonry of light and not a bar
   const jointMat = new THREE.MeshBasicMaterial({
@@ -1266,12 +1270,12 @@ export function buildDeck(hue: number): DeckParts {
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
   for (const ox of [-0.5, 0.5]) {
-    const j = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.3), jointMat);
+    const j = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.34), jointMat);
     j.position.set(ox, 0, 0.33);
     deck.add(j);
   }
   const top = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.07), jointMat);
-  top.position.set(0, 0.15, 0.33);
+  top.position.set(0, 0.17, 0.33);
   deck.add(top);
   // and the hairline the guild's wiring leaves in the stone when it is off
   const traceMat = new THREE.MeshBasicMaterial({
@@ -1279,7 +1283,7 @@ export function buildDeck(hue: number): DeckParts {
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
   const trace = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.14), traceMat);
-  trace.position.set(0, -0.16, 0.34);
+  trace.position.set(0, -0.2, 0.34);
   g.add(trace);
   return { group: g, deck, deckMat, traceMat };
 }
