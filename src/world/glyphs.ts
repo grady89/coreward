@@ -101,42 +101,108 @@ export const WORLD_GLYPHS: Record<string, string[]> = {
 // ---------------------------------------------------------------------------
 // world-space mark: emissive strokes set into the stone face
 
+/** seconds a stone takes to wake under a standing pilot, and to fall dark again */
+export const GLYPH_WAKE = 1.6;
+export const GLYPH_FADE = 0.8;
+
+/** the unlit carving: the hue, most of the way down to cold stone */
+function dormant(hue: number): number {
+  const c = new THREE.Color(hue);
+  return c.lerp(new THREE.Color(0x191722), 0.76).getHex();
+}
+
 /**
- * Build one glyph mark as a Group of thin emissive bars plus its point of
- * light (or socket ring). `size` is the mark's full width in world units.
+ * Build one glyph mark as a Group: a dim carving that is always readable,
+ * and a vivid overlay that draws itself along the strokes as the stone
+ * wakes. `size` is the mark's full width in world units.
+ *
+ * The group carries `userData.setCharge(k)`, k in 0..1 — 0 is cold stone,
+ * 1 is a stone fully lit and ready to be stepped into.
  */
 export function buildGlyphMark(g: GlyphDef, size: number, color: number, lit: boolean): THREE.Group {
   const group = new THREE.Group();
   const s = size / 4; // grid step: grid spans 0..4
   const thick = size * 0.055;
-  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: lit ? 0.95 : 0.55 });
+  const carveMat = new THREE.MeshBasicMaterial({ color: dormant(color), transparent: true, opacity: 0.5 });
   const toLocal = (gx: number, gy: number): [number, number] => [(gx - 2) * s, (gy - 2) * s];
+
+  // every segment in drawing order, with where it starts along the whole path
+  const segs: { ax: number; ay: number; bx: number; by: number; len: number; at: number }[] = [];
+  let total = 0;
   for (const stroke of g.strokes) {
     for (let i = 1; i < stroke.length; i++) {
       const [ax, ay] = toLocal(stroke[i - 1][0], stroke[i - 1][1]);
       const [bx, by] = toLocal(stroke[i][0], stroke[i][1]);
-      const len = Math.hypot(bx - ax, by - ay) + thick;
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(
-        Math.abs(bx - ax) > Math.abs(by - ay) ? len : thick,
-        Math.abs(by - ay) > Math.abs(bx - ax) ? len : thick,
-        thick * 0.6), mat);
-      bar.position.set((ax + bx) / 2, (ay + by) / 2, 0);
-      group.add(bar);
+      const len = Math.hypot(bx - ax, by - ay);
+      segs.push({ ax, ay, bx, by, len, at: total });
+      total += len;
     }
   }
+
+  const bars: { mesh: THREE.Mesh; horiz: boolean; seg: typeof segs[number] }[] = [];
+  for (const seg of segs) {
+    const horiz = Math.abs(seg.bx - seg.ax) > Math.abs(seg.by - seg.ay);
+    const full = seg.len + thick;
+    const geo = () => new THREE.BoxGeometry(horiz ? full : thick, horiz ? thick : full, thick * 0.6);
+    // the carving, always there
+    const carve = new THREE.Mesh(geo(), carveMat);
+    carve.position.set((seg.ax + seg.bx) / 2, (seg.ay + seg.by) / 2, 0);
+    group.add(carve);
+    // the light, drawn on top and grown from the segment's start
+    const bright = new THREE.Mesh(geo(), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+    bright.position.copy(carve.position);
+    bright.position.z = thick * 0.25;
+    group.add(bright);
+    bars.push({ mesh: bright, horiz, seg });
+  }
+
+  let dot: THREE.Mesh | null = null;
+  let socket: THREE.Mesh | null = null;
   if (g.light) {
     const [lx, ly] = toLocal(g.light[0], g.light[1]);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xfff2d0, transparent: true, opacity: lit ? 1 : 0.65 });
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(thick * 1.35, 10, 8), dotMat);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xfff2d0, transparent: true, opacity: 1 });
+    dot = new THREE.Mesh(new THREE.SphereGeometry(thick * 1.35, 10, 8), dotMat);
     dot.position.set(lx, ly, thick * 0.4);
     dot.name = 'glyph-light';
     group.add(dot);
   } else if (g.socket) {
     const [sx, sy] = toLocal(g.socket[0], g.socket[1]);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(thick * 1.6, thick * 0.45, 8, 20), mat);
-    ring.position.set(sx, sy, thick * 0.4);
-    group.add(ring);
+    // the Famine's empty socket: a ring that never fills, only rims with light
+    socket = new THREE.Mesh(new THREE.TorusGeometry(thick * 1.6, thick * 0.45, 8, 20),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+    socket.position.set(sx, sy, thick * 0.4);
+    group.add(socket);
   }
+
+  /** k in 0..1: light crawls the path, then the point of light takes */
+  const setCharge = (k: number): void => {
+    const run = Math.max(0, Math.min(1, k)) * total;
+    for (const b of bars) {
+      const f = total === 0 ? 1 : Math.max(0, Math.min(1, (run - b.seg.at) / b.seg.len));
+      b.mesh.visible = f > 0.002;
+      if (!b.mesh.visible) continue;
+      if (b.horiz) {
+        b.mesh.scale.x = f;
+        b.mesh.position.x = b.seg.ax + (b.seg.bx - b.seg.ax) * f / 2;
+      } else {
+        b.mesh.scale.y = f;
+        b.mesh.position.y = b.seg.ay + (b.seg.by - b.seg.ay) * f / 2;
+      }
+    }
+    // the light itself is the last thing to catch
+    const tail = Math.max(0, Math.min(1, (k - 0.82) / 0.18));
+    if (dot) {
+      dot.visible = tail > 0.01;
+      (dot.material as THREE.MeshBasicMaterial).opacity = tail;
+      dot.scale.setScalar(0.35 + tail * 0.65);
+    }
+    if (socket) {
+      socket.visible = tail > 0.01;
+      (socket.material as THREE.MeshBasicMaterial).opacity = tail * 0.95;
+    }
+  };
+  group.userData.setCharge = setCharge;
+  setCharge(lit ? 1 : 0);
   return group;
 }
 
@@ -156,12 +222,13 @@ export function glyphSvg(g: GlyphDef, cls: string): string {
 
 /**
  * The marks standing in the world: one per seeded stone, facing out of the
- * tile. Rebuilt on world change; translated stones burn brighter and their
- * light breathes.
+ * tile. Rebuilt on world change. A stone wakes while the pilot stands at it
+ * — the light crawls its strokes and the point of light catches last — and
+ * falls cold when they walk off. A translated stone stays lit and breathes.
  */
 export class GlyphMarks {
   private group = new THREE.Group();
-  private marks: { mesh: THREE.Group; id: string }[] = [];
+  private marks: { mesh: THREE.Group; id: string; charge: number; done: boolean }[] = [];
 
   constructor(scene: THREE.Scene) {
     scene.add(this.group);
@@ -172,11 +239,12 @@ export class GlyphMarks {
     for (const s of stones) {
       const g = glyphById(s.id);
       if (!g) continue;
-      const lit = translated.has(s.id);
-      const mark = buildGlyphMark(g, 0.66, color, lit);
+      // a translated stone never goes cold again
+      const done = translated.has(s.id);
+      const mark = buildGlyphMark(g, 0.66, color, done);
       mark.position.set(s.x + 0.5, -(s.y + 0.5), 0.52);
       this.group.add(mark);
-      this.marks.push({ mesh: mark, id: s.id });
+      this.marks.push({ mesh: mark, id: s.id, charge: done ? 1 : 0, done });
     }
   }
 
@@ -185,15 +253,45 @@ export class GlyphMarks {
     this.build(stones, color, translated);
   }
 
-  update(time: number): void {
+  /** how far along its waking a stone is, 0..1 — 1 means it will take you in */
+  chargeOf(id: string): number {
+    return this.marks.find(m => m.id === id)?.charge ?? 0;
+  }
+
+  /**
+   * `nearId` is the stone the pilot is standing at, if any: it wakes while
+   * they stay, and every other stone falls back to cold. Returns the id of a
+   * stone that finished waking this frame, so the caller can sound it.
+   */
+  update(time: number, dt = 0, nearId: string | null = null): string | null {
+    let justLit: string | null = null;
     for (const m of this.marks) {
-      const dot = m.mesh.getObjectByName('glyph-light') as THREE.Mesh | null;
-      if (dot) dot.scale.setScalar(1 + Math.sin(time * 2.1 + m.mesh.position.x) * 0.18);
+      const was = m.charge;
+      if (m.done) m.charge = 1;
+      else if (m.id === nearId) m.charge = Math.min(1, m.charge + dt / GLYPH_WAKE);
+      else m.charge = Math.max(0, m.charge - dt / GLYPH_FADE);
+      if (m.charge !== was) {
+        m.mesh.userData.setCharge?.(m.charge);
+        if (m.charge >= 1 && was < 1) justLit = m.id;
+      }
+      // only a stone that is fully awake breathes
+      if (m.charge >= 1) {
+        const dot = m.mesh.getObjectByName('glyph-light') as THREE.Mesh | null;
+        if (dot) dot.scale.setScalar(1 + Math.sin(time * 2.1 + m.mesh.position.x) * 0.18);
+      }
     }
+    return justLit;
   }
 
   clear(): void {
-    for (const m of this.marks) this.group.remove(m.mesh);
+    for (const m of this.marks) {
+      m.mesh.traverse(o => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        (mesh.material as THREE.Material)?.dispose?.();
+      });
+      this.group.remove(m.mesh);
+    }
     this.marks.length = 0;
   }
 }

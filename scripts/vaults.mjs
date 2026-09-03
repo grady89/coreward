@@ -75,11 +75,16 @@ const entry = await page.evaluate(async () => {
   key('KeyE'); key('KeyE', false);
   const eva = await until(() => g.mode === 'eva', 20);
   g.pilot.px = s.x + 0.5; g.pilot.py = -s.y + 0.6;
+  // the mark has to finish waking before the stone will take you
+  key('KeyE'); key('KeyE', false);
+  const early = g.mode === 'vault';
+  const woke = await until(() => g.glyphMarks.chargeOf(s.id) >= 1, 200);
   key('KeyE'); key('KeyE', false);
   const inVault = await until(() => g.mode === 'vault', 20);
-  return { eva, inVault, glyph: g.vault?.glyphId, spark: g.vault?.spark };
+  return { eva, early, woke, inVault, glyph: g.vault?.glyphId, spark: g.vault?.spark };
 });
-ok('entry on foot', entry, entry.eva && entry.inVault && entry.glyph === 'wick' && entry.spark === true);
+ok('entry on foot', entry, entry.eva && entry.early === false && entry.woke && entry.inVault
+  && entry.glyph === 'wick' && entry.spark === true);
 await page.screenshot({ path: OUT + '/v-wick.png' });
 
 // --- the spark: a dash spends it, landing relights it ---
@@ -370,6 +375,9 @@ const gallery = await page.evaluate(async () => {
   const stones = g.terrain.glyphStones.length;
   key('BracketRight'); key('BracketRight', false);
   await new Promise(r => setTimeout(r, 200));
+  // hopping onto a stone still means standing there while the mark takes
+  const at = g.terrain.glyphStones.find(s => Math.abs(g.pilot.px - (s.x + 0.5)) < 1.1);
+  await until(() => g.glyphMarks.chargeOf(at.id) >= 1, 200);
   key('KeyE'); key('KeyE', false);
   const inVault = await until(() => g.mode === 'vault', 20);
   const id = g.vault?.glyphId;

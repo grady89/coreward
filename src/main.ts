@@ -482,7 +482,7 @@ class Game {
     if (completed && id && !this.state.glyphsSet.has(id)) {
       this.state.glyphsSet.add(id);
       this.hud.toast(`TRANSLATED — ${glyphById(id)?.name} · ${this.state.glyphs}/9`, 'stratum');
-      this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
+      this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.glyphHue, this.state.glyphsSet);
       this.saveNow();
     }
     // Dispatch never sees inside — her unease is the vaults' only narration
@@ -601,7 +601,7 @@ class Game {
       this.terrain.onChange(gx, y0);
       this.terrain.glyphStones.push({ x: gx, y: y0, id: GLYPHS[i].id });
     }
-    this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
+    this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.glyphHue, this.state.glyphsSet);
 
     // pod parked at the door, pilot already on foot in front of the Wick
     const st = this.state;
@@ -685,7 +685,7 @@ class Game {
     this.depots = new DepotField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
     this.glyphMarks = new GlyphMarks(this.scene);
-    this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.core.body, this.state.glyphsSet);
+    this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.glyphHue, this.state.glyphsSet);
   }
 
   private events() {
@@ -1465,10 +1465,11 @@ class Game {
       if (this.salvaging) return;
       // at a cradle the E key is a HOLD, managed per-frame — not a press
       if (this.coreActKind) return;
-      // standing at a carved stone: the mark ignites and you step in
+      // standing at a carved stone: the mark has to finish igniting first —
+      // the wake is the door opening, and E before it is done knocks on stone
       const stone = this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1);
       if (stone) {
-        this.enterVault(stone.id);
+        if (this.glyphMarks.chargeOf(stone.id) >= 1) this.enterVault(stone.id);
         return;
       }
       // SITE 297: the readables are the whole errand
@@ -1653,6 +1654,10 @@ class Game {
     // fluid pulse (shared material)
     lavaMat.color.setHex(Math.sin(this.time * 2.6) > 0 ? ACTIVE.fluid.pulseA : ACTIVE.fluid.pulseB);
 
+    const waking = this.mode === 'eva' && !this.finale.isCommunion
+      ? this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1) : null;
+    if (this.glyphMarks.update(this.time, dt, waking?.id ?? null)) this.audio.glyph();
+
     if (this.mode === 'title') {
       this.cam.titlePose(this.time, this.reducedMotion ? 0 : this.mouseX, this.reducedMotion ? 0 : this.mouseY);
       const bob = Math.sin(this.time * 1.7) * 0.12;
@@ -1699,7 +1704,6 @@ class Game {
     this.pumpNarrative(raw);
     this.particles.update(dt);
     this.wrecks.update(this.time, dt);
-    this.glyphMarks.update(this.time);
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
     this.finale.frame(dt, this.time, camRow);
@@ -2530,6 +2534,7 @@ class Game {
       }
 
       // contextual prompt
+      const stone = this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1);
       if (rite || this.salvaging || this.coreActKind) {
         // handled above / silent while working
       } else if (ACTIVE.husk) {
@@ -2538,6 +2543,11 @@ class Game {
         // handled by cradleFrame
       } else if (this.wreckAtPilot() >= 0) {
         this.hud.setPrompt(`<span class="key">E</span>SALVAGE`);
+      } else if (stone) {
+        const k = this.glyphMarks.chargeOf(stone.id);
+        this.hud.setPrompt(k >= 1
+          ? `<span class="key">E</span>STEP INTO ${glyphById(stone.id)?.name ?? 'THE STONE'}`
+          : `<span class="key">◇</span>THE MARK IS TAKING · ${Math.round(k * 100)}%`);
       } else {
         // walking: point at the wreck so the dark doesn't swallow the errand
         const t = this.targetWreck();

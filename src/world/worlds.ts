@@ -63,6 +63,8 @@ export interface WorldDef {
     counter: string;
   };
   core: { body: number; shell: number; light: number };
+  /** what a Lamplighter stone burns when it wakes — the world's one vivid note */
+  glyphHue: number;
   gemTint: number; // biolume + fleck tint for the dark band
   ending: { title: string; text: string };
   lore: [string, string, string, string, string];
@@ -100,6 +102,7 @@ export const WORLDS: WorldDef[] = [
       counter: 'THEY FOLLOW THE LAMP — F TO RUN DARK',
     },
     core: { body: 0xffc98a, shell: 0xff6a2a, light: 0xff9a3c },
+    glyphHue: 0xff7a24,
     gemTint: 0x46e6c8,
     ending: {
       title: 'THE EMBER',
@@ -154,6 +157,7 @@ export const WORLDS: WorldDef[] = [
       counter: 'YOUR ENGINE WAKES THEM — CUT THRUST AND DRIFT',
     },
     core: { body: 0xc8fff0, shell: 0x5affc8, light: 0x7affd8 },
+    glyphHue: 0x2effcc,
     gemTint: 0x8ac8ff,
     ending: {
       title: 'THE GLACIER HEART',
@@ -207,6 +211,7 @@ export const WORLDS: WorldDef[] = [
       counter: 'THEY ANSWER TO NEARNESS — GIVE THEM ROOM',
     },
     core: { body: 0xf0eaff, shell: 0xb0a0ff, light: 0xd8ccff },
+    glyphHue: 0x9d5cff,
     gemTint: 0x3ce6c8,
     ending: {
       title: 'THE PEARL',
@@ -257,6 +262,7 @@ export const HUSK: WorldDef = {
     alert: '—', counter: '—',
   },
   core: { body: 0x3a3a3e, shell: 0x2a2a2c, light: 0x4a4a4e },
+  glyphHue: 0x4a4a4e,
   gemTint: 0x3a3a3e,
   ending: { title: '—', text: '—' },
   lore: ['—', '—', '—', '—', '—'],
@@ -296,6 +302,7 @@ function huskify(def: WorldDef): WorldDef {
     fluid: { ...def.fluid, base: gray(def.fluid.base), pulseA: gray(def.fluid.pulseA), pulseB: gray(def.fluid.pulseB) },
     swarm: { ...def.swarm, color: gray(def.swarm.color), hunting: gray(def.swarm.hunting) },
     core: { body: gray(def.core.body), shell: gray(def.core.shell), light: gray(def.core.light) },
+    glyphHue: gray(def.glyphHue),
     gemTint: gray(def.gemTint),
   };
 }
