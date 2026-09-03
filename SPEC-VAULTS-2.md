@@ -683,6 +683,21 @@ walk (new chars `o` `*`); `vaultfit.mjs` AIR set. *Adds:* pulse-ratio lint,
 the P1 spark-classification totality check, a snuffer check (steals without
 guttering), a ride check (standable censer apex).
 
+**V3.5 — The dress.** ~14–24 h. The dedicated art pass §VI implies but the
+first draft never scheduled: every object the player reads, redesigned to
+the quality bar of the colony-structure miniatures, kit-final and BEFORE a
+single room is authored — beautifying a changing kit is paying twice, and
+authoring rooms against placeholder dress invalidates their readability
+tuning. Scope: the sconce family (cup, flame, famine's cracked cup,
+brazier), the hazard family (beam emitters and cones, shuttle rails and
+bolts, censers and chains, crushers, rime), bridges, doors, the one-way
+curtain, the master-stone chamber dressing, and the lattice's final
+material values per act (maintained / stripped / hurried — §VI
+architecture-as-chronology rides along here). Workflow per the house rule:
+Midjourney reference sheets per object family → rebuild → rendered review
+page → approval before ship. *Adds:* nothing mechanical; the P2
+dark-hazard-emissive lint re-verified against final materials.
+
 **V4 — Rooms 4–9,** authored in order **5, 4, 6, 7, 8, 9** (EMBER first: it
 stresses the most new kit at once, so its failures are cheapest to learn
 from). ~40–70 h of authoring and iteration; chambers are independently
@@ -706,7 +721,7 @@ verified (pulse-stretch keeps ratios; `assistSconce` per room). Full
 regression: `vaults.mjs`, `vaultfit.mjs`, `phase3.mjs`, the movement metrics
 locked at their V1 values.
 
-**Honest total: 130–220 hours.** The wide band is V4/V5 — level authoring
+**Honest total: 145–245 hours.** The wide band is V4/V5 — level authoring
 converges only through play, and the plan's chamber structure exists partly
 so that a bad chamber dies alone.
 
