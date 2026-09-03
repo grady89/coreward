@@ -18,7 +18,8 @@ export class FollowCam {
   private cy = 4;
   private cz = 17;
   reducedMotion = false;
-  /** dev sandbox pull-back, so a big creature fits the frame. 0 in play. */
+  /** extra camera distance: vault runs hold it at 4, the dev sandbox pushes
+   *  it further so a big creature fits the frame. 0 in the mines. */
   zoomBias = 0;
   /** horizontal follow clamp — vault levels are their own width, not the world's */
   xMax = WORLD_W;

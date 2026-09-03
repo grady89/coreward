@@ -17,8 +17,24 @@ import { Suit, SUIT_R, SUIT_H, buildSuit, animateSuit } from '../player/suit';
 // the level is the question of where you spend it. Failure is never death:
 // you gutter and re-form at the last sconce you lit.
 
-const HW = 0.15;
-const HH = 0.26;
+/**
+ * How much bigger the driller stands in a vault than out in the mines.
+ *
+ * The levels are authored in tiles and the movement constants below are in
+ * tiles, so BOTH stay exactly as they were — every gap, arc and hazard is
+ * measured the same. What changes is the body reading against that grid: at
+ * 1x the driller is half a tile and a jump clears five and a half of them,
+ * which is why the camera had to sit so far back and why the rooms read as
+ * dollhouses. At 2x the body is a full tile, a jump clears 2.8 of them, and
+ * the frame can come in close enough to see the visor.
+ *
+ * The ceiling is the maps: the tightest traversed corridors (THE LAST SHIFT,
+ * THE WEATHER) are 2 tiles of headroom, so a body taller than 2 tiles would
+ * not fit through its own levels.
+ */
+const BODY = 2;
+const HW = 0.15 * BODY;
+const HH = 0.26 * BODY;
 const EPS = 0.001;
 const WALK = 3.6;
 const AIR_CTRL = 26;        // horizontal steering, airborne (capped at walk speed)
@@ -140,8 +156,8 @@ export class VaultRun {
     this.doorOpen = this.p.doors.map(() => false);
     this.rimeState = this.p.rime.map(() => ({ t: -1, gone: 0 }));
     this.build();
-    this.cam.zoomBias = 9;
-    this.cam.snap(this.px, this.py + 0.5, 17.5);
+    this.cam.zoomBias = 4;
+    this.cam.snap(this.px, this.py + 0.5, 8.5 + this.cam.zoomBias);
 
     this.hud = document.createElement('div');
     this.hud.id = 'vault-hud';
@@ -418,9 +434,12 @@ export class VaultRun {
     this.sparkMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.075),
       new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
     this.sparkMesh.position.copy(this.suit.packAnchor);
-    this.lamp = new THREE.PointLight(0xffe6c0, 6, 6, 1.6);
+    this.lamp = new THREE.PointLight(0xffe6c0, 6, 6 * BODY, 1.6);
     this.lamp.position.set(0, 0, 0.35);
-    this.pilotGroup.add(this.suit.group, this.sparkMesh, this.lamp);
+    const body = new THREE.Group();
+    body.scale.setScalar(BODY);
+    body.add(this.suit.group, this.sparkMesh, this.lamp);
+    this.pilotGroup.add(body);
     this.scene.add(this.pilotGroup);
   }
 
@@ -456,7 +475,7 @@ export class VaultRun {
     if (dx !== 0) this.facing = Math.sign(dx);
     // the burst leaves a short trail of itself
     for (let i = 0; i < 3; i++) {
-      const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(SUIT_R, SUIT_H, 3, 6),
+      const ghost = new THREE.Mesh(new THREE.CapsuleGeometry(SUIT_R * BODY, SUIT_H * BODY, 3, 6),
         new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.4 - i * 0.1 }));
       ghost.position.set(this.px - this.dashVX * 0.02 * (i + 1), this.py - this.dashVY * 0.02 * (i + 1), 0.05);
       this.scene.add(ghost);
