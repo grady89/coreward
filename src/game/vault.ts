@@ -1189,6 +1189,7 @@ export class VaultRun {
       grounded: this.grounded, facing: this.facing,
       vy: gDown ? this.vy : -this.vy,
       wall: this.wallDir,
+      wallKick: this.wallJumpT > 0,
       dash: this.dashT > 0 ? { x: this.dashVX / DASH_V, y: this.dashVY / DASH_V } : null,
       crouch: this.grounded && input.down,
       fastFall: !this.grounded && input.down && (gDown ? this.vy < 0 : this.vy > 0),

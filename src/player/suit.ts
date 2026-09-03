@@ -73,6 +73,10 @@ function buildLeg(x: number): THREE.Group {
 
 export function buildSuit(): Suit {
   const group = new THREE.Group();
+  // roll is applied AFTER yaw, so a pose's lean/pitch is a pure screen-plane
+  // tilt no matter how far the shoulders are turned — the reference sheets'
+  // superman dash is a body pitch, not a lean, and this is what makes it read
+  group.rotation.order = 'ZYX';
   const helmet = new THREE.Group();
 
   // helmet — the dome, squashed a touch wide, riding the top of the box.
@@ -158,6 +162,8 @@ export interface SuitPoseIn {
   dash?: { x: number; y: number } | null;
   /** grounded + down held */
   crouch?: boolean;
+  /** the first frames after a wall-jump: the push-off pose */
+  wallKick?: boolean;
   /** airborne + down held */
   fastFall?: boolean;
   /** time-of-day for idle breathing; any monotonically rising clock */
@@ -198,42 +204,51 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   st.landSquash = Math.max(0, st.landSquash - p.dt * 6);
 
   // ---- targets ----
-  const swing = p.grounded ? Math.sin(p.walkT) * 0.5 * Math.max(0.25, p.speed01) : 0;
-  let turn = p.facing * (0.35 + 0.55 * p.speed01);   // shoulders open with speed
-  let lean = -p.facing * 0.14 * p.speed01;           // into the run
+  // (tuned against reference-art/locomotion, air-verbs, wall-verbs sheets)
+  const swing = p.grounded ? Math.sin(p.walkT) * 0.65 * Math.max(0.25, p.speed01) : 0;
+  let turn = p.facing * (0.35 + 1.0 * p.speed01);   // full profile at speed
+  let lean = -p.facing * 0.2 * p.speed01;           // into the run
   let legL = swing, legR = -swing;
-  let armL = -swing * 0.7, armR = swing * 0.7;
+  let armL = -swing * 0.8, armR = swing * 0.8;
   let headX = 0;
   let sx = 1, sy = 1;
   let shiftX = 0;
   let damp = 12;
 
   if (!p.grounded) {
-    // airborne: tuck rising, trail falling — blended by vy
+    // airborne: cannonball tuck rising, trail and reach falling
     const rise = Math.max(-1, Math.min(1, vy / 8));
-    legL = 0.55 * Math.max(0, rise) + 0.2;
-    legR = -0.25 * Math.max(0, rise) - 0.1 - 0.3 * Math.max(0, -rise);
-    armL = -0.35 * rise - 0.55 * Math.max(0, -rise);
-    armR = 0.25 * rise + 0.75 * Math.max(0, -rise);
-    headX = -rise * 0.18;                            // look where you're going
-    lean = -p.facing * 0.08 * p.speed01;
+    legL = 1.0 * Math.max(0, rise) + 0.35 * Math.max(0, -rise);
+    legR = 0.6 * Math.max(0, rise) - 0.25 * Math.max(0, -rise);
+    armL = -0.9 * Math.max(0, rise) - 0.6 * Math.max(0, -rise);
+    armR = -0.7 * Math.max(0, rise) + 0.5 * Math.max(0, -rise);
+    headX = -rise * 0.18;
+    lean = -p.facing * 0.1 * p.speed01;
   }
   if (p.fastFall) {
-    // streamlined: a dropped tool
-    legL = 0.06; legR = -0.06; armL = 0.9; armR = 0.9;
-    sy = 1.1; sx = 0.94; headX = 0.28;
+    // the dropped dart: arms pinned, legs together, streamlined
+    legL = 0.05; legR = -0.05; armL = 0.1; armR = -0.1;
+    sy = 1.12; sx = 0.92; headX = 0.3;
   }
   if (wall !== 0 && !p.grounded) {
-    // pressed to the wall: three-quarter turn into it, both hands up and
-    // gripping, legs staggered against the face, leaning in, eyes up
+    // the climber's hang: both hands high on the face, knees drawn up,
+    // feet on the wall, eyes up the climb
     turn = wall * 0.95;
-    lean = wall * 0.16;
+    lean = wall * 0.12;
     shiftX = wall * 0.055;      // the collider touches; the body should too
-    legL = 0.7; legR = 0.2;
-    armL = wall < 0 ? -0.9 : -0.5;
-    armR = wall > 0 ? -0.9 : -0.5;
-    headX = -0.35;
+    legL = 0.95; legR = 0.5;
+    armL = wall < 0 ? -1.9 : -1.5;
+    armR = wall > 0 ? -1.9 : -1.5;
+    headX = -0.4;
     damp = 16;
+  }
+  if (p.wallKick) {
+    // the push-off X: thrown open away from the wall for a few frames
+    lean = -p.facing * 0.35;
+    legL = 0.9; legR = -0.6;
+    armL = -2.1; armR = 0.6;
+    headX = -0.15;
+    damp = 30;
   }
   if (p.crouch && p.grounded) {
     legL = 0.5; legR = -0.4; armL = -0.3; armR = 0.3;
@@ -241,23 +256,33 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
     turn = p.facing * 0.5;
   }
   if (p.dash) {
-    // stretched along the burst — x and z together read as "long" under
-    // any shoulder turn, y alone reads as "tall"
-    const horiz = Math.abs(p.dash.x) >= Math.abs(p.dash.y);
-    sx = horiz ? 1.22 : 0.86;
-    sy = horiz ? 0.82 : 1.28;
-    legL = horiz ? 0.85 : 0.15; legR = horiz ? -0.65 : -0.15;
-    armL = horiz ? 0.9 : 1.1; armR = horiz ? -0.9 : 1.1;
-    // nose into the burst: level dash leans 0.2, diving dash noses down
-    // harder, rising dash flattens out
     const dyN = Math.max(-1, Math.min(1, p.dash.y));
-    lean = -Math.sign(p.dash.x || p.facing) * (horiz ? 0.2 - dyN * 0.2 : 0.05);
-    headX = -Math.max(-1, Math.min(1, p.dash.y)) * 0.25;
-    damp = 26;                                       // the burst poses NOW
+    const horiz = Math.abs(p.dash.x) >= Math.abs(p.dash.y);
+    if (horiz) {
+      // superman: the whole body pitches onto the burst line, arms leading,
+      // legs trailing — diving noses past horizontal, rising flattens
+      lean = -Math.sign(p.dash.x || p.facing) * (1.25 - dyN * 0.45);
+      armL = -1.5; armR = -1.35;
+      legL = 0.45; legR = 0.15;
+    } else {
+      // vertical burst: a drawn arrow — no pitch, stretched tall
+      lean = 0;
+      armL = dyN > 0 ? -1.6 : 0.2;
+      armR = dyN > 0 ? -1.6 : -0.2;
+      legL = 0.1; legR = -0.1;
+    }
+    // the body's long axis is its local y, so length always stretches sy
+    sy = 1.25; sx = 0.85;
+    headX = -dyN * 0.25;
+    damp = 26;
   }
-  // the landing squash rides on top of whatever pose is active
+  // the landing squash rides on top of whatever pose is active — scale AND
+  // knees, so a hard landing folds him instead of just flattening him
   sy *= 1 - 0.24 * st.landSquash;
   sx *= 1 + 0.18 * st.landSquash;
+  legL += 0.55 * st.landSquash;
+  legR += 0.35 * st.landSquash;
+  armL -= 0.3 * st.landSquash;
 
   // ---- damped approach ----
   const k = Math.min(1, p.dt * damp);
