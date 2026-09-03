@@ -669,7 +669,7 @@ await stage('proving', ['the proving ground', 'brazier relight', 'snuffer steals
       currents: (def.currents ?? []).length, parked: def.beams.some(b => b.parked),
     };
   });
-  ok('the proving ground', enter, enter.inVault && enter.motes >= 3 && enter.braziers === 1
+  ok('the proving ground', enter, enter.inVault && enter.motes >= 3 && enter.braziers === 2
     && enter.snuffer && enter.gates === 1 && enter.currents === 1 && enter.parked);
   await page.screenshot({ path: OUT + '/v-proving.png' });
 
@@ -688,9 +688,27 @@ await stage('proving', ['the proving ground', 'brazier relight', 'snuffer steals
     v.px = b.x + 0.5; v.py = -(b.y + 0.5) - 0.3; v.vx = 0; v.vy = 0;
     const relitMidAir = await until(() => v.spark && !v.grounded, 20, 40);
     const sameCheckpoint = v.checkpoint.x === cp0.x && v.checkpoint.y === cp0.y;
-    return { spent, relitMidAir, sameCheckpoint };
+
+    // the shaft basket, taken at speed — the one a player can actually read.
+    // Drop through the curtain, spend the light in the fall, and the brazier
+    // must hand it back while the body is still in the air: on a floor the
+    // stone would do it and the object would prove nothing.
+    // kill the burst first: a teleport with a spark still in flight keeps the
+    // old velocity and would fly the body up out of the shaft
+    v.dashT = 0; v.freezeT = 0; v.dashCarryT = 0;
+    v.px = 30.5; v.py = -7.5; v.vx = 0; v.vy = 0;
+    await until(() => v.py < -9.5, 25, 40);   // through the curtain, falling
+    v.spark = false;
+    let caught = false, landedFirst = false;
+    for (let i = 0; i < 60 && !caught && !landedFirst; i++) {
+      await new Promise(r => setTimeout(r, 25));
+      if (v.spark && !v.grounded) caught = true;
+      else if (v.grounded) landedFirst = true;
+    }
+    return { spent, relitMidAir, sameCheckpoint, caught, landedFirst };
   });
-  ok('brazier relight', brazier, brazier.spent && brazier.relitMidAir && brazier.sameCheckpoint);
+  ok('brazier relight', brazier, brazier.spent && brazier.relitMidAir
+    && brazier.sameCheckpoint && brazier.caught && !brazier.landedFirst);
 
   // --- ▲ snuffer: asleep on the wall, wakes on proximity, STEALS the charged
   // spark and leaves you standing — no gutter, and a spent spark is ignored ---

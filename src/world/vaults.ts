@@ -726,6 +726,13 @@ export const VAULTS: VaultDef[] = [
  * Above: a loft with the second sconce and a parked beam behind its arm
  * rect. Between: a one-way drop shaft (the curtain) and a rising current
  * column back up.
+ *
+ * The shaft's brazier is the one that can actually be READ by hand. On a
+ * floor the spark comes back the instant you land (stone refunds), so the
+ * spent state only exists while airborne — the hall's brazier can be proven
+ * by the suite but never felt. The shaft gives eight tiles of falling, which
+ * is the only place a player can watch the light go out, stay out, and be
+ * handed back by something other than the ground.
  */
 export const TEST_VAULTS: VaultDef[] = [
   {
@@ -757,9 +764,9 @@ export const TEST_VAULTS: VaultDef[] = [
       '##############################..########..######',
       '##############################..########..######',
       '##############################..########..######',
-      '##############################..########..######',
-      '##############################..########..######',
-      '##############################..########..######',
+      '##############################o.########..######',
+      '##############################.#########..######',
+      '##############################.*########..######',
       '##############################..########..######',
       '##############################..########..######',
       '##############################..########..######',
