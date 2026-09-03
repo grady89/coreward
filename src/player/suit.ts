@@ -36,10 +36,18 @@ export const SUIT_H = 0.16;
 export interface Suit {
   group: THREE.Group;
   helmet: THREE.Group;
+  /** hip pivots */
   legL: THREE.Group;
   legR: THREE.Group;
-  armL: THREE.Mesh;
-  armR: THREE.Mesh;
+  /** knee pivots, children of the hips — bend is always ≤ 0 (calf trails) */
+  kneeL: THREE.Group;
+  kneeR: THREE.Group;
+  /** shoulder pivots */
+  armL: THREE.Group;
+  armR: THREE.Group;
+  /** elbow pivots, children of the shoulders */
+  elbowL: THREE.Group;
+  elbowR: THREE.Group;
   /** where a pack-mounted ornament rides — the vault hangs its spark here */
   packAnchor: THREE.Vector3;
 }
@@ -57,18 +65,40 @@ function facePatch(r: number, wide: number, tall: number): THREE.SphereGeometry 
   );
 }
 
-function buildLeg(x: number): THREE.Group {
+function buildLeg(x: number): { hip: THREE.Group; knee: THREE.Group } {
   const hip = new THREE.Group();
   hip.position.set(x, -0.075, 0);
-  const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.042, 0.055, 3, 8), SUIT);
-  shin.position.y = -0.075;
-  // boot overlaps the shin's heel so the two never separate mid-swing, and
+  const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.043, 0.035, 3, 8), SUIT);
+  thigh.position.y = -0.04;
+  // the knee: a real hinge, so a drawn-up leg reads as a bent leg and the
+  // gait can flex through the swing instead of waddling a rigid stub
+  const knee = new THREE.Group();
+  knee.position.y = -0.09;
+  const calf = new THREE.Mesh(new THREE.CapsuleGeometry(0.037, 0.025, 3, 8), SUIT);
+  calf.position.y = -0.03;
+  // boot overlaps the calf's heel so the two never separate mid-swing, and
   // its sole lands exactly on the bottom of the collision box
   const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.052, 0.04, 10), STEEL);
-  boot.position.y = -0.165;
+  boot.position.y = -0.075;
   boot.scale.z = 1.2;
-  hip.add(shin, boot);
-  return hip;
+  knee.add(calf, boot);
+  hip.add(thigh, knee);
+  return { hip, knee };
+}
+
+function buildArm(side: number): { shoulder: THREE.Group; elbow: THREE.Group } {
+  const shoulder = new THREE.Group();
+  shoulder.position.set(side * 0.104, 0.005, 0);
+  shoulder.rotation.z = side * 0.16;
+  const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.031, 0.028, 3, 8), SUIT);
+  upper.position.y = -0.028;
+  const elbow = new THREE.Group();
+  elbow.position.y = -0.055;
+  const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.026, 3, 8), SUIT);
+  forearm.position.y = -0.024;
+  elbow.add(forearm);
+  shoulder.add(upper, elbow);
+  return { shoulder, elbow };
 }
 
 export function buildSuit(): Suit {
@@ -116,22 +146,22 @@ export function buildSuit(): Suit {
   const pack = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.11, 0.05), STEEL);
   pack.position.set(0, -0.022, -0.086);
 
-  // arms hang stubby at the sides, pivoting from the shoulder
-  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.07, 3, 8), SUIT);
-  const armR = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.07, 3, 8), SUIT);
-  for (const [arm, s] of [[armL, -1], [armR, 1]] as const) {
-    arm.position.set(s * 0.104, -0.03, 0);
-    arm.rotation.z = s * 0.16;
-  }
+  // arms pivot at the shoulder and bend at the elbow
+  const aL = buildArm(-1);
+  const aR = buildArm(1);
 
-  // legs: shin in a pivot group so the swing hinges at the hip, each capped
-  // with a dark boot that flares past the leg
-  const legL = buildLeg(-0.05);
-  const legR = buildLeg(0.05);
+  // legs hinge at the hip and bend at the knee
+  const lL = buildLeg(-0.05);
+  const lR = buildLeg(0.05);
 
-  group.add(helmet, neck, torso, belt, chestLamp, pack, armL, armR, legL, legR);
+  group.add(helmet, neck, torso, belt, chestLamp, pack, aL.shoulder, aR.shoulder, lL.hip, lR.hip);
   // seated in the pack's back face, so an ornament reads as mounted, not hovering
-  return { group, helmet, legL, legR, armL, armR, packAnchor: new THREE.Vector3(0, -0.01, -0.1) };
+  return {
+    group, helmet,
+    legL: lL.hip, legR: lR.hip, kneeL: lL.knee, kneeR: lR.knee,
+    armL: aL.shoulder, armR: aR.shoulder, elbowL: aL.elbow, elbowR: aR.elbow,
+    packAnchor: new THREE.Vector3(0, -0.01, -0.1),
+  };
 }
 
 /**
@@ -172,7 +202,8 @@ export interface SuitPoseIn {
 
 interface PoseState {
   turn: number; lean: number;
-  legL: number; legR: number; armL: number; armR: number;
+  legL: number; legR: number; kneeL: number; kneeR: number;
+  armL: number; armR: number; elbowL: number; elbowR: number;
   headX: number; sx: number; sy: number; shiftX: number;
   landSquash: number; wasGrounded: boolean; lastVy: number;
 }
@@ -190,7 +221,7 @@ const poseStates = new WeakMap<Suit, PoseState>();
 export function poseSuit(s: Suit, p: SuitPoseIn): void {
   let st = poseStates.get(s);
   if (!st) {
-    st = { turn: 0.35, lean: 0, legL: 0, legR: 0, armL: 0, armR: 0, headX: 0, sx: 1, sy: 1, shiftX: 0, landSquash: 0, wasGrounded: true, lastVy: 0 };
+    st = { turn: 0.35, lean: 0, legL: 0, legR: 0, kneeL: 0, kneeR: 0, armL: 0, armR: 0, elbowL: 0, elbowR: 0, headX: 0, sx: 1, sy: 1, shiftX: 0, landSquash: 0, wasGrounded: true, lastVy: 0 };
     poseStates.set(s, st);
   }
   const vy = p.vy ?? 0;
@@ -204,12 +235,20 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   st.landSquash = Math.max(0, st.landSquash - p.dt * 6);
 
   // ---- targets ----
-  // (tuned against reference-art/locomotion, air-verbs, wall-verbs sheets)
-  const swing = p.grounded ? Math.sin(p.walkT) * 0.65 * Math.max(0.25, p.speed01) : 0;
+  // (tuned against reference-art/locomotion, air-verbs, wall-verbs sheets;
+  //  knees bend ≤ 0 — the calf always trails the thigh)
+  const sp = Math.max(0.25, p.speed01);
+  const swing = p.grounded ? Math.sin(p.walkT) * 0.65 * sp : 0;
   let turn = p.facing * (0.35 + 1.0 * p.speed01);   // full profile at speed
   let lean = -p.facing * 0.2 * p.speed01;           // into the run
   let legL = swing, legR = -swing;
+  // the knee flexes through the recovery swing and lands near-straight —
+  // this is the difference between a run and a waddle
+  let kneeL = -(0.12 + Math.max(0, Math.cos(p.walkT)) * 0.9 * p.speed01 * (p.grounded ? 1 : 0));
+  let kneeR = -(0.12 + Math.max(0, -Math.cos(p.walkT)) * 0.9 * p.speed01 * (p.grounded ? 1 : 0));
   let armL = -swing * 0.8, armR = swing * 0.8;
+  let elbowL = -0.2 - 0.35 * p.speed01;             // runner's arms carry bent
+  let elbowR = -0.2 - 0.35 * p.speed01;
   let headX = 0;
   let sx = 1, sy = 1;
   let shiftX = 0;
@@ -218,27 +257,34 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   if (!p.grounded) {
     // airborne: cannonball tuck rising, trail and reach falling
     const rise = Math.max(-1, Math.min(1, vy / 8));
-    legL = 1.0 * Math.max(0, rise) + 0.35 * Math.max(0, -rise);
-    legR = 0.6 * Math.max(0, rise) - 0.25 * Math.max(0, -rise);
-    armL = -0.9 * Math.max(0, rise) - 0.6 * Math.max(0, -rise);
-    armR = -0.7 * Math.max(0, rise) + 0.5 * Math.max(0, -rise);
+    const up = Math.max(0, rise), dn = Math.max(0, -rise);
+    legL = 1.0 * up + 0.35 * dn;
+    legR = 0.6 * up - 0.25 * dn;
+    kneeL = -(1.25 * up + 0.5 * dn);
+    kneeR = -(1.05 * up + 0.2 * dn);
+    armL = -0.9 * up - 0.6 * dn;
+    armR = -0.7 * up + 0.5 * dn;
+    elbowL = -0.55; elbowR = -0.45;
     headX = -rise * 0.18;
     lean = -p.facing * 0.1 * p.speed01;
   }
   if (p.fastFall) {
-    // the dropped dart: arms pinned, legs together, streamlined
-    legL = 0.05; legR = -0.05; armL = 0.1; armR = -0.1;
+    // the dropped dart: everything pinned and straight
+    legL = 0.05; legR = -0.05; kneeL = -0.1; kneeR = -0.1;
+    armL = 0.1; armR = -0.1; elbowL = -0.08; elbowR = -0.08;
     sy = 1.12; sx = 0.92; headX = 0.3;
   }
   if (wall !== 0 && !p.grounded) {
-    // the climber's hang: both hands high on the face, knees drawn up,
-    // feet on the wall, eyes up the climb
+    // the climber's hang: hands high on the face with forearms flat to it,
+    // knees drawn up hard, feet on the wall, eyes up the climb
     turn = wall * 0.95;
     lean = wall * 0.12;
     shiftX = wall * 0.055;      // the collider touches; the body should too
-    legL = 0.95; legR = 0.5;
-    armL = wall < 0 ? -1.9 : -1.5;
-    armR = wall > 0 ? -1.9 : -1.5;
+    legL = 0.9; legR = 0.55;
+    kneeL = -1.25; kneeR = -1.0;
+    armL = wall < 0 ? -1.75 : -1.45;
+    armR = wall > 0 ? -1.75 : -1.45;
+    elbowL = -0.55; elbowR = -0.55;
     headX = -0.4;
     damp = 16;
   }
@@ -246,12 +292,16 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
     // the push-off X: thrown open away from the wall for a few frames
     lean = -p.facing * 0.35;
     legL = 0.9; legR = -0.6;
+    kneeL = -0.35; kneeR = -0.6;
     armL = -2.1; armR = 0.6;
+    elbowL = -0.15; elbowR = -0.5;
     headX = -0.15;
     damp = 30;
   }
   if (p.crouch && p.grounded) {
-    legL = 0.5; legR = -0.4; armL = -0.3; armR = 0.3;
+    legL = 0.55; legR = 0.35;
+    kneeL = -1.05; kneeR = -0.9;
+    armL = -0.35; armR = 0.3; elbowL = -0.5; elbowR = -0.4;
     sy = 0.8; sx = 1.12; headX = 0.22;
     turn = p.facing * 0.5;
   }
@@ -259,17 +309,19 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
     const dyN = Math.max(-1, Math.min(1, p.dash.y));
     const horiz = Math.abs(p.dash.x) >= Math.abs(p.dash.y);
     if (horiz) {
-      // superman: the whole body pitches onto the burst line, arms leading,
-      // legs trailing — diving noses past horizontal, rising flattens
+      // superman: the whole body pitches onto the burst line, arms leading
+      // near-straight, legs trailing in a curl
       lean = -Math.sign(p.dash.x || p.facing) * (1.25 - dyN * 0.45);
-      armL = -1.5; armR = -1.35;
-      legL = 0.45; legR = 0.15;
+      armL = -1.5; armR = -1.35; elbowL = -0.12; elbowR = -0.12;
+      legL = 0.4; legR = 0.15;
+      kneeL = -0.8; kneeR = -0.55;
     } else {
       // vertical burst: a drawn arrow — no pitch, stretched tall
       lean = 0;
       armL = dyN > 0 ? -1.6 : 0.2;
       armR = dyN > 0 ? -1.6 : -0.2;
-      legL = 0.1; legR = -0.1;
+      elbowL = -0.1; elbowR = -0.1;
+      legL = 0.1; legR = -0.1; kneeL = -0.15; kneeR = -0.15;
     }
     // the body's long axis is its local y, so length always stretches sy
     sy = 1.25; sx = 0.85;
@@ -280,18 +332,27 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   // knees, so a hard landing folds him instead of just flattening him
   sy *= 1 - 0.24 * st.landSquash;
   sx *= 1 + 0.18 * st.landSquash;
-  legL += 0.55 * st.landSquash;
+  legL += 0.5 * st.landSquash;
   legR += 0.35 * st.landSquash;
+  kneeL -= 0.85 * st.landSquash;
+  kneeR -= 0.7 * st.landSquash;
   armL -= 0.3 * st.landSquash;
 
   // ---- damped approach ----
+  // limbs track faster than the body: the gait is an oscillation, and a
+  // slow damp low-passes it into mush — the waddle was half damping
   const k = Math.min(1, p.dt * damp);
+  const kL = Math.min(1, p.dt * Math.max(damp, 26));
   st.turn += (turn - st.turn) * k;
   st.lean += (lean - st.lean) * k;
-  st.legL += (legL - st.legL) * k;
-  st.legR += (legR - st.legR) * k;
-  st.armL += (armL - st.armL) * k;
-  st.armR += (armR - st.armR) * k;
+  st.legL += (legL - st.legL) * kL;
+  st.legR += (legR - st.legR) * kL;
+  st.kneeL += (kneeL - st.kneeL) * kL;
+  st.kneeR += (kneeR - st.kneeR) * kL;
+  st.armL += (armL - st.armL) * kL;
+  st.armR += (armR - st.armR) * kL;
+  st.elbowL += (elbowL - st.elbowL) * kL;
+  st.elbowR += (elbowR - st.elbowR) * kL;
   st.headX += (headX - st.headX) * k;
   st.sx += (sx - st.sx) * Math.min(1, p.dt * 18);
   st.sy += (sy - st.sy) * Math.min(1, p.dt * 18);
@@ -302,8 +363,12 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   s.group.rotation.z = st.lean;
   s.legL.rotation.x = st.legL;
   s.legR.rotation.x = st.legR;
+  s.kneeL.rotation.x = st.kneeL;
+  s.kneeR.rotation.x = st.kneeR;
   s.armL.rotation.x = st.armL;
   s.armR.rotation.x = st.armR;
+  s.elbowL.rotation.x = st.elbowL;
+  s.elbowR.rotation.x = st.elbowR;
   s.helmet.rotation.x = st.headX;
   s.group.scale.set(st.sx, st.sy, 1 + (st.sx - 1) * 0.8);
   // squash pivots on the boots, not the belt
