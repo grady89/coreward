@@ -689,6 +689,20 @@ the whole famine economy are unauthorable. Placement is per-room by design
 and stays out of the nine until V4/V5 author them. Its rim is cold rather
 than absent, departing from the table's word "rimless": a hole in the
 lattice already means a fang (P2), and dead floor must stay readable.
+
+*Feel validated by hand, 2026-09-03* (headless proves completability, never
+difficulty — §VI): the pulse retune is clean, all nine still play with no
+timing regression; the current reads as a carry at the right speed; the
+snuffer's theft is legible. **One finding carried into V3.5:** the
+censer-ride works but is hard to land on deliberately. The collision is
+already maximally permissive — the crown is standable through the whole
+swing, not only at the apex — so the gap is not the rule but the
+**telegraph**: a pendulum is briefly still at the ends of its arc and
+fastest (~6.4 t/s, nearly twice walk) through the bottom, and nothing on
+screen tells the player where the apex will be or when. §III already
+specifies the fix as part of the censer's dress — "chain, arc smoke-trace"
+— so it lands in V3.5's hazard family, not in tuning. Do not widen the
+landing band to compensate; the target needs to be readable, not bigger.
 *Breaks:* `vaults.mjs` `alphabet` kit census (new counts) and its parse
 walk (new chars `o` `*`); `vaultfit.mjs` AIR set. *Adds:* pulse-ratio lint,
 the P1 spark-classification totality check, a snuffer check (steals without
