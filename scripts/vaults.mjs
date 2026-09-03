@@ -657,7 +657,7 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     && JSON.stringify(voice.poses) === JSON.stringify(['curled', 'fallen', 'kneeling', 'reaching']));
 });
 
-await stage('proving', ['the proving ground', 'dead surface', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride', 'thin platforms'], async () => {
+await stage('proving', ['the proving ground', 'dead surface', 'brazier relight', 'snuffer steals', 'one-way gate', 'the current', 'parked beam arms', 'censer ride', 'thin platforms', 'door register'], async () => {
   // --- the V3 kit, in its dev room: nothing here touches the nine maps ---
   const enter = await page.evaluate(async () => {
     const { g, until } = window.__H();
@@ -952,6 +952,26 @@ await stage('proving', ['the proving ground', 'dead surface', 'brazier relight',
   });
   const bandOk = r => r.under !== null && r.under > 0.3 && r.under < 0.4 && r.lands;
   ok('thin platforms', thin, bandOk(thin.rime) && bandOk(thin.bridge));
+
+  // --- the door's count register is CUT INTO the door, so it leaves with it.
+  // The masonry fades on payment and the bronze plate used to stay behind,
+  // hanging in the empty doorway as a small lit cube with nothing holding it.
+  const rune = await page.evaluate(async () => {
+    const { g } = window.__H();
+    const v = g.vault;
+    const NONE = { left: false, right: false, up: false, down: false };
+    const shut = v.doorRunes[0].group.visible;
+    v.sconceLit[0] = true;
+    v.doorOpen[0] = true;
+    for (let i = 0; i < 240; i++) v.frame(1 / 60, NONE, false);
+    return {
+      shut,
+      door: v.doorMeshes[0].some(m => m.visible),
+      left: v.doorRunes[0].group.visible,
+      brass: +v.doorRunes[0].brass.opacity.toFixed(3),
+    };
+  });
+  ok('door register', rune, rune.shut && !rune.door && !rune.left && rune.brass < 0.03);
 });
 
 await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {

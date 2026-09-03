@@ -1297,14 +1297,28 @@ export function buildDeck(hue: number): DeckParts {
  * one at a time as the sconces of the room are lit. A door you cannot read
  * the price of is a lock; a door with the sum on its face is arithmetic.
  */
-export function buildDoorRune(need: number): { group: THREE.Group; pips: THREE.Mesh[] } {
+export interface DoorRuneParts {
+  group: THREE.Group;
+  /** one per unit of the price, filling as the room's sconces are lit */
+  pips: THREE.Mesh[];
+  /** the bronze it is cut into — faded out with the masonry it belongs to */
+  brass: THREE.MeshStandardMaterial;
+  lamps: THREE.MeshBasicMaterial[];
+}
+
+export function buildDoorRune(need: number): DoorRuneParts {
   const g = new THREE.Group();
-  const bronze = bronzeMat(0xa8874a);
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.2 + need * 0.22, 0.42, 0.06), bronze));
+  // the register is transparent from the start: when the price is paid the
+  // door dissolves, and the sum on its face has to go with it rather than
+  // hang in the doorway on its own
+  const brass = bronzeMat(0xa8874a);
+  brass.transparent = true;
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.2 + need * 0.22, 0.42, 0.06), brass));
   const pips: THREE.Mesh[] = [];
+  const lamps: THREE.MeshBasicMaterial[] = [];
   for (let i = 0; i < need; i++) {
     const ox = (i - (need - 1) / 2) * 0.22;
-    const socket = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.02, 5, 12), bronze);
+    const socket = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.02, 5, 12), brass);
     socket.position.set(ox, 0, 0.04);
     const pip = new THREE.Mesh(new THREE.CircleGeometry(0.07, 12), glowMat(0xffd9a0, 0.15));
     pip.position.set(ox, 0, 0.05);
@@ -1312,8 +1326,9 @@ export function buildDoorRune(need: number): { group: THREE.Group; pips: THREE.M
     lamp.position.set(ox, 0, 0.06);
     g.add(socket, pip, lamp);
     pips.push(pip);
+    lamps.push(lamp.material as THREE.MeshBasicMaterial);
   }
-  return { group: g, pips };
+  return { group: g, pips, brass, lamps };
 }
 
 // ---------------------------------------------------------------------------

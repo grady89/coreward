@@ -773,6 +773,12 @@ permissive — `vaultfit` already treated `A` `b` `R` as air. *Adds:* the
 `thin platforms` check, which proves the head stops on the ice and the feet
 still land on the tile top, for both a shelf and a deck.
 
+**The door's count register is cut INTO the door**, so it fades with the
+masonry it is part of. It shipped as a separate object added to the scene,
+and when a door was paid off the bronze plate stayed behind, hanging in the
+empty doorway as a small lit cube with nothing holding it up. *Adds:* the
+`door register` check.
+
 **The proving ground grew** a plain shuttle, a crusher, three rime shelves,
 two bridge runs and a door: the dev room had no bolt, crusher, rime, bridge
 or door on screen, so those families could not be reviewed at all. The nine

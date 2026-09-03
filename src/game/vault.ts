@@ -13,7 +13,7 @@ import {
   buildRailPost, buildBolt, BoltParts, buildSnuffer, MothParts,
   buildCenser, CenserParts, buildArcTelegraph, ArcTelegraph, buildChain,
   buildCrusher, buildRime, RimeParts,
-  buildPier, buildDeck, DeckParts, buildDoorRune,
+  buildPier, buildDeck, DeckParts, buildDoorRune, DoorRuneParts,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
   buildMote, buildMasterDressing,
 } from './vaultkit';
@@ -266,8 +266,9 @@ export class VaultRun {
     smoke: THREE.Mesh[];
   }[] = [];
   private doorMeshes: THREE.Mesh[][] = [];
-  /** the count on a door's face, filling a pip per sconce lit */
-  private doorPips: THREE.Mesh[][] = [];
+  /** the count on a door's face, filling a pip per sconce lit — and it
+   *  belongs to the door, so it leaves when the door does */
+  private doorRunes: DoorRuneParts[] = [];
   private bridgeMeshes: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: 0 | 1; parts: DeckParts }[] = [];
   /** a bridge run's piers, which never go out — the phase read from a distance */
   private pierMats: THREE.MeshBasicMaterial[] = [];
@@ -607,7 +608,7 @@ export class VaultRun {
       const rune = buildDoorRune(need);
       rune.group.position.set(mid.x + 0.5, -(mid.y + 0.5), 0.5);
       this.scene.add(rune.group);
-      this.doorPips.push(rune.pips);
+      this.doorRunes.push(rune);
     }
 
     // bridges — a deck of light between two stone piers. The piers stay lit
@@ -2367,14 +2368,21 @@ export class VaultRun {
         mm.opacity += ((this.doorOpen[d] ? 0 : 1) - mm.opacity) * Math.min(1, dt * 3);
         m.visible = mm.opacity > 0.03;
       }
-      // the count on its face fills a pip per sconce lit -- arithmetic, and
-      // it goes on reading as arithmetic while the door itself fades out
+      // the count on its face fills a pip per sconce lit — arithmetic, and it
+      // goes on reading as arithmetic right up until the sum comes out, at
+      // which point the register leaves with the masonry it is cut into. It
+      // is part of the door, not a fixture hanging in the empty doorway.
+      const rune = this.doorRunes[d];
+      const vis = (this.doorMeshes[d][0].material as THREE.MeshStandardMaterial).opacity;
+      rune.group.visible = vis > 0.03;
+      rune.brass.opacity = vis;
       const paid = this.sconceLit.filter(Boolean).length;
-      for (let k = 0; k < this.doorPips[d].length; k++) {
-        const mm = this.doorPips[d][k].material as THREE.MeshBasicMaterial;
+      for (let k = 0; k < rune.pips.length; k++) {
+        const mm = rune.pips[k].material as THREE.MeshBasicMaterial;
         const on = k < paid;
-        mm.opacity += ((on ? 0.85 + Math.sin(this.time * 3 + k) * 0.12 : 0.12) - mm.opacity)
-          * Math.min(1, dt * 4);
+        const want = (on ? 0.85 + Math.sin(this.time * 3 + k) * 0.12 : 0.12) * vis;
+        mm.opacity += (want - mm.opacity) * Math.min(1, dt * 4);
+        rune.lamps[k].opacity = (on ? 0.3 : 0.06) * vis;
       }
     }
     for (const bm of this.bridgeMeshes) {
