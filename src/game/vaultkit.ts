@@ -1116,10 +1116,18 @@ export function buildRime(seed: number): RimeParts {
     const s = Math.sin(seed * 97.3 + n * 41.7) * 43758.5453;
     return s - Math.floor(s);
   };
-  const course = new THREE.Mesh(new THREE.BoxGeometry(0.99, 0.42, 0.9),
-    new THREE.MeshStandardMaterial({ color: 0x6f7382, roughness: 0.9, metalness: 0.05, flatShading: true }));
-  course.position.y = -0.24;
-  g.add(course);
+  // ICE ALL THE WAY DOWN.
+  //
+  // The whole tile goes when this shelf gives — the group is what gets hidden,
+  // every part of it — so a masonry course drawn under the crust promises a
+  // base that will still be there to stand on. Nothing is. "Young ice over old
+  // work" is where the shelf SITS, in the gaps of the guild's stone, not what
+  // it is made of one tile at a time.
+  //
+  // What gives the block its depth instead is ice of two ages: clear young ice
+  // at the top, and older ice compacted denser and bluer below it, with a few
+  // fracture planes caught between them. All of it reads as one substance, and
+  // all of it is the substance that leaves.
   // young ice against old stone: the point of the shelf is that you can see
   // at a glance it is NOT masonry, so it is lifted well clear of the course
   // it sits on and carries its own faint inner light
@@ -1128,9 +1136,29 @@ export function buildRime(seed: number): RimeParts {
     emissive: 0x2a4a5e, emissiveIntensity: 0.55,
     transparent: true, opacity: 0.92, flatShading: true,
   });
-  const crust = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 0.94), ice);
-  crust.position.y = 0.16;
+  const crust = new THREE.Mesh(new THREE.BoxGeometry(1, 0.98, 0.94), ice);
+  crust.position.y = -0.02;
   g.add(crust);
+  // the old ice below: same substance, packed tighter and gone blue with it
+  const old = new THREE.MeshStandardMaterial({
+    color: 0x9fc4d8, roughness: 0.3, metalness: 0.02,
+    emissive: 0x1d3a4c, emissiveIntensity: 0.5,
+    transparent: true, opacity: 0.85, flatShading: true,
+  });
+  const deep = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.4, 0.8), old);
+  deep.position.y = -0.26;
+  g.add(deep);
+  // and the fracture planes trapped between the two ages
+  const seamMat = new THREE.MeshBasicMaterial({
+    color: 0xdff4ff, transparent: true, opacity: 0.22,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  for (let i = 0; i < 3; i++) {
+    const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.86 - rnd(i + 31) * 0.3, 0.014), seamMat);
+    seam.position.set((rnd(i + 33) - 0.5) * 0.2, 0.06 - i * 0.19, 0.48);
+    seam.rotation.z = (rnd(i + 35) - 0.5) * 0.16;
+    g.add(seam);
+  }
   // NOTHING ON THIS OBJECT MAY COME TO A POINT.
   //
   // The rime shelf demands commitment (§III) — it crumbles, it regrows, and
@@ -1143,19 +1171,19 @@ export function buildRime(seed: number): RimeParts {
   // beads with heavy bottoms, the shape of a drip rather than a tooth.
   for (let i = 0; i < 9; i++) {
     const lump = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i) * 0.035, 5, 4), ice);
-    lump.position.set(-0.44 + i * 0.11, 0.4 + rnd(i + 3) * 0.03, 0.24 - rnd(i + 5) * 0.46);
+    lump.position.set(-0.44 + i * 0.11, 0.46 + rnd(i + 3) * 0.03, 0.24 - rnd(i + 5) * 0.46);
     lump.scale.set(1, 0.55 + rnd(i + 7) * 0.3, 1);
     lump.rotation.z = (rnd(i + 7) - 0.5) * 0.6;
     g.add(lump);
   }
   for (let i = 0; i < 4; i++) {
     const bead = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i + 11) * 0.02, 6, 5), ice);
-    bead.position.set(-0.34 + i * 0.23, -0.46 - rnd(i + 13) * 0.06, 0.3);
+    bead.position.set(-0.34 + i * 0.23, -0.58 - rnd(i + 13) * 0.06, 0.3);
     bead.scale.set(0.8, 1.25, 0.8);
     g.add(bead);
     // the neck it hangs from, so the bead reads as running water gone still
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.03, 0.09, 5), ice);
-    neck.position.set(bead.position.x, -0.4, 0.3);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.03, 0.1, 5), ice);
+    neck.position.set(bead.position.x, -0.51, 0.3);
     g.add(neck);
   }
 
@@ -1167,10 +1195,10 @@ export function buildRime(seed: number): RimeParts {
     const r1 = 0.2 + rnd(i + 27) * 0.24;
     const bend = (rnd(i + 29) - 0.5) * 0.7;
     const px = (r: number, ang: number): number => Math.cos(ang) * r;
-    const py = (r: number, ang: number): number => 0.16 + Math.sin(ang) * r * 0.5;
-    pos.push(px(r0, a), py(r0, a), 0.49, px(r1, a + bend), py(r1, a + bend), 0.49);
-    pos.push(px(r1, a + bend), py(r1, a + bend), 0.49,
-      px(r1 + 0.16, a + bend * 2), py(r1 + 0.16, a + bend * 2), 0.49);
+    const py = (r: number, ang: number): number => 0.06 + Math.sin(ang) * r * 0.5;
+    pos.push(px(r0, a), py(r0, a), 0.5, px(r1, a + bend), py(r1, a + bend), 0.5);
+    pos.push(px(r1, a + bend), py(r1, a + bend), 0.5,
+      px(r1 + 0.16, a + bend * 2), py(r1 + 0.16, a + bend * 2), 0.5);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
