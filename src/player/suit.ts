@@ -235,17 +235,20 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   st.landSquash = Math.max(0, st.landSquash - p.dt * 6);
 
   // ---- targets ----
-  // (tuned against reference-art/locomotion, air-verbs, wall-verbs sheets;
-  //  knees bend ≤ 0 — the calf always trails the thigh)
-  const sp = Math.max(0.25, p.speed01);
-  const swing = p.grounded ? Math.sin(p.walkT) * 0.65 * sp : 0;
+  // Sign conventions, fixed once and for all: the suit faces +z, so on a
+  // hip a NEGATIVE rotation.x swings the leg forward and a positive one
+  // back; on a knee POSITIVE bends the heel back (anatomy), negative would
+  // be a bird leg; on a shoulder negative raises the arm forward-up; on an
+  // elbow negative folds the forearm forward.
+  const swing = p.grounded ? Math.sin(p.walkT) * 0.65 * Math.max(0.25, p.speed01) : 0;
   let turn = p.facing * (0.35 + 1.0 * p.speed01);   // full profile at speed
   let lean = -p.facing * 0.2 * p.speed01;           // into the run
   let legL = swing, legR = -swing;
-  // the knee flexes through the recovery swing and lands near-straight —
-  // this is the difference between a run and a waddle
-  let kneeL = -(0.12 + Math.max(0, Math.cos(p.walkT)) * 0.9 * p.speed01 * (p.grounded ? 1 : 0));
-  let kneeR = -(0.12 + Math.max(0, -Math.cos(p.walkT)) * 0.9 * p.speed01 * (p.grounded ? 1 : 0));
+  // the knee flexes through the recovery swing (while its leg travels
+  // forward) and lands near-straight — the difference between run and waddle
+  const gaitK = p.speed01 * (p.grounded ? 1 : 0);
+  let kneeL = 0.12 + Math.max(0, -Math.cos(p.walkT)) * 0.9 * gaitK;
+  let kneeR = 0.12 + Math.max(0, Math.cos(p.walkT)) * 0.9 * gaitK;
   let armL = -swing * 0.8, armR = swing * 0.8;
   let elbowL = -0.2 - 0.35 * p.speed01;             // runner's arms carry bent
   let elbowR = -0.2 - 0.35 * p.speed01;
@@ -258,10 +261,10 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
     // airborne: cannonball tuck rising, trail and reach falling
     const rise = Math.max(-1, Math.min(1, vy / 8));
     const up = Math.max(0, rise), dn = Math.max(0, -rise);
-    legL = 1.0 * up + 0.35 * dn;
-    legR = 0.6 * up - 0.25 * dn;
-    kneeL = -(1.25 * up + 0.5 * dn);
-    kneeR = -(1.05 * up + 0.2 * dn);
+    legL = -(1.0 * up + 0.35 * dn);                 // thighs drawn up
+    legR = -(0.6 * up) + 0.25 * dn;
+    kneeL = 1.25 * up + 0.5 * dn;                   // heels tucked under
+    kneeR = 1.05 * up + 0.2 * dn;
     armL = -0.9 * up - 0.6 * dn;
     armR = -0.7 * up + 0.5 * dn;
     elbowL = -0.55; elbowR = -0.45;
@@ -270,18 +273,18 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   }
   if (p.fastFall) {
     // the dropped dart: everything pinned and straight
-    legL = 0.05; legR = -0.05; kneeL = -0.1; kneeR = -0.1;
+    legL = 0.05; legR = -0.05; kneeL = 0.1; kneeR = 0.1;
     armL = 0.1; armR = -0.1; elbowL = -0.08; elbowR = -0.08;
     sy = 1.12; sx = 0.92; headX = 0.3;
   }
   if (wall !== 0 && !p.grounded) {
     // the climber's hang: hands high on the face with forearms flat to it,
-    // knees drawn up hard, feet on the wall, eyes up the climb
+    // thighs drawn up, heels tucked, feet on the wall, eyes up the climb
     turn = wall * 0.95;
     lean = wall * 0.12;
     shiftX = wall * 0.055;      // the collider touches; the body should too
-    legL = 0.9; legR = 0.55;
-    kneeL = -1.25; kneeR = -1.0;
+    legL = -0.9; legR = -0.55;
+    kneeL = 1.25; kneeR = 1.0;
     armL = wall < 0 ? -1.75 : -1.45;
     armR = wall > 0 ? -1.75 : -1.45;
     elbowL = -0.55; elbowR = -0.55;
@@ -291,16 +294,16 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   if (p.wallKick) {
     // the push-off X: thrown open away from the wall for a few frames
     lean = -p.facing * 0.35;
-    legL = 0.9; legR = -0.6;
-    kneeL = -0.35; kneeR = -0.6;
+    legL = -0.9; legR = 0.6;
+    kneeL = 0.35; kneeR = 0.6;
     armL = -2.1; armR = 0.6;
     elbowL = -0.15; elbowR = -0.5;
     headX = -0.15;
     damp = 30;
   }
   if (p.crouch && p.grounded) {
-    legL = 0.55; legR = 0.35;
-    kneeL = -1.05; kneeR = -0.9;
+    legL = -0.55; legR = -0.35;
+    kneeL = 1.05; kneeR = 0.9;
     armL = -0.35; armR = 0.3; elbowL = -0.5; elbowR = -0.4;
     sy = 0.8; sx = 1.12; headX = 0.22;
     turn = p.facing * 0.5;
@@ -310,18 +313,18 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
     const horiz = Math.abs(p.dash.x) >= Math.abs(p.dash.y);
     if (horiz) {
       // superman: the whole body pitches onto the burst line, arms leading
-      // near-straight, legs trailing in a curl
+      // near-straight, legs trailing behind with heels curled up
       lean = -Math.sign(p.dash.x || p.facing) * (1.25 - dyN * 0.45);
       armL = -1.5; armR = -1.35; elbowL = -0.12; elbowR = -0.12;
-      legL = 0.4; legR = 0.15;
-      kneeL = -0.8; kneeR = -0.55;
+      legL = 0.3; legR = 0.1;
+      kneeL = 0.8; kneeR = 0.55;
     } else {
       // vertical burst: a drawn arrow — no pitch, stretched tall
       lean = 0;
       armL = dyN > 0 ? -1.6 : 0.2;
       armR = dyN > 0 ? -1.6 : -0.2;
       elbowL = -0.1; elbowR = -0.1;
-      legL = 0.1; legR = -0.1; kneeL = -0.15; kneeR = -0.15;
+      legL = 0.1; legR = -0.1; kneeL = 0.15; kneeR = 0.15;
     }
     // the body's long axis is its local y, so length always stretches sy
     sy = 1.25; sx = 0.85;
@@ -332,10 +335,10 @@ export function poseSuit(s: Suit, p: SuitPoseIn): void {
   // knees, so a hard landing folds him instead of just flattening him
   sy *= 1 - 0.24 * st.landSquash;
   sx *= 1 + 0.18 * st.landSquash;
-  legL += 0.5 * st.landSquash;
-  legR += 0.35 * st.landSquash;
-  kneeL -= 0.85 * st.landSquash;
-  kneeR -= 0.7 * st.landSquash;
+  legL -= 0.5 * st.landSquash;    // thighs fold forward into the squat
+  legR -= 0.35 * st.landSquash;
+  kneeL += 0.85 * st.landSquash;  // heels give backward
+  kneeR += 0.7 * st.landSquash;
   armL -= 0.3 * st.landSquash;
 
   // ---- damped approach ----
