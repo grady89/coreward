@@ -15,7 +15,7 @@ not. Reference: 3 empty = 0.55x, 4 = 0.73x, 5 = 0.92x, 7 = 1.28x (spark only).
 """
 import io
 
-W, HGT = 56, 34
+W, HGT = 56, 38
 g = [['#'] * W for _ in range(HGT)]          # solid rock; we cut into it
 
 
@@ -52,18 +52,48 @@ carve(41, 10, 46, 29)       # the chimney — walked into at floor level
 carve(41, 3, 54, 10)        # the reveal, overlapping the chimney's top at
                             # row 10 so the two are one continuous space
 
-# THE FLOOR OF FAILURE. One continuous course under the whole hall, so that
-# missing ANY jump in A or B costs the same four seconds: you land on stone,
-# you walk to a step, you climb back. Uniform recovery is what lets the gaps
-# above it be honest.
-floor(30, 1, 46)
+# THE NET, AND WHERE IT ENDS.
+#
+# Chamber A and the teaching gap keep a floor under them: the first ten seconds
+# of a game should not spend your progress, and the gap teaches by letting you
+# be wrong cheaply. That is the whole of the mercy.
+#
+# Past it the bottom of the room is UNLIGHT. A miss is a gutter and a gutter is
+# the walk back from the last sconce you paid for, which is where risk actually
+# comes from — a room can be precise and still cost nothing if every fall lands
+# on stone two courses down. The harness measures both halves now: sconces six
+# beats apart meant nothing while seven of nine misses were netted.
+floor(30, 1, 22)                    # chamber A's floor
+# floor() paints stone INSIDE the carved space, so a basin has to be cut
+# before it can be floored — the first attempt at this just painted rock onto
+# rock and the basin silently did not exist.
+carve(23, 30, 33, 34)               # THE GAP'S BASIN, cut four courses deeper
+floor(35, 23, 33)
+floor(30, 34, 54, 'X')              # and unlight everywhere past it
+
+# The basin is deep on purpose. At three courses down the harness simply fell
+# into it and sparked straight back out to the far lip — a vertical bypass of
+# the one jump the room is built around, at a one-frame window. At eight it is
+# out of the spark's reach, and climbing out is three beats up the near wall,
+# which is what a miss on the room's hardest jump ought to cost.
+floor(33, 23, 24)
+floor(30, 23, 25)
 # ...and every step is on the NEAR side of the teaching gap. A step at col 31
 # sits inside the gap's own span, which turns the recovery floor into a
 # staircase up the far side: the harness proved the far lip reachable with the
 # spark disabled, which is the whole lesson bypassed.
-for _sx in (8, 14, 20, 26):               # steps back up every few tiles, so
-    floor(29, _sx, _sx)                   # a fall costs three tiles of walking
-    floor(28, _sx + 1, _sx + 1)           # and not fifteen
+# The steps out of the basin are TWO tiles, not one. A one-tile stub is a
+# precision target, and the harness routed the golden path through them —
+# turning the recovery furniture into the intended line, at a four-frame
+# window on the room's very first jump. Recovery must be easy to land on or
+# it stops being recovery.
+# ...and the last of them stops well short of the gap. Widening these to two
+# tiles put the top step at col 28-29, inside the gap's own span, which is the
+# staircase-around-the-lesson bug for the third time. The gap's near shelf
+# starts at col 25; nothing that climbs may reach past col 23.
+for _sx in (8, 14, 20):
+    floor(29, _sx, _sx + 1)
+    floor(28, _sx + 2, _sx + 3)
 
 # THE BASIN MUST DEAD-END. A recovery floor that runs the length of the hall is
 # not a recovery, it is a bypass: the first cut of this room could be walked
@@ -92,16 +122,16 @@ floor(29, 1, 6)                     # the threshold — wide, a breath
 put(2, 28, '@')
 put(4, 28, 'S')                     # the free light, at your feet
 arc(27, 7, 9)                       # 3 empty = 0.55x
-floor(28, 11, 13)                   # 0.73x, and two tiles of landing
+floor(28, 12, 13)                   # 0.73x onto TWO tiles
 arc(26, 13, 15)                     # 3 empty, +1 rise = 0.62x
-floor(27, 18, 19)                   # 0.85x — the hardest the legs are asked
+floor(27, 19, 19)                   # 0.85x onto ONE — the aim is the jump
 put(12, 27, 'S')                    # the cut-13 light, standing on the shelf
 
 # ===========================================================================
 # CHAMBER B · cols 14-33 · DEVELOP → the spark, discovered by elimination
 # ===========================================================================
 arc(25, 19, 22)                     # 4 empty = 0.73x — the first HELD jump
-floor(26, 24, 26)                   # 0.85x again, on a three-tile shelf
+floor(26, 25, 26)                   # 0.85x onto two
 
 # THE TEACHING GAP · 7 empty columns = 1.28x. It cannot be jumped, and that is
 # the point. It is fully visible from the shelf you stand on, its far lip is in
@@ -119,7 +149,9 @@ floor(25, 33, 39)                   # the far lip — gap is cols 27-33, SEVEN
 # nothing back, so you land here with the spark still spent and the next gap
 # must go on legs alone — which it can, at 0.66x. No text required.
 arc(24, 40, 42)
-floor(24, 36, 38, '=')      # drank: carries you, refunds nothing
+floor(24, 36, 38, '=')      # drank: three tiles, so the intended route via
+                            # the islands is shorter than sparking straight
+                            # past them — a one-frame skip is not a route
 put(32, 25, 'S')                    # the cut-33 light, over the teaching gap
 
 # ===========================================================================
@@ -133,9 +165,9 @@ put(32, 25, 'S')                    # the cut-33 light, over the teaching gap
 # the shaft stands ON the hall's own floor — you walk into it, you do not
 # drop into it, and the way up is the only way on
 floor(26, 41, 42)                   # kick ledges, alternating walls, each a
-floor(22, 45, 46)                   # single wall-jump apart (2.68 per kick)
-floor(18, 41, 42)
-floor(14, 45, 46)
+floor(22, 45, 45)                   # single wall-jump apart (2.68 per kick)
+floor(18, 42, 42)
+floor(14, 45, 45)
 put(44, 20, '*')                    # the brazier — refill in mid-air, and the
                                     # greedy line: spark from here past two
                                     # ledges straight to the top
@@ -152,7 +184,7 @@ put(45, 10, 'S')                    # the cut-45 light, on the chimney's lip
 floor(11, 45, 54)                   # the reveal's floor — cols 43-44 stay open
                                     # as the light well the shaft climbs through
 arc(9, 48, 50)                      # 3 empty, +2 rise: the last held jump
-floor(8, 51, 54)
+floor(8, 51, 52)
 arc(6, 50, 52)
 # THE UNLIGHT, chamber D only. Chambers A, B and C keep their promise that
 # nothing there can hurt you; the room's last two jumps are the only ones in

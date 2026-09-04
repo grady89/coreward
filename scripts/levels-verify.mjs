@@ -168,6 +168,43 @@ function solve(w, from, to, dashes = DASHES) {
   return null;
 }
 
+/**
+ * What a MISS costs. Fly the beat's own tape with the jump cut short, and see
+ * where the body ends up: standing on something, or still falling.
+ *
+ * Checkpoint spacing alone does not measure risk. A room can put its sconces
+ * six beats apart and still cost nothing, because a safety floor two courses
+ * under every jump means the hardest gap in the game is worth four seconds.
+ * Risk is spacing AND the absence of a net; this is the second half.
+ */
+function missCost(w, from, to, opt, route, i, lastLit) {
+  const short = { ...opt, hold: 2, dash: null, kicks: [] };
+  const s = spawn(w, short.launchX, from.y - 1);
+  s.py = -(from.y) + C.HH + 0.001;
+  s.grounded = true; s.spark = true;
+  const dir = short.dir;
+  const hold1 = (d) => ({ ...H, [d > 0 ? 'right' : 'left']: true });
+  for (let i = 0; i < short.runUp; i++) step(s, hold1(dir));
+  step(s, { ...hold1(dir), press: true });
+  for (let f = 0; f < 200; f++) {
+    step(s, { ...hold1(dir), jump: f < 2 });
+    // a gutter costs everything back to the last light you paid for
+    if (s.dead) return i - lastLit;
+    if (s.grounded && f > 3) {
+      const fx = Math.floor(s.px), fy = Math.round(-(s.py - C.HH));
+      // which beat of the path did the body land back on?
+      let back = -1;
+      for (let k = 0; k <= i; k++) {
+        const q = route[k].b;
+        if (fy === q.y && fx >= q.x0 - 1 && fx <= q.x1 + 1) back = k;
+      }
+      if (back < 0 && fy === route[0].a.y) back = 0;
+      return back < 0 ? i - lastLit : i - back;      // beats of progress lost
+    }
+  }
+  return i - lastLit;
+}
+
 /** how many frames the jump press may slide and still land it */
 function margin(w, from, to, opt) {
   let early = 0, late = 0;
@@ -228,6 +265,8 @@ for (const { glyph, rows } of rooms) {
     continue;
   }
 
+  const sconces = [];
+  for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (w.at(x, y) === 'S') sconces.push({ x, y });
   const plats = platforms(w);
   // every pair the body could plausibly be asked to cross
   const edges = [];
@@ -347,12 +386,42 @@ for (const { glyph, rows } of rooms) {
   }
   const seconds = +(frames / 60).toFixed(1);
 
+  // RISK — what a fall actually costs, in beats.
+  //
+  // A room can be precise and still have no stakes: if every miss drops you on
+  // a floor two courses down and you walk back, the hardest jump in the game
+  // costs four seconds. Hollow Knight's platforming is not harder than
+  // Celeste's per input; it is riskier per attempt, because the checkpoints
+  // are far apart and a fall spends the climb.
+  //
+  // So this counts the longest run of consecutive golden-path beats with no
+  // sconce on it. That is the progress a single miss can cost, and it is the
+  // dial that turns precision into risk.
+  const lit = [];
+  route.forEach((e, i) => {
+    const onIt = sconces.some(sc =>
+      sc.x >= e.b.x0 - 2 && sc.x <= e.b.x1 + 2 && Math.abs(sc.y - e.b.y) <= 3);
+    if (onIt) lit.push(i);
+  });
+  let risk = 0, since = 0;
+  for (let i = 0; i < route.length; i++) {
+    if (lit.includes(i)) since = 0; else since++;
+    risk = Math.max(risk, since);
+  }
+
   const hard = [];
-  for (const e of route) {
+  let lostMax = 0, lostSum = 0;
+  for (let i = 0; i < route.length; i++) {
+    const e = route[i];
     if (!e) continue;
     const mg = margin(w, e.a, e.b, e.opt);
     if (mg < MARGIN) hard.push({ ...e, mg });
+    const lastLit = lit.filter(k => k < i).pop() ?? 0;
+    const lost = missCost(w, e.a, e.b, e.opt, route, i, lastLit);
+    lostMax = Math.max(lostMax, lost);
+    lostSum += lost;
   }
+  const lostAvg = route.length ? +(lostSum / route.length).toFixed(1) : 0;
   tight += hard.length;
 
   console.log(`${glyph.padEnd(9)} ${(graded ? 'GRADED' : 'report').padEnd(6)} platforms ${String(plats.length).padStart(3)} · proved ${String(solved).padStart(4)}`
@@ -361,6 +430,7 @@ for (const { glyph, rows } of rooms) {
     + ` · stone ${reachesStone ? 'reached' : 'UNREACHED'}`
     + (sparkForced === null ? '' : ` · spark ${sparkForced ? 'FORCED' : 'OPTIONAL'}`)
     + ` · fast line ${String(seconds).padStart(5)}s`
+    + ` · a miss costs ${String(lostAvg).padStart(4)} beats avg, ${String(lostMax).padStart(2)} worst`
     + ` · undecided ${String(flat.worst).padStart(3)}t${flat.worst > FLAT_MAX ? ' FLAT' : ''}`);
   if (flat.worst > FLAT_MAX && graded) flatFail++;
   if (verbose) {

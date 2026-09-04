@@ -341,11 +341,34 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
   // --- F8: a jump buffered mid-spark fires the frame the spark ends ---
   const buffered = await page.evaluate(async () => {
     const { g, until } = window.__H();
+    // re-enter the room first. This check kept failing only in a full run and
+    // passing alone, because by the time it ran the stage had left the body in
+    // a state where dash() refuses. A movement rule should be tested from a
+    // known start, not from whatever the previous eight checks left behind.
+    g.devVault('wick');
+    await until(() => g.mode === 'vault' && g.vault && g.vault.phase === 'run', 40);
     const v = g.vault;
-    v.px = 5.5; v.py = -25.4; v.vx = 0; v.vy = 0; v.invuln = 3;
+    // stand on the entry shelf, found rather than remembered, and charge the
+    // breath explicitly: what is under test is F8 — a jump buffered during the
+    // burst firing the frame the burst ends — not where a shelf happens to be
+    // or whether an earlier check left the spark spent.
+    const p0 = v.p;
+    v.px = p0.entry.x + 1.5; v.py = -(p0.entry.y + 0.5); v.vx = 0; v.vy = 0;
+    v.invuln = 5;
     await until(() => v.grounded, 30);
-    v.dash({ left: false, right: true, up: false, down: false });
-    const spentAtPress = !v.spark; // stone underfoot re-arms it after the burst
+    // and wait for any burst still running from the check before this one:
+    // dash() refuses outright while freezeT or dashT is live, so the spark was
+    // never being spent and the failure looked like an F8 regression
+    // dash() refuses outright while a burst or its freeze is still live, and
+    // in a full run the check before this one leaves one in flight. Retry
+    // until the breath is actually spent rather than assuming one call takes.
+    let spentAtPress = false;
+    for (let i = 0; i < 12 && !spentAtPress; i++) {
+      v.spark = true;
+      v.dash({ left: false, right: true, up: false, down: false });
+      spentAtPress = !v.spark;
+      if (!spentAtPress) await new Promise(r => setTimeout(r, 40));
+    }
     v.jumpPress();          // pressed during the freeze+burst
     v.jumpRelease();
     const jumped = await until(() => v.vy > 4, 20, 30);
