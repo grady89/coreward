@@ -112,13 +112,39 @@ Every beat on the golden path, with its margin:
 | (41,11)→(51,8) | 9 | 1.65× | spark | 21f |
 
 **Read this carefully — it is not the intended line.** The harness's BFS
-minimises *beats*, so it finds the route that skips the most platforms, which
-is the spark-heavy expert line. That it exists at all is rule 6 satisfied (a
-greedy line is available in every chamber). But the *taught* line — the
-three-shelf chain in A, the wall climb in C — is longer in beats and therefore
-not what BFS returns.
+minimises *beats*, so it returns the route that skips the most platforms: the
+spark-heavy expert line. That it exists at all is rule 6 satisfied. The
+*taught* line — the three-shelf chain in A, the wall climb in C — is longer in
+beats and so is not what BFS returns.
 
-**Known gap:** the harness should also solve each room with the spark
-*disabled* to produce the safe line, and report the two side by side. That is
-exactly the test rule 6 specifies and it is not yet implemented. Until it is,
-"0 tight traversals" is a claim about the expert route only.
+## The spark gate, and the two bypasses it caught
+
+`npm run levels:verify` now solves every graded room a second time with the
+spark **disabled**, and fails the room if the stone is still reachable. This is
+rule 6's test, and for a tutorial it is *the* test: a room whose subject is the
+scarce verb must not be completable without it.
+
+It caught the rebuild doing exactly what the old WICK did — twice.
+
+1. **The recovery floor was a bypass.** A continuous floor under the hall let
+   you walk from the entry to the chimney along the bottom, never crossing the
+   teaching gap. The basin now dead-ends.
+2. **A recovery step was a staircase.** A step at col 31 sat *inside* the gap's
+   own span, so falling in and climbing out put you on the far side. Steps are
+   now only on the near side.
+3. **And the pit was climbable.** Wall-jumps are free and unlimited here, so
+   any pit with a wall beside it can be climbed out of on the wrong side — the
+   harness proved it after both fixes above. The far lip is now a
+   **cantilever**: its supporting rock sits at cols 37-40, so the columns under
+   its left end are open air with no face to kick off, and the lip itself caps
+   anyone who climbs at col 37.
+
+With the spark disabled the far lip, the drank islands, the chimney, the
+reveal and the stone are all unreachable. The gap is forced.
+
+```
+wick  GRADED  ... stone reached · spark FORCED · undecided 9t
+```
+
+That is the difference between a tutorial that teaches a verb and one that
+merely contains it, and I would not have found it by looking.

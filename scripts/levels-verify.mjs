@@ -45,6 +45,11 @@ const args = process.argv.slice(2);
 const only = (args.find(a => a.startsWith('--room=')) ?? '').slice(7) || null;
 const MARGIN = Number((args.find(a => a.startsWith('--margin=')) ?? '--margin=6').slice(9));
 const flatOnly = args.includes('--flat');
+// Solve with the spark DISABLED. This is rule 6's test and it is also the only
+// way to ask the question a tutorial lives or dies on: is the scarce verb
+// actually forced, or is there a way round it? A room whose stone is still
+// reachable without the spark has made the spark optional.
+const noSpark = args.includes('--no-spark');
 const verbose = args.includes('--verbose');
 
 const AIR = new Set('.dS@MXAbR^><KFCN12o*'.split(''));
@@ -90,7 +95,7 @@ function platforms(w) {
 const RUNUPS = [0, 12];
 const HOLDS = [3, 6, 10, 16, 26, 44, 999];
 const DASHES = [null];
-for (const at of [2, 6, 10, 16, 24]) {
+for (const at of noSpark ? [] : [2, 6, 10, 16, 24]) {
   for (const [dx, dy] of [[1, 0], [0.7, 0.7], [0, 1], [0.7, -0.7], [-0.7, 0.7]]) {
     DASHES.push({ at, dx, dy });
   }
@@ -129,7 +134,7 @@ function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jum
   return false;
 }
 
-function solve(w, from, to) {
+function solve(w, from, to, dashes = DASHES) {
   const dir = to.x0 > from.x1 ? 1 : to.x1 < from.x0 ? -1 : (to.x0 >= from.x0 ? 1 : -1);
   const launches = dir > 0
     ? [from.x1, Math.max(from.x0, from.x1 - 3), from.x0]
@@ -150,7 +155,7 @@ function solve(w, from, to) {
     for (const runUp of RUNUPS) {
       for (const hold of HOLDS) {
         for (const kicks of kickSets) {
-          for (const dash of DASHES) {
+          for (const dash of dashes) {
             const opt = { launchX, dir, runUp, hold, dash, kicks };
             if (attempt(w, from, to, opt)) return opt;
           }
@@ -205,7 +210,7 @@ function longestUndecided(w) {
 const m = metrics();
 const MAXJ = m.running.distance;
 const rooms = loadRooms().filter(r => r.glyph !== 'proving' && (!only || r.glyph === only));
-let broken = 0, tight = 0, flatFail = 0;
+let broken = 0, tight = 0, flatFail = 0, sparkOptional = 0;
 const FLAT_MAX = 10;
 
 console.log(`solvability harness · body ${(C.HW * 2).toFixed(2)}×${(C.HH * 2).toFixed(2)} tiles`);
@@ -279,8 +284,15 @@ for (const { glyph, rows } of rooms) {
       console.log(`  reached ${seen.length}/${plats.length} platforms from the entry`);
       const missed = plats.filter(p => !prev.has(key(p))).map(p => `y${p.y}x${p.x0}-${p.x1}`);
       console.log('  never reached:', missed.join(' '));
-      const frontier = [...prev.keys()].map(k => k).sort();
-      console.log('  reached:', frontier.join(' '));
+      if (process.env.DBG_TO) {
+        const tgt = [...prev.keys()].find(k => k === process.env.DBG_TO);
+        const src = tgt ? prev.get(tgt) : null;
+        console.log(`  ${process.env.DBG_TO} reached from`, src ? key(src) : 'NOWHERE');
+        if (src) {
+          const e = opts.get(key(src) + '>' + process.env.DBG_TO);
+          console.log('  via', JSON.stringify(e && e.opt));
+        }
+      }
     }
     if (prev.has(key(goalP))) {
       let cur = goalP;
@@ -295,6 +307,31 @@ for (const { glyph, rows } of rooms) {
   const graded = DONE.includes(glyph);
   if (!reachesStone && graded) broken++;
 
+  // RULE 6 / the tutorial gate, run automatically for graded rooms: solve the
+  // whole room again with the spark DISABLED. If the stone is still reachable,
+  // the scarce verb is optional — which is the fault this rebuild exists to
+  // fix, and it hid behind a green harness twice before this check existed.
+  let sparkForced = null;
+  if (graded && goalP && startP) {
+    const g2 = new Map();
+    for (const [a, b] of edges) {
+      if (!solve(w, a, b, [null])) continue;
+      if (!g2.has(key(a))) g2.set(key(a), []);
+      g2.get(key(a)).push(b);
+    }
+    const seen2 = new Set([key(startP)]);
+    const q2 = [startP];
+    while (q2.length) {
+      const cur = q2.shift();
+      for (const nx of g2.get(key(cur)) ?? []) {
+        if (seen2.has(key(nx))) continue;
+        seen2.add(key(nx)); q2.push(nx);
+      }
+    }
+    sparkForced = !seen2.has(key(goalP));
+    if (!sparkForced) sparkOptional++;
+  }
+
   const hard = [];
   for (const e of route) {
     if (!e) continue;
@@ -307,6 +344,7 @@ for (const { glyph, rows } of rooms) {
     + ` · path ${String(route.length).padStart(2)} beats`
     + ` · tight(<${MARGIN}f) ${String(hard.length).padStart(2)}`
     + ` · stone ${reachesStone ? 'reached' : 'UNREACHED'}`
+    + (sparkForced === null ? '' : ` · spark ${sparkForced ? 'FORCED' : 'OPTIONAL'}`)
     + ` · undecided ${String(flat.worst).padStart(3)}t${flat.worst > FLAT_MAX ? ' FLAT' : ''}`);
   if (flat.worst > FLAT_MAX && graded) flatFail++;
   if (verbose) {
@@ -327,8 +365,9 @@ if (!flatOnly) {
   console.log(`
 graded: ${DONE.join(", ")} — the rest are REPORTED, not graded: they`
     + ` predate the measured body, and failing them is the audit's finding.`);
+  console.log(`${sparkOptional} graded room(s) where the spark is OPTIONAL`);
   console.log(`${broken} graded room(s) with no proved path to the stone`
     + ` · ${tight} traversal(s) tighter than ${MARGIN} frames`
     + ` · ${flatFail} graded room(s) with a corridor over ${FLAT_MAX} tiles`);
 }
-process.exit(broken || flatFail ? 1 : 0);
+process.exit(broken || flatFail || sparkOptional ? 1 : 0);

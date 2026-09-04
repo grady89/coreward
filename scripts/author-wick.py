@@ -57,9 +57,29 @@ carve(41, 3, 54, 10)        # the reveal, overlapping the chimney's top at
 # you walk to a step, you climb back. Uniform recovery is what lets the gaps
 # above it be honest.
 floor(30, 1, 46)
-for _sx in (8, 14, 20, 26, 31, 36):       # steps back up every few tiles, so
+# ...and every step is on the NEAR side of the teaching gap. A step at col 31
+# sits inside the gap's own span, which turns the recovery floor into a
+# staircase up the far side: the harness proved the far lip reachable with the
+# spark disabled, which is the whole lesson bypassed.
+for _sx in (8, 14, 20, 26):               # steps back up every few tiles, so
     floor(29, _sx, _sx)                   # a fall costs three tiles of walking
     floor(28, _sx + 1, _sx + 1)           # and not fifteen
+
+# THE BASIN MUST DEAD-END. A recovery floor that runs the length of the hall is
+# not a recovery, it is a bypass: the first cut of this room could be walked
+# from the entry to the chimney along the bottom without ever crossing the
+# teaching gap, which made the spark optional in the room whose subject is the
+# spark — the exact fault the rebuild exists to correct. The far lip's support
+# is solid to the floor, so a fall traps you and the only way out is back up
+# the steps to try the gap again.
+# The far lip is a CANTILEVER: its supporting rock sits at cols 37-40, so the
+# four columns under its left end are open air. Wall-jumps are free and
+# unlimited in this game, which means any pit with a wall beside it can be
+# climbed — the harness proved exactly that, twice. A climber in the basin can
+# only find a face at col 37, and the lip itself caps them at row 25. The only
+# way ONTO the lip is across the gap, which is the point of the gap.
+for _by in range(26, 30):
+    floor(_by, 37, 40)
 
 # ===========================================================================
 # CHAMBER A · cols 1-13 · INTRODUCE
