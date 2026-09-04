@@ -424,24 +424,41 @@ await stage('shift', ['spinning beams'], async () => {
 });
 
 await stage('vault', ['brazier doors'], async () => {
-  // --- the vault: doors melt open at their sconce count ---
+  // --- the vault: doors are ARITHMETIC. Each melts at its own count and not
+  // before, so the cheap door must open on two while the dear one is still
+  // standing, and the dear one only on three.
+  //
+  // Addressed by the door's own character, never by parse order: V4 moved
+  // door `2` higher up the keep than door `1`, which silently made the old
+  // coordinate-coupled version light two sconces and demand the three-sconce
+  // door open. A check that breaks when a map is rearranged is testing the
+  // map, not the rule.
   const doors = await page.evaluate(async () => {
     const { g, until, vaultOf } = window.__H();
     g.devVault('vault');
     await until(() => g.mode === 'vault', 20);
     const v = g.vault;
     const p = vaultOf('vault');
-    const d0 = p.doors[0].tiles[0];
-    const closed = v.solidTile(d0.x, d0.y);
-    // light two sconces by teleport-touch
-    for (const s of p.sconces.slice(0, 2)) {
-      v.px = s.x + 0.5; v.py = -(s.y + 0.5); v.vx = 0; v.vy = 0;
-      await until(() => v.sconceLit[p.sconces.indexOf(s)], 20, 50);
-    }
-    const open = await until(() => !v.solidTile(d0.x, d0.y), 20, 50);
-    return { closed, open, needs: window.__VAULTS.find(x => x.glyph === 'vault').doorNeeds };
+    const needs = window.__VAULTS.find(x => x.glyph === 'vault').doorNeeds;
+    const doorOf = (ch) => p.doors[p.doors.findIndex(d => d.ch === ch)].tiles[0];
+    const cheap = doorOf('1'), dear = doorOf('2');
+    const shut = v.solidTile(cheap.x, cheap.y) && v.solidTile(dear.x, dear.y);
+    const light = async (n) => {
+      for (let i = 0; i < n; i++) {
+        const s = p.sconces[i];
+        v.px = s.x + 0.5; v.py = -(s.y + 0.5); v.vx = 0; v.vy = 0;
+        await until(() => v.sconceLit[i], 20, 50);
+      }
+    };
+    await light(needs['1']);
+    const cheapOpen = await until(() => !v.solidTile(cheap.x, cheap.y), 20, 50);
+    const dearHeld = v.solidTile(dear.x, dear.y);
+    await light(needs['2']);
+    const dearOpen = await until(() => !v.solidTile(dear.x, dear.y), 20, 50);
+    return { shut, cheapOpen, dearHeld, dearOpen, needs, lit: v.sconceLit.filter(Boolean).length };
   });
-  ok('brazier doors', doors, doors.closed && doors.open);
+  ok('brazier doors', doors,
+    doors.shut && doors.cheapOpen && doors.dearHeld && doors.dearOpen);
 });
 
 await stage('ember', ['the pursuit', 'censers swing'], async () => {
