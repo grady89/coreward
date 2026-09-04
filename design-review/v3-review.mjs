@@ -110,8 +110,16 @@ await page.waitForTimeout(200);
 await at(13.5, -19.4, 7, 'v35-bridge-off');
 await page.evaluate(() => { window.__game.vault.bridgeOn = [true, false]; });
 
-// the door, wearing the count it wants
-await at(30.5, -20.6, 5, 'v35-door');
+// the door: a leaf in a stone opening, wearing the count it wants — and the
+// same doorway once the price is paid, which must be an opening and not a gap
+await at(37.5, -20.2, 5.5, 'v35-door');
+await page.evaluate(() => {
+  const v = window.__game.vault;
+  v.sconceLit[0] = true;
+  v.doorOpen[0] = true;
+});
+await page.waitForTimeout(1400);
+await at(37.5, -20.2, 5.5, 'v35-door-open');
 
 // the parked watch-lantern in the loft: pedestal, gimbal, counterweight arm
 await at(34.5, -5, 7, 'v3-beam-parked');

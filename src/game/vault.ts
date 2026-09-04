@@ -13,7 +13,7 @@ import {
   buildRailPost, buildBolt, BoltParts, buildSnuffer, MothParts,
   buildCenser, CenserParts, buildArcTelegraph, ArcTelegraph, buildChain,
   buildCrusher, buildRime, RimeParts,
-  buildPier, buildDeck, DeckParts, buildDoorRune, DoorRuneParts,
+  buildPier, buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
   buildMote, buildMasterDressing,
 } from './vaultkit';
@@ -602,11 +602,21 @@ export class VaultRun {
         meshes.push(m);
       }
       this.doorMeshes.push(meshes);
-      // the register goes on the middle course of the door, facing the room
+      // THE DOORWAY the leaf hangs in. Without it a door tile is a warmer
+      // wall block standing in the room, and paying one off leaves a gap
+      // where a box used to be. With it, what opens is an opening.
+      const xs = d.tiles.map(t => t.x), ys = d.tiles.map(t => t.y);
+      const dx0 = Math.min(...xs), dx1 = Math.max(...xs);
+      const dy0 = Math.min(...ys), dy1 = Math.max(...ys);
+      const dw = dx1 - dx0 + 1, dh = dy1 - dy0 + 1;
+      const cx = (dx0 + dx1 + 1) / 2, cy = -(dy0 + dy1 + 1) / 2;
+      const way = buildDoorway(dw, dh);
+      way.position.set(cx, cy, 0);
+      this.scene.add(way);
+      // and the register, on the leaf's own face at eye height
       const need = this.def.doorNeeds?.[d.ch] ?? 1;
-      const mid = d.tiles[Math.floor(d.tiles.length / 2)];
       const rune = buildDoorRune(need);
-      rune.group.position.set(mid.x + 0.5, -(mid.y + 0.5), 0.5);
+      rune.group.position.set(cx, cy, 0.5);
       this.scene.add(rune.group);
       this.doorRunes.push(rune);
     }

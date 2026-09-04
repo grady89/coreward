@@ -912,9 +912,14 @@ await stage('proving', ['the proving ground', 'dead surface', 'brazier relight',
     // within a single window.
     const probe = (tx, ty, wait) => {
       const top = -ty;
+      // Wait for a RISING EDGE, not merely for `on`. Catching the tail of an
+      // on-window let the deck switch off halfway through a fall, the body
+      // dropped through, and the check failed about one run in three — which
+      // is exactly the kind of intermittent a suite must not carry.
       const settle = () => {
         if (!wait) return true;
-        for (let i = 0; i < 400; i++) {
+        for (let i = 0; i < 900 && wait(); i++) v.frame(1 / 60, NONE, false);
+        for (let i = 0; i < 900; i++) {
           if (wait()) return true;
           v.frame(1 / 60, NONE, false);
         }
@@ -944,6 +949,7 @@ await stage('proving', ['the proving ground', 'dead surface', 'brazier relight',
       };
     };
     const R = v.p.rime[1];
+    v.rimeState[1].t = -1; v.rimeState[1].gone = 0;   // whole, whatever ran before
     const B = v.p.bridges.find(b => b.group === 0);
     return {
       rime: probe(R.x, R.y),

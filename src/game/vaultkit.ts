@@ -1306,6 +1306,42 @@ export interface DoorRuneParts {
   lamps: THREE.MeshBasicMaterial[];
 }
 
+/**
+ * THE DOORWAY — the opening, not the leaf.
+ *
+ * A door tile on its own is a slightly warmer wall block, which is to say it
+ * is not readable as a door at all: nothing about it says "this is a way
+ * through that is currently shut". What says that is the surround — jambs
+ * either side, a lintel over them, a worn threshold underneath — and the
+ * surround is masonry, so it STAYS when the leaf dissolves. Paying a door
+ * off should leave a doorway standing open, not a gap where a box used to be.
+ */
+export function buildDoorway(w: number, h: number): THREE.Group {
+  const g = new THREE.Group();
+  const stone = stoneMat(0x8b8496);
+  const bronze = bronzeMat(0xa8874a);
+  for (const k of [-1, 1]) {
+    const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.34, h + 0.3, 0.78), stone);
+    jamb.position.set(k * (w / 2 + 0.14), 0, 0);
+    g.add(jamb);
+    // the hinge pintles, so the leaf has something to have hung from
+    for (const oy of [h / 2 - 0.35, -h / 2 + 0.35]) {
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 8), bronze);
+      pin.rotation.z = Math.PI / 2;
+      pin.position.set(k * (w / 2 - 0.02), oy, 0.36);
+      g.add(pin);
+    }
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(w + 0.86, 0.3, 0.82), stone);
+  lintel.position.y = h / 2 + 0.15;
+  const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.7, 0.05, 0.06), bronze);
+  band.position.set(0, h / 2 + 0.02, 0.42);
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.12, 0.8), stone);
+  sill.position.y = -h / 2 - 0.06;
+  g.add(lintel, band, sill);
+  return g;
+}
+
 export function buildDoorRune(need: number): DoorRuneParts {
   const g = new THREE.Group();
   // the register is transparent from the start: when the price is paid the
