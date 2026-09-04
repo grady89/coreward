@@ -290,6 +290,8 @@ export class VaultRun {
   }[] = [];
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
+  /** last frame's place, so the moth can turn into where it is going */
+  private snuffPrev: ({ x: number; y: number } | null)[] = [];
   /** a plain bolt's carriage, so the wake can lie behind the direction of travel */
   private boltParts: (BoltParts | null)[] = [];
   private moteMeshes: { mesh: THREE.Object3D; x: number; y: number; ph: number; mats: THREE.MeshBasicMaterial[] }[] = [];
@@ -336,6 +338,7 @@ export class VaultRun {
     this.pulse = def.clock ?? PULSE;
     this.act = actOf(glyph.world);
     this.snuffState = (def.shuttles ?? []).map(() => ({ awake: false, t: 0, sate: 0 }));
+    this.snuffPrev = (def.shuttles ?? []).map(() => null);
     this.beamArmed = (def.beams ?? []).map(b => !b.parked);
     this.beamArmT = (def.beams ?? []).map(() => 0);
     this.cam = new FollowCam(aspect);
@@ -2034,6 +2037,33 @@ export class VaultRun {
 
   // ---------------- hazard positions ----------------
 
+  /**
+   * A MOTH IS NOT A BOLT.
+   *
+   * The snuffer shares the shuttle's def and clock because its PATROL is the
+   * same idea — out along a line and back on a period — but a creature that
+   * holds a dead straight line at a constant speed does not read as a
+   * creature at all; it reads as the machine it borrowed its data from. So
+   * the rail is the moth's ROUTE, not its path: it wanders either side of it
+   * and dawdles and darts along it.
+   *
+   * This goes into the position the run actually uses, not into the drawing,
+   * because the drawing and the hitbox have to be the same thing — a moth
+   * fluttering beside its own collision box would be the same fault as a
+   * beam drawn wider than it bites. It is deterministic (layered sines on
+   * incommensurate periods, no randomness), so a replay is a replay and the
+   * suite can still stand the body in its path.
+   *
+   * The wander is bounded well inside a tile so a patrol authored down a
+   * corridor cannot flutter into the masonry.
+   */
+  private snufferDrift(i: number, t: number): { x: number; y: number } {
+    return {
+      x: Math.sin(t * 1.7 + i * 2.3) * 0.22 + Math.sin(t * 0.61 + i) * 0.13,
+      y: Math.sin(t * 2.11 + i * 1.3) * 0.17 + Math.sin(t * 0.83 + i * 3.1) * 0.11,
+    };
+  }
+
   private shuttlePos(i: number): { x: number; y: number } {
     const s = this.def.shuttles![i];
     // a snuffer sleeps parked at the rail's start; its own clock only runs
@@ -2042,10 +2072,18 @@ export class VaultRun {
     if (s.snuff && !st.awake) return { x: s.x0 + 0.5, y: -(s.y0 + 0.5) };
     const t = s.snuff ? st.t : this.time;
     const u = (t / (s.period / this.hazardMul()) + (s.snuff ? 0 : s.phase)) % 1;
-    const ping = u < 0.5 ? u * 2 : 2 - u * 2;
+    let ping = u < 0.5 ? u * 2 : 2 - u * 2;
+    let ox = 0, oy = 0;
+    if (s.snuff) {
+      // it does not hold its speed either: a moth dawdles and then darts
+      ping = Math.max(0, Math.min(1,
+        ping + Math.sin(t * 1.31 + i) * 0.055 + Math.sin(t * 0.47 + i * 2) * 0.03));
+      const d = this.snufferDrift(i, t);
+      ox = d.x; oy = d.y;
+    }
     return {
-      x: s.x0 + 0.5 + (s.x1 - s.x0) * ping,
-      y: -(s.y0 + 0.5) - (s.y1 - s.y0) * ping,
+      x: s.x0 + 0.5 + (s.x1 - s.x0) * ping + ox,
+      y: -(s.y0 + 0.5) - (s.y1 - s.y0) * ping + oy,
     };
   }
 
@@ -2431,13 +2469,30 @@ export class VaultRun {
         // taken your light, and for that moment it is full of it.
         const st = this.snuffState[i];
         const feeding = st.sate > 0;
-        const flap = feeding ? 0.15 + Math.sin(this.time * 22 + i) * 0.35
-          : st.awake ? 0.5 + Math.sin(this.time * 7 + i) * 0.55
+        // where it is actually going this frame, which is what it should look
+        // like it is doing: a creature turns into its own travel
+        const prev = this.snuffPrev[i];
+        const mvx = prev ? pos.x - prev.x : 0;
+        const mvy = prev ? pos.y - prev.y : 0;
+        this.snuffPrev[i] = { x: pos.x, y: pos.y };
+        const speed = Math.hypot(mvx, mvy) / Math.max(dt, 1e-4);
+        // the beat quickens with the work, the way a heavy moth's does
+        const beat = feeding ? 22 : 5.5 + Math.min(6, speed * 1.6);
+        const flap = feeding ? 0.15 + Math.sin(this.time * beat + i) * 0.35
+          : st.awake ? 0.42 + Math.sin(this.time * beat + i) * 0.6
             : 1.25;
+        // the two wings are never quite in phase — the tell that it is alive
         moth.wings[0].rotation.y = flap;
-        moth.wings[1].rotation.y = -flap;
-        // asleep it hangs nose-over against the rail; awake it flies level
-        moth.group.rotation.z = st.awake ? Math.sin(this.time * 1.7 + i) * 0.12 : 0.5;
+        moth.wings[1].rotation.y = -(flap * 0.94 + 0.04);
+        if (st.awake) {
+          if (Math.abs(mvx) > 1e-4) moth.group.scale.x = Math.sign(mvx);
+          // it banks into a climb and noses down into a descent
+          const bank = Math.max(-0.55, Math.min(0.55, -mvy / Math.max(dt, 1e-4) * 0.09));
+          moth.group.rotation.z += (bank - moth.group.rotation.z) * Math.min(1, dt * 7);
+        } else {
+          // asleep it hangs nose-over against the rail
+          moth.group.rotation.z += (0.5 - moth.group.rotation.z) * Math.min(1, dt * 5);
+        }
         for (const a of moth.antennae) a.rotation.x = st.awake ? Math.sin(this.time * 9) * 0.3 : 0;
         this.shuttleMeshes[i].mat.opacity = feeding
           ? 0.95 * Math.min(1, st.sate / SNUFF_SATE + 0.25)

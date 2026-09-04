@@ -779,12 +779,39 @@ and when a door was paid off the bronze plate stayed behind, hanging in the
 empty doorway as a small lit cube with nothing holding it up. *Adds:* the
 `door register` check.
 
+**The snuffer flies rather than travels.** It shares the shuttle's def and
+clock because its patrol is the same idea — out along a line and back on a
+period — but a creature holding a dead straight line at a constant speed
+reads as the machine it borrowed its data from, not as an animal. The rail
+is its ROUTE now: it wanders either side of it and it dawdles and darts
+along it (measured: up to 0.28 tiles off the line, and 0.25 to 4.5 tiles/s).
+The wander goes into `shuttlePos` — the position the run actually uses —
+never into the drawing alone, because a moth fluttering beside its own
+hitbox would be the same fault as a beam drawn wider than it bites. It is
+deterministic, layered sines on incommensurate periods, so replays hold and
+the suite can still stand the body in its path. Bounded well inside a tile
+so a patrol authored down a corridor cannot flutter into masonry.
+
 **The proving ground grew** a plain shuttle, a crusher, three rime shelves,
 two bridge runs and a door: the dev room had no bolt, crusher, rime, bridge
 or door on screen, so those families could not be reviewed at all. The nine
 maps are untouched, as V4/V5 still rewrite them.
 `design-review/v3-review.mjs` was extended rather than replaced and now
 captures every family, the three acts, and the censer strip.
+
+**V4 authoring note, banked from V3.5's review — the floor-to-ceiling
+crusher.** Every crusher authored so far throws a short distance into open
+air, which reads as a block that pokes out and goes back. A piston whose
+travel spans the FULL height of its shaft — able to crush the body into the
+floor or into the ceiling depending on where it catches you — is a stronger
+object for the same kit cost: it is authoring, not code (`dx`/`dy` and the
+travel are already def data), it makes the approach buffer (≥ 5 tiles,
+grammar §4.2) genuinely earn its width, and it gives the stop-and-go read
+two failure directions instead of one. Worth trying first in EMBER, which
+stresses the most new kit at once and is therefore where a bad crusher is
+cheapest to learn from. Not decided here: where crushers sit and how far
+they throw is a per-room call, and picking it inside a dress phase would be
+authoring level design in the proving ground.
 
 **V4 — Rooms 4–9,** authored in order **5, 4, 6, 7, 8, 9** (EMBER first: it
 stresses the most new kit at once, so its failures are cheapest to learn
