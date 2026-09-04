@@ -52,7 +52,7 @@ const flatOnly = args.includes('--flat');
 const noSpark = args.includes('--no-spark');
 const verbose = args.includes('--verbose');
 
-const AIR = new Set('.dS@MXAbR^><KFCN12o*'.split(''));
+const AIR = new Set('.dS@MX_AbR^><KFCN12o*'.split(''));
 const H = { left: false, right: false, up: false, down: false };
 
 // ---------------------------------------------------------------------------
@@ -127,7 +127,15 @@ function liftBetween(w, a, b) {
 // many frames could the jump have been mistimed?
 // ---------------------------------------------------------------------------
 const RUNUPS = [0, 12];
-const HOLDS = [3, 6, 10, 16, 26, 44, 999];
+// when the steering is released, if at all. 0 is "hold it all the way"
+const BRAKES = [0, 6, 10, 16, 24];
+// How long the jump is held, in frames. This used to step 3-6-10-16-26-44,
+// which is fine for landing on a shelf and useless for landing on a TILE: the
+// gap between "falls short into the pit" and "sails over into the next one"
+// can be narrower than the gap between two rungs of that ladder, so the search
+// missed the legs tape entirely and reported the spark tape's tight window as
+// the level's difficulty. A precision landing needs a precision ladder.
+const HOLDS = [3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 26, 34, 44, 999];
 const DASHES = [null];
 for (const at of noSpark ? [] : [2, 6, 10, 16, 24]) {
   for (const [dx, dy] of [[1, 0], [0.7, 0.7], [0, 1], [0.7, -0.7], [-0.7, 0.7]]) {
@@ -143,7 +151,7 @@ for (const at of noSpark ? [] : [2, 6, 10, 16, 24]) {
  * these the harness cannot verify one of the game's four verbs, and a shaft
  * climbed by wall-jumps reads to it as an unreachable room.
  */
-function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jumpDelay = 0 }) {
+function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jumpDelay = 0, brake = 0 }) {
   const s = spawn(w, launchX, from.y - 1);
   s.py = -(from.y) + C.HH + 0.001;      // standing on the surface
   s.grounded = true; s.spark = true;
@@ -158,7 +166,15 @@ function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jum
   for (let f = 0; f < FLY; f++) {
     const k = kicks.find(q => q.at === f);
     if (k) steer = k.dir;
-    const inp = { ...hold1(steer), jump: f < hold };
+    // THE AIR BRAKE. Let go of the direction and the body coasts -- air
+    // control is an acceleration, not a speed you are stuck with -- and that
+    // is the whole technique for landing on something small. Holding the
+    // stick for the entire flight, which is all this used to search, measures
+    // a player who has decided not to aim: it put a one-tile landing at two
+    // frames and called the level unfair when the level was fine.
+    const inp = (brake > 0 && f >= brake && !k)
+      ? { ...H, jump: f < hold }
+      : { ...hold1(steer), jump: f < hold };
     if (k) { inp.press = true; }
     else if (f === hold) inp.release = true;
     if (dash && f === dash.at) { inp.dash = true; inp.dashDX = dash.dx * steer; inp.dashDY = dash.dy; }
@@ -202,9 +218,11 @@ function solve(w, from, to, dashes = DASHES) {
       for (const runUp of RUNUPS) {
         for (const hold of HOLDS) {
           for (const kicks of kickSets) {
-            const opt = { launchX, dir, runUp, hold, dash, kicks };
-            const r = attempt(w, from, to, opt);
-            if (r) return { ...opt, frames: r.frames };
+            for (const brake of BRAKES) {
+              const opt = { launchX, dir, runUp, hold, dash, kicks, brake };
+              const r = attempt(w, from, to, opt);
+              if (r) return { ...opt, frames: r.frames };
+            }
           }
         }
       }

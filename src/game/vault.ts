@@ -615,6 +615,7 @@ export class VaultRun {
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         if (!p.kill[y * p.w + x]) continue;
+        if (p.voidTile[y * p.w + x]) continue;   // a void is an absence: nothing to draw
         // a run of studs is ONE hole: the torn edge is drawn only where the
         // bite meets something that is not another bite
         const open = [
@@ -768,7 +769,14 @@ export class VaultRun {
         const x = s2.x0;
         let top = Math.min(s2.y0, s2.y1), bot = Math.max(s2.y0, s2.y1);
         while (top > 1 && !this.solidTile(x, top - 1)) top--;
-        while (bot < this.p.h - 2 && !this.solidTile(x, bot + 1)) bot++;
+        // Down to the first stone, or to the FLOOR LINE OF THE GROUND BESIDE
+        // IT, whichever comes first. A rail strung over a pit would otherwise
+        // hang the length of the hole — eleven courses into a place the body
+        // never goes — and the bolt would spend most of its round down there,
+        // so the wall of light you are supposed to thread is absent when you
+        // jump. A cable is hung across a gap, not down it.
+        while (bot < this.p.h - 2 && !this.solidTile(x, bot + 1)
+          && !this.solidTile(x - 1, bot + 1) && !this.solidTile(x + 1, bot + 1)) bot++;
         // keep the authored direction, so `phase` still means what it meant
         return s2.y0 <= s2.y1
           ? { x0: x, y0: top, x1: x, y1: bot }

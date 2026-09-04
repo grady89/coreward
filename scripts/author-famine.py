@@ -1,4 +1,4 @@
-"""THE FAMINE — built to the drawing. 56 x 48.
+"""THE FAMINE — built to the drawing. 56 x 56.
 
     start ---> hall A ---> [wind] ---> hall B <--- [wind] ---> hall C ---> finish
                              up                     up
@@ -30,7 +30,7 @@ tiles, so a run of four is 0.92x and a run of five is past what legs can do.
 """
 import io
 
-W, HGT = 56, 48
+W, HGT = 56, 56
 MAXJ = 5.45
 PULSE = 0.85
 
@@ -43,7 +43,7 @@ LEFT, RIGHT = 2, W - 3
 
 # the two channels: (columns, from hall, to hall)
 CH1 = (50, 53)                                # right end: hall A -> hall B
-CH2 = (3, 6)                                  # left end:  hall B -> hall C
+CH2 = (19, 22)                                # hall B's left end -> hall C
 
 
 def carve(x0, x1, y0, y1):
@@ -68,13 +68,18 @@ def ledge(floor, x0, x1, rise):
         put(x, floor - rise, '#')
 
 
-# --- the halls -------------------------------------------------------------
-for f in HALL:
-    carve(LEFT, RIGHT, f - AIR, f - 1)
+# Each hall has its own extent. Hall A is the long one -- a start, a wide pit,
+# a flat run and four landings all have to fit in it. Halls B and C are chains
+# of small pads and are exactly as long as their chains, so the rock west of
+# the second lift is simply rock.
+HALL_X = [(LEFT, RIGHT), (CH2[0], RIGHT), (CH2[0], RIGHT)]
+
+for f, (a, b) in zip(HALL, HALL_X):
+    carve(a, b, f - AIR, f - 1)
 
 # --- the channels: cut through the rock between the halls ------------------
 carve(CH1[0], CH1[1], HALL[1] - 1, HALL[0] - 1)      # A -> B, right end
-carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C, left end
+carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C
 
 # ===========================================================================
 # THE HALLS, in the drawing's own vocabulary.
@@ -91,45 +96,61 @@ carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C, left end
 # flat run crossed by one horizontal rail AND two vertical ones over the top
 # of it, four jumps onto one-tile landings, and the lift out.
 # ===========================================================================
-PIT_DEPTH = 4
+# A pit's bottom is a VOID (`_`) -- unlight that is never drawn. The first pass
+# floored them with visible unlight, which lights the hole and turns a fall
+# into a landing on something; THE WICK's pits are open sky and read as an
+# absence, and these read the same way.
+#
+# HOW DEEP IS WHATEVER ROCK THERE IS. A fixed depth put hall B's pit floors
+# eleven courses down, which is through the five courses of rock under it and
+# out into HALL A'S AIR -- lethal tiles hanging in the middle of the hall
+# below, and the pit itself a hole between two storeys. The bottom hall gets
+# the whole basement; the others get the band under them, less the course that
+# is the next hall's ceiling.
+def pit_depth(h):
+    below = HALL[h - 1] - AIR - 1 if h > 0 else HGT - 2
+    return below - HALL[h] - 1
+
+
+PIT_DEPTH = [pit_depth(h) for h in range(3)]
 
 SOLID = [
-    [(2, 13), (19, 34), (38, 38), (42, 42), (46, 46), (49, 49)],
-    [(2, RIGHT)],
-    [(2, RIGHT)],
+    [(2, 13), (19, 34), (37, 37), (40, 40), (43, 43), (46, 46), (CH1[0], CH1[1])],
+    # HALL B, read RIGHT TO LEFT: the pad at the top of the first lift, then
+    # three jumps onto small pads with a wall of light standing in each gap --
+    # and TWO in the last one, both to be threaded in a single jump -- landing
+    # in the second lift.
+    [(CH2[0], CH2[1]), (28, 31), (36, 39), (44, 49)],
+    [(CH2[0], RIGHT)],
 ]
 PIT = [
-    [(14, 18), (35, 37), (39, 41), (43, 45), (47, 48)],
-    [],
+    [(14, 18), (35, 36), (38, 39), (41, 42), (44, 45), (47, 49)],
+    [(23, 27), (32, 35), (40, 43)],
     [],
 ]
-STUDS = [
-    [],
-    [(40, 3), (26, 3), (12, 3)],
-    [(14, 3), (30, 4), (46, 3)],
-]
-LEDGES = [
-    [],
-    [(31, 4), (17, 4)],
-    [(23, 4), (40, 4)],
-]
+STUDS = [[], [], [(30, 4), (46, 3)]]
+LEDGES = [[], [], [(40, 4)]]
 LASER = [
     # the long flat run, all three lights over the same stretch of floor
     [('h', 20, 33, 3, 0.0), ('v', 24, 2, 0.25), ('v', 30, 2, 0.75)],
-    [('v', 37, 3, 0.0), ('v', 23, 2, 0.25), ('v', 9, 3, 0.75)],
+    # one in each gap, and two in the last: 1.10x is the whole width of the
+    # legs' reach, so threading both is one jump with no room to hesitate
+    [('v', 41, 3, 0.0), ('v', 33, 3, 0.5), ('v', 24, 2, 0.25), ('v', 26, 2, 0.75)],
     [('v', 19, 2, 0.0), ('v', 36, 2, 0.5), ('v', 45, 2, 0.25)],
 ]
 LEDGE_RISE = 2
 
 # a hall's floor exists only where the table says it does
 for h, f in enumerate(HALL):
-    for x in range(LEFT, RIGHT + 1):
+    for x in range(HALL_X[h][0], HALL_X[h][1] + 1):
         if not any(a <= x <= b for a, b in SOLID[h]):
             g[f][x] = '.'
     for x0, x1 in PIT[h]:
-        carve(x0, x1, f, f + PIT_DEPTH - 1)
+        d = PIT_DEPTH[h]
+        assert d >= 3, 'hall %d has only %d courses of rock for a pit' % (h, d)
+        carve(x0, x1, f, f + d - 1)
         for x in range(x0, x1 + 1):
-            put(x, f + PIT_DEPTH, 'X')          # the bottom of it is unlight
+            put(x, f + d, '_')                  # unlight you never see
     for x0, n in STUDS[h]:
         studs(f, x0, n)
     for x0, n in LEDGES[h]:
@@ -148,7 +169,7 @@ for h in range(3):
 # Entry + three, all dead (SII.2): the famine's sconces hold your place and
 # hand you nothing. One at the start, one where each channel sets you down, so
 # a fall costs the hall you are in and never the hall behind it.
-SCONCE = [(7, 0), (46, 1), (9, 2)]
+SCONCE = [(7, 0), (47, 1), (24, 2)]
 put(4, HALL[0] - 1, '@')
 for x, h in SCONCE:
     put(x, HALL[h] - 1, 'S')

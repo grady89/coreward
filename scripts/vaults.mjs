@@ -1351,7 +1351,7 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
   const sparkClass = await page.evaluate(() => {
     const SC = window.__SPARK_CLASS;
     const els = new Set();
-    const CHAR = { S: 'sconce', X: 'stud', d: 'dark', A: 'bridge', b: 'bridge',
+    const CHAR = { S: 'sconce', X: 'stud', _: 'stud', d: 'dark', A: 'bridge', b: 'bridge',
       '=': 'dead-surface',
       R: 'rime', o: 'mote', '*': 'brazier', '^': 'gravity', '>': 'gravity',
       '<': 'gravity', 1: 'door', 2: 'door', 3: 'door', K: 'figure', F: 'figure',

@@ -45,7 +45,7 @@ export const EPS = 0.001;
 export const DT = 1 / 60;
 
 /** tiles a body may stand in, matching vaultfit's AIR set */
-const AIR = new Set(['.', 'd', 'S', '@', 'M', 'X', 'A', 'b', 'R', '^', '>', '<',
+const AIR = new Set(['.', 'd', 'S', '@', 'M', 'X', '_', 'A', 'b', 'R', '^', '>', '<',
   'K', 'F', 'C', 'N', '1', '2', 'o', '*']);
 /** ...and the ones that are floor to stand ON */
 const THIN = new Set(['A', 'b', 'R']);
@@ -175,7 +175,10 @@ function touchingKill(s) {
     [s.px - C.HW, s.py - C.HH], [s.px + C.HW, s.py - C.HH],
     [s.px - C.HW, s.py + C.HH], [s.px + C.HW, s.py + C.HH],
   ]) {
-    if (s.world.at(Math.floor(x), Math.floor(-y)) === 'X') return true;
+    // `_` is unlight you cannot see -- the bottom of a bottomless pit. It
+    // kills exactly as `X` does; the only difference is that nothing is drawn
+    const t = s.world.at(Math.floor(x), Math.floor(-y));
+    if (t === 'X' || t === '_') return true;
   }
   return false;
 }
