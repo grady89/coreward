@@ -1089,7 +1089,9 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
 
   // --- P3b: a sconce stands at every boundary the camera cuts on ---
   const boundarySconce = await page.evaluate(() => {
+    const max = window.__CHAMBER_MAX_W;
     const bad = [];
+    const thin = [];
     let cuts = 0;
     for (const v of window.__VAULTS) {
       const p = window.__parseVault(v);
@@ -1097,11 +1099,18 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
         cuts++;
         if (!p.sconces.some(s => Math.abs(s.x - c) <= 1)) bad.push(v.glyph + '@' + c);
       }
+      // the floor on how many cuts a room owes is DERIVED from its own width
+      // and the frame's limit, not carried over from whatever the maps
+      // happened to look like on the day the lint was written. A room that
+      // gets wider owes another cut; a room that gets narrower does not owe
+      // one it cannot use.
+      const owed = Math.ceil(p.w / max) - 1;
+      if (p.cuts.length < owed) thin.push(v.glyph + ':' + p.cuts.length + '<' + owed);
     }
-    return { cuts, bad };
+    return { cuts, bad, thin };
   });
   ok('lint · sconce at boundary', boundarySconce,
-    boundarySconce.cuts >= 24 && boundarySconce.bad.length === 0);
+    boundarySconce.bad.length === 0 && boundarySconce.thin.length === 0);
 
   // --- P2: dark hides floors, never fangs. Every hazard VOLUME that reaches
   // into a `d` region has to be self-luminous or carry a visible track — read

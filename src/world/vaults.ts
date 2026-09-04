@@ -220,6 +220,14 @@ export interface VaultDef {
   crushers?: CrusherDef[];
   pursuit?: PursuitDef;
   wind?: WindDef;
+  /**
+   * Rime that does NOT come back. One behaviour per room and never both
+   * (grammar §2): THE EMBER teaches the cycle, where a shelf returning is a
+   * rhythm you can lean on; THE WEATHER owns the one-shot, where it is a
+   * trap. Additive with a default, so every existing room and save keeps the
+   * cycle it was authored against.
+   */
+  rimeOnce?: boolean;
   gates?: GateDef[];
   currents?: CurrentDef[];
   /** the room's pulse, seconds — every cyclic period a multiple (default PULSE) */
@@ -557,59 +565,93 @@ export const VAULTS: VaultDef[] = [
       '############################################'
     ],
   },
-  // 6 · THE WEATHER — the storm crossing, with teeth: gusts on the old
-  // cycle, but now a censer swings in the wind, bolts patrol the runs
-  // between shelters, and the last stretch is a low eave you cross flat
-  // out or not at all.
+  // 6 · THE WEATHER — the room enacts its own glyph. Depth is the only calm,
+  // so the wind is the whole of the crossing and then it is gone, storey by
+  // storey, until the master stands in the first still air of the act. An L:
+  // right across the surface into a wind blowing left, then down out of it.
+  //
+  // Its rime is the ONE-SHOT kind. THE EMBER owns the cycle, where a shelf
+  // coming back is a rhythm you lean on; here it is the trap under the trap
+  // light, and a room may never teach both (grammar §2).
   {
     glyph: 'weather',
-    // one shelter per chamber: the gust crossing is always exactly as long
-    // as the frame, which is the whole reason the crossing reads
-    chambers: [12, 22, 34, 48],
-    // wind on the room's groove: 4 pulses calm, 3 gust
+    chambers: [19, 39],
     wind: { dir: -1, calm: 3.4, gust: 2.55, force: 30 },
+    rimeOnce: true,
     censers: [
-      { x: 26, y: 7, len: 5, arc: 0.85, period: 2.55, phase: 0 },
+      // the lantern returns IN the wind: its arc skewed by the gust, so the
+      // crossing is two clocks read at once
+      // hung clear of both shoulder sconces by four courses at every point of
+      // their arcs — a swinging hazard is a moving danger volume, and the
+      // buffer is measured against the whole swing, not the lantern's rest
+      { x: 26, y: 6, len: 3.2, arc: 1.0, period: 2.55, phase: 0 },
+      { x: 38, y: 3, len: 2.6, arc: 0.85, period: 2.55, phase: 0.5 },
     ],
     shuttles: [
-      { x0: 13, y0: 22, x1: 19, y1: 22, period: 2.55, phase: 0 },
-      { x0: 23, y0: 22, x1: 31, y1: 22, period: 2.55, phase: 0.5 },
-      { x0: 46, y0: 21, x1: 56, y1: 21, period: 1.7, phase: 0.5 },
+      // bolts down the shelter runs, into the wind's own line
+      { x0: 15, y0: 7, x1: 24, y1: 7, period: 1.7, phase: 0.25 },
+      { x0: 35, y0: 19, x1: 26, y1: 19, period: 2.55, phase: 0.75 },
+    ],
+    crushers: [
+      // the eave's own teeth, on the pulse the gust is counted in
+      { x: 25, y: 10, w: 2, h: 1, dx: 0, dy: 3, period: 3.4, phase: 0 },
+      { x: 44, y: 8, w: 2, h: 1, dx: 0, dy: 2, period: 3.4, phase: 0.5 },
+      { x: 50, y: 12, w: 2, h: 1, dx: 0, dy: 3, period: 2.55, phase: 0.25 },
+    ],
+    currents: [
+      // TEN: wind was the enemy, and now one wind is the road
+      { x0: 36, y0: 5, x1: 39, y1: 20, force: 46 },
+    ],
+    beams: [
+      // a watch-light on the descent, parked until the turn downward
+      // one on the crossing and one on the descent: by P4 the last chamber
+      // may hold nothing the room has not already taught
+      { x: 12.5, y: 11.5, period: 4.25, phase: 0.5, spin: true, parked: true, arm: [8, 12, 14, 14] },
+      { x: 46.5, y: 21.5, period: 4.25, phase: 0, spin: true, parked: true, arm: [46, 11, 58, 13] },
     ],
     map: [
       '############################################################',
-      '############################################################',
-      '############################################################',
-      '############################################################',
-      '############################################################',
-      '############################################################',
-      '############################################################',
-      '############################################################',
+      '#.............................................#............#',
+      '#.............................................#............#',
+      '#.............................................#............#',
+      '#.............................................#............#',
+      '#.............................................#............#',
+      '#.............................................#............#',
+      '#.............................................#............#',
+      '#.............................ooooooo...#######............#',
+      '#.....#####....#####.......#####.S......#######............#',
+      '#.....#####....#####.......#####RRRR.....oooo.#............#',
+      '#.......................................####################',
+      '#..............ooooo....................ooFoCo.............#',
+      '#..@..S.ooooo......S...................S...................#',
+      '#############..##########..#########oooo..........oooooooo.#',
+      '#...............................................############',
+      '#..............##......##..................................#',
+      '#..........................................................#',
+      '#................#....#....................................#',
+      '#.............oooooooooooo....................##########...#',
+      '#............##############................................#',
+      '#..........................................................#',
+      '#...................................................oooooo.#',
+      '#.................................................##########',
+      '#..........................................................#',
+      '#..........................................................#',
+      '#..........................................................#',
+      '#.............................................#########....#',
+      '#..........................................................#',
+      '#..........................................................#',
+      '#.................................................ooooooo..#',
+      '#................................................###########',
+      '#..........................................................#',
+      '#..........................................................#',
+      '#...............................................oNooMooooo.#',
       '#.............................................##############',
-      '#.............................................##############',
-      '#.........................................##..##############',
-      '#.........................................##..##############',
-      '#...................##....................##..##############',
-      '#...................##....................##..##############',
-      '#.........##........##....................##..##############',
-      '#.........##........##..........##........##..##############',
-      '#.........##........##..........##........##..##############',
-      '#.........##........##..........##........##..##############',
-      '#.........##........##..........##........##...............#',
-      '#.........##........##..........##........##...............#',
-      '#.........##........##..........##........##....S..........#',
-      '#.........##........##..........##........##...............#',
-      '#.@.......##S.......##S.........##S.......##............M..#',
-      '##############XXXX##########XXXX############XXX####XX#######',
-      '############################################################',
-      '############################################################',
+      '#..........................................................#',
+      '#..........................................................#',
+      '#..........................................................#',
+      '############################################################'
     ],
   },
-
-  // ==================================================================
-  // ACT III — MAELIS-6 · the exam
-  // ==================================================================
-
   // 7 · THE DEBT — two rooms sharing a wall, and both sides get paid:
   // the door to the stone takes a sconce lit under EACH gravity. Stone
   // pistons still cycle on both sides — mirrored, out of phase.

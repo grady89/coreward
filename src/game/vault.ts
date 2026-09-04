@@ -2312,7 +2312,7 @@ export class VaultRun {
       const rs = this.rimeState[i];
       const mesh = this.rimeMeshes[i];
       if (rs.gone > 0) {
-        rs.gone -= dt;
+        if (rs.gone !== Infinity) rs.gone -= dt;
         mesh.visible = false;
         if (rs.gone <= 0) {
           const r = this.p.rime[i];
@@ -2328,7 +2328,12 @@ export class VaultRun {
         // the cost of hesitating is drawn on the thing you are hesitating on.
         this.rimeParts[i].crackMat.opacity = Math.min(1, k * 1.4);
         this.rimeParts[i].cracks.scale.setScalar(0.5 + k * 0.7);
-        if (rs.t >= RIME_CRUMBLE) { rs.gone = RIME_REGROW; rs.t = -1; }
+        // a one-shot shelf is gone for the run, not for a cycle: the room
+        // that owns the trap never also owns the rhythm (grammar §2)
+        if (rs.t >= RIME_CRUMBLE) {
+          rs.gone = this.def.rimeOnce ? Infinity : RIME_REGROW;
+          rs.t = -1;
+        }
       } else {
         this.rimeParts[i].crackMat.opacity = 0;
       }
