@@ -211,6 +211,9 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
   // in both of those the cup sits over the middle of its own tile
   const facing = mount.kind === 'wall' ? mount.facing : 1;
   const onWall = mount.kind === 'wall';
+  /** how far back the mount's own hardware sits from the cup's plane */
+  let mountZ = 0;
+  const hardware: THREE.Object3D[] = [];
   const bronze = bronzeMat(dead ? 0xa78f63 : 0xc09a5c);
   const dark = ironMat();
 
@@ -236,24 +239,40 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
     arm.position.set(facing * SCONCE_REACH * 0.5, 0.02, 0.02);
     g.add(arm);
   } else if (mount.kind === 'ceiling') {
-    // hung: a plate in the vault above and a rod down to the cup
+    // the hardware sits BEHIND the play plane. The body runs at z 0.1 and a
+    // stand or a chain crossing a whole tile in front of it turns the fitting
+    // into a post through the player's chest — the light has to reach the
+    // room, the mast does not.
+    mountZ = -0.45;
+    // hung: a plate in the vault above, and a rod down to the cup — or, past
+    // about a tile, a CHAIN, because a long rigid stalk reads as a mast
     const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.09, 8), dark);
     boss.position.y = mount.reach;
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, Math.max(0.1, mount.reach - 0.24), 6), bronze);
-    rod.position.y = (mount.reach - 0.24) / 2 + 0.24;
+    hardware.push(boss);
+    const drop = Math.max(0.1, mount.reach - 0.28);
+    if (drop > 1.1) {
+      const chain = buildChain(drop);
+      chain.position.y = mount.reach - 0.06;
+      hardware.push(chain);
+    } else {
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, drop, 6), bronze);
+      rod.position.y = drop / 2 + 0.28;
+      hardware.push(rod);
+    }
     const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.07, 8), bronze);
     collar.position.y = 0.3;
-    g.add(boss, rod, collar);
+    hardware.push(collar);
   } else {
+    mountZ = -0.45;
     // standing: a floor pedestal, the same masonry-and-bronze as everything
     // else the guild bolted down
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.09, 10), stoneMat(0x8e8b83));
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.09, 10), stoneMat(0x6f6b78));
     base.position.y = -mount.reach;
-    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, Math.max(0.1, mount.reach - 0.14), 8), stoneMat(0x94918a));
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, Math.max(0.1, mount.reach - 0.14), 8), stoneMat(0x77737f));
     stand.position.y = -(mount.reach - 0.14) / 2 - 0.05;
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8), bronze);
     cap.position.y = -0.08;
-    g.add(base, stand, cap);
+    hardware.push(base, stand, cap);
   }
 
   const cx = onWall ? facing * SCONCE_REACH : 0;
@@ -349,6 +368,8 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
       smoke.push(s);
     }
   }
+
+  for (const h of hardware) { h.position.z += mountZ; g.add(h); }
 
   // hurried work is mounted crooked (§VI architecture-as-chronology) — but a
   // standing lamp leans on nothing, so only bracket and hung work goes askew

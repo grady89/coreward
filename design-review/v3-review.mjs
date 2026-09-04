@@ -163,6 +163,51 @@ await page.evaluate(async () => {
 await page.waitForTimeout(600);
 await shot('v3-deadlight');
 
+// --- the kit the first V3.5 scope list forgot to enumerate ------------------
+// §VI's governing line is "every object the player reads", and these four are
+// objects the player reads: the unlight studs, the pursuit wave and its
+// burning edge, the wind's gust, and the frame you stepped in through.
+
+await to('wick');
+const stud = await page.evaluate(() => {
+  const v = window.__game.vault;
+  for (let y = 0; y < v.p.h; y++) for (let x = 0; x < v.p.w; x++) {
+    if (v.p.kill[y * v.p.w + x]) return { x: x + 0.5, y: -(y + 0.5) };
+  }
+  return null;
+});
+if (stud) await at(stud.x, stud.y, 5, 'v35-studs');
+
+const entry = await page.evaluate(() => {
+  const v = window.__game.vault;
+  return { x: v.p.entry.x + 0.5, y: -(v.p.entry.y + 0.5) };
+});
+await at(entry.x, entry.y, 5, 'v35-entry');
+
+await to('ember');
+await page.evaluate(() => {
+  const v = window.__game.vault;
+  const pu = v.def.pursuit;
+  v.pursuitOn = true;
+  v.pursuitEdge = pu.dir === 'down' ? (pu.zone[1] + pu.zone[3]) / 2
+    : pu.dir === 'right' ? (pu.zone[0] + pu.zone[2]) / 2 : pu.zone[1];
+});
+await page.waitForTimeout(400);
+const pz = await page.evaluate(() => {
+  const v = window.__game.vault;
+  const z = v.def.pursuit.zone;
+  return { x: (z[0] + z[2]) / 2, y: -v.pursuitEdge };
+});
+await at(pz.x, pz.y, 10, 'v35-pursuit');
+
+await to('weather');
+await page.evaluate(() => {
+  const v = window.__game.vault;
+  v.windT = v.def.wind.calm + 0.4;    // mid-gust
+});
+await page.waitForTimeout(700);
+await at(20, -12, 12, 'v35-wind');
+
 // --- the lattice, one shot per act (§VI architecture as chronology) ---------
 
 for (const [glyph, name] of [['wick', 'v35-act1-maintained'], ['vault', 'v35-act2-stripped'], ['debt', 'v35-act3-hurried']]) {

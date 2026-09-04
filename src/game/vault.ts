@@ -2097,12 +2097,17 @@ export class VaultRun {
     if (this.solidTile(x - 1, y)) return { kind: 'wall', facing: 1 };
     if (this.solidTile(x + 1, y)) return { kind: 'wall', facing: -1 };
     let up = 0, down = 0;
-    while (up < 6 && !this.solidTile(x, y - up - 1)) up++;
-    while (down < 6 && !this.solidTile(x, y + down + 1)) down++;
-    const upOk = up < 6, downOk = down < 6;
-    // a lamp stands if it can; the floor is where a keeper could reach it
-    if (downOk && (!upOk || down <= up + 1)) return { kind: 'floor', reach: down + 0.7 };
-    if (upOk) return { kind: 'ceiling', reach: up + 0.8 };
+    while (up < 8 && !this.solidTile(x, y - up - 1)) up++;
+    while (down < 8 && !this.solidTile(x, y + down + 1)) down++;
+    // A LAMP STANDS ONLY IF THE FLOOR IS RIGHT THERE. A pedestal is a short
+    // object — the first cut let one reach as far as it liked and produced a
+    // six-tile mast standing in front of the player, which is worse than the
+    // floating cup it replaced. Past about a tile the honest fitting is a
+    // hung one: a lamp on a long chain is ordinary, a lamp on a long pole is
+    // a flagpole.
+    if (down <= 1 && down < 8) return { kind: 'floor', reach: down + 0.7 };
+    if (up < 8) return { kind: 'ceiling', reach: up + 0.8 };
+    if (down < 8) return { kind: 'floor', reach: down + 0.7 };
     return { kind: 'wall', facing: 1 };
   }
 
