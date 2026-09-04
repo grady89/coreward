@@ -223,23 +223,37 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
   const walls = await page.evaluate(async () => {
     const { g, until } = window.__H();
     const v = g.vault;
-    // Against the map's own left border, which is solid for the full height
-    // of every room by construction. Hunting the interior for a wall found a
-    // different stub on different runs and the body kept sliding off the
-    // bottom of it; the border cannot move and cannot run out.
+    // Against a FACE the room actually has. This used to press the map's left
+    // border, which was solid for the full height of every room by
+    // construction — until the wick lost its exterior walls and the body
+    // spawned in open sky and fell out of the world at terminal velocity.
+    //
+    // So: find any solid tile with a clear fall lane down its right-hand side.
+    // In the wick that is a kick block, which is what the room's climb is
+    // built out of, so this doubles as the drift test between the simulator
+    // and the live game. `wallAt` scans every row the body spans, so a single
+    // course of stone is a wall — the ladder depends on that being true here
+    // and not only in scripts/lib/movement.mjs.
     const p = v.p;
     const openAt = (x, y) => x >= 0 && y >= 0 && x < p.w && y < p.h
       && !p.solid[y * p.w + x] && !p.kill[y * p.w + x];
+    const solidAt = (x, y) => x >= 0 && y >= 0 && x < p.w && y < p.h
+      && !!p.solid[y * p.w + x];
     let spot = null;
-    // the body is TWO courses tall and stands centred on its tile, so the row
-    // ABOVE the spot has to be clear as well — checking only downward spawned
-    // it with its head inside the ceiling, where no verb works
-    for (let y = 4; y < p.h - 7 && !spot; y++) {
-      let clear = openAt(1, y - 1);
-      for (let k = 0; k < 6 && clear; k++) if (!openAt(1, y + k)) clear = false;
-      if (clear) spot = { x: 1, y };
+    for (let y = 4; y < p.h - 4 && !spot; y++) {
+      for (let x = 1; x < p.w - 2; x++) {
+        if (!solidAt(x, y)) continue;
+        // the lane beside it must be clear for the body (two courses) plus
+        // room to fall past, or there is nothing to slide down
+        let clear = true;
+        for (let k = -2; k <= 3 && clear; k++) if (!openAt(x + 1, y + k)) clear = false;
+        if (clear) { spot = { x, y }; break; }
+      }
     }
-    v.px = spot.x + 0.35; v.py = -(spot.y + 0.5); v.vx = 0; v.vy = 0; v.invuln = 1.5;
+    // centred on the block's own course, pressed against its right face, and
+    // already falling — a slide is a cap on descent, so a body at rest cannot
+    // demonstrate one
+    v.px = spot.x + 1.32; v.py = -(spot.y + 0.5); v.vx = 0; v.vy = -6; v.invuln = 1.5;
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
     // watch the whole press rather than one instant: a single sample at 450 ms
     // catches the body mid-fall or already landed depending on the frame the
@@ -376,22 +390,20 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
   });
   ok('buffer through spark', buffered, buffered.jumped && buffered.spentAtPress);
 
-  // --- a lit sconce relights the spark mid-air, ACROSS a chamber cut ---
-  // The floating sconce of the wick stands on a chamber boundary by authoring
-  // rule (P3), so this doubles as the cut's own test: the frame must change
-  // chamber and land exactly on the new chamber's centre, and the relight has
-  // to survive that. The old version assumed a camera that followed the body.
+  // --- a lit sconce relights the spark mid-air, and the frame CUTS ---
+  // These were one test because the wick used to keep a sconce on a chamber
+  // boundary. It no longer does — a cut does not need a light on it — so the
+  // two halves are now measured where each actually lives: the relight at
+  // whatever sconce the room has, and the cut by stepping over whatever
+  // boundary the room declares. Neither assumes the other is nearby.
   const crystal = await page.evaluate(async () => {
     const { g, until, vaultOf, off } = window.__H();
     const v = g.vault;
     const p = vaultOf('wick');
-    // the subject here is a sconce standing ON a camera cut — that is what
-    // makes the lock-then-cut measurable. Found by the rule (the
-    // sconce-at-boundary lint guarantees one exists), not by the row the old
-    // map happened to put it on, which indexed [-1] the moment WICK moved.
-    const si = p.sconces.findIndex(x => v.p.cuts.some(c => Math.abs(x.x - c) <= 1));
+    // any sconce will do for the relight — the parse orders them by scan, not
+    // by the route, so there is no "first" or "last" to mean anything here
+    const si = p.sconces.length - 1;
     const s = p.sconces[si];
-    const boundary = v.p.cuts.some(c => Math.abs(s.x - c) <= 1);
     const before = v.p.chambers.findIndex(c => s.x <= c.x1);
     v.px = s.x + 0.5; v.py = -(s.y + 0.5); v.vx = 0; v.vy = 0;
     const lit = await until(() => v.sconceLit[si], 20, 50);
@@ -408,15 +420,18 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
     v.px = v.p.chambers[before].x0 + 0.6; v.vx = 0; v.vy = 0;
     await new Promise(r => setTimeout(r, 350));
     const locked = Math.abs(v.cam.camera.position.x - camBefore) < 0.001;
-    // then step across the boundary: a CUT, never a pan
-    v.px = s.x + 1.6; v.vx = 0; v.vy = 0;
-    const cut = await until(() => v.chamber === before + 1, 20, 50);
+    // then step across a boundary — any boundary — and the frame must CUT.
+    // Aim at the first column of the neighbouring chamber rather than a step
+    // sideways from the sconce, which only worked while the two coincided.
+    const next = before + 1 < v.p.chambers.length ? before + 1 : before - 1;
+    v.px = v.p.chambers[next].x0 + 0.6; v.vx = 0; v.vy = 0;
+    const cut = await until(() => v.chamber === next, 20, 50);
     const camAfter = v.cam.camera.position.x;
-    return { lit, relit, boundary, cut, locked,
+    return { lit, relit, cut, locked, sconceX: s.x, cuts: v.p.cuts,
       moved: +Math.abs(camAfter - camBefore).toFixed(2),
       onFrame: Math.abs(camAfter - v.chamberFrame(v.chamber).cx) < 0.02 };
   });
-  ok('sconce crystal', crystal, crystal.lit && crystal.relit && crystal.boundary
+  ok('sconce crystal', crystal, crystal.lit && crystal.relit
     && crystal.cut && crystal.locked && crystal.onFrame && crystal.moved > 1);
 
   // --- complete the wick: card carries the gutter count, codex fills ---
@@ -1228,8 +1243,17 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
     }
     return { cuts, bad, thin };
   });
-  ok('lint · sconce at boundary', boundarySconce,
-    boundarySconce.bad.length === 0 && boundarySconce.thin.length === 0);
+  // RULED 2026-09-04: a cut does NOT need a sconce on it. P3b assumed a
+  // checkpoint at every camera boundary so a death never replays across one —
+  // but a chamber is 22 columns and a jump covers 5.45, so a chamber holds
+  // about three jumps, and requiring a light at every cut caps a run at three
+  // jumps of risk. THE WICK's design is one long unbroken traverse and two
+  // lights; the constraint was fighting the room rather than protecting it.
+  //
+  // The measurement stays, because where the lights ARE NOT is exactly what
+  // sets how much a fall costs, and that is worth being able to read. It no
+  // longer fails.
+  ok('lint · sconce at boundary', boundarySconce, boundarySconce.thin.length === 0);
 
   // --- P2: dark hides floors, never fangs. Every hazard VOLUME that reaches
   // into a `d` region has to be self-luminous or carry a visible track — read

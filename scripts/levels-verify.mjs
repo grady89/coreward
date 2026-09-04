@@ -152,11 +152,18 @@ function solve(w, from, to, dashes = DASHES) {
       }
     }
   }
-  for (const launchX of launches) {
-    for (const runUp of RUNUPS) {
-      for (const hold of HOLDS) {
-        for (const kicks of kickSets) {
-          for (const dash of dashes) {
+  // The DASH loop is OUTERMOST on purpose, so the entire spark-free tape space
+  // is exhausted before a single spark tape is tried. Nested the other way the
+  // search returned the first tape that worked at all, and since a spark
+  // rescues a badly cut jump, that was almost always a spark: the report then
+  // read `spark@2` on beats a walker clears, and quoted the spark tape's
+  // tighter margin. DASHES[0] is null, so this yields the CHEAPEST verb that
+  // solves the beat — which is the one the player will actually find.
+  for (const dash of dashes) {
+    for (const launchX of launches) {
+      for (const runUp of RUNUPS) {
+        for (const hold of HOLDS) {
+          for (const kicks of kickSets) {
             const opt = { launchX, dir, runUp, hold, dash, kicks };
             const r = attempt(w, from, to, opt);
             if (r) return { ...opt, frames: r.frames };

@@ -1,219 +1,221 @@
-"""THE WICK — rebuilt as the vertical slice. 56 x 34.
+"""THE WICK — built to the drawing. 73 x 48, and it has no walls.
 
-THE TUTORIAL THAT USES NO WORDS. Four chambers, four steps: introduce the
-jump, develop it until the spark is the only verb left, twist to the wall,
-conclude by recombining all three.
+    left ---> right ---> up the staircase
 
-Built by CARVING a hall out of solid rock rather than placing shelves in open
-air. A room assembled the other way grows voids nobody meant to author, which
-is what the first attempt did — a fourteen-column pit down the right half.
+The room is open sky. There is no floor under the traverse, no wall beside the
+shaft, and nothing to land on that was not put there on purpose. Miss, and you
+fall past the screen and re-form at the last sconce you paid for.
 
-Every distance is a fraction of the MEASURED running jump: 5.45 tiles across,
-2.68 up (docs/movement-metrics.md). Gaps are given in empty columns with the
-fraction beside them, because "a 4-tile gap" is a number and "a big gap" is
-not. Reference: 3 empty = 0.55x, 4 = 0.73x, 5 = 0.92x, 7 = 1.28x (spark only).
+The invisible boundary sits EIGHT tiles out on every side (VOID_PAD in
+src/game/vault.ts). That is about a jump and a half of slack, and it is
+generous deliberately: a wall one block past the last platform kills players
+who are still steering back from a missed landing, which is a death they can
+neither see coming nor learn from. Past the pad the fall was already over.
+
+TWO SCONCES, as drawn. One at the start, one at the foot of the staircase.
+Not one per camera cut: a chamber is 22 columns and a jump covers 5.45, so a
+light at every cut would cap a run at three jumps of risk. The traverse
+crosses two cuts unlit on purpose — it is a single unbroken run, and a fall
+anywhere in it costs all of it.
+
+Distances are fractions of the MEASURED running jump (5.45 tiles across, 2.68
+up — docs/movement-metrics.md), declared per beat rather than measured off the
+map afterwards.
 """
 import io
 
-W, HGT = 56, 38
-g = [['#'] * W for _ in range(HGT)]          # solid rock; we cut into it
+W, HGT = 73, 48
+MAXJ = 5.45
+g = [['.'] * W for _ in range(HGT)]          # open sky, not stone
+
+PATH = []
+CUR = {'x0': 1, 'x1': 5, 'y': 40}
+PATH.append({**CUR, 'note': 'the start, and the first light', 'frac': 0})
 
 
-def carve(x0, y0, x1, y1):
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if 0 < y < HGT - 1 and 0 < x < W - 1:
-                g[y][x] = '.'
+def beat(gap, width, rise, note=''):
+    """Place the next shelf GAP empty columns to the right.
+
+    Authored in tiles, not in fractions of the jump, because the map is made
+    of tiles: `round(frac * 5.45)` quietly collapsed 0.55 and 0.62 onto the
+    same three columns, so the fractions in the comments described a room that
+    was never built. The fraction is now derived from what was laid down —
+    the crossing is gap+1 tiles, over a 5.45-tile jump — and printed back.
+    """
+    x0 = CUR['x1'] + 1 + gap
+    y = CUR['y'] - rise
+    frac = (gap + 1) / MAXJ
+    assert x0 + width - 1 <= W - 2, f'{note}: runs off the map at x={x0}'
+    assert 2 <= y < HGT - 2, f'{note}: off the map vertically at y={y}'
+    # the 45-degree spark carries 8.60 tiles, which is 1.58 running jumps
+    assert frac <= 1.55, f'{note}: {frac:.2f}x is past the reach of the spark'
+    CUR.update({'x0': x0, 'x1': x0 + width - 1, 'y': y})
+    PATH.append({**CUR, 'note': note, 'frac': frac})
 
 
-def floor(y, x0, x1, ch='#'):
+def kick(across, rise, dirn, note=''):
+    """A single block whose FACE is the target, not its top.
+
+    Placed higher than a jump can rise, so the step below cannot reach its
+    surface. The body arrives against the side, the wall catches it, and the
+    kick is the only way on. Written as tiles rather than a fraction because
+    what is being authored is a wall, not a gap.
+    """
+    x0 = CUR['x1'] + across if dirn > 0 else CUR['x0'] - across
+    y = CUR['y'] - rise
+    assert 1 <= x0 <= W - 2, f'{note}: off the map at x={x0}'
+    assert 2 <= y < HGT - 2, f'{note}: off the map vertically at y={y}'
+    CUR.update({'x0': x0, 'x1': x0, 'y': y})
+    PATH.append({**CUR, 'note': note, 'frac': 0, 'kick': True})
+
+
+def climb(gap, width, rise, dirn, note=''):
+    """A staircase beat: alternating, so the shaft is a zig-zag not a ladder."""
+    frac = (gap + 1) / MAXJ
+    x0 = CUR['x1'] + 1 + gap if dirn > 0 else CUR['x0'] - gap - width
+    y = CUR['y'] - rise
+    assert 1 <= x0 and x0 + width - 1 <= W - 2, f'{note}: off the map at x={x0}'
+    assert 2 <= y < HGT - 2, f'{note}: off the map vertically at y={y}'
+    CUR.update({'x0': x0, 'x1': x0 + width - 1, 'y': y})
+    PATH.append({**CUR, 'note': note, 'frac': frac})
+
+
+# ===========================================================================
+# THE TRAVERSE · nine beats, left to right, over nothing.
+# Every landing here is small and every miss is the whole run. The fractions
+# climb from a stroll to the top of the legs' range, and the last one before
+# the checkpoint is the spark — taught by inevitability, and now taught over
+# a drop rather than a basin, which is the drawing's whole point.
+# ===========================================================================
+# The crossings climb in four rungs of about 0.18x each — 0.73, 0.92, 1.10 —
+# and THE SPARK at 1.47 is simply the next rung. Nothing is introduced at the
+# gap; the room has been counting up to it for eight beats, and the only thing
+# that changes is which verb reaches.
+beat(3, 3, 0, 'the first hop — nothing under it')
+beat(3, 2, +1, 'two tiles wide from here on')
+beat(4, 2, 0, '')
+beat(4, 2, -1, 'down as well as up: the line is not a staircase')
+beat(4, 2, +1, '')
+beat(5, 1, 0, 'ONE tile. The aim is the jump.')
+beat(5, 2, +1, '')
+beat(5, 2, 0, '1.10x — past the honest reach, landed on the fall of the arc')
+beat(7, 4, +1, 'THE SPARK — and it lands on the second light')
+
+# ===========================================================================
+# THE STAIRCASE · the climb, with the second light at its foot.
+# A zig-zag rather than a ladder, so each step is a jump with a direction in
+# it. The shaft is open on both sides — the boundary is eight tiles out, so a
+# missed kick has room to be recovered before it becomes a fall.
+# ===========================================================================
+# NOTHING IN THIS SHAFT MAY BE REACHABLE FROM THE NEAR SIDE OF THE GAP.
+# The first build put the stair's foot at x58 y34 and the harness walked
+# (53,38)->(58,34) on legs with 13 frames to spare: four across and four up is
+# well inside one arc once there is a face to kick, and a single block is all
+# face. That made the spark gap scenery. Wall-kicks chain for free, so the
+# rule is not "the first step is hard to reach" but "no step is reachable at
+# all" — touch one and you have the whole shaft.
+#
+# So the shaft lives entirely at x >= 60, six columns past the last thing on
+# the near side (x54) and rising. The gap is the only door into it.
+climb(2, 2, +3, +1, 'the foot of the staircase')
+climb(2, 2, +3, -1, '')
+climb(3, 2, +3, +1, '')
+climb(3, 2, +3, -1, '')
+
+# ---------------------------------------------------------------------------
+# THE FORCED KICKS. Single blocks, alternating sides, set FOUR courses apart —
+# past the 2.68 a jump can rise, so their tops cannot be reached from the step
+# below. What you can reach is the FACE, and a wall inside 0.4 tiles is a kick
+# whether you meant it or not.
+#
+# So the arrival is sideways: you jump into the block, catch it, and kick back
+# across to the next one. Three of them, and the shaft is open on both sides
+# the whole way, so a fumbled kick has eight tiles of sky to be corrected in
+# before it becomes a fall.
+# ---------------------------------------------------------------------------
+kick(4, +4, +1, 'kick one — arrive at the face, not the top')
+kick(4, +4, -1, 'kick two, back the other way')
+kick(4, +4, +1, 'kick three')
+climb(3, 4, +3, -1, 'the head of the stair')
+
+# A kick block is drawn THREE courses deep. One course is a floating cube and
+# nothing about a floating cube says "kick off me" — the move the shaft asks
+# for has to be visible in the shape of the thing that asks for it. The extra
+# stone hangs BELOW, so the tops stay four courses apart and the reach envelope
+# is untouched; all that changes is that there is now a face to see and to
+# catch.
+KICK_FACE = 3
+for p in PATH:
+    deep = KICK_FACE if p.get('kick') else 1
+    for x in range(p['x0'], p['x1'] + 1):
+        for d in range(deep):
+            g[p['y'] + d][x] = '#'
+
+
+def arc(y, x0, x1):
     for x in range(x0, x1 + 1):
-        g[y][x] = ch
+        if 0 <= x < W and 0 <= y < HGT and g[y][x] == '.':
+            g[y][x] = 'o'
 
 
 def put(x, y, ch):
     g[y][x] = ch
 
 
-def arc(y, x0, x1):
-    """motes over a gap — the breadcrumb that says a jump goes here"""
-    for x in range(x0, x1 + 1):
-        if g[y][x] == '.':
-            g[y][x] = 'o'
+# motes over the apex of every crossing — the only guidance in an open room
+for i in range(len(PATH) - 1):
+    a, b = PATH[i], PATH[i + 1]
+    mx = (a['x1'] + b['x0']) // 2 if b['x0'] > a['x1'] else (b['x1'] + a['x0']) // 2
+    arc(min(a['y'], b['y']) - 2, mx - 1, mx + 1)
 
+# the spark's own breadcrumb: straight and rising where every other arc in the
+# room is a curve, and the only instruction the room gives
+GAP = next(k for k, q in enumerate(PATH) if q['frac'] > 1.2)
+near, far = PATH[GAP - 1], PATH[GAP]
+for i, x in enumerate(range(near['x1'] + 1, far['x0'])):
+    arc(near['y'] - 1 - (i // 3), x, x)
 
-# ===========================================================================
-# THE ENVELOPE. One continuous cut: a hall that rises left to right, into a
-# chimney, into the reveal. Everything outside it stays rock.
-# ===========================================================================
-carve(1, 22, 40, 29)        # the hall
-carve(34, 18, 40, 29)       # its rising right end
-carve(41, 10, 46, 29)       # the chimney — walked into at floor level
-carve(41, 3, 54, 10)        # the reveal, overlapping the chimney's top at
-                            # row 10 so the two are one continuous space
+put(PATH[0]['x0'] + 1, PATH[0]['y'] - 1, '@')
+put(PATH[0]['x0'] + 3, PATH[0]['y'] - 1, 'S')
 
-# THE NET, AND WHERE IT ENDS.
-#
-# Chamber A and the teaching gap keep a floor under them: the first ten seconds
-# of a game should not spend your progress, and the gap teaches by letting you
-# be wrong cheaply. That is the whole of the mercy.
-#
-# Past it the bottom of the room is UNLIGHT. A miss is a gutter and a gutter is
-# the walk back from the last sconce you paid for, which is where risk actually
-# comes from — a room can be precise and still cost nothing if every fall lands
-# on stone two courses down. The harness measures both halves now: sconces six
-# beats apart meant nothing while seven of nine misses were netted.
-floor(30, 1, 22)                    # chamber A's floor
-# floor() paints stone INSIDE the carved space, so a basin has to be cut
-# before it can be floored — the first attempt at this just painted rock onto
-# rock and the basin silently did not exist.
-carve(23, 30, 33, 34)               # THE GAP'S BASIN, cut four courses deeper
-floor(35, 23, 33)
-floor(30, 34, 54, 'X')              # and unlight everywhere past it
+# the second light stands where the spark gap lands — the foot of the stair,
+# as drawn. The whole traverse from the first light to here is one unbroken
+# run, which is the point of the room.
+foot = PATH[GAP]
+put(foot['x0'] + 1, foot['y'] - 1, 'S')
 
-# The basin is deep on purpose. At three courses down the harness simply fell
-# into it and sparked straight back out to the far lip — a vertical bypass of
-# the one jump the room is built around, at a one-frame window. At eight it is
-# out of the spark's reach, and climbing out is three beats up the near wall,
-# which is what a miss on the room's hardest jump ought to cost.
-floor(33, 23, 24)
-floor(30, 23, 25)
-# ...and every step is on the NEAR side of the teaching gap. A step at col 31
-# sits inside the gap's own span, which turns the recovery floor into a
-# staircase up the far side: the harness proved the far lip reachable with the
-# spark disabled, which is the whole lesson bypassed.
-# The steps out of the basin are TWO tiles, not one. A one-tile stub is a
-# precision target, and the harness routed the golden path through them —
-# turning the recovery furniture into the intended line, at a four-frame
-# window on the room's very first jump. Recovery must be easy to land on or
-# it stops being recovery.
-# ...and the last of them stops well short of the gap. Widening these to two
-# tiles put the top step at col 28-29, inside the gap's own span, which is the
-# staircase-around-the-lesson bug for the third time. The gap's near shelf
-# starts at col 25; nothing that climbs may reach past col 23.
-for _sx in (8, 14, 20):
-    floor(29, _sx, _sx + 1)
-    floor(28, _sx + 2, _sx + 3)
-
-# THE BASIN MUST DEAD-END. A recovery floor that runs the length of the hall is
-# not a recovery, it is a bypass: the first cut of this room could be walked
-# from the entry to the chimney along the bottom without ever crossing the
-# teaching gap, which made the spark optional in the room whose subject is the
-# spark — the exact fault the rebuild exists to correct. The far lip's support
-# is solid to the floor, so a fall traps you and the only way out is back up
-# the steps to try the gap again.
-# The far lip is a CANTILEVER: its supporting rock sits at cols 37-40, so the
-# four columns under its left end are open air. Wall-jumps are free and
-# unlimited in this game, which means any pit with a wall beside it can be
-# climbed — the harness proved exactly that, twice. A climber in the basin can
-# only find a face at col 37, and the lip itself caps them at row 25. The only
-# way ONTO the lip is across the gap, which is the point of the gap.
-for _by in range(26, 30):
-    floor(_by, 37, 40)
-
-# ===========================================================================
-# CHAMBER A · cols 1-13 · INTRODUCE
-# The jump, and the fact the whole game rests on: a landing is a launch. Three
-# shelves, each a little further than the last, all landable without thinking.
-# Nothing here can hurt you. The phrase is jump-jump-jump with no stop in it,
-# and the shelves are SHORT so you land near the lip you launch from.
-# ===========================================================================
-floor(29, 1, 6)                     # the threshold — wide, a breath
-put(2, 28, '@')
-put(4, 28, 'S')                     # the free light, at your feet
-arc(27, 7, 9)                       # 3 empty = 0.55x
-floor(28, 12, 13)                   # 0.73x onto TWO tiles
-arc(26, 13, 15)                     # 3 empty, +1 rise = 0.62x
-floor(27, 19, 19)                   # 0.85x onto ONE — the aim is the jump
-put(12, 27, 'S')                    # the cut-13 light, standing on the shelf
-
-# ===========================================================================
-# CHAMBER B · cols 14-33 · DEVELOP → the spark, discovered by elimination
-# ===========================================================================
-arc(25, 19, 22)                     # 4 empty = 0.73x — the first HELD jump
-floor(26, 25, 26)                   # 0.85x onto two
-
-# THE TEACHING GAP · 7 empty columns = 1.28x. It cannot be jumped, and that is
-# the point. It is fully visible from the shelf you stand on, its far lip is in
-# the same chamber, and three courses below is a basin with a floor and a way
-# back out — so being wrong costs about four seconds and no light.
-# The motes here run STRAIGHT and rising. Every arc so far has been a curve;
-# this one is the shape of a spark, and it is the only instruction given.
-for i, x in enumerate(range(27, 34)):
-    arc(25 - (i // 3), x, x)
-floor(25, 33, 39)                   # the far lip — gap is cols 27-33, SEVEN
-                                    # empty = 1.28x. Eight would be 1.47x and
-                                    # the 45-degree spark only reaches 8.6.
-
-# THE ECONOMY, stated in two platforms. Drank stone carries you and gives
-# nothing back, so you land here with the spark still spent and the next gap
-# must go on legs alone — which it can, at 0.66x. No text required.
-arc(24, 40, 42)
-floor(24, 36, 38, '=')      # drank: three tiles, so the intended route via
-                            # the islands is shorter than sparking straight
-                            # past them — a one-frame skip is not a route
-put(32, 25, 'S')                    # the cut-33 light, over the teaching gap
-
-# ===========================================================================
-# CHAMBER C · cols 34-45 · TWIST — the wall
-# The hall stops dead. The only way on is up a chimney three columns wide, and
-# the only verb that climbs it is one the room has not yet asked for. Kick
-# ledges sit 3 courses apart — one wall-jump is 2.68, so each is a single kick.
-# A brazier hangs halfway: the safe line is four kicks, the greedy line is a
-# spark off the brazier straight to the top, skipping two.
-# ===========================================================================
-# the shaft stands ON the hall's own floor — you walk into it, you do not
-# drop into it, and the way up is the only way on
-floor(26, 41, 42)                   # kick ledges, alternating walls, each a
-floor(22, 45, 45)                   # single wall-jump apart (2.68 per kick)
-floor(18, 42, 42)
-floor(14, 45, 45)
-put(44, 20, '*')                    # the brazier — refill in mid-air, and the
-                                    # greedy line: spark from here past two
-                                    # ledges straight to the top
-arc(25, 43, 45)
-arc(16, 43, 44)
-floor(11, 41, 42)                   # the chimney's top landing, on the left
-
-# ===========================================================================
-# CHAMBER D · cols 46-54 · CONCLUDE — density of the known, and no sconce
-# One held jump, one spark, and the stone. Nothing new. It ends ABOVE where it
-# began, which no other room in the game does.
-# ===========================================================================
-put(45, 10, 'S')                    # the cut-45 light, on the chimney's lip
-floor(11, 45, 54)                   # the reveal's floor — cols 43-44 stay open
-                                    # as the light well the shaft climbs through
-arc(9, 48, 50)                      # 3 empty, +2 rise: the last held jump
-floor(8, 51, 52)
-arc(6, 50, 52)
-# THE UNLIGHT, chamber D only. Chambers A, B and C keep their promise that
-# nothing there can hurt you; the room's last two jumps are the only ones in
-# the tutorial that cost more than four seconds, which is how a tutorial ends
-# with stakes without opening with them.
-floor(10, 48, 49, 'X')
-floor(9, 52, 53, 'X')
-
-put(53, 7, 'M')
-put(51, 7, 'K')                     # one still reaching, at the top
+head = PATH[-1]
+put(head['x0'] + 2, head['y'] - 1, 'M')
+put(head['x0'], head['y'] - 1, 'K')
 
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
-defn = """  // 1 · THE WICK — the tutorial that uses no words. Four chambers, four
-  // steps. A introduces the jump and the fact the game rests on: a landing is
-  // a launch. B develops it until the spark is the only verb left, over a
-  // basin that makes being wrong cost four seconds instead of a life, then
-  // states the light economy in two platforms of drank stone. C is the twist
-  // — the hall stops dead and the only way on is a wall. D recombines all
-  // three and ends ABOVE where it began, which no other room does.
+defn = """  // Cuts are inclusive last-columns. The last chamber is 51-72 and holds the
+  // spark gap AND the whole shaft, because the far lip of a teaching gap must
+  // be VISIBLE from the launch — a cut mid-flight would hide the thing the
+  // beat exists to show. The three before it split the traverse evenly.
   //
-  // Distances are fractions of the MEASURED running jump: 5.45 tiles across,
-  // 2.68 up (docs/movement-metrics.md). The teaching gap is 1.28x — it cannot
-  // be jumped, which is the whole of the lesson.
+  // 1 · THE WICK — the tutorial, and it has no walls. Left, right, and up the
+  // staircase, over open sky the whole way. There is no floor under the
+  // traverse and no wall beside the shaft: miss, and you fall past the screen
+  // and re-form at the last sconce you paid for.
+  //
+  // The boundary sits eight tiles out (VOID_PAD). A wall one block past the
+  // last platform kills players who are still steering back from a missed
+  // landing — a death they can neither see coming nor learn from — so the pad
+  // is generous and the only thing that ends a run is a fall already over.
+  //
+  // Two sconces. One at the start, one at the foot of the stair. NOT one per
+  // camera cut — the traverse crosses two cuts unlit, deliberately, so that
+  // the nine beats from the first light to the second are a single unbroken
+  // run and a fall anywhere in them costs all of it. That is where the risk
+  // lives, and it is the whole reason the room has no walls.
   {
     glyph: 'wick',
-    chambers: [13, 33, 45],
+    chambers: [17, 34, 50],
+    openEdges: true,
     map: [
 %s
     ],
@@ -226,10 +228,16 @@ p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
 start = s.index('  // 1 · THE WICK')
 end = s.index('  // 2 · THE FAMINE')
-s = s[:start] + out + s[end:]
-io.open(p, 'w', encoding='utf-8').write(s)
+io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
 
-print('THE WICK ·', len(rows), 'rows x', W, '· chambers at 13 / 33 / 45\n')
+print(f'THE WICK · {HGT} rows x {W} · {len(PATH)} platforms\n')
+print('  beat  from      to        gap  xjump  rise  note')
+for i in range(len(PATH) - 1):
+    a, b = PATH[i], PATH[i + 1]
+    gap = (b['x0'] - a['x1'] - 1) if b['x0'] > a['x1'] else (a['x0'] - b['x1'] - 1)
+    print(f"  {i+1:>4}  ({a['x0']:>2},{a['y']:>2})   ({b['x0']:>2},{b['y']:>2})"
+          f"   {gap:>3}  {b['frac']:>5.2f}  {a['y'] - b['y']:>+4}  {b['note']}")
+print()
 print('    ' + ''.join(str(i // 10 % 10) for i in range(W)))
 print('    ' + ''.join(str(i % 10) for i in range(W)))
 for i, r in enumerate(rows):

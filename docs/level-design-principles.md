@@ -239,6 +239,21 @@ a piston) protects the *approach*; this rule protects the *interval*.
 > **Test:** no required sequence between two sconces may exceed ~25 s of
 > golden-path time. Beyond that a death costs a re-run of solved content.
 
+**A camera cut does not need a sconce on it** (ruled 2026-09-04). An earlier
+authoring rule put a light at every chamber boundary so that a death could
+never replay content across a cut. It reads as safety and is actually a cap on
+ambition: a chamber is 22 columns, a jump covers 5.45, so a chamber holds about
+three jumps — and a light at every cut therefore limits *every run in the game*
+to three jumps of risk. That is the arithmetic behind the flat feel, in the
+same family as the 55 %-calibrated reach model.
+
+The interval above is the real constraint, and 25 s is many chambers wide. THE
+WICK crosses three cuts on two lights: nine unbroken beats from the first light
+to the second, which is ~12 s of golden path and eight beats of progress to
+lose. The lint still *measures* which cuts are unlit — where the lights are not
+is exactly what sets the price of a fall, and that is worth reading — but it no
+longer fails.
+
 ### 8 · Difficulty from precision and reading, never tedium or trickery
 
 No memorisation of invisible information. No single-frame inputs. No hazard

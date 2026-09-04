@@ -1,150 +1,147 @@
 # THE WICK — vertical slice beat map
 
-The tutorial that uses no words. 56 × 34, four chambers, four steps.
+The tutorial that uses no words, and **the only room in the game with no
+walls**. 73 × 48, four chambers, seventeen beats.
 Source: [scripts/author-wick.py](../scripts/author-wick.py) → `src/world/vaults.ts`.
 Verified: `npm run levels:verify -- --room=wick --verbose`.
 
 All distances are fractions of the **measured** running jump (5.45 tiles
 across, 2.68 up — [movement-metrics.md](movement-metrics.md)).
 
+```
+    left ------------> right ------------> up the staircase
+```
+
 ---
 
-## Chamber A · cols 1–13 · **INTRODUCE**
+## The contract: open sky
 
-**Teaches:** the jump, and the one fact the game rests on — *a landing is a
-launch*.
+There is no floor under the traverse and no wall beside the shaft. Every
+landing in the room was put there on purpose; everything else is a fall.
 
-| beat | ask | distance |
+The invisible boundary sits **eight tiles out** on every side (`VOID_PAD` in
+[vault.ts](../src/game/vault.ts)) — about a jump and a half of slack, and
+generous deliberately. A wall one block past the last platform kills players
+who are still steering back from a missed landing: a death they can neither see
+coming nor learn from. Past the pad the fall was already over.
+
+The fall is checked **before** the invulnerability gate. A body eight tiles
+outside the room is not in a scrape that invulnerability can spare it from.
+
+## Two lights, three cuts
+
+| | column | what it costs to fall after it |
 |---|---|---|
-| 1 | walk right off a wide threshold | — |
-| 2 | jump the first gap | 0.55× |
-| 3 | land short, jump again immediately | 0.62× |
+| sconce 1 | 4 | nothing — it is the start |
+| sconce 2 | 63 | **the whole traverse**, nine beats |
+| the stone | 64 | eight beats of climb |
 
-The shelves are **three tiles wide**, so the natural landing spot is within a
-tile of the next launch. There is no room to stop and line up, which is the
-entire lesson. Motes arc over each gap at the apex.
+Not one light per camera cut. The traverse crosses cuts at 17, 34 and 50
+unlit, on purpose — nine beats from the first light to the second is a single
+unbroken run, and that is where the room's risk lives. See rule 7 in
+[level-design-principles.md](level-design-principles.md).
 
-**Nothing here can hurt you.** No unlight, no hazard, no timing. Chamber A is
-the only place in the game where that is true, and it is true on purpose.
+Cuts are inclusive last-columns, so the final chamber is **51–72** and holds
+the spark gap *and* the whole shaft. The far lip of a teaching gap has to be
+visible from the launch; a cut mid-flight would hide the thing the beat exists
+to show.
 
-- Chain: **3 inputs**, one breath at the end.
-- Intended time: ~8 s · intended deaths: **0**
+## The traverse · beats 1–9 · **INTRODUCE → DEVELOP**
 
-## Chamber B · cols 14–33 · **DEVELOP** → the spark, by elimination
+Four rungs of about 0.18× each, and the spark is simply the fifth.
 
-| beat | ask | distance |
-|---|---|---|
-| 4 | the first *held* jump | 0.73× |
-| 5 | **the teaching gap** — cannot be jumped | **1.28×** |
-| 6 | land on drank stone; the spark does not come back | — |
-| 7 | cross on legs alone | 0.66× |
+| beat | dx | ×jump | verb | margin | ask |
+|---|---|---|---|---|---|
+| 1 | 4 | 0.73× | legs | 21f | the first hop — nothing under it |
+| 2 | 4 | 0.73× | legs | 21f | two tiles wide from here on |
+| 3 | 5 | 0.92× | legs | 20f | |
+| 4 | 5 | 0.92× | legs | 21f | **down** as well as up |
+| 5 | 5 | 0.92× | legs | 21f | |
+| 6 | 6 | 1.10× | legs | 15f | lands on **one tile** |
+| 7 | 6 | 1.10× | legs | 11f | |
+| 8 | 6 | 1.10× | legs | 18f | past the honest reach, caught on the fall of the arc |
+| 9 | 8 | **1.47×** | **spark** | 30f | **the teaching gap** |
 
-**The teaching gap** is the slice's thesis. Seven empty columns is 1.28× the
-running jump and 0.81× the spark's reach: unjumpable, unambiguously. It is
-fully visible from the shelf you stand on, its far lip is in the same camera
-chamber, and three courses below is a floor with steps back up — so being
-wrong costs about four seconds and no light.
+Beats 6–8 cross **1.10× the running jump** on legs alone. That is past the
+arc's own width and only lands because the far lip is at or below the launch —
+the body is caught on the descending half. It is the hardest thing the legs can
+do in this game and the room spends three beats there before asking for
+anything else.
 
-The motes over it **change shape**. Every arc so far has been a curve; this one
-is drawn straight and rising. That is the only instruction the room gives.
+**The teaching gap** is 1.47× the jump and 0.93× the spark. Unjumpable,
+unambiguously, and both lips are in the same camera frame. The motes over it
+**change shape**: every arc so far is a curve, this one is drawn straight and
+rising. That is the only instruction the room gives.
 
-**Then the economy, stated in two platforms.** You land on drank stone (`=`),
-which carries you and refunds nothing, so the next gap must go on legs alone —
-which it can, at 0.66×. No text.
+It lands on the second light — so the reward for the room's one new verb is the
+checkpoint, and the nine beats behind it stop being at risk.
 
-- Chain: **4 inputs** with one deliberate failure expected.
-- Intended time: ~20 s · intended deaths: **0** (but 1–3 *falls*, recovered)
+## The staircase · beats 10–17 · **TWIST → CONCLUDE**
 
-## Chamber C · cols 34–45 · **TWIST** — the wall
+A zig-zag, not a ladder: every step has a direction in it. Four climb beats,
+then three **forced kicks**.
 
-The hall stops dead. The only way on is up, and the only verb that climbs is
-one the room has not yet asked for.
+| beat | dx | dy | ×jump | margin | ask |
+|---|---|---|---|---|---|
+| 10–11 | 3 | +3 | 0.55× | 21f | the foot of the stair |
+| 12–13 | 4 | +3 | 0.73× | 11f | |
+| 14 | 4 | **+4** | 0.73× | 13f | **kick one** — arrive at the face, not the top |
+| 15 | 4 | **+4** | 0.73× | 14f | kick two, back the other way |
+| 16 | 4 | **+4** | 0.73× | 13f | kick three |
+| 17 | 4 | +3 | 0.73× | 11f | the head of the stair, and the stone |
 
-| beat | ask | distance |
-|---|---|---|
-| 8 | wall-kick to the first ledge | 4 courses ≈ 1.5 kicks |
-| 9 | kick again, alternating walls | 4 courses |
-| 10 | kick to the top landing | 3 courses |
+The kick blocks sit **four courses apart** — past the 2.68 a jump can rise —
+so their tops cannot be reached from the step below. What can be reached is the
+**face**, and a wall inside 0.4 tiles is a kick whether you meant it or not.
 
-Kick ledges alternate sides, each a wall-jump apart (one kick = 2.68). A
-**brazier** hangs halfway: the safe line is four kicks, the **greedy line** is a
-spark off the brazier straight past two ledges to the top.
+They are drawn **three courses deep**. A single course is a floating cube and
+nothing about a floating cube says *kick off me*; the extra stone hangs below,
+so the tops stay four apart and the reach envelope is untouched. All that
+changes is that there is now a face to see and to catch.
 
-- Chain: **3–5 inputs**, continuous — a wall-jump chain has no breath in it.
-- Intended time: ~15 s · intended deaths: **0–1**
-
-## Chamber D · cols 46–54 · **CONCLUDE** — density of the known
-
-No sconce. Nothing new.
-
-| beat | ask | distance |
-|---|---|---|
-| 11 | step out of the shaft onto the reveal floor | 0.4× |
-| 12 | the last held jump | 0.55× + 2 rise |
-| 13 | the stone | — |
-
-It ends **above where it began** — the only room in the game that does.
-
-- Intended time: ~10 s · intended deaths: **0**
-- **Total intended first clear: 55–75 s**, 1–4 falls, 0–1 gutters.
+The shaft is open on both sides the whole way, so a fumbled kick has eight
+tiles of sky to be corrected in before it becomes a fall.
 
 ---
 
 ## Harness output
 
 ```
-wick  GRADED  platforms 32 · proved 235 · path 9 beats · tight(<6f) 0
-              · stone reached · undecided 9t
+wick GRADED platforms 18 · proved 39 · path 17 beats · tight(<6f) 0
+     · stone reached · spark FORCED · fast line 22.9s
+     · a miss costs 2.1 beats avg, 8 worst · undecided 2t
 ```
 
-Every beat on the golden path, with its margin:
+- **fast line 22.9 s** — up from ~10 s. Clear time is about 1.08 s per hop on
+  the critical path, so the only way to lengthen a room is to make more hops
+  unskippable, which needs a *serial* path. An open cavern always gives BFS a
+  short route through the middle.
+- **a miss costs 2.1 beats average, 8 worst.** Up from ~0. The worst case is a
+  fall at the head of the stair, which returns you to the stair-foot sconce
+  eight beats back. This is the number the room was rebuilt for.
+- **tight(<6f) 0.** The tightest required input has 11 frames of slack against
+  a 6-frame threshold — six being the coyote window, the game's own declared
+  unit of forgiveness.
 
-| from → to | dx | ×jump | verb | margin |
-|---|---|---|---|---|
-| (1,29)→(15,28) | 9 | 1.65× | spark | 16f |
-| (15,28)→(23,26) | 8 | 1.47× | spark | 21f |
-| (23,26)→(33,25) | 7 | 1.28× | spark | 21f |
-| (33,25)→(36,24) | 1 | 0.18× | legs | 21f |
-| (36,24)→(45,22) | 7 | 1.28× | spark | 21f |
-| (45,22)→(41,18) | 3 | 0.55× | spark | 21f |
-| (41,18)→(45,14) | 3 | 0.55× | spark | 21f |
-| (45,14)→(41,11) | 3 | 0.55× | spark | 21f |
-| (41,11)→(51,8) | 9 | 1.65× | spark | 21f |
+## Two things the harness caught in this rebuild
 
-**Read this carefully — it is not the intended line.** The harness's BFS
-minimises *beats*, so it returns the route that skips the most platforms: the
-spark-heavy expert line. That it exists at all is rule 6 satisfied. The
-*taught* line — the three-shelf chain in A, the wall climb in C — is longer in
-beats and so is not what BFS returns.
+**1 · The spark gap was scenery.** The first build put the stair's foot at
+(58,34) and the no-spark solve walked `(53,38)` to `(58,34)` on legs with 13
+frames to spare. Four across and four up is well inside one arc once there is a
+face to kick, and a single block is *all* face — so the room could be finished
+without ever crossing the gap it exists to teach.
 
-## The spark gate, and the two bypasses it caught
+Wall-kicks chain for free, so the rule is not *the first step is hard to reach*
+but **no step is reachable at all**: touch one and you have the whole shaft. The
+shaft now lives entirely at x >= 62, six columns past the last thing on the near
+side and rising. The gap is the only door into it.
 
-`npm run levels:verify` now solves every graded room a second time with the
-spark **disabled**, and fails the room if the stone is still reachable. This is
-rule 6's test, and for a tutorial it is *the* test: a room whose subject is the
-scarce verb must not be completable without it.
+**2 · The report was lying about the verb.** The tape search nested the dash
+loop innermost, so it returned the first tape that worked at all — and since a
+spark rescues a badly cut jump, that was almost always a spark. The verbose
+output read `spark@2` on beats a walker clears, and quoted the spark tape's
+tighter margin: beat 2 of the tutorial was reported at 6 frames.
 
-It caught the rebuild doing exactly what the old WICK did — twice.
-
-1. **The recovery floor was a bypass.** A continuous floor under the hall let
-   you walk from the entry to the chimney along the bottom, never crossing the
-   teaching gap. The basin now dead-ends.
-2. **A recovery step was a staircase.** A step at col 31 sat *inside* the gap's
-   own span, so falling in and climbing out put you on the far side. Steps are
-   now only on the near side.
-3. **And the pit was climbable.** Wall-jumps are free and unlimited here, so
-   any pit with a wall beside it can be climbed out of on the wrong side — the
-   harness proved it after both fixes above. The far lip is now a
-   **cantilever**: its supporting rock sits at cols 37-40, so the columns under
-   its left end are open air with no face to kick off, and the lip itself caps
-   anyone who climbs at col 37.
-
-With the spark disabled the far lip, the drank islands, the chimney, the
-reveal and the stone are all unreachable. The gap is forced.
-
-```
-wick  GRADED  ... stone reached · spark FORCED · undecided 9t
-```
-
-That is the difference between a tutorial that teaches a verb and one that
-merely contains it, and I would not have found it by looking.
+`DASHES[0]` is `null`, so hoisting that loop **outermost** exhausts the entire
+spark-free tape space before any spark tape is tried. The report now names the
+cheapest verb that solves each beat — the one the player will actually find.

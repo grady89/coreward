@@ -110,6 +110,13 @@ const BEAM_R = 0.3;
  * tunnel through a panel in one step.
  */
 const THIN_BAND = 0.34;
+/**
+ * How far outside an open-edged room the body may go before it has fallen.
+ * Eight tiles is about a jump and a half of slack in every direction, which
+ * is the room a player needs to steer back from a missed landing. The number
+ * is large on purpose: the boundary must never be the thing that kills you.
+ */
+const VOID_PAD = 8;
 const REFORM_T = 0.35;
 const INVULN_T = 0.6;
 
@@ -372,7 +379,9 @@ export class VaultRun {
   private hazardMul(): number { return this.assist ? 0.6 : 1; }
 
   private solidTile(x: number, y: number): boolean {
-    if (x < 0 || y < 0 || x >= this.p.w || y >= this.p.h) return true;
+    // an open-edged room has sky past its edge, not stone: the body leaves,
+    // and the void — not a wall — is what ends the attempt
+    if (x < 0 || y < 0 || x >= this.p.w || y >= this.p.h) return !this.def.openEdges;
     const i = y * this.p.w + x;
     if (this.p.solid[i]) return true;
     for (let d = 0; d < this.p.doors.length; d++) {
@@ -1585,6 +1594,17 @@ export class VaultRun {
         this.darkSeen = true;
         this.audio.duck(0.08, 3);
       }
+    }
+
+    // THE FALL, checked ahead of the invulnerability gate. A body eight tiles
+    // outside the room is not in a scrape that invulnerability can spare it
+    // from — it is gone, and gating this would leave it falling for as long
+    // as the mercy lasts.
+    if (this.def.openEdges && (
+      this.py < -(this.p.h + VOID_PAD)
+      || this.px < -VOID_PAD || this.px > this.p.w + VOID_PAD)) {
+      this.reform();
+      return;
     }
 
     // hazards

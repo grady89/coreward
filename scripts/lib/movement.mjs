@@ -49,15 +49,25 @@ const AIR = new Set(['.', 'd', 'S', '@', 'M', 'X', 'A', 'b', 'R', '^', '>', '<',
 /** ...and the ones that are floor to stand ON */
 const THIN = new Set(['A', 'b', 'R']);
 
+export const VOID_PAD = 8;
+
 export class World {
-  constructor(rows) {
+  constructor(rows, openEdges = false) {
     this.rows = rows;
     this.h = rows.length;
     this.w = Math.max(...rows.map(r => r.length));
+    // an open-edged room has sky past its edge, not stone. The simulator has
+    // to know, or it verifies a room with walls the game does not have.
+    this.openEdges = openEdges;
   }
   at(x, y) {
-    if (y < 0 || y >= this.h || x < 0 || x >= this.w) return '#';
+    if (y < 0 || y >= this.h || x < 0 || x >= this.w) return this.openEdges ? '.' : '#';
     return this.rows[y][x] ?? '#';
+  }
+  /** past the pad, the body has fallen */
+  voided(px, py) {
+    if (!this.openEdges) return false;
+    return py < -(this.h + VOID_PAD) || px < -VOID_PAD || px > this.w + VOID_PAD;
   }
   /** solid to the WORLD — doors and bridges count as stone here */
   solid(x, y) {
@@ -250,7 +260,7 @@ export function step(s, input, dt = DT) {
     const ft = s.world.at(Math.floor(s.px), Math.floor(-(s.py - C.HH - 0.05)));
     if (ft !== '=') s.spark = true;
   }
-  if (touchingKill(s)) s.dead = true;
+  if (touchingKill(s) || s.world.voided(s.px, s.py)) s.dead = true;
   return s;
 }
 
