@@ -89,6 +89,10 @@ const SNUFF_SATE = 1.2;     // a moth that has just fed is sated this long — o
                             // frame the floor re-arms you, sting and all
 const RIME_CRUMBLE = 0.55;
 const RIME_REGROW = 3.5;
+/** the bolt's glass head: how far forward of its carriage it rides, and how
+ *  big it is. Both are read off buildBolt so the hazard is the drawn light */
+const BOLT_HEAD = 0.13;
+const BOLT_R = 0.18;
 const BEAM_R = 0.3;
 /**
  * How far a watch-light throws, in tiles.
@@ -253,6 +257,23 @@ export class VaultRun {
   private pulse: number;
   /** which of the three ages this room's masonry and fittings belong to (§VI) */
   private act: Act;
+  /**
+   * The rail each shuttle actually runs on, in tiles.
+   *
+   * A VERTICAL bolt is a gate, and a gate is only readable if it is anchored:
+   * something on the floor, something on the ceiling, and the light shuttling
+   * between them. Authored endpoints float in the middle of a shaft and read
+   * as a light with no reason to be there — so a vertical rail is SEATED, out
+   * to the first stone above and the first stone below, and the bolt travels
+   * that whole span. The author says which column and roughly where; the room
+   * says how long.
+   *
+   * Horizontal rails are strung between two anchor posts the author placed on
+   * purpose, and snuffers sleep parked at their rail's start, so neither is
+   * seated — one is a span, the other is a patrol.
+   */
+  private shuttleSpan: { x0: number; y0: number; x1: number; y1: number }[] = [];
+
   /** per shuttle; only a snuffer's entry is ever awake or ticking */
   private snuffState: { awake: boolean; t: number; sate: number }[] = [];
   /** which censer's crown the body is standing on, -1 for none */
@@ -717,9 +738,23 @@ export class VaultRun {
     // veining glowing violet, self-luminous so the dark can never hide the
     // thief — and never the unlight's ember, because it steals, it does not
     // kill.
-    for (const s2 of this.def.shuttles ?? []) {
-      const ax = s2.x0 + 0.5, ay = -(s2.y0 + 0.5);
-      const bx = s2.x1 + 0.5, by = -(s2.y1 + 0.5);
+    this.shuttleSpan = (this.def.shuttles ?? []).map(s2 => {
+      const vertical = Math.abs(s2.y1 - s2.y0) > Math.abs(s2.x1 - s2.x0);
+      if (!vertical || s2.snuff) return { x0: s2.x0, y0: s2.y0, x1: s2.x1, y1: s2.y1 };
+      const x = s2.x0;
+      let top = Math.min(s2.y0, s2.y1), bot = Math.max(s2.y0, s2.y1);
+      while (top > 1 && !this.solidTile(x, top - 1)) top--;
+      while (bot < this.p.h - 2 && !this.solidTile(x, bot + 1)) bot++;
+      // keep the authored direction, so `phase` still means what it meant
+      return s2.y0 <= s2.y1
+        ? { x0: x, y0: top, x1: x, y1: bot }
+        : { x0: x, y0: bot, x1: x, y1: top };
+    });
+
+    for (const [si, s2] of (this.def.shuttles ?? []).entries()) {
+      const sp = this.shuttleSpan[si];
+      const ax = sp.x0 + 0.5, ay = -(sp.y0 + 0.5);
+      const bx = sp.x1 + 0.5, by = -(sp.y1 + 0.5);
       const bearing = Math.atan2(by - ay, bx - ax);
       const railGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(ax, ay, 0.05), new THREE.Vector3(bx, by, 0.05),
@@ -733,9 +768,19 @@ export class VaultRun {
       const rail2 = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(ax + nx, ay + ny, 0.05), new THREE.Vector3(bx + nx, by + ny, 0.05),
       ]), railMat);
-      for (const [px2, py2] of [[ax, ay], [bx, by]] as [number, number][]) {
+      // A post stands on what it is bolted to. On a vertical rail that is the
+      // ceiling at one end and the floor at the other, so the upper one is
+      // turned over to hang from its stone rather than stand on air.
+      const vert = sp.x0 === sp.x1 && sp.y0 !== sp.y1;
+      for (const [px2, py2, upper] of [[ax, ay, 1], [bx, by, 0]] as [number, number, number][]) {
         const post = buildRailPost();
-        post.position.set(px2, py2 - 0.28, 0.02);
+        if (vert) {
+          const hangs = upper ? sp.y0 < sp.y1 : sp.y1 < sp.y0;
+          post.rotation.z = hangs ? Math.PI : 0;
+          post.position.set(px2, py2 + (hangs ? 0.28 : -0.28), 0.02);
+        } else {
+          post.position.set(px2, py2 - 0.28, 0.02);
+        }
         this.scene.add(post);
       }
       this.scene.add(rail, rail2);
@@ -1662,9 +1707,23 @@ export class VaultRun {
         }
         continue;
       }
-      const horizontal = Math.abs(sdef.x1 - sdef.x0) >= Math.abs(sdef.y1 - sdef.y0);
-      const hw = horizontal ? 0.7 : 0.17, hh = horizontal ? 0.17 : 0.7;
-      if (Math.abs(this.px - pos.x) < hw + HW && Math.abs(this.py - pos.y) < hh + HH) { this.reform(); return; }
+      // THE LIGHT IS THE HAZARD, and nothing else on the carriage is.
+      //
+      // This used to be a box half a tile and a bit long down the rail — 1.4
+      // tiles end to end — which is nearly twice the bolt that is drawn, and
+      // on a VERTICAL rail that ran down the axis the body is tallest in: a
+      // 2.44-tile lethal column under an orb you see as less than one. It
+      // killed from where nothing was, repeatedly, and there was no way to
+      // read that off the screen because the thing doing the killing was not
+      // on the screen.
+      //
+      // The bolt's glass head is what glows and what you track, so it is what
+      // bites: a disc at the head's own radius, tested against the body's box
+      // by nearest point. The bronze carriage behind it is the vehicle.
+      const orb = this.boltOrb(i, pos);
+      const cx = Math.max(this.px - HW, Math.min(orb.x, this.px + HW));
+      const cy = Math.max(this.py - HH, Math.min(orb.y, this.py + HH));
+      if (Math.hypot(orb.x - cx, orb.y - cy) < BOLT_R) { this.reform(); return; }
     }
     for (let i = 0; i < (this.def.censers ?? []).length; i++) {
       if (this.ridingCenser === i) continue;             // standing on the crown
@@ -2120,12 +2179,27 @@ export class VaultRun {
     };
   }
 
+  /**
+   * Where the bolt's glass head actually is. buildBolt puts it 0.13 forward of
+   * the carriage centre and the carriage is turned to the rail's bearing, so
+   * the light a player tracks is NOT the point the shuttle is positioned at.
+   * Killing from the carriage centre is off by a sixth of a tile on every
+   * axis, which is exactly the sort of gap that reads as an unfair hit.
+   */
+  private boltOrb(i: number, pos: { x: number; y: number }): { x: number; y: number } {
+    const sp = this.shuttleSpan[i];
+    const bearing = Math.atan2(-(sp.y1 - sp.y0), sp.x1 - sp.x0);
+
+    return { x: pos.x + Math.cos(bearing) * BOLT_HEAD, y: pos.y + Math.sin(bearing) * BOLT_HEAD };
+  }
+
   private shuttlePos(i: number): { x: number; y: number } {
     const s = this.def.shuttles![i];
     // a snuffer sleeps parked at the rail's start; its own clock only runs
     // once it wakes, so the patrol always begins from where it slept
     const st = this.snuffState[i];
     if (s.snuff && !st.awake) return { x: s.x0 + 0.5, y: -(s.y0 + 0.5) };
+
     const t = s.snuff ? st.t : this.time;
     const u = (t / (s.period / this.hazardMul()) + (s.snuff ? 0 : s.phase)) % 1;
     let ping = u < 0.5 ? u * 2 : 2 - u * 2;
@@ -2137,9 +2211,10 @@ export class VaultRun {
       const d = this.snufferDrift(i, t);
       ox = d.x; oy = d.y;
     }
+    const sp = this.shuttleSpan[i];
     return {
-      x: s.x0 + 0.5 + (s.x1 - s.x0) * ping + ox,
-      y: -(s.y0 + 0.5) - (s.y1 - s.y0) * ping + oy,
+      x: sp.x0 + 0.5 + (sp.x1 - sp.x0) * ping + ox,
+      y: -(sp.y0 + 0.5) - (sp.y1 - sp.y0) * ping + oy,
     };
   }
 
