@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "levels:verify": "node scripts/levels-verify.mjs",
+    "levels:metrics": "node scripts/metrics.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.170.0",

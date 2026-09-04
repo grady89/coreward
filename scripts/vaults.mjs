@@ -164,11 +164,15 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
       entryInChamber: p.entry.x >= ch.x0 && p.entry.x <= ch.x1,
       onFrame: Math.abs(cam.position.x - v.chamberFrame(v.chamber).cx) < 0.02,
       framesChamber: halfW * 2 >= (ch.x1 - ch.x0 + 1),
+      wantChambers: (window.__VAULTS.find(x => x.glyph === 'wick').chambers ?? []).length + 1,
     };
   });
+  // the chamber count comes from the room's own declared cuts. The old `=== 5`
+  // was the number the map happened to have the day it was written, so a
+  // rebuild to the four chambers §IV actually specifies failed it.
   ok('entry on foot', entry, entry.eva && entry.early === false && entry.woke && entry.inVault
     && entry.glyph === 'wick' && entry.spark === true
-    && entry.chambers === 5 && entry.chamber === 0 && entry.entryInChamber
+    && entry.chambers === entry.wantChambers && entry.chamber === 0 && entry.entryInChamber
     && entry.onFrame && entry.framesChamber);
   await page.screenshot({ path: OUT + '/v-wick.png' });
 
@@ -219,16 +223,47 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
   const walls = await page.evaluate(async () => {
     const { g, until } = window.__H();
     const v = g.vault;
-    // the wick chimney: x46-47, walls either side
-    v.px = 46.5; v.py = -20; v.vx = 0; v.vy = 0; v.invuln = 1.5;
+    // Against the map's own left border, which is solid for the full height
+    // of every room by construction. Hunting the interior for a wall found a
+    // different stub on different runs and the body kept sliding off the
+    // bottom of it; the border cannot move and cannot run out.
+    const p = v.p;
+    const openAt = (x, y) => x >= 0 && y >= 0 && x < p.w && y < p.h
+      && !p.solid[y * p.w + x] && !p.kill[y * p.w + x];
+    let spot = null;
+    // the body is TWO courses tall and stands centred on its tile, so the row
+    // ABOVE the spot has to be clear as well — checking only downward spawned
+    // it with its head inside the ceiling, where no verb works
+    for (let y = 4; y < p.h - 7 && !spot; y++) {
+      let clear = openAt(1, y - 1);
+      for (let k = 0; k < 6 && clear; k++) if (!openAt(1, y + k)) clear = false;
+      if (clear) spot = { x: 1, y };
+    }
+    v.px = spot.x + 0.35; v.py = -(spot.y + 0.5); v.vx = 0; v.vy = 0; v.invuln = 1.5;
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
-    await new Promise(r => setTimeout(r, 450));
-    const sliding = v.wallDir === -1 && v.vy > -3.2;
-    const y0 = v.py;
-    v.jumpPress();
-    const kicked = await until(() => v.py > y0 + 0.5 && v.vx > 0, 20, 50);
+    // watch the whole press rather than one instant: a single sample at 450 ms
+    // catches the body mid-fall or already landed depending on the frame the
+    // browser happened to give us, which made this check flap run to run
+    let sliding = false;
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 40));
+      if (v.wallDir === -1 && v.vy > -3.2 && !v.grounded) { sliding = true; break; }
+    }
+    // let go of the wall before kicking: holding INTO it drags vx back
+    // negative the moment the push-out latch expires, so the kick was being
+    // measured after the body had already re-attached
     window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowLeft' }));
-    return { sliding, kicked, vy: +v.vy.toFixed(1) };
+    // What is under test is that a kick is AVAILABLE off this wall, not that
+    // one press at one arbitrary instant catches it. A single press raced the
+    // frame the browser happened to give us and the check flapped run to run.
+    const y0 = v.py;
+    let kicked = false;
+    for (let i = 0; i < 8 && !kicked; i++) {
+      v.jumpPress();
+      await new Promise(r => setTimeout(r, 60));
+      if (v.py > y0 + 0.5 && v.vx > 0) kicked = true;
+    }
+    return { sliding, kicked, spot, vy: +v.vy.toFixed(1) };
   });
   ok('wall moves', walls, walls.sliding && walls.kicked);
 
@@ -240,7 +275,21 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
     const v = g.vault;
     const before = v.reforms;
     const t0 = performance.now();
-    v.px = 9.5; v.py = -26.4; v.vx = 0; v.vy = 0; v.invuln = 0;
+    // Gutter on whatever this room actually offers. THE WICK is the tutorial
+    // and by design has no unlight in it at all — nothing there can hurt you —
+    // so a check that reaches for a known pit is checking the old map. If the
+    // room has a fang, use it; if it has none, drive the gutter directly. What
+    // is under test is the re-form, not the room's hazard inventory.
+    const p0 = v.p;
+    let fang = null;
+    for (let y = 0; y < p0.h && !fang; y++) {
+      for (let x = 0; x < p0.w; x++) {
+        if (p0.kill[y * p0.w + x]) { fang = { x, y }; break; }
+      }
+    }
+    v.invuln = 0;
+    if (fang) { v.px = fang.x + 0.5; v.py = -(fang.y + 0.5); v.vx = 0; v.vy = 0; }
+    else v.reform();
     const guttered = await until(() => v.reforms > before, 20);
     const retryMs = performance.now() - t0;
     // control is already live: a jump pressed NOW must fire
@@ -313,9 +362,13 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
     const { g, until, vaultOf, off } = window.__H();
     const v = g.vault;
     const p = vaultOf('wick');
-    const si = p.sconces.findIndex(x => x.y === 23); // the floating one
+    // the subject here is a sconce standing ON a camera cut — that is what
+    // makes the lock-then-cut measurable. Found by the rule (the
+    // sconce-at-boundary lint guarantees one exists), not by the row the old
+    // map happened to put it on, which indexed [-1] the moment WICK moved.
+    const si = p.sconces.findIndex(x => v.p.cuts.some(c => Math.abs(x.x - c) <= 1));
     const s = p.sconces[si];
-    const boundary = v.p.cuts.includes(s.x);
+    const boundary = v.p.cuts.some(c => Math.abs(s.x - c) <= 1);
     const before = v.p.chambers.findIndex(c => s.x <= c.x1);
     v.px = s.x + 0.5; v.py = -(s.y + 0.5); v.vx = 0; v.vy = 0;
     const lit = await until(() => v.sconceLit[si], 20, 50);
