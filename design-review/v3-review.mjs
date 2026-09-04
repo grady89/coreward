@@ -184,21 +184,24 @@ const entry = await page.evaluate(() => {
 });
 await at(entry.x, entry.y, 5, 'v35-entry');
 
+// the wave has to be held mid-zone: its own advance would carry it out of
+// frame long before the shutter, so the edge is pinned each frame
 await to('ember');
-await page.evaluate(() => {
-  const v = window.__game.vault;
-  const pu = v.def.pursuit;
-  v.pursuitOn = true;
-  v.pursuitEdge = pu.dir === 'down' ? (pu.zone[1] + pu.zone[3]) / 2
-    : pu.dir === 'right' ? (pu.zone[0] + pu.zone[2]) / 2 : pu.zone[1];
-});
-await page.waitForTimeout(400);
 const pz = await page.evaluate(() => {
   const v = window.__game.vault;
-  const z = v.def.pursuit.zone;
-  return { x: (z[0] + z[2]) / 2, y: -v.pursuitEdge };
+  const pu = v.def.pursuit;
+  const mid = pu.dir === 'down' ? (pu.zone[1] + pu.zone[3]) / 2 : (pu.zone[0] + pu.zone[2]) / 2;
+  v.pursuitOn = true;
+  v.pursuitEdge = mid;
+  v.__pin = setInterval(() => { v.pursuitOn = true; v.pursuitEdge = mid; }, 16);
+  const z = pu.zone;
+  return pu.dir === 'down'
+    ? { x: (z[0] + z[2]) / 2, y: -mid - 2 }
+    : { x: mid + 2, y: -(z[1] + z[3]) / 2 };
 });
-await at(pz.x, pz.y, 10, 'v35-pursuit');
+await page.waitForTimeout(500);
+await at(pz.x, pz.y, 11, 'v35-pursuit');
+await page.evaluate(() => { clearInterval(window.__game.vault.__pin); });
 
 await to('weather');
 await page.evaluate(() => {

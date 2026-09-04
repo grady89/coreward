@@ -15,7 +15,7 @@ import {
   buildCrusher, buildRime, RimeParts,
   buildPier, buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
-  buildMote, buildMasterDressing,
+  buildMote, buildStud, buildPursuit, PursuitParts, buildMasterDressing,
 } from './vaultkit';
 
 // A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
@@ -306,8 +306,10 @@ export class VaultRun {
   private crusherRams: { ram: THREE.Mesh; ax: number; ay: number; along: boolean }[] = [];
   /** the watch-lantern heads, turned to their own beam's bearing */
   private emitters: EmitterParts[] = [];
-  private pursuitMesh: THREE.Mesh | null = null;
-  private pursuitEdgeMesh: THREE.Mesh | null = null;
+  private pursuitMesh: THREE.Object3D | null = null;
+  private pursuitEdgeMesh: THREE.Object3D | null = null;
+  /** the wave's own parts: the veils, the burn, and the light it throws */
+  private pursuit: PursuitParts | null = null;
   private masterGroup!: THREE.Group;
   private motes!: THREE.Points;
   private motePos!: Float32Array;
@@ -548,22 +550,23 @@ export class VaultRun {
     this.buildRimLattice();
     this.buildDarkFog();
 
-    // unlight
-    const killMat = new THREE.MeshBasicMaterial({ color: 0x1a0508 });
-    const seamMat = new THREE.MeshBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.22 });
+    // unlight — the only instant-kill terrain in the game, so it is the one
+    // thing in a room that must read as a wound rather than as masonry
+    const isStud = (x: number, y: number): boolean =>
+      x >= 0 && y >= 0 && x < p.w && y < p.h && !!p.kill[y * p.w + x];
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         if (!p.kill[y * p.w + x]) continue;
-        const hole = new THREE.Mesh(box, killMat);
-        hole.position.set(x + 0.5, -(y + 0.5), -0.1);
-        hole.scale.setScalar(0.98);
-        const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.08), seamMat);
-        seam.position.set(x + 0.5, -(y + 0.5) + 0.42, 0.42);
-        const haze = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.8),
-          new THREE.MeshBasicMaterial({ color: 0x4a1008, transparent: true, opacity: 0.5, depthWrite: false }));
-        haze.position.set(x + 0.5, -(y + 0.5), 0.35);
-        this.killMats.push(seam.material as THREE.Material, haze.material as THREE.Material);
-        this.scene.add(hole, seam, haze);
+        // a run of studs is ONE hole: the torn edge is drawn only where the
+        // bite meets something that is not another bite
+        const open = [
+          !isStud(x, y - 1), !isStud(x, y + 1),
+          !isStud(x - 1, y), !isStud(x + 1, y),
+        ];
+        const stud = buildStud(x * 37 + y * 11, open);
+        stud.group.position.set(x + 0.5, -(y + 0.5), 0);
+        this.killMats.push(...stud.mats);
+        this.scene.add(stud.group);
       }
     }
 
@@ -809,18 +812,27 @@ export class VaultRun {
       this.crusherRams.push({ ram: parts.ram, ax: hx, ay: hy, along });
     }
 
-    // pursuit — the consumed dark, and its burning leading edge
+    // pursuit — the consumed dark, and the burning front that lights the room
+    // ahead of it. That last part is a RULE (§III: "fleeing is also seeing"),
+    // so the front carries real lights thrown forward into the unconsumed
+    // room, not a bar drawn beside it.
     if (this.def.pursuit) {
       const z = this.def.pursuit.zone;
       const zw = z[2] - z[0] + 1, zh = z[3] - z[1] + 1;
-      this.pursuitMesh = new THREE.Mesh(new THREE.PlaneGeometry(zw, zh),
-        new THREE.MeshBasicMaterial({ color: 0x02030a, transparent: true, opacity: 0.96, depthWrite: false }));
-      this.pursuitMesh.visible = false;
       const vertical = this.def.pursuit.dir === 'down' || this.def.pursuit.dir === 'up';
-      this.pursuitEdgeMesh = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? zw : 0.16, vertical ? 0.16 : zh),
-        new THREE.MeshBasicMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
-      this.pursuitEdgeMesh.visible = false;
-      this.scene.add(this.pursuitMesh, this.pursuitEdgeMesh);
+      const parts = buildPursuit(vertical ? zw : zh);
+      // the front is built travelling +x; turn it to the way this wave comes
+      parts.edge.rotation.z =
+        this.def.pursuit.dir === 'down' ? -Math.PI / 2 :
+        this.def.pursuit.dir === 'up' ? Math.PI / 2 :
+        this.def.pursuit.dir === 'left' ? Math.PI : 0;
+      parts.body.scale.set(zw, zh, 1);
+      parts.body.visible = false;
+      parts.edge.visible = false;
+      this.scene.add(parts.body, parts.edge);
+      this.pursuit = parts;
+      this.pursuitMesh = parts.body;
+      this.pursuitEdgeMesh = parts.edge;
     }
 
     // THE STANDING DEAD — the same rig the player wears, held in one of four
@@ -2029,7 +2041,7 @@ export class VaultRun {
       const pts: [number, number][] = [];
       for (let x = zx0; x <= zx1; x++) for (let y = zy0; y <= zy1; y++) pts.push([x + 0.5, -(y + 0.5)]);
       out.push({ kind: 'pursuit', i: 0, dark: count(pts),
-        lit: luminous([this.pursuitEdgeMesh?.material as THREE.Material | undefined]) });
+        lit: luminous([this.pursuit?.coreMat]) });
     }
 
     return out;
@@ -2659,17 +2671,33 @@ export class VaultRun {
       const on = this.pursuitOn;
       this.pursuitMesh.visible = on;
       this.pursuitEdgeMesh.visible = on;
-      if (on) {
+      if (on && this.pursuit) {
+        const zw = zx1 - zx0 + 1, zh = zy1 - zy0 + 1;
         if (pu.dir === 'down') {
           const top = -zy0, edge = -this.pursuitEdge;
-          this.pursuitMesh.scale.y = Math.max(0.001, (top - edge) / (zy1 - zy0 + 1));
+          this.pursuitMesh.scale.set(zw, Math.max(0.001, top - edge), 1);
           this.pursuitMesh.position.set((zx0 + zx1 + 1) / 2, (top + edge) / 2, 0.45);
           this.pursuitEdgeMesh.position.set((zx0 + zx1 + 1) / 2, edge, 0.46);
         } else if (pu.dir === 'right') {
           const left = zx0, edge = this.pursuitEdge;
-          this.pursuitMesh.scale.x = Math.max(0.001, (edge - left) / (zx1 - zx0 + 1));
+          this.pursuitMesh.scale.set(Math.max(0.001, edge - left), zh, 1);
           this.pursuitMesh.position.set((left + edge) / 2, -(zy0 + zy1 + 1) / 2, 0.45);
           this.pursuitEdgeMesh.position.set(edge, -(zy0 + zy1 + 1) / 2, 0.46);
+        }
+        // the burn is not steady — it is eating something
+        const flick = 0.8 + Math.sin(this.time * 21) * 0.12 + Math.sin(this.time * 37) * 0.08;
+        this.pursuit.coreMat.opacity = flick;
+        for (let i = 0; i < this.pursuit.lights.length; i++) {
+          this.pursuit.lights[i].intensity = 3.2 * flick + Math.sin(this.time * 9 + i) * 0.4;
+        }
+        // embers off the front, drifting into the room it is about to take
+        const span = pu.dir === 'down' || pu.dir === 'up' ? zw : zh;
+        for (let i = 0; i < this.pursuit.embers.length; i++) {
+          const u = (this.time * 0.7 + i * 0.31) % 1;
+          const e = this.pursuit.embers[i];
+          e.position.set(0.3 + u * 2.2, (((i * 0.37) % 1) - 0.5) * span, 0.5);
+          e.scale.setScalar(0.6 + u * 0.9);
+          (e.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - u);
         }
       }
     }

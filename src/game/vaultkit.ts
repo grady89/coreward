@@ -1684,6 +1684,225 @@ export function buildMote(hue: number): { group: THREE.Group; mats: THREE.MeshBa
 }
 
 // ---------------------------------------------------------------------------
+// 16 · THE PURSUIT — the dark, arriving
+// ---------------------------------------------------------------------------
+
+export interface PursuitParts {
+  /** the consumed dark, scaled by the run as the front advances */
+  body: THREE.Group;
+  /** the burning front, moved by the run */
+  edge: THREE.Group;
+  /** what it throws forward — the mechanic, not the mood */
+  lights: THREE.PointLight[];
+  coreMat: THREE.MeshBasicMaterial;
+  embers: THREE.Mesh[];
+}
+
+/**
+ * THE PURSUIT WAVE.
+ *
+ * §III does not describe this one's telegraph as a look. It says the leading
+ * edge "LIGHTS THE ROOM AHEAD OF IT — fleeing is also seeing", which is a
+ * rule: the wave is how you are able to read the ground you are running
+ * onto, and losing it means running blind. Drawn as a flat black plane with
+ * a 0.16-wide bar in front, the room ahead got nothing, and the one thing
+ * this hazard is supposed to GIVE was missing.
+ *
+ * So the front carries real lights, thrown forward into the unconsumed room.
+ * Behind them the dark has body — layered planes at distinct z, the same
+ * trick the fog banks use, so what is coming reads as depth rather than as a
+ * hole in the screen. In front of them, embers off the burn.
+ *
+ * Built with the direction of travel along +x; the run rotates the whole
+ * thing to whichever way the wave is coming.
+ */
+export function buildPursuit(span: number): PursuitParts {
+  const body = new THREE.Group();
+  // three veils at distinct depths: the black gets parallax, and its leading
+  // face is not a straight edge but a torn one
+  for (const [z, o, c] of [[0.2, 0.99, 0x01020a], [0.34, 0.6, 0x05030f], [0.46, 0.35, 0x0a0512]] as [number, number, number][]) {
+    const veil = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false }));
+    veil.position.z = z;
+    body.add(veil);
+  }
+
+  const edge = new THREE.Group();
+  // the burn itself: a hot core with a long forward falloff, so the light on
+  // the room reads as coming OFF the front rather than painted beside it
+  const coreMat = new THREE.MeshBasicMaterial({
+    color: 0xffb070, transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const core = new THREE.Mesh(new THREE.PlaneGeometry(0.1, span), coreMat);
+  core.position.z = 0.5;
+  edge.add(core);
+  const wash = new THREE.Mesh(new THREE.PlaneGeometry(2.6, span * 1.05),
+    new THREE.MeshBasicMaterial({
+      map: softDisc(), color: 0xff8a3c, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }));
+  wash.position.set(1.1, 0, 0.49);      // ahead of the core, into the room
+  edge.add(wash);
+
+  // THE LIGHTS. This is the rule, not the mood: the room ahead has to be
+  // readable because the wave is in it.
+  const lights: THREE.PointLight[] = [];
+  const n = Math.max(2, Math.min(4, Math.round(span / 5)));
+  for (let i = 0; i < n; i++) {
+    const l = new THREE.PointLight(0xffa860, 3.2, 11, 1.5);
+    l.position.set(0.7, (i - (n - 1) / 2) * (span / n), 0.9);
+    edge.add(l);
+    lights.push(l);
+  }
+
+  // embers thrown off the burn, drifting forward
+  const embers: THREE.Mesh[] = [];
+  for (let i = 0; i < 14; i++) {
+    const e = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1),
+      new THREE.MeshBasicMaterial({
+        map: softDisc(), color: 0xffc078, transparent: true, opacity: 0.7,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+      }));
+    edge.add(e);
+    embers.push(e);
+  }
+
+  return { body, edge, lights, coreMat, embers };
+}
+
+// ---------------------------------------------------------------------------
+// 15 · THE UNLIGHT STUD — where the dark bit through
+// ---------------------------------------------------------------------------
+
+export interface StudParts {
+  group: THREE.Group;
+  /** the torn edge and the throat: self-luminous, because this one kills (P2) */
+  mats: THREE.Material[];
+}
+
+/**
+ * THE UNLIGHT STUD `X`.
+ *
+ * The only instant-kill terrain in the game, and it shipped as a flat maroon
+ * rectangle with one orange bar across the top — a hazard drawn quieter than
+ * the rule it enforces, which is the over-wide beam's fault in reverse and
+ * costs the player exactly as much.
+ *
+ * §III calls it "zero rim; a hole in the lattice", fiction "where the dark
+ * bit through", and both are instructions. It gets no rim-light — the
+ * lattice runs on solid faces and a stud is not one, so it is already a gap
+ * in that weave — and what replaces it is a BITE: a recess with no back to
+ * it, a torn ember edge where the masonry was eaten through, and shards of
+ * stone left pointing inward around the wound.
+ *
+ * `open` is [up, down, left, right] — false where the neighbour is another
+ * stud, so a run of them reads as one hole rather than a row of squares.
+ */
+export function buildStud(seed: number, open: boolean[]): StudParts {
+  const g = new THREE.Group();
+  const mats: THREE.Material[] = [];
+  const rnd = (n: number): number => {
+    const v = Math.sin(seed * 71.7 + n * 29.3) * 43758.5453;
+    return v - Math.floor(v);
+  };
+
+  // the recess. Sunk back and open-fronted, so it reads as a cavity rather
+  // than a tile someone painted black.
+  const dark = new THREE.MeshBasicMaterial({ color: 0x08020a, side: THREE.DoubleSide });
+  const throatGeo = new THREE.BoxGeometry(0.98, 0.98, 0.7, 1, 1, 1);
+  const throat = new THREE.Mesh(throatGeo, dark);
+  throat.position.z = -0.4;
+  g.add(throat);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(1.02, 1.02),
+    new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  back.position.z = -0.74;
+  g.add(back);
+
+  // THE TORN EDGE. Not a bar: a ragged line following where the stone gave
+  // out, hot at its lip and dying into the hole, drawn per open side.
+  const pos: number[] = [];
+  const col: number[] = [];
+  const hot = new THREE.Color(0xff6a34);
+  const tri = (
+    ax: number, ay: number, ka: number,
+    bx: number, by: number, kb: number,
+    cx: number, cy: number, kc: number,
+  ): void => {
+    pos.push(ax, ay, 0.44, bx, by, 0.44, cx, cy, 0.44);
+    for (const k of [ka, kb, kc]) col.push(hot.r * k, hot.g * k, hot.b * k);
+  };
+  const R = 0.49;
+  const sides: [number, number, number, number][] = [
+    [0, 1, 1, 0],    // up:    along x, inward -y
+    [0, -1, 1, 0],   // down:  along x, inward +y
+    [-1, 0, 0, 1],   // left:  along y, inward +x
+    [1, 0, 0, 1],    // right: along y, inward -x
+  ];
+  for (let sIdx = 0; sIdx < 4; sIdx++) {
+    if (!open[sIdx]) continue;
+    const [nx, ny, ax, ay] = sides[sIdx];
+    const N = 7;
+    for (let i = 0; i < N; i++) {
+      const t0 = -R + (i / N) * 2 * R;
+      const t1 = -R + ((i + 1) / N) * 2 * R;
+      // the lip sits on the tile edge; the tear reaches irregularly inward
+      // shallow: the tear is a burnt LIP around the hole, and four sides of
+      // a deep one eat the whole tile and leave a lava square
+      const d0 = 0.05 + rnd(sIdx * 13 + i) * 0.11;
+      const d1 = 0.05 + rnd(sIdx * 13 + i + 1) * 0.11;
+      const lx0 = ax * t0 + nx * R, ly0 = ay * t0 + ny * R;
+      const lx1 = ax * t1 + nx * R, ly1 = ay * t1 + ny * R;
+      const ix0 = lx0 - nx * d0, iy0 = ly0 - ny * d0;
+      const ix1 = lx1 - nx * d1, iy1 = ly1 - ny * d1;
+      const k0 = 0.4 + rnd(sIdx * 7 + i) * 0.45;
+      const k1 = 0.4 + rnd(sIdx * 7 + i + 3) * 0.45;
+      tri(lx0, ly0, k0, lx1, ly1, k1, ix1, iy1, 0);
+      tri(lx0, ly0, k0, ix1, iy1, 0, ix0, iy0, 0);
+    }
+  }
+  if (pos.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const tearMat = new THREE.MeshBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
+    g.add(new THREE.Mesh(geo, tearMat));
+    mats.push(tearMat);
+  }
+
+  // the shards the bite left behind, pointing in off the open edges
+  const shardMat = new THREE.MeshBasicMaterial({ color: 0x1b0a10 });
+  for (let sIdx = 0; sIdx < 4; sIdx++) {
+    if (!open[sIdx]) continue;
+    const [nx, ny, ax, ay] = sides[sIdx];
+    for (let i = 0; i < 2; i++) {
+      const t = (rnd(sIdx * 31 + i) - 0.5) * 0.7;
+      const len = 0.14 + rnd(sIdx * 37 + i) * 0.14;
+      const sh = new THREE.Mesh(new THREE.ConeGeometry(0.07, len, 4), shardMat);
+      sh.position.set(ax * t + nx * (R - len / 2), ay * t + ny * (R - len / 2), 0.4);
+      sh.rotation.z = Math.atan2(-nx, ny) + (rnd(sIdx * 41 + i) - 0.5) * 0.5;
+      g.add(sh);
+    }
+  }
+
+  // the throat's own glow: what little the wound gives back, so the hole is
+  // legible in a black room without ever looking like somewhere to stand
+  const hazeMat = new THREE.MeshBasicMaterial({
+    map: softDisc(), color: 0x6d1410, transparent: true, opacity: 0.3,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.05), hazeMat);
+  haze.position.z = -0.1;
+  g.add(haze);
+  mats.push(hazeMat);
+
+  return { group: g, mats };
+}
+
+// ---------------------------------------------------------------------------
 // 14 · THE MASTER STONE'S CHAMBER — the single lit thing
 // ---------------------------------------------------------------------------
 

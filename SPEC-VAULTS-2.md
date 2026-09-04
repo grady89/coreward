@@ -792,6 +792,30 @@ deterministic, layered sines on incommensurate periods, so replays hold and
 the suite can still stand the body in its path. Bounded well inside a tile
 so a patrol authored down a corridor cannot flutter into masonry.
 
+**Two objects the scope list forgot, found by auditing the phase's governing
+line — "every object the player reads" — rather than its enumeration.**
+
+*The unlight stud* `X` is the only instant-kill terrain in the game and it
+shipped as a flat maroon rectangle with one bar across the top: a hazard
+drawn quieter than the rule it enforces, which is the over-wide beam's fault
+in reverse and costs the player just as much. §III's "zero rim; a hole in
+the lattice" and "where the dark bit through" are both instructions, so it
+is a BITE now — a recess with no back to it, a torn ember lip where the
+masonry was eaten through, and shards of stone left pointing inward. A run
+of studs draws one hole rather than a row of squares, because the tear is
+drawn only where the bite meets something that is not another bite. The lip
+is deliberately shallow and dim: four deep sides eat the tile and leave a
+lava square, which reads as terrain rather than as a wound.
+
+*The pursuit wave's* telegraph in §III is not a look — "its leading edge
+**lights the room ahead of it** — fleeing is also seeing" is a rule, and a
+black plane with a 0.16-wide bar in front of it delivered none of it. The
+front now carries real point lights thrown forward into the unconsumed room,
+so the ground you are running onto is readable *because* the thing chasing
+you is in it. Behind them the dark has body — layered veils at distinct z,
+the fog banks' own trick — and ahead of them, embers off the burn. The lint
+reads the burn's core material now rather than the old edge mesh.
+
 **The proving ground grew** a plain shuttle, a crusher, three rime shelves,
 two bridge runs and a door: the dev room had no bolt, crusher, rime, bridge
 or door on screen, so those families could not be reviewed at all. The nine
