@@ -8,7 +8,7 @@ import {
 } from '../player/suit';
 import {
   Act, actOf, LATTICE, softDisc, drankStain, glowMat,
-  buildSconce, SCONCE_REACH, SCONCE_FLAME_Y, buildBrazier,
+  buildSconce, SconceMount, SCONCE_FLAME_Y, buildBrazier,
   buildEmitter, seatEmitter, EMITTER_REACH, coneGeometry, coneMaterial, EmitterParts,
   buildRailPost, buildBolt, BoltParts, buildSnuffer, MothParts,
   buildCenser, CenserParts, buildArcTelegraph, ArcTelegraph, buildChain,
@@ -297,7 +297,7 @@ export class VaultRun {
     light: THREE.PointLight; embers: THREE.Mesh[]; x: number; y: number;
     bedMat: THREE.MeshBasicMaterial; coals: THREE.Mesh[];
   }[] = [];
-  private gateMeshes: { parts: CurtainParts; flecks: THREE.Mesh[]; g: GateDef }[] = [];
+  private gateMeshes: { parts: CurtainParts; g: GateDef; down: boolean }[] = [];
   private currentPts: { parts: CurrentParts; c: CurrentDef }[] = [];
   private crusherMeshes: THREE.Object3D[] = [];
   /** each piston's ram, stretched between its housing and its head */
@@ -572,17 +572,19 @@ export class VaultRun {
     // give (§III; atmosphere §3.4).
     const dead = !!this.def.deadLight;
     for (const sc of this.p.sconces) {
-      // the fitting hangs off the wall it is bolted to, so the cup reaches
-      // OUT into the room rather than floating in the middle of its tile
-      const facing = p.solid[sc.y * p.w + sc.x - 1] ? 1 : p.solid[sc.y * p.w + sc.x + 1] ? -1 : 1;
-      const parts = buildSconce(this.act, facing, dead);
+      // every fitting has a foot. A wall beside it gets the bracket the
+      // light-family sheet is of; failing that it hangs off the vault above
+      // or stands on the floor below, because the guild did not leave cups
+      // floating in mid-air and a reader should never have to wonder.
+      const mount = this.sconceSeat(sc.x, sc.y);
+      const parts = buildSconce(this.act, mount, dead);
       // hurried work is also mounted too high, out of comfortable reach (§VI)
-      const lift = this.act === 'hurried' ? 0.12 : 0;
-      parts.group.position.set(sc.x + 0.5 - facing * 0.34, -(sc.y + 0.5) - 0.2 + lift, 0.3);
+      const lift = this.act === 'hurried' && mount.kind !== 'floor' ? 0.12 : 0;
+      const ox = mount.kind === 'wall' ? -mount.facing * 0.34 : 0;
+      const gx = sc.x + 0.5 + ox, gy = -(sc.y + 0.5) - 0.2 + lift;
+      parts.group.position.set(gx, gy, 0.3);
       const light = new THREE.PointLight(dead ? 0x9db8ff : 0xffd9a0, 0, 7, 1.7);
-      light.position.set(
-        sc.x + 0.5 - facing * 0.34 + facing * SCONCE_REACH,
-        -(sc.y + 0.5) - 0.2 + lift + SCONCE_FLAME_Y, 0.35);
+      light.position.set(gx + parts.cupX, gy + SCONCE_FLAME_Y, 0.35);
       this.scene.add(parts.group, light);
       this.sconceMeshes.push({
         flame: parts.flame, light, mat: parts.flameMat,
@@ -775,17 +777,7 @@ export class VaultRun {
       const parts = buildCurtain(gw, gh, this.hue, down);
       parts.group.position.set(g2.x0 + gw / 2, -(g2.y0 + gh / 2), 0.25);
       this.scene.add(parts.group);
-      const flecks: THREE.Mesh[] = [];
-      for (let k = 0; k < 8; k++) {
-        const f = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.24),
-          new THREE.MeshBasicMaterial({
-            color: this.hue, transparent: true, opacity: 0.7,
-            blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-          }));
-        flecks.push(f);
-        this.scene.add(f);
-      }
-      this.gateMeshes.push({ parts, flecks, g: g2 });
+      this.gateMeshes.push({ parts, g: g2, down });
     }
 
     // currents — the visible rising column: a braided rope of sparks out of
@@ -2058,6 +2050,25 @@ export class VaultRun {
   }
 
   /**
+   * What a sconce is bolted to. A wall beside it wins — that is the fitting
+   * the light-family sheet is of, and it keeps the cup out of the body's
+   * path. With no wall, the fitting hangs from the vault above or stands on
+   * the floor below, whichever is nearer.
+   */
+  private sconceSeat(x: number, y: number): SconceMount {
+    if (this.solidTile(x - 1, y)) return { kind: 'wall', facing: 1 };
+    if (this.solidTile(x + 1, y)) return { kind: 'wall', facing: -1 };
+    let up = 0, down = 0;
+    while (up < 6 && !this.solidTile(x, y - up - 1)) up++;
+    while (down < 6 && !this.solidTile(x, y + down + 1)) down++;
+    const upOk = up < 6, downOk = down < 6;
+    // a lamp stands if it can; the floor is where a keeper could reach it
+    if (downOk && (!upOk || down <= up + 1)) return { kind: 'floor', reach: down + 0.7 };
+    if (upOk) return { kind: 'ceiling', reach: up + 0.8 };
+    return { kind: 'wall', facing: 1 };
+  }
+
+  /**
    * Where a watch-lantern's pedestal finds its footing: the nearest solid
    * tile out of the emitter's own point, tried floor first (a lantern
    * STANDS unless the room says otherwise), then ceiling, then either wall.
@@ -2367,9 +2378,10 @@ export class VaultRun {
         sm.light.intensity = lit ? 2.4 + Math.sin(this.time * 7 + i) * 0.4 : 0;
         sm.mat.color.setHex(lit ? 0xffd9a0 : 0x342e22);
         const f = lit ? 1 + Math.sin(this.time * 9 + i) * 0.15 : 0.8;
-        // a flame is taller than it is wide, and it is the HEIGHT that
-        // wavers -- a sphere breathing evenly reads as a bulb, not a fire
-        sm.flame.scale.set(0.8 * f, 1.5 * (lit ? f * f : 0.8), 0.8 * f);
+        // the flame is already a teardrop in geometry, so it only breathes:
+        // the old 1.5 stretch belonged to the sphere it replaced and turned
+        // the cone into a spike a tile long
+        sm.flame.scale.set(0.9 * f, lit ? f * f : 0.7, 0.9 * f);
       }
     }
     for (let d = 0; d < this.doorMeshes.length; d++) {
@@ -2516,24 +2528,33 @@ export class VaultRun {
         (e.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - u);
       }
     }
-    // one-way gates -- the folds sway on their rail and the pool gathers
-    // under them; the flecks stream the way the curtain will let you pass
+    // one-way gates — the fall runs on the current's own system, mirrored:
+    // sprites tightening as they arrive, braids of haze behind them, a pool
+    // where it meets the stone. The hard line along the underside is the
+    // rule made visible, and it pulses on its own beat so it never reads as
+    // part of the falling light.
     for (const gm of this.gateMeshes) {
-      for (let k = 0; k < gm.parts.folds.length; k++) {
-        gm.parts.folds[k].rotation.z = Math.sin(this.time * 0.8 + k * 1.7) * 0.035;
-        gm.parts.foldMats[k].opacity = 0.3 + Math.sin(this.time * 1.6 + k * 1.7) * 0.14;
+      const gp = gm.parts.pts.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const gh = gm.g.y1 - gm.g.y0 + 1;
+      const gw = gm.g.x1 - gm.g.x0 + 1;
+      for (let i = 0; i < gp.count; i++) {
+        let y = gp.getY(i) + (2.6 + (i % 5) * 0.5) * dt * (gm.down ? -1 : 1);
+        const past = gm.down ? y < -gh / 2 : y > gh / 2;
+        if (past) {
+          y = gm.down ? gh / 2 : -gh / 2;
+          gp.setX(i, (Math.random() - 0.5) * gw);
+        }
+        gp.setY(i, y);
+      }
+      gp.needsUpdate = true;
+      for (let k = 0; k < gm.parts.braids.length; k++) {
+        const b2 = gm.parts.braids[k];
+        b2.rotation.z = Math.sin(this.time * 0.5 + k * 2.1) * 0.05;
+        b2.scale.x = 0.65 + Math.sin(this.time * 1.1 + k * 1.9) * 0.3;
+        (b2.material as THREE.MeshBasicMaterial).opacity = 0.13 + Math.sin(this.time * 1.7 + k) * 0.06;
       }
       gm.parts.poolMat.opacity = 0.42 + Math.sin(this.time * 2.1) * 0.1;
-      const gw = gm.g.x1 - gm.g.x0 + 1;
-      const down = (gm.g.dir ?? 'down') === 'down';
-      for (let k = 0; k < gm.flecks.length; k++) {
-        const u = (this.time * 0.9 + k * 0.125) % 1;
-        const fy = down ? -(gm.g.y0 - 0.6) - u * 2.6 : -(gm.g.y1 + 1.6) + u * 2.6;
-        gm.flecks[k].position.set(
-          gm.g.x0 + 0.25 + ((k * 0.37) % 1) * (gw - 0.5), fy, 0.26);
-        (gm.flecks[k].material as THREE.MeshBasicMaterial).opacity =
-          0.7 * Math.sin(u * Math.PI);
-      }
+      gm.parts.sillMat.opacity = 0.6 + Math.sin(this.time * 3.4) * 0.18;
     }
     // currents -- the column's sparks rise and the braids twist behind them;
     // the fighter falls, the carrier climbs, and the eye tells them apart

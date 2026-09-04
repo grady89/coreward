@@ -183,6 +183,8 @@ export interface SconceParts {
   flameMat: THREE.MeshBasicMaterial;
   /** the hot core and the halo: an UNLIT cup must show neither (the wager) */
   fireMats: THREE.MeshBasicMaterial[];
+  /** where the cup ended up in the group's own space, so the light follows */
+  cupX: number;
   /** the guttering blue-white's smoke, famine rooms only */
   smoke: THREE.Mesh[];
 }
@@ -202,35 +204,59 @@ export interface SconceParts {
  * The act does the chronology: Act I keeps its carved crown and its finial,
  * Act II has had the ornament taken off it, Act III is mounted crooked.
  */
-export function buildSconce(act: Act, facing: number, dead: boolean): SconceParts {
+export function buildSconce(act: Act, mount: SconceMount, dead: boolean): SconceParts {
   const g = new THREE.Group();
+  // a WALL fitting reaches out of the masonry it is bolted to; with no wall
+  // to bolt to it hangs off the ceiling or stands on the floor instead, and
+  // in both of those the cup sits over the middle of its own tile
+  const facing = mount.kind === 'wall' ? mount.facing : 1;
+  const onWall = mount.kind === 'wall';
   const bronze = bronzeMat(dead ? 0xa78f63 : 0xc09a5c);
   const dark = ironMat();
 
-  // the backplate against the masonry — carved in Act I, plain after
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.44, 0.07), dark);
-  plate.position.set(0, 0.02, 0);
-  g.add(plate);
-  if (act === 'maintained') {
-    const crown = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.09, 0.09), bronze);
-    crown.position.set(0, 0.28, 0.01);
-    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), bronze);
-    bead.position.set(0, 0.35, 0.01);
-    g.add(crown, bead);
+  if (onWall) {
+    // the backplate against the masonry — carved in Act I, plain after
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.44, 0.07), dark);
+    plate.position.set(0, 0.02, 0);
+    g.add(plate);
+    if (act === 'maintained') {
+      const crown = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.09, 0.09), bronze);
+      crown.position.set(0, 0.28, 0.01);
+      const bead = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), bronze);
+      bead.position.set(0, 0.35, 0.01);
+      g.add(crown, bead);
+    }
+    const foot = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 6), dark);
+    foot.rotation.z = Math.PI;
+    foot.position.set(0, -0.24, 0);
+    g.add(foot);
+    // the bracket arm, reaching out and up to the cup
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.03, 0.34, 6), bronze);
+    arm.rotation.z = facing * -1.05;
+    arm.position.set(facing * SCONCE_REACH * 0.5, 0.02, 0.02);
+    g.add(arm);
+  } else if (mount.kind === 'ceiling') {
+    // hung: a plate in the vault above and a rod down to the cup
+    const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.09, 8), dark);
+    boss.position.y = mount.reach;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, Math.max(0.1, mount.reach - 0.24), 6), bronze);
+    rod.position.y = (mount.reach - 0.24) / 2 + 0.24;
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.07, 8), bronze);
+    collar.position.y = 0.3;
+    g.add(boss, rod, collar);
+  } else {
+    // standing: a floor pedestal, the same masonry-and-bronze as everything
+    // else the guild bolted down
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.09, 10), stoneMat(0x8e8b83));
+    base.position.y = -mount.reach;
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.12, Math.max(0.1, mount.reach - 0.14), 8), stoneMat(0x94918a));
+    stand.position.y = -(mount.reach - 0.14) / 2 - 0.05;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8), bronze);
+    cap.position.y = -0.08;
+    g.add(base, stand, cap);
   }
-  const foot = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 6), dark);
-  foot.rotation.z = Math.PI;
-  foot.position.set(0, -0.24, 0);
-  g.add(foot);
 
-  // the bracket arm, reaching out and up to the cup
-  const reach = SCONCE_REACH;
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.03, 0.34, 6), bronze);
-  arm.rotation.z = facing * -1.05;
-  arm.position.set(facing * reach * 0.5, 0.02, 0.02);
-  g.add(arm);
-
-  const cx = facing * reach;
+  const cx = onWall ? facing * SCONCE_REACH : 0;
 
   // the cup. Bronze in a working room; in the famine, cracked stone.
   if (dead) {
@@ -279,7 +305,7 @@ export function buildSconce(act: Act, facing: number, dead: boolean): SconcePart
   knop.scale.y = 0.72;
   knop.position.set(cx, 0, 0);
   g.add(stem, knop);
-  if (act !== 'stripped') {
+  if (act !== 'stripped' && mount.kind !== 'floor') {
     const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.034, 0.09, 6), bronze);
     waist.position.set(cx, -0.07, 0);
     const drop = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.13, 8), bronze);
@@ -324,11 +350,12 @@ export function buildSconce(act: Act, facing: number, dead: boolean): SconcePart
     }
   }
 
-  // hurried work is mounted crooked (§VI architecture-as-chronology)
-  if (act === 'hurried') g.rotation.z = facing * 0.13;
+  // hurried work is mounted crooked (§VI architecture-as-chronology) — but a
+  // standing lamp leans on nothing, so only bracket and hung work goes askew
+  if (act === 'hurried' && mount.kind !== 'floor') g.rotation.z = facing * 0.13;
 
   return {
-    group: g, flame, flameMat, smoke,
+    group: g, flame, flameMat, smoke, cupX: cx,
     fireMats: [
       coreMat,
       halo.material as THREE.MeshBasicMaterial,
@@ -340,6 +367,17 @@ export function buildSconce(act: Act, facing: number, dead: boolean): SconcePart
 /** how far the cup stands off the wall, and how high the flame rides */
 export const SCONCE_REACH = 0.3;
 export const SCONCE_FLAME_Y = 0.28;
+
+/**
+ * What a sconce is bolted to. Every fitting in this game has a foot: the
+ * guild did not hang lights in mid-air, and a cup floating in the middle of
+ * a room is the reading equivalent of a beam drawn wider than it bites.
+ * `reach` is how far the mount travels to meet its surface.
+ */
+export type SconceMount =
+  | { kind: 'wall'; facing: number }
+  | { kind: 'ceiling'; reach: number }
+  | { kind: 'floor'; reach: number };
 
 // ---------------------------------------------------------------------------
 // 2 · THE BRAZIER — ductwork the guild never turned off
@@ -1036,9 +1074,37 @@ export function buildCrusher(w: number, h: number, dx: number, dy: number): Crus
   const sx = along ? Math.sign(dx) : 0;
   const sy = along ? 0 : -Math.sign(dy);
   const shoe = new THREE.Mesh(
-    new THREE.BoxGeometry(along ? 0.1 : w * 1.02, along ? h * 1.02 : 0.1, 1.02), bronze);
+    new THREE.BoxGeometry(along ? 0.12 : w * 1.02, along ? h * 1.02 : 0.12, 1.02), bronze);
   shoe.position.set(sx * w / 2, sy * h / 2, 0);
   head.add(shoe);
+
+  // THE TEETH.
+  //
+  // This one kills, and unlike the rime shelf it is supposed to: it demands
+  // nerve (§III) and it takes the run if you get it wrong. So the platformer
+  // grammar that was a lie on the ice is the truth here, and the object must
+  // SAY so. A blank stone block sliding out of a wall reads as scenery you
+  // could stand on; a row of forged teeth along the striking face reads as
+  // the one thing in the room you do not touch. Same rule as everywhere else
+  // in this pass, pointing the other way: draw the fang you actually have.
+  const teeth = Math.max(3, Math.round((along ? h : w) * 3));
+  const span = along ? h : w;
+  for (let i = 0; i < teeth; i++) {
+    const t = -span / 2 + ((i + 0.5) / teeth) * span;
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.26, 4), bronzeMat(0x8a7444));
+    if (along) {
+      tooth.position.set(sx * (w / 2 + 0.11), t, 0);
+      tooth.rotation.z = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
+    } else {
+      tooth.position.set(t, sy * (h / 2 + 0.11), 0);
+      tooth.rotation.z = sy > 0 ? 0 : Math.PI;
+    }
+    head.add(tooth);
+    // each tooth glows at its root, so the row is legible in a dark room too
+    const spark = bloom(0.3, 0xff7a3c, 0.5);
+    spark.position.copy(tooth.position);
+    head.add(spark);
+  }
 
   // THE SEAM NET — cracks branching across the working face, per the sheet
   const faceW = along ? h : w;
@@ -1310,35 +1376,56 @@ export interface DoorRuneParts {
  * THE DOORWAY — the opening, not the leaf.
  *
  * A door tile on its own is a slightly warmer wall block, which is to say it
- * is not readable as a door at all: nothing about it says "this is a way
- * through that is currently shut". What says that is the surround — jambs
- * either side, a lintel over them, a worn threshold underneath — and the
- * surround is masonry, so it STAYS when the leaf dissolves. Paying a door
- * off should leave a doorway standing open, not a gap where a box used to be.
+ * does not read as a door at all. What says "a way through, currently shut"
+ * is the surround, and the surround is masonry, so it STAYS when the leaf
+ * dissolves: paying a door off leaves a doorway standing open rather than a
+ * gap where a box used to be.
+ *
+ * BUT THE PASSAGE RUNS SIDEWAYS. The body walks through a door along X, so
+ * side jambs at ±X are built exactly where the player is about to be — a
+ * frame standing in its own doorway, which is why the first cut read as a
+ * door facing the camera that you then walked straight through the edge of.
+ * Seen from the side, a lateral passage has no side jambs to draw: the wall
+ * ABOVE is its head and the floor BELOW is its sill, and the only vertical
+ * members are the reveals — the cut faces of the wall's own thickness, which
+ * sit fore and aft in Z and frame the opening without ever standing in it.
+ *
+ * Nothing swings, either. The leaf melts when the count is paid, so there are
+ * no hinges: it sits in a bronze channel, the way a barrier dropped into a
+ * passage would.
  */
 export function buildDoorway(w: number, h: number): THREE.Group {
   const g = new THREE.Group();
   const stone = stoneMat(0x8b8496);
   const bronze = bronzeMat(0xa8874a);
-  for (const k of [-1, 1]) {
-    const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.34, h + 0.3, 0.78), stone);
-    jamb.position.set(k * (w / 2 + 0.14), 0, 0);
-    g.add(jamb);
-    // the hinge pintles, so the leaf has something to have hung from
-    for (const oy of [h / 2 - 0.35, -h / 2 + 0.35]) {
-      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 8), bronze);
-      pin.rotation.z = Math.PI / 2;
-      pin.position.set(k * (w / 2 - 0.02), oy, 0.36);
-      g.add(pin);
+
+  // the head: the wall carrying on over the opening, with its soffit showing
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.28, 0.92), stone);
+  lintel.position.y = h / 2 + 0.14;
+  const soffit = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.06, 0.86), stoneMat(0x6f6a7d));
+  soffit.position.y = h / 2 - 0.02;
+  // and the threshold, worn by everyone who came through before the vault shut
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(w + 0.34, 0.14, 0.9), stone);
+  sill.position.y = -h / 2 - 0.07;
+  g.add(lintel, soffit, sill);
+
+  // the reveals: the wall's own thickness, fore and aft of the passage. They
+  // frame the opening in Z, never in X, so the way through stays clear.
+  for (const z of [0.44, -0.44]) {
+    const reveal = new THREE.Mesh(new THREE.BoxGeometry(w + 0.06, h + 0.04, 0.08), stoneMat(0x7b7590));
+    reveal.position.set(0, 0, z);
+    g.add(reveal);
+    for (const k of [-1, 1]) {
+      // the channel the leaf sits in, run down each edge of the reveal
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.07, h, 0.05), bronze);
+      rail.position.set(k * (w / 2 - 0.02), 0, z + (z > 0 ? 0.05 : -0.05));
+      g.add(rail);
     }
   }
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(w + 0.86, 0.3, 0.82), stone);
-  lintel.position.y = h / 2 + 0.15;
-  const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.7, 0.05, 0.06), bronze);
-  band.position.set(0, h / 2 + 0.02, 0.42);
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.12, 0.8), stone);
-  sill.position.y = -h / 2 - 0.06;
-  g.add(lintel, band, sill);
+  // the bronze band across the head, so the opening reads as guild work
+  const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.36, 0.05, 0.06), bronze);
+  band.position.set(0, h / 2 + 0.03, 0.5);
+  g.add(band);
   return g;
 }
 
@@ -1373,17 +1460,30 @@ export function buildDoorRune(need: number): DoorRuneParts {
 
 export interface CurtainParts {
   group: THREE.Group;
-  folds: THREE.Mesh[];
-  foldMats: THREE.MeshBasicMaterial[];
+  /** the fall itself: the same sprite system the rising current is built on */
+  pts: THREE.Points;
+  braids: THREE.Mesh[];
   poolMat: THREE.MeshBasicMaterial;
+  /** the underside, which is the part that is stone */
+  sillMat: THREE.MeshBasicMaterial;
 }
 
 /**
- * A falling curtain of light in a stone doorway, from the curtain-current
- * sheet: not a glowing rectangle but hanging FOLDS, each its own width and
- * its own slow sway, gathered in a pool on the floor under them and hung
- * off a bronze rail with jamb brackets. Solid from below, and it looks it —
- * the folds hang, they never rise.
+ * THE ONE-WAY CURTAIN — a fall of light in a doorway.
+ *
+ * The rising current is built from soft additive sprites with braids of haze
+ * behind them and a glow where it meets the stone, and it reads. The curtain
+ * shipped as flat bars instead — short thick dashes that looked like tally
+ * marks falling down a hole — so it is rebuilt on the current's system,
+ * mirrored: the same sprites, the same braids, the same pool, running DOWN.
+ *
+ * The two must still never be mistaken for each other, because they do
+ * opposite things: the current CARRIES you up and is generous; the curtain
+ * COMMITS you and is solid from below. So the current keeps the warm end of
+ * the palette and its column loosens as it climbs, while the curtain takes
+ * the room's cool core hue, tightens as it falls, and — the part that is the
+ * actual rule — wears a bright hard line along its underside. That line is
+ * the stone. Everything above it is a way down you do not come back up.
  */
 export function buildCurtain(w: number, h: number, hue: number, down: boolean): CurtainParts {
   const g = new THREE.Group();
@@ -1399,30 +1499,76 @@ export function buildCurtain(w: number, h: number, hue: number, down: boolean): 
     g.add(bracket);
   }
 
-  const folds: THREE.Mesh[] = [];
-  const foldMats: THREE.MeshBasicMaterial[] = [];
-  const n = Math.max(5, Math.round(w * 4));
+  // the fall: sprites, seeded across the opening, tight where they arrive
+  // the fall is confined to the opening: it STOPS at the sill, because the
+  // sill is stone. Spray past it would argue with the one thing this object
+  // exists to say.
+  const n = 130;
+  const pos = new Float32Array(n * 3);
+  const col = new Float32Array(n * 3);
+  const near = new THREE.Color(hue).lerp(new THREE.Color(0xffffff), 0.45);
+  const far = new THREE.Color(hue).multiplyScalar(0.7);
   for (let i = 0; i < n; i++) {
-    const fw = (w / n) * (0.7 + ((i * 7) % 5) / 6);
-    const m = new THREE.MeshBasicMaterial({
-      map: softDisc(), color: hue, transparent: true, opacity: 0.4,
-      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-    });
-    const f = new THREE.Mesh(new THREE.PlaneGeometry(fw, h + 0.6), m);
-    f.position.set(-w / 2 + (i + 0.5) * (w / n), 0, 0.02 + (i % 3) * 0.01);
-    g.add(f);
-    folds.push(f);
-    foldMats.push(m);
+    const u = Math.random();                 // 0 at the rail, 1 at the sill
+    pos[i * 3] = (Math.random() - 0.5) * w * (1 - u * 0.45);
+    pos[i * 3 + 1] = down ? h / 2 - u * h : -h / 2 + u * h;
+    pos[i * 3 + 2] = 0.15;
+    const c = far.clone().lerp(near, u);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
-  // where the folds gather on the stone
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+    // sized against the opening, not against the room: a one-tile doorway
+    // full of 0.15 sprites is confetti, not a fall
+    size: Math.max(0.05, Math.min(0.12, h * 0.1)),
+    vertexColors: true, transparent: true, opacity: 0.8,
+    depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    map: softDisc(), sizeAttenuation: true,
+  }));
+  g.add(pts);
+
+  // the braids of haze the sprites fall through
+  const braids: THREE.Mesh[] = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.5, h),
+      new THREE.MeshBasicMaterial({
+        map: softDisc(), color: hue, transparent: true, opacity: 0.16,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+      }));
+    m.position.set(0, 0, 0.12);
+    g.add(m);
+    braids.push(m);
+  }
+
+  // where it gathers on the stone
   const poolMat = new THREE.MeshBasicMaterial({
     map: softDisc(), color: hue, transparent: true, opacity: 0.5,
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
-  const pool = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.2, 0.5), poolMat);
-  pool.position.set(0, down ? -h / 2 - 0.2 : h / 2 + 0.2, 0.06);
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.4, 0.7), poolMat);
+  pool.position.set(0, down ? -h / 2 - 0.15 : h / 2 + 0.15, 0.06);
   g.add(pool);
-  return { group: g, folds, foldMats, poolMat };
+
+  // THE SILL. The one-way rule drawn: the underside of the curtain is solid,
+  // and a hard bright line is the only thing on the object that says so.
+  const sillMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.75,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const sill = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.05), sillMat);
+  sill.position.set(0, down ? -h / 2 : h / 2, 0.2);
+  const sillGlow = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.1, 0.3),
+    new THREE.MeshBasicMaterial({
+      map: softDisc(), color: hue, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }));
+  sillGlow.position.copy(sill.position);
+  sillGlow.position.z = 0.19;
+  g.add(sill, sillGlow);
+
+  return { group: g, pts, braids, poolMat, sillMat };
 }
 
 // ---------------------------------------------------------------------------
