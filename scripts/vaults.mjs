@@ -523,20 +523,41 @@ await stage('debt', ['the debt'], async () => {
 });
 
 await stage('return', ['the return'], async () => {
-  // --- the return: current sweeps, the door wants the niche sconce ---
+  // --- the return: the bottom corridor IS sideways-down, the door holds
+  // until the cameo sconce is standing with, and the U is walked in full.
+  //
+  // Addressed by what the room's own def says rather than by coordinates a
+  // rewrite invalidates: the corridor is found from its gravity zone, the
+  // door from its need, so the check follows the room instead of a snapshot
+  // of one.
   const ret = await page.evaluate(async () => {
     const { g, until, vaultOf } = window.__H();
     g.devVault('return');
     await until(() => g.mode === 'vault', 20);
     const v = g.vault;
-    v.px = 10; v.py = -30.5; v.vx = 0; v.vy = 0; v.invuln = 2;
-    const swept = await until(() => v.vx > 0.5, 30);
     const p = vaultOf('return');
+    // find an open tile inside the right-gravity corridor, with room to fall
+    let spot = null;
+    for (let y = 0; y < p.h && !spot; y++) {
+      for (let x = 0; x < p.w - 3; x++) {
+        const i = y * p.w + x;
+        if (p.gravity[i] !== 2 || p.solid[i]) continue;
+        if (p.solid[i + 1] || p.solid[i + 2] || p.solid[i + 3]) continue;
+        spot = { x, y }; break;
+      }
+    }
+    v.px = spot.x + 0.5; v.py = -(spot.y + 0.5); v.vx = 0; v.vy = 0; v.invuln = 5;
+    const swept = await until(() => v.vx > 0.5, 30);
     const d0 = p.doors[0].tiles[0];
     const closed = v.solidTile(d0.x, d0.y);
-    return { swept, closed, figures: p.figures.length };
+    const needs = window.__VAULTS.find(x => x.glyph === 'return').doorNeeds;
+    return {
+      swept, closed, spot, figures: p.figures.length,
+      need: needs['1'], sconces: p.sconces.length,
+    };
   });
-  ok('the return', ret, ret.swept && ret.closed && ret.figures === 1);
+  ok('the return', ret,
+    ret.swept && ret.closed && ret.figures >= 1 && ret.need === ret.sconces);
 });
 
 await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 'the guild voice'], async () => {
