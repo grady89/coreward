@@ -657,7 +657,14 @@ export const VAULTS: VaultDef[] = [
       // a watch-light on the descent, parked until the turn downward
       // one on the crossing and one on the descent: by P4 the last chamber
       // may hold nothing the room has not already taught
-      { x: 12.5, y: 11.5, period: 4.25, phase: 0.5, spin: true, parked: true, arm: [8, 12, 14, 14] },
+      // Mounted UP in the slot between the two shelter blocks, not out in the
+      // open a tile and a half above the walkway. Hung at 11.5 its arc swept
+      // the ENTRY and two sconces on the row-13 corridor: the body spawned
+      // inside the light with no cover, no gap and nothing to time, which is
+      // not a hazard but a wall. From the slot the blocks either side shadow
+      // the corridor and the beam becomes what a watch-light should be — a
+      // gate across four columns that you wait out and run.
+      { x: 12.5, y: 8.5, period: 4.25, phase: 0.5, spin: true, parked: true, arm: [8, 12, 14, 14] },
       { x: 46.5, y: 21.5, period: 4.25, phase: 0, spin: true, parked: true, arm: [46, 11, 58, 13] },
     ],
     map: [

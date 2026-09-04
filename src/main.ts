@@ -41,7 +41,7 @@ import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
 import { STAGES, SandboxCard, StageCtx } from './dev/sandbox';
 import { GlyphMarks, glyphById, GLYPHS, WORLD_GLYPHS } from './world/glyphs';
-import { VaultRun } from './game/vault';
+import { VaultRun, BEAM_LEN } from './game/vault';
 import { vaultByGlyph, VAULTS, TEST_VAULTS, parseVault, CHAMBER_MAX_W, SPARK_CLASS, PULSE } from './world/vaults';
 import { Interior, InteriorPanel } from './game/interior';
 import { loadMeta, lockMeta } from './game/meta';
@@ -254,6 +254,7 @@ class Game {
     (window as unknown as { __TEST_VAULTS: unknown }).__TEST_VAULTS = TEST_VAULTS;
     (window as unknown as { __SPARK_CLASS: unknown }).__SPARK_CLASS = SPARK_CLASS;
     (window as unknown as { __PULSE: unknown }).__PULSE = PULSE;
+    (window as unknown as { __BEAM_LEN: unknown }).__BEAM_LEN = BEAM_LEN;
     import('./game/meta').then(m => {
       (window as unknown as { __meta: unknown }).__meta = m;
     });

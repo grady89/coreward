@@ -91,6 +91,23 @@ const RIME_CRUMBLE = 0.55;
 const RIME_REGROW = 3.5;
 const BEAM_R = 0.3;
 /**
+ * How far a watch-light throws, in tiles.
+ *
+ * This used to be `90` steps of 0.35 written out twice — 31.5 tiles, which is
+ * wider than most rooms. A beam that long is not a lantern, it is an
+ * architectural line that sweeps: in THE LAST SHIFT it put 46% of every
+ * standing tile in the room inside its arc, the ENTRY included, so the room
+ * began with the body in the path of something it could not step away from.
+ *
+ * Nine tiles is a little under a camera chamber's half-width, so there is
+ * always footing outside the disc within the frame you are being asked to
+ * read. The beam still crosses a corridor convincingly; it just stops owning
+ * the room.
+ */
+export const BEAM_LEN = 9;
+const BEAM_STEP = 0.35;
+const BEAM_STEPS = Math.round(BEAM_LEN / BEAM_STEP);
+/**
  * THIN PLATFORMS — bridge decks and rime shelves.
  *
  * Both are drawn as panels a third of a tile deep, because that is what they
@@ -2051,8 +2068,8 @@ export class VaultRun {
       for (let a = 0; a < 36; a++) {
         const ang = (a / 36) * Math.PI * 2;
         let ex = b.x, ey = -b.y;
-        for (let st = 0; st < 90; st++) {
-          const nx = ex + Math.cos(ang) * 0.35, ny = ey + Math.sin(ang) * 0.35;
+        for (let st = 0; st < BEAM_STEPS; st++) {
+          const nx = ex + Math.cos(ang) * BEAM_STEP, ny = ey + Math.sin(ang) * BEAM_STEP;
           if (this.solidTile(Math.floor(nx), Math.floor(-ny))) break;
           ex = nx; ey = ny;
           pts.push([ex, ey]);
@@ -2282,9 +2299,9 @@ export class VaultRun {
       }
       const ray = this.beamRays[i];
       let ex = b.x, ey = -b.y;
-      for (let s = 0; s < 90; s++) {
-        const nx = ex + Math.cos(ang) * 0.35;
-        const ny = ey + Math.sin(ang) * 0.35;
+      for (let s = 0; s < BEAM_STEPS; s++) {
+        const nx = ex + Math.cos(ang) * BEAM_STEP;
+        const ny = ey + Math.sin(ang) * BEAM_STEP;
         if (this.solidTile(Math.floor(nx), Math.floor(-ny))) break;
         ex = nx; ey = ny;
       }

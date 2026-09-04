@@ -1204,7 +1204,7 @@ await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
   // ===================================================================
 });
 
-await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · the stone on foot', 'lint · flat walk'], async () => {
+await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · nothing respawns in a beam', 'lint · the stone on foot', 'lint · flat walk'], async () => {
   // --- P3a: no chamber is wider than the frame can hold legibly ---
   const chamberW = await page.evaluate(() => {
     const max = window.__CHAMBER_MAX_W;
@@ -1428,12 +1428,12 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
       // every tile a hazard can occupy, tagged by whether it is a piston
       const danger = [];
       for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
-        if (p.kill[y * p.w + x]) danger.push({ x, y, crusher: false });
+        if (p.kill[y * p.w + x]) danger.push({ x, y, crusher: false, kind: 'stud' });
       }
       for (const c of v.crushers ?? []) {
         for (let e = 0; e <= 1; e++) {
           for (let dx = 0; dx < c.w; dx++) for (let dy = 0; dy < c.h; dy++) {
-            danger.push({ x: c.x + dx + c.dx * e, y: c.y + dy + c.dy * e, crusher: true });
+            danger.push({ x: c.x + dx + c.dx * e, y: c.y + dy + c.dy * e, crusher: true, kind: 'crusher' });
           }
         }
       }
@@ -1443,27 +1443,64 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
         for (let k = 0; k <= n; k++) {
           danger.push({
             x: Math.round(sh.x0 + (sh.x1 - sh.x0) * (k / n)),
-            y: Math.round(sh.y0 + (sh.y1 - sh.y0) * (k / n)), crusher: false });
+            y: Math.round(sh.y0 + (sh.y1 - sh.y0) * (k / n)),
+            crusher: false, kind: sh.snuff ? 'snuffer' : 'shuttle' });
         }
       }
       for (const c of v.censers ?? []) {
         for (let k = 0; k <= 12; k++) {
           const a2 = -c.arc + (2 * c.arc * k) / 12;
           danger.push({ x: Math.round(c.x + Math.sin(a2) * c.len),
-            y: Math.round(c.y + Math.cos(a2) * c.len), crusher: false });
+            y: Math.round(c.y + Math.cos(a2) * c.len), crusher: false, kind: 'censer' });
         }
       }
-      for (const b of v.beams ?? []) danger.push({ x: Math.round(b.x), y: Math.round(b.y), crusher: false });
-      for (const sc of p.sconces) {
-        let worst = 99, kind = '';
-        for (const d of danger) {
-          const gap = Math.max(Math.abs(d.x - sc.x), Math.abs(d.y - sc.y));
-          const need = d.crusher ? 5 : 4;
-          if (gap < need && gap - need < worst - (kind === 'crusher' ? 5 : 4)) {
-            worst = gap; kind = d.crusher ? 'crusher' : 'danger';
+      // A BEAM IS ITS SWEEP, NOT ITS LAMP. This used to push the emitter's own
+      // tile and nothing else, so the rule read "keep the sconce four tiles
+      // from the lantern" while the lantern threw a lethal line nine tiles in
+      // every direction. Under the old 31-tile reach that put the ENTRY of two
+      // rooms inside a beam's arc and the lint stayed green, which is how a
+      // check that measures the wrong noun fails: not loudly, silently.
+      //
+      // March the same rays the game marches, and every tile the light can
+      // reach is danger.
+      for (const b of v.beams ?? []) {
+        const steps = Math.round(window.__BEAM_LEN / 0.35);
+        for (let a2 = 0; a2 < 180; a2++) {
+          const ang = (a2 / 180) * Math.PI * 2;
+          let ex = b.x, ey = -b.y;
+          for (let st = 0; st < steps; st++) {
+            const nx = ex + Math.cos(ang) * 0.35, ny = ey + Math.sin(ang) * 0.35;
+            const tx = Math.floor(nx), ty = Math.floor(-ny);
+            if (tx < 0 || ty < 0 || tx >= p.w || ty >= p.h || p.solid[ty * p.w + tx]) break;
+            ex = nx; ey = ny;
+            danger.push({ x: tx, y: ty, crusher: false, kind: 'beam' });
           }
         }
-        if (kind) rows.push({ glyph: v.glyph, at: sc.x + ',' + sc.y, gap: worst, kind });
+      }
+      for (const sc of p.sconces) {
+        let worst = 99, kind = '', where = '';
+        // How much room a checkpoint owes depends on what kind of danger it
+        // is. A stud is permanent and silent: four tiles, so you can stand up
+        // and read before it matters. A crusher adds a course for its travel.
+        //
+        // A BEAM is not measured here at all. It is intermittent and
+        // telegraphed, and the whole point of it is that you watch it and
+        // pick your moment — demanding four clear tiles from every tile a
+        // light can ever reach would put the sconce thirteen tiles from the
+        // lantern, which is most of a chamber. What a beam owes a checkpoint
+        // is categorical rather than metric: never spawn INSIDE the arc.
+        // That is the check below.
+        const NEED = { crusher: 5, beam: Infinity };
+        for (const d of danger) {
+          const gap = Math.max(Math.abs(d.x - sc.x), Math.abs(d.y - sc.y));
+          const need = NEED[d.kind] ?? 4;
+          if (need === Infinity) continue;
+          if (gap < need && gap - need < worst - (NEED[kind] === Infinity ? 4 : NEED[kind] ?? 4)) {
+            worst = gap; kind = d.kind || 'danger';
+            where = d.x + ',' + d.y;                 // say WHAT is crowding it
+          }
+        }
+        if (kind) rows.push({ glyph: v.glyph, at: sc.x + ',' + sc.y, gap: worst, kind, where });
       }
       // and the entry itself
       let clear = 0;
@@ -1476,9 +1513,52 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
     }
     const graded = rows.filter(r => done.includes(r.glyph));
     return { flagged: rows.length, graded: graded.length,
-      bad: graded.map(r => r.glyph + '@' + r.at + ':' + r.kind + ' ' + r.gap) };
+      bad: graded.map(r => `${r.glyph} sconce@${r.at} is ${r.gap} from ${r.kind}@${r.where}`
+        + ` (needs ${r.kind === 'crusher' ? 5 : 4})`) };
   }, V4_DONE);
   ok('lint · sconce buffer', buffer, buffer.bad.length === 0);
+
+  // --- NOTHING RESPAWNS IN A BEAM. The sharp half of the buffer rule, and
+  // the one that was actually costing playability: a checkpoint or an entry
+  // standing inside a watch-light's arc hands the body back to the player
+  // inside the hazard. There is no timing answer to that, because the light
+  // is already on you when control returns.
+  //
+  // It went unseen because the beam reach was 31.5 tiles and the buffer lint
+  // counted a beam as its LAMP — one tile — so THE WEATHER opened with its
+  // entry and two sconces inside the arc of a light mounted a tile and a half
+  // over a flat corridor, and the suite stayed green. ---
+  const beamRespawn = await page.evaluate(() => {
+    const steps = Math.round(window.__BEAM_LEN / 0.35);
+    const rows = [];
+    for (const v of window.__VAULTS) {
+      if (!v.beams || !v.beams.length) continue;
+      const p = window.__parseVault(v);
+      const hit = new Set();
+      for (const b of v.beams) {
+        // a full turn, at finer resolution than the beam is wide, so a ray
+        // cannot slip between the samples
+        for (let a2 = 0; a2 < 720; a2++) {
+          const ang = (a2 / 720) * Math.PI * 2;
+          let ex = b.x, ey = -b.y;
+          for (let st = 0; st < steps; st++) {
+            const nx = ex + Math.cos(ang) * 0.35, ny = ey + Math.sin(ang) * 0.35;
+            const tx = Math.floor(nx), ty = Math.floor(-ny);
+            if (tx < 0 || ty < 0 || tx >= p.w || ty >= p.h || p.solid[ty * p.w + tx]) break;
+            ex = nx; ey = ny; hit.add(tx + ',' + ty);
+          }
+        }
+      }
+      for (const sc of p.sconces) {
+        if (hit.has(sc.x + ',' + sc.y)) rows.push(v.glyph + ' sconce@' + sc.x + ',' + sc.y);
+      }
+      if (hit.has(p.entry.x + ',' + p.entry.y)) rows.push(v.glyph + ' ENTRY@' + p.entry.x + ',' + p.entry.y);
+    }
+    return rows;
+  });
+  const beamGraded = beamRespawn.filter(r => V4_DONE.includes(r.split(' ')[0]));
+  ok('lint · nothing respawns in a beam',
+    { inArc: beamRespawn, graded: beamGraded, reach: '9t' }, beamGraded.length === 0);
 
   // --- the stone is taken ON FOOT. Completion now waits for the feet — a
   // radius that fired mid-air froze the run wherever the body happened to be

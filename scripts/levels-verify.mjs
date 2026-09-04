@@ -74,15 +74,28 @@ function loadRooms() {
 // platforms: maximal runs of landable surface. These are the notes; the
 // traversals between them are the phrase.
 // ---------------------------------------------------------------------------
+/**
+ * Landable surfaces, SPLIT where the stone changes state.
+ *
+ * Drank stone (`=`) carries the body and refunds nothing, so whether a shelf
+ * refills the spark is a property of the tile you land on and not of the shelf
+ * as a whole. Breaking a run at the live/drank seam makes each platform
+ * uniformly one or the other, which is the only way the ledger below can be
+ * honest without also modelling where along a shelf the body stopped.
+ */
 function platforms(w) {
   const solid = (x, y) => !AIR.has(w.at(x, y));
   const land = (x, y) => solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2);
+  const dryAt = (x, y) => w.at(x, y) === '=';
   const out = [];
   for (let y = 1; y < w.h; y++) {
-    let x0 = -1;
+    let x0 = -1, dry = false;
+    const close = (x) => { if (x0 >= 0) out.push({ x0, x1: x - 1, y, dry }); x0 = -1; };
     for (let x = 0; x <= w.w; x++) {
-      if (x < w.w && land(x, y)) { if (x0 < 0) x0 = x; }
-      else if (x0 >= 0) { out.push({ x0, x1: x - 1, y }); x0 = -1; }
+      if (x < w.w && land(x, y)) {
+        if (x0 < 0) { x0 = x; dry = dryAt(x, y); }
+        else if (dryAt(x, y) !== dry) { close(x); x0 = x; dry = dryAt(x, y); }
+      } else close(x);
     }
   }
   return out;
@@ -256,7 +269,7 @@ function longestUndecided(w) {
 const m = metrics();
 const MAXJ = m.running.distance;
 const rooms = loadRooms().filter(r => r.glyph !== 'proving' && (!only || r.glyph === only));
-let broken = 0, tight = 0, flatFail = 0, sparkOptional = 0;
+let broken = 0, tight = 0, flatFail = 0, sparkOptional = 0, strandFail = 0;
 const FLAT_MAX = 10;
 
 console.log(`solvability harness · body ${(C.HW * 2).toFixed(2)}×${(C.HH * 2).toFixed(2)} tiles`);
@@ -294,16 +307,38 @@ for (const { glyph, rows } of rooms) {
   // nobody is asked to make it. Grading every pair floods the report with
   // traversals the level never requests, which is how a harness becomes noise.
   const key = (p) => `${p.x0},${p.y}`;
+
+  // THE SPARK LEDGER. A node is not a platform, it is a platform AND whether
+  // there is a breath in hand when you arrive on it. Without that the search
+  // silently assumed a full spark at the start of every beat, which is fine in
+  // a room built of live stone and a lie in a room built of drank stone: THE
+  // FAMINE is entirely about where the next refill is, and a harness that
+  // hands out a free spark per jump cannot see the room at all.
+  //
+  // Landing rules, straight from vault.ts: live stone refills, drank stone
+  // gives nothing back and leaves the ledger exactly as it was, and a spark
+  // spent in flight is gone whatever you land on.
+  const solveCache = new Map();
+  const edgeOpt = (a, b, hasSpark) => {
+    const k = key(a) + '>' + key(b) + (hasSpark ? '|s' : '|-');
+    if (!solveCache.has(k)) solveCache.set(k, solve(w, a, b, hasSpark ? DASHES : [null]));
+    return solveCache.get(k);
+  };
+  const nkey = (p, sp) => key(p) + (sp ? '|s' : '|-');
   const graph = new Map();
   let solved = 0;
   const opts = new Map();
   for (const [a, b, dx, dy] of edges) {
-    const opt = solve(w, a, b);
-    if (!opt) continue;
-    solved++;
-    if (!graph.has(key(a))) graph.set(key(a), []);
-    graph.get(key(a)).push(b);
-    opts.set(key(a) + '>' + key(b), { a, b, dx, dy, opt });
+    for (const hasSpark of [true, false]) {
+      const opt = edgeOpt(a, b, hasSpark);
+      if (!opt) continue;
+      if (hasSpark) solved++;
+      const to = b.dry ? (opt.dash ? false : hasSpark) : true;
+      const from = nkey(a, hasSpark);
+      if (!graph.has(from)) graph.set(from, []);
+      graph.get(from).push({ b, spark: to });
+      opts.set(from + '>' + nkey(b, to), { a, b, dx, dy, opt, spark: hasSpark });
+    }
   }
   const find = (ch) => {
     for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (w.at(x, y) === ch) return { x, y };
@@ -313,24 +348,27 @@ for (const { glyph, rows } of rooms) {
   const entry = find('@'), M = find('M');
   const startP = entry && under(entry), goalP = M && under(M);
 
-  // shortest verified route from the entry to the stone
+  // shortest verified route from the entry to the stone. You arrive on foot
+  // with a breath in hand, and the ledger runs from there.
   let route = [];
+  let goalNode = null;
   if (startP && goalP) {
-    const prev = new Map([[key(startP), null]]);
-    const q = [startP];
+    const prev = new Map([[nkey(startP, true), null]]);
+    const q = [{ p: startP, spark: true }];
     while (q.length) {
       const cur = q.shift();
-      if (key(cur) === key(goalP)) break;
-      for (const nx of graph.get(key(cur)) ?? []) {
-        if (prev.has(key(nx))) continue;
-        prev.set(key(nx), cur);
-        q.push(nx);
+      if (key(cur.p) === key(goalP)) { goalNode = cur; break; }
+      for (const nx of graph.get(nkey(cur.p, cur.spark)) ?? []) {
+        if (prev.has(nkey(nx.b, nx.spark))) continue;
+        prev.set(nkey(nx.b, nx.spark), cur);
+        q.push({ p: nx.b, spark: nx.spark });
       }
     }
     if (process.env.DBG) {
       const seen = [...prev.keys()];
       console.log(`  reached ${seen.length}/${plats.length} platforms from the entry`);
-      const missed = plats.filter(p => !prev.has(key(p))).map(p => `y${p.y}x${p.x0}-${p.x1}`);
+      const missed = plats.filter(p => !prev.has(nkey(p, true)) && !prev.has(nkey(p, false)))
+        .map(p => `y${p.y}x${p.x0}-${p.x1}`);
       console.log('  never reached:', missed.join(' '));
       if (process.env.DBG_TO) {
         const tgt = [...prev.keys()].find(k => k === process.env.DBG_TO);
@@ -342,16 +380,70 @@ for (const { glyph, rows } of rooms) {
         }
       }
     }
-    if (prev.has(key(goalP))) {
-      let cur = goalP;
-      while (prev.get(key(cur))) {
-        const p0 = prev.get(key(cur));
-        route.unshift(opts.get(key(p0) + '>' + key(cur)));
+    if (goalNode) {
+      let cur = goalNode;
+      while (prev.get(nkey(cur.p, cur.spark))) {
+        const p0 = prev.get(nkey(cur.p, cur.spark));
+        route.unshift(opts.get(nkey(p0.p, p0.spark) + '>' + nkey(cur.p, cur.spark)));
         cur = p0;
       }
     }
   }
   const reachesStone = route.length > 0 || (startP && goalP && key(startP) === key(goalP));
+
+  // THE SOFTLOCK. A room whose resource can run out can stand you somewhere
+  // the stone is no longer reachable from — no death, no gutter, nothing to
+  // tell you it happened, and the only cure is Esc. That is a worse failure
+  // than an impossible jump because the room keeps letting you play.
+  //
+  // The ledger graph answers it directly: walk forward from the entry, walk
+  // BACKWARD from every node that stands on the stone's platform, and every
+  // node in the first set had better be in the second. A drank recovery floor
+  // with no legs-only way off it is exactly what this catches.
+  let stranded = [];
+  if (startP && goalP) {
+    const fwd = new Set([nkey(startP, true)]);
+    const q3 = [{ p: startP, spark: true }];
+    while (q3.length) {
+      const c = q3.shift();
+      for (const nx of graph.get(nkey(c.p, c.spark)) ?? []) {
+        if (fwd.has(nkey(nx.b, nx.spark))) continue;
+        fwd.add(nkey(nx.b, nx.spark)); q3.push({ p: nx.b, spark: nx.spark });
+      }
+    }
+    const back = new Map();
+    for (const [from, tos] of graph) {
+      for (const t of tos) {
+        const k = nkey(t.b, t.spark);
+        if (!back.has(k)) back.set(k, []);
+        back.get(k).push(from);
+      }
+    }
+    const safe = new Set();
+    const q4 = [];
+    for (const sp of [true, false]) {
+      const k = nkey(goalP, sp);
+      if (fwd.has(k)) { safe.add(k); q4.push(k); }
+    }
+    while (q4.length) {
+      const c = q4.shift();
+      for (const b2 of back.get(c) ?? []) {
+        if (safe.has(b2)) continue;
+        safe.add(b2); q4.push(b2);
+      }
+    }
+    stranded = [...fwd].filter(k => !safe.has(k));
+  }
+
+  // THE DRY RUN: the longest stretch of the route flown with nothing in hand.
+  // In a famine that is the difficulty curve stated as a number — it is the
+  // count of beats you must land clean in a row before the stone gives the
+  // breath back.
+  let dryRun = 0, cur = 0, refills = 0;
+  for (const e of route) {
+    if (e.opt.dash) refills++;             // a spark spent is a spark that was there
+    if (e.b.dry) { cur++; dryRun = Math.max(dryRun, cur); } else cur = 0;
+  }
   const graded = DONE.includes(glyph);
   if (!reachesStone && graded) broken++;
 
@@ -430,12 +522,15 @@ for (const { glyph, rows } of rooms) {
   }
   const lostAvg = route.length ? +(lostSum / route.length).toFixed(1) : 0;
   tight += hard.length;
+  if (graded && stranded.length) strandFail++;
 
   console.log(`${glyph.padEnd(9)} ${(graded ? 'GRADED' : 'report').padEnd(6)} platforms ${String(plats.length).padStart(3)} · proved ${String(solved).padStart(4)}`
     + ` · path ${String(route.length).padStart(2)} beats`
     + ` · tight(<${MARGIN}f) ${String(hard.length).padStart(2)}`
     + ` · stone ${reachesStone ? 'reached' : 'UNREACHED'}`
     + (sparkForced === null ? '' : ` · spark ${sparkForced ? 'FORCED' : 'OPTIONAL'}`)
+    + (plats.some(p2 => p2.dry) ? ` · dry run ${dryRun} beats, ${refills} spark(s) spent` : '')
+    + (stranded.length ? ` · STRANDS at ${stranded.length} node(s): ${stranded.slice(0, 4).join(' ')}` : '')
     + ` · fast line ${String(seconds).padStart(5)}s`
     + ` · a miss costs ${String(lostAvg).padStart(4)} beats avg, ${String(lostMax).padStart(2)} worst`
     + ` · undecided ${String(flat.worst).padStart(3)}t${flat.worst > FLAT_MAX ? ' FLAT' : ''}`);
@@ -459,8 +554,9 @@ if (!flatOnly) {
 graded: ${DONE.join(", ")} — the rest are REPORTED, not graded: they`
     + ` predate the measured body, and failing them is the audit's finding.`);
   console.log(`${sparkOptional} graded room(s) where the spark is OPTIONAL`);
+  console.log(`${strandFail} graded room(s) that can strand the body with the stone unreachable`);
   console.log(`${broken} graded room(s) with no proved path to the stone`
     + ` · ${tight} traversal(s) tighter than ${MARGIN} frames`
     + ` · ${flatFail} graded room(s) with a corridor over ${FLAT_MAX} tiles`);
 }
-process.exit(broken || flatFail || sparkOptional ? 1 : 0);
+process.exit(broken || flatFail || sparkOptional || strandFail ? 1 : 0);
