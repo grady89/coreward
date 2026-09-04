@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARRESTOR_CATCH_X, ARRESTOR_CATCH_Y, MAX_ARRESTORS, ARRESTOR_CLEARANCE } from '../config';
+import { ARRESTOR_CATCH_X, ARRESTOR_CATCH_Y, MAX_ARRESTORS, ARRESTOR_CLEARANCE, POD_W } from '../config';
 
 // Arrestors: deployable landing pads for shafts you have already dug. They
 // catch a full-speed fall and mark the map. Deliberately nothing else — never
@@ -93,6 +93,28 @@ export class ArrestorField {
   retrieve(i: number): void {
     this.list.splice(i, 1);
     this.sync();
+  }
+
+  /**
+   * Drop any arrestor whose footing has been dug out from under it — the
+   * plate bolts to rock, and a drill through that rock takes the plate with
+   * it. Loses footing exactly when the pod standing there would have fallen.
+   * Returns how many came loose, to go back into the hold.
+   */
+  settle(solidAt: (x: number, y: number) => boolean): number {
+    const before = this.list.length;
+    this.list = this.list.filter(a => {
+      // sample just under the plate, so a pad sitting flush on the tile top
+      // still reads the tile it rests on
+      const r = Math.floor(-(a.y - 0.1));
+      const c0 = Math.floor(a.x - POD_W / 2 + 0.01);
+      const c1 = Math.floor(a.x + POD_W / 2 - 0.01);
+      for (let c = c0; c <= c1; c++) if (solidAt(c, r)) return true;
+      return false;
+    });
+    const lost = before - this.list.length;
+    if (lost) this.sync();
+    return lost;
   }
 
   /**

@@ -1729,6 +1729,15 @@ class Game {
 
     // tell the controller whether a pad is in position to take this fall
     this.ctrl.arrestorCatch = this.arrestors.catchFall(this.ctrl.px, this.ctrl.py, this.ctrl.vy);
+    // a shaft dug out from under a pad takes the pad with it, back into the hold
+    const loose = this.arrestors.settle((x, y) => this.terrain.solidAt(x, y));
+    if (loose > 0) {
+      this.state.arrestors += loose;
+      this.hud.toast(loose > 1 ? `${loose} ARRESTORS RECOVERED — NOTHING LEFT TO BOLT TO` : 'ARRESTOR RECOVERED — NOTHING LEFT TO BOLT TO');
+      this.hud.setConsumables(this.state.flares, this.state.charges, this.state.arrestors);
+      this.audio.click();
+      this.saveNow();
+    }
     this.arrestors.update(this.time);
     this.shaftlightField.update(this.ctrl.px, this.ctrl.py, this.time);
 

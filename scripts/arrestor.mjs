@@ -151,5 +151,38 @@ await page.screenshot({ path: OUT + '/a-map.png' });
 const mapOpen = await page.evaluate(() => window.__game.map.visible);
 console.log('map marker rendered:', mapOpen ? 'OK' : 'FAIL');
 
+// --- footing: drilling out the block under a pad returns it to the hold ---
+await page.keyboard.press('Tab');
+await page.waitForTimeout(500);
+const footing = await page.evaluate(async () => {
+  const g = window.__game;
+  const X = 26;
+  g.terrain.wrecks = g.terrain.wrecks.filter(w => Math.abs(w.x - X) > 5);
+  g.arrestors.clear();
+  g.state.arrestors = 1;
+  g.state.fuel = g.state.maxFuel;
+  g.state.hull = g.state.maxHull;
+  g.ctrl.px = X + 0.5; g.ctrl.py = -151 + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  await new Promise(r => setTimeout(r, 400));
+  for (let i = 0; i < 40 && !g.ctrl.grounded; i++) await new Promise(r => setTimeout(r, 100));
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB' }));
+  await new Promise(r => setTimeout(r, 400));
+  const deployed = g.arrestors.list.length, heldAfterDeploy = g.state.arrestors;
+  const diag = { grounded: g.ctrl.grounded, mode: g.mode, mapOpen: g.map.visible, py: +g.ctrl.py.toFixed(2) };
+  // drill straight down out of the shaft floor the pad is standing on
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }));
+  let dug = false;
+  for (let i = 0; i < 150; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    if (!g.terrain.solidAt(X, 152)) { dug = true; break; }
+  }
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyS' }));
+  await new Promise(r => setTimeout(r, 500));
+  return { diag, deployed, heldAfterDeploy, dug, left: g.arrestors.list.length, held: g.state.arrestors };
+});
+console.log('footing dug out:', JSON.stringify(footing),
+  footing.deployed === 1 && footing.heldAfterDeploy === 0 && footing.dug &&
+  footing.left === 0 && footing.held === 1 ? 'OK — pad came back to the hold' : 'FAIL');
+
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();
