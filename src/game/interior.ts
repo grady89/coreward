@@ -81,6 +81,74 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return tex;
 }
 
+/**
+ * One arching fern frond, drawn as pinnae down both sides of a curved spine.
+ * Built once and shared — the fan reuses the single texture at nine angles.
+ */
+let frondMat: THREE.MeshStandardMaterial | null = null;
+function frondMaterial(): THREE.MeshStandardMaterial {
+  if (frondMat) return frondMat;
+  const tex = canvasTex(160, 320, gg => {
+    gg.clearRect(0, 0, 160, 320);
+    // leaflets as solid shapes, not hairlines — at the size this plane ends up
+    // on screen a 3px stroke disappears and the fern reads as wire
+    for (let i = 0; i <= 21; i++) {
+      const t = i / 21;
+      const px = 80 + Math.sin(t * 1.45) * 12;
+      const py = 308 - t * 288;
+      const span = Math.sin(Math.min(1, t * 1.08) * Math.PI) * 62 * (1 - t * 0.2) + 8;
+      const wide = 3.6 + Math.sin(Math.min(1, t * 1.08) * Math.PI) * 4.4;
+      for (const sd of [-1, 1]) {
+        gg.fillStyle = (i + (sd > 0 ? 1 : 0)) % 2 ? '#6ab058' : '#4d8a42';
+        gg.beginPath();
+        gg.ellipse(px + sd * span * 0.52, py + 6 + t * 12, span * 0.56, wide,
+          sd * (0.34 + t * 0.36), 0, Math.PI * 2);
+        gg.fill();
+      }
+    }
+    gg.lineCap = 'round';
+    gg.strokeStyle = '#3a6a34'; gg.lineWidth = 4;
+    gg.beginPath();
+    for (let i = 0; i <= 26; i++) {
+      const t = i / 26;
+      gg.lineTo(80 + Math.sin(t * 1.45) * 12, 312 - t * 294);
+    }
+    gg.stroke();
+  });
+  frondMat = new THREE.MeshStandardMaterial({
+    map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide,
+    roughness: 0.85, emissive: 0x16321c, emissiveIntensity: 0.6,
+  });
+  return frondMat;
+}
+
+/** a potted fern: fronds fanning out of a crown, the way a fern actually grows */
+function fernPlant(x: number, y: number, z: number, s = 1): THREE.Group {
+  const g = new THREE.Group();
+  const mat = frondMaterial();
+  const N = 11;
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    const lean = (t - 0.5) * 1.9;
+    const h = (0.44 + Math.cos((t - 0.5) * 2.7) * 0.16) * s;
+    const geom = new THREE.PlaneGeometry(h * 0.72, h);
+    geom.translate(0, h / 2 + 0.03 * s, 0);   // pivot below the frond's base,
+                                              // so no quad corner dips into the pot
+    const f = new THREE.Mesh(geom, mat);
+    f.position.set(x, y, z + ((i % 3) - 1) * 0.05 * s);
+    f.rotation.z = -lean;
+    f.rotation.y = ((i % 3) - 1) * 0.36;
+    g.add(f);
+  }
+  // the crown the fronds come out of, so the fan has a root
+  for (const [cx, ch] of [[-0.05, 0.1], [0.02, 0.13], [0.07, 0.09]] as const) {
+    const stub = new THREE.Mesh(new THREE.ConeGeometry(0.045 * s, ch * s, 6), FERN);
+    stub.position.set(x + cx * s, y + (ch * s) / 2, z);
+    g.add(stub);
+  }
+  return g;
+}
+
 /** dusk through glass: the amber sky, from inside */
 function duskWindow(w: number, x: number, y: number): THREE.Group {
   const g = new THREE.Group();
@@ -338,12 +406,9 @@ export class Interior {
       g.add(pt);
     }
     if (own.includes('plant')) {
-      g.add(box(0.4, 0.26, 0.34, TEAL_PAINT, 2.4, 0.15, -1.3));
-      for (const [fx, fh] of [[2.32, 0.35], [2.4, 0.46], [2.48, 0.32]] as const) {
-        const frond = new THREE.Mesh(new THREE.ConeGeometry(0.07, fh, 6), FERN);
-        frond.position.set(fx, 0.28 + fh / 2, -1.3);
-        g.add(frond);
-      }
+      g.add(box(0.5, 0.32, 0.4, TEAL_PAINT, 2.4, 0.18, -1.3));
+      g.add(box(0.54, 0.04, 0.44, DARKPIPE, 2.4, 0.36, -1.3));
+      g.add(fernPlant(2.4, 0.37, -1.3));
     }
     if (own.includes('bunk')) {
       g.add(box(1.7, 0.16, 0.75, GUNMETAL, 21.4, 0.3, -1.35));
@@ -359,14 +424,28 @@ export class Interior {
       g.add(cyl(0.05, 0.05, CREAM, 18.1, 0.64, -1.72, 8));
     }
     if (own.includes('shelf')) {
-      g.add(box(1.1, 0.05, 0.3, this.trimMat, 10.5, 1.55, -1.85));
-      for (const [bx, bh, bc] of [[10.15, 0.24, 0x2e6e64], [10.32, 0.28, 0xa83a24], [10.5, 0.22, 0xe6dcc4], [10.72, 0.26, 0x4b545e]] as const) {
+      // hung in the clear bay west of the x=11 window — a plank across the
+      // glass reads as a mistake, and the ribs at 8 and 11.5 box it in
+      g.add(box(1.1, 0.05, 0.3, this.trimMat, 9.55, 1.55, -1.85));
+      for (const s of [-1, 1]) {
+        const bracket = box(0.04, 0.16, 0.22, DARKPIPE, 9.55 + s * 0.48, 1.45, -1.87);
+        bracket.rotation.x = -0.5;
+        g.add(bracket);
+      }
+      for (const [bx, bh, bc] of [[9.2, 0.24, 0x2e6e64], [9.37, 0.28, 0xa83a24], [9.55, 0.22, 0xe6dcc4], [9.77, 0.26, 0x4b545e]] as const) {
         g.add(box(0.12, bh, 0.2, new THREE.MeshStandardMaterial({ color: bc, roughness: 0.8 }), bx, 1.58 + bh / 2, -1.82));
       }
-      const flat = box(0.26, 0.1, 0.2, new THREE.MeshStandardMaterial({ color: 0x9c431c, roughness: 0.8 }), 10.98, 1.63, -1.82);
+      const flat = box(0.26, 0.1, 0.2, new THREE.MeshStandardMaterial({ color: 0x9c431c, roughness: 0.8 }), 9.98, 1.63, -1.82);
       g.add(flat);
     }
     if (own.includes('radio')) {
+      // the set sits on its own side cabinet — it was floating at desk height
+      // with nothing under it
+      for (const s of [-1, 1]) g.add(box(0.07, 0.08, 0.3, DARKPIPE, 5.1 + s * 0.19, 0.04, -1.4));
+      g.add(box(0.52, 0.5, 0.38, GUNMETAL, 5.1, 0.33, -1.4));
+      g.add(box(0.58, 0.04, 0.42, DARKPIPE, 5.1, 0.6, -1.4));
+      g.add(box(0.42, 0.025, 0.01, DARKPIPE, 5.1, 0.42, -1.205));
+      g.add(box(0.06, 0.05, 0.03, GUNMETAL, 5.1, 0.28, -1.205));
       g.add(box(0.4, 0.24, 0.2, GUNMETAL, 5.1, 0.74, -1.4));
       g.add(cyl(0.012, 0.4, DARKPIPE, 5.24, 1.05, -1.4, 4));
       g.add(glowDot(TEAL_GLOW, 4.98, 0.78, -1.28, 0.02));
@@ -388,10 +467,10 @@ export class Interior {
       });
       const chart = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.82),
         new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
-      chart.position.set(14.6, 1.5, -1.95);
+      chart.position.set(13.25, 1.5, -1.92);
       g.add(chart);
-      g.add(box(1.38, 0.05, 0.04, DARKPIPE, 14.6, 1.93, -1.94));
-      g.add(box(1.38, 0.05, 0.04, DARKPIPE, 14.6, 1.07, -1.94));
+      g.add(box(1.38, 0.05, 0.04, DARKPIPE, 13.25, 1.93, -1.91));
+      g.add(box(1.38, 0.05, 0.04, DARKPIPE, 13.25, 1.07, -1.91));
     }
   }
 
