@@ -1204,7 +1204,7 @@ await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
   // ===================================================================
 });
 
-await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · nothing respawns in a beam', 'lint · the stone on foot', 'lint · flat walk'], async () => {
+await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · no rail post floats', 'lint · nothing respawns in a beam', 'lint · the stone on foot', 'lint · flat walk'], async () => {
   // --- P3a: no chamber is wider than the frame can hold legibly ---
   const chamberW = await page.evaluate(() => {
     const max = window.__CHAMBER_MAX_W;
@@ -1517,6 +1517,34 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
         + ` (needs ${r.kind === 'crusher' ? 5 : 4})`) };
   }, V4_DONE);
   ok('lint · sconce buffer', buffer, buffer.bad.length === 0);
+
+  // --- NO RAIL POST FLOATS. A cable is held up by something. An endpoint
+  // with no stone within reach in any direction is a rail bolted to the sky,
+  // and it reads as nothing whichever angle the rail runs at — which is the
+  // point of stating it as a rule rather than fixing the rails one at a time.
+  // Asked of the SEATED span, so it covers what the room actually built. ---
+  const railPosts = await page.evaluate(async () => {
+    const { g, until } = window.__H();
+    const floating = [];
+    let ends = 0;
+    for (const def of window.__VAULTS) {
+      g.devVault(def.glyph);
+      await until(() => g.mode === 'vault' && g.vault && g.vault.glyphId === def.glyph, 40);
+      const v = g.vault;
+      (v.def.shuttles ?? []).forEach((s, i) => {
+        const sp = v.shuttleSpan[i];
+        for (const [x, y] of [[sp.x0, sp.y0], [sp.x1, sp.y1]]) {
+          ends++;
+          if (!v.railAnchor(x + 0.5, -(y + 0.5))) {
+            floating.push(`${def.glyph}@${x},${y}`);
+          }
+        }
+      });
+    }
+    return { ends, floating };
+  });
+  ok('lint · no rail post floats', railPosts,
+    railPosts.ends > 0 && railPosts.floating.length === 0);
 
   // --- NOTHING RESPAWNS IN A BEAM. The sharp half of the buffer rule, and
   // the one that was actually costing playability: a checkpoint or an entry

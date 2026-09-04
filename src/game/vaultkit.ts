@@ -656,6 +656,30 @@ export function buildRailPost(): THREE.Group {
   return g;
 }
 
+/**
+ * The leg a rail post stands on. A cable is held up by something; how far that
+ * something has to reach is the room's business, not the author's, so the mast
+ * is built to order from the post's foot down to the stone beneath it.
+ */
+export function buildRailMast(drop: number): THREE.Group {
+  const g = new THREE.Group();
+  if (drop <= 0.02) return g;
+  const stone = stoneMat(0x8a877f);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.095, drop, 7), stone);
+  shaft.position.y = -drop / 2;
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.09, 8), stone);
+  foot.position.y = -drop + 0.045;
+  g.add(shaft, foot);
+  // a collar every course or so, so a long leg reads as built and not extruded
+  for (let d = 0.55; d < drop - 0.12; d += 0.7) {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.018, 4, 8), bronzeMat());
+    band.rotation.x = Math.PI / 2;
+    band.position.y = -d;
+    g.add(band);
+  }
+  return g;
+}
+
 export interface BoltParts {
   group: THREE.Group;
   /** the glass head — what the lint reads, and what you see coming */

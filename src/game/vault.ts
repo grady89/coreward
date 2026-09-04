@@ -10,7 +10,7 @@ import {
   Act, actOf, LATTICE, softDisc, drankStain, glowMat,
   buildSconce, SconceMount, SCONCE_FLAME_Y, buildBrazier,
   buildEmitter, seatEmitter, EMITTER_REACH, coneGeometry, coneMaterial, EmitterParts,
-  buildRailPost, buildBolt, BoltParts, buildSnuffer, MothParts,
+  buildRailPost, buildRailMast, buildBolt, BoltParts, buildSnuffer, MothParts,
   buildCenser, CenserParts, buildArcTelegraph, ArcTelegraph, buildChain,
   buildCrusher, buildRime, RimeParts,
   buildPier, buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts,
@@ -739,16 +739,23 @@ export class VaultRun {
     // thief — and never the unlight's ember, because it steals, it does not
     // kill.
     this.shuttleSpan = (this.def.shuttles ?? []).map(s2 => {
+      const asIs = { x0: s2.x0, y0: s2.y0, x1: s2.x1, y1: s2.y1 };
+      if (s2.snuff) return asIs;             // a moth is a patrol, not a fixture
       const vertical = Math.abs(s2.y1 - s2.y0) > Math.abs(s2.x1 - s2.x0);
-      if (!vertical || s2.snuff) return { x0: s2.x0, y0: s2.y0, x1: s2.x1, y1: s2.y1 };
-      const x = s2.x0;
-      let top = Math.min(s2.y0, s2.y1), bot = Math.max(s2.y0, s2.y1);
-      while (top > 1 && !this.solidTile(x, top - 1)) top--;
-      while (bot < this.p.h - 2 && !this.solidTile(x, bot + 1)) bot++;
-      // keep the authored direction, so `phase` still means what it meant
-      return s2.y0 <= s2.y1
-        ? { x0: x, y0: top, x1: x, y1: bot }
-        : { x0: x, y0: bot, x1: x, y1: top };
+      if (vertical) {
+        const x = s2.x0;
+        let top = Math.min(s2.y0, s2.y1), bot = Math.max(s2.y0, s2.y1);
+        while (top > 1 && !this.solidTile(x, top - 1)) top--;
+        while (bot < this.p.h - 2 && !this.solidTile(x, bot + 1)) bot++;
+        // keep the authored direction, so `phase` still means what it meant
+        return s2.y0 <= s2.y1
+          ? { x0: x, y0: top, x1: x, y1: bot }
+          : { x0: x, y0: bot, x1: x, y1: top };
+      }
+      // A horizontal rail keeps the height it was authored at. Where it hangs
+      // is level design; that its posts are bolted to something is not, and
+      // that is handled once for every rail by railAnchor below.
+      return asIs;
     });
 
     for (const [si, s2] of (this.def.shuttles ?? []).entries()) {
@@ -771,17 +778,28 @@ export class VaultRun {
       // A post stands on what it is bolted to. On a vertical rail that is the
       // ceiling at one end and the floor at the other, so the upper one is
       // turned over to hang from its stone rather than stand on air.
-      const vert = sp.x0 === sp.x1 && sp.y0 !== sp.y1;
-      for (const [px2, py2, upper] of [[ax, ay, 1], [bx, by, 0]] as [number, number, number][]) {
+      // NO RAIL POST FLOATS. Whatever the rail's angle — level, plumb or
+      // anything between — each end is bolted to the nearest stone, and the
+      // leg is built to whatever length that takes. The post turns to face
+      // its anchor, so one rule covers a floor stand, a ceiling hanger and a
+      // wall bracket without any of them being a special case.
+      for (const [px2, py2] of [[ax, ay], [bx, by]] as [number, number][]) {
+        const a2 = this.railAnchor(px2, py2);
         const post = buildRailPost();
-        if (vert) {
-          const hangs = upper ? sp.y0 < sp.y1 : sp.y1 < sp.y0;
-          post.rotation.z = hangs ? Math.PI : 0;
-          post.position.set(px2, py2 + (hangs ? 0.28 : -0.28), 0.02);
-        } else {
+        if (!a2) {                      // nothing within reach: leave it be
           post.position.set(px2, py2 - 0.28, 0.02);
+          this.scene.add(post);
+          continue;
         }
-        this.scene.add(post);
+        const [dx2, dy2] = a2.dir;
+        // the post's own axis runs down its -y, so turn that onto the anchor
+        const th = Math.atan2(dx2, -dy2);
+        post.rotation.z = th;
+        post.position.set(px2 + dx2 * 0.28, py2 + dy2 * 0.28, 0.02);
+        const mast = buildRailMast(a2.reach - 0.48);
+        mast.rotation.z = th;
+        mast.position.set(px2 + dx2 * 0.48, py2 + dy2 * 0.48, 0.02);
+        this.scene.add(post, mast);
       }
       this.scene.add(rail, rail2);
       if (s2.snuff) {
@@ -2216,6 +2234,34 @@ export class VaultRun {
       x: sp.x0 + 0.5 + (sp.x1 - sp.x0) * ping + ox,
       y: -(sp.y0 + 0.5) - (sp.y1 - sp.y0) * ping + oy,
     };
+  }
+
+  /**
+   * What a rail post is bolted to: the nearest stone, floor first.
+   *
+   * Floor wins ties because a post that stands reads as holding the cable up,
+   * which is what a cable wants; a hanger and a bracket are what you fall back
+   * on when there is no floor within reach. Returns the direction to the stone
+   * and how far the surface is in world units, so the leg can be built to fit.
+   */
+  railAnchor(wx: number, wy: number): { dir: [number, number]; reach: number } | null {
+    const tx = Math.floor(wx), ty = Math.floor(-wy);
+    const MAX = 20;
+    let best: { dir: [number, number]; reach: number } | null = null;
+    const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    for (const [dx, dy] of dirs) {
+      for (let k = 1; k <= MAX; k++) {
+        const cx = tx + dx * k, cy = ty - dy * k;
+        if (!this.solidTile(cx, cy)) continue;
+        // the face of that tile, not its middle
+        const reach = dx !== 0
+          ? Math.abs((cx + (dx > 0 ? 0 : 1)) - wx)
+          : Math.abs(-(cy + (dy > 0 ? 1 : 0)) - wy);
+        if (!best || reach < best.reach - 1e-6) best = { dir: [dx, dy], reach };
+        break;
+      }
+    }
+    return best && best.reach > 0.5 ? best : (best ? { ...best, reach: 0.5 } : null);
   }
 
   /**
