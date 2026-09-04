@@ -478,17 +478,24 @@ await stage('famine', ['the famine', 'light shuttles'], async () => {
     await new Promise(r => setTimeout(r, 700));
     const p1 = v.shuttlePos(0);
     const moves = Math.abs(p1.x - p0.x) > 0.2;
-    // hold station in the rail's path: there is no floor at rail height, so a
-    // one-shot placement falls out of the kill box before the shuttle arrives —
-    // whether it hit depended on the shuttle's phase at placement time
+    // STAND ON THE GROUND UNDER THE RAIL AND YOU ARE HIT. That is the whole
+    // rule now that a level rail seats one course above its floor, so the
+    // check states it that way rather than naming the row the rail used to be
+    // on — which it did, and which stopped meaning anything the moment the
+    // rail came down to where it belongs.
+    const sp = v.shuttleSpan[0];
+    const p = v.p;
+    const mid = Math.round((sp.x0 + sp.x1) / 2);
+    let f = sp.y0;
+    while (f < p.h - 1 && !(p.solid[(f + 1) * p.w + mid] || p.kill[(f + 1) * p.w + mid])) f++;
     const r0 = v.reforms;
     let hit = false;
     for (let i = 0; i < 60 && !hit; i++) {
-      v.px = 23.5; v.py = -21.5; v.vx = 0; v.vy = 0; v.invuln = 0;
+      v.px = mid + 0.5; v.py = -(f + 1) + 0.52; v.vx = 0; v.vy = 0; v.invuln = 0;
       await new Promise(r => setTimeout(r, 100));
       hit = v.reforms > r0;
     }
-    return { moves, hit };
+    return { moves, hit, railY: sp.y0, stoodOn: f + 1 };
   });
   ok('light shuttles', shuttle, shuttle.moves && shuttle.hit);
 });

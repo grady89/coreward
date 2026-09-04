@@ -752,10 +752,41 @@ export class VaultRun {
           ? { x0: x, y0: top, x1: x, y1: bot }
           : { x0: x, y0: bot, x1: x, y1: top };
       }
-      // A horizontal rail keeps the height it was authored at. Where it hangs
-      // is level design; that its posts are bolted to something is not, and
-      // that is handled once for every rail by railAnchor below.
-      return asIs;
+      // A LEVEL RAIL SITS ONE COURSE ABOVE THE GROUND IT IS STRUNG OVER.
+      //
+      // Authored heights hung it a storey up, which is not an obstacle at all:
+      // a standing body walked underneath 129 of the 269 rail columns in the
+      // game, six whole rails end to end. Longer legs only made a tall thing
+      // you still walk under — the rail had to come DOWN. At one course up the
+      // bolt crosses the body of anything standing there, so it is jumped or
+      // waited out. The jump is cheap (0.68 tiles against a 2.68 rise); the
+      // timing is the obstacle, which is what a shuttle is for.
+      //
+      // A level cable needs level ground under it, and that is the AUTHOR's
+      // business: a rail over a step should be angled, or moved, or cut short.
+      // So this seats the rail only where the floor is flat under the whole
+      // span, and leaves an uneven one exactly where it was put — `lint · rail
+      // over level ground` names those rather than bending the rail to hide
+      // them.
+      // GROUND IS SOLID *OR* LETHAL. A stud (`X`) sets kill and not solid, so
+      // searching for the first solid tile falls straight through the fangs in
+      // a floor and finds whatever is a storey below — which made flat ground
+      // with studs in it read as a staircase, and left the rail floating over
+      // exactly the corridors it was put there to guard.
+      const ground = (x: number, y: number): boolean =>
+        this.solidTile(x, y) || (x >= 0 && y >= 0 && x < this.p.w && y < this.p.h
+          && !!this.p.kill[y * this.p.w + x]);
+      const lo = Math.min(s2.x0, s2.x1), hi = Math.max(s2.x0, s2.x1);
+      let floor = -1;
+      for (let x = lo; x <= hi; x++) {
+        let f = s2.y0;
+        while (f < this.p.h - 1 && !ground(x, f + 1)) f++;
+        if (f >= this.p.h - 1) return asIs;               // open sky under it
+        if (floor < 0) floor = f;
+        else if (f !== floor) return asIs;                // a step: not ours to fix
+      }
+      if (floor < 0 || floor <= s2.y0) return asIs;
+      return { x0: s2.x0, y0: floor, x1: s2.x1, y1: floor };
     });
 
     for (const [si, s2] of (this.def.shuttles ?? []).entries()) {
