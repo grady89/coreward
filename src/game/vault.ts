@@ -273,6 +273,17 @@ export class VaultRun {
    * seated — one is a span, the other is a patrol.
    */
   private shuttleSpan: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  /**
+   * A CURRENT FILLS ITS SHAFT.
+   *
+   * The def gives the columns and a point inside them; the room decides how
+   * far the wind reaches, by opening out to the first stone above and below.
+   * Typing the extent by hand meant a shaft whose wind stopped partway up for
+   * no reason a player could see, and a number that silently disagreed with
+   * the rock the moment either moved. Same rule as a rail post: the author
+   * says where, the room says how far.
+   */
+  currentSpan: { x0: number; y0: number; x1: number; y1: number; force: number }[] = [];
 
   /** per shuttle; only a snuffer's entry is ever awake or ticking */
   private snuffState: { awake: boolean; t: number; sate: number }[] = [];
@@ -738,6 +749,17 @@ export class VaultRun {
     // veining glowing violet, self-luminous so the dark can never hide the
     // thief — and never the unlight's ember, because it steals, it does not
     // kill.
+    this.currentSpan = (this.def.currents ?? []).map(cu => {
+      const openRow = (y: number): boolean => {
+        for (let x = cu.x0; x <= cu.x1; x++) if (this.solidTile(x, y)) return false;
+        return true;
+      };
+      let top = Math.min(cu.y0, cu.y1), bot = Math.max(cu.y0, cu.y1);
+      while (top > 1 && openRow(top - 1)) top--;
+      while (bot < this.p.h - 2 && openRow(bot + 1)) bot++;
+      return { x0: cu.x0, y0: top, x1: cu.x1, y1: bot, force: cu.force };
+    });
+
     this.shuttleSpan = (this.def.shuttles ?? []).map(s2 => {
       const asIs = { x0: s2.x0, y0: s2.y0, x1: s2.x1, y1: s2.y1 };
       if (s2.snuff) return asIs;             // a moth is a patrol, not a fixture
@@ -909,7 +931,8 @@ export class VaultRun {
     // currents — the visible rising column: a braided rope of sparks out of
     // a hot vent, warmer and tighter at the floor than the room's falling
     // motes, so the carrier and the fighter can never be confused (grammar §2)
-    for (const cu of this.def.currents ?? []) {
+    // drawn to the SEATED span, so the wind you can see is the wind that lifts
+    for (const cu of this.currentSpan) {
       const parts = buildCurrent(cu.x0, cu.x1, cu.y0, cu.y1);
       this.scene.add(parts.group);
       this.currentPts.push({ parts, c: cu });
@@ -1592,7 +1615,7 @@ export class VaultRun {
       // CURRENTS — the rising updraft: a vertical carry, capped so it lifts
       // like a breath and never fires like a cannon (P5). The generosity
       // object: wind was the enemy; this one wind is the road
-      for (const cu of this.def.currents ?? []) {
+      for (const cu of this.currentSpan) {
         if (this.px > cu.x0 && this.px < cu.x1 + 1
           && -this.py > cu.y0 && -this.py < cu.y1 + 1 && this.vy < CURRENT_RISE) {
           this.vy = Math.min(CURRENT_RISE, this.vy + cu.force * dt);

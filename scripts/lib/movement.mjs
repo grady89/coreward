@@ -33,6 +33,7 @@ export const C = {
   GRAV: K('GRAV'), MAX_FALL: K('MAX_FALL'), DASH_V: K('DASH_V'), DASH_T: K('DASH_T'),
   DASH_KEEP: K('DASH_KEEP'), DASH_CARRY: K('DASH_CARRY'), FREEZE_T: K('FREEZE_T'),
   FAST_FALL: K('FAST_FALL'), APEX_BAND: K('APEX_BAND'), CORNER: K('CORNER'),
+  CURRENT_RISE: K('CURRENT_RISE'),
   DASH_POP: K('DASH_POP'), WJ_NEAR: K('WJ_NEAR'), WJ_LATCH: K('WJ_LATCH'),
   WALL_SLIDE: K('WALL_SLIDE'), WALL_JUMP_UP: K('WALL_JUMP_UP'),
   WALL_JUMP_OUT: K('WALL_JUMP_OUT'), COYOTE: K('COYOTE'), BUFFER: K('BUFFER'),
@@ -52,10 +53,26 @@ const THIN = new Set(['A', 'b', 'R']);
 export const VOID_PAD = 8;
 
 export class World {
-  constructor(rows, openEdges = false) {
+  constructor(rows, openEdges = false, currents = []) {
     this.rows = rows;
     this.h = rows.length;
     this.w = Math.max(...rows.map(r => r.length));
+    // CURRENTS — rising updraft columns. Without these the simulator cannot
+    // see a room whose route goes up a wind channel: it reports the stone
+    // unreachable and every shaft as a wall, which is a harness lying about a
+    // mechanic rather than measuring it.
+    // seated the way the game seats them: the def names the columns and a
+    // point inside them, the ROOM decides how far the wind reaches
+    this.currents = currents.map(cu => {
+      const openRow = (y) => {
+        for (let x = cu.x0; x <= cu.x1; x++) if (this.solid(x, y)) return false;
+        return true;
+      };
+      let top = Math.min(cu.y0, cu.y1), bot = Math.max(cu.y0, cu.y1);
+      while (top > 1 && openRow(top - 1)) top--;
+      while (bot < this.h - 2 && openRow(bot + 1)) bot++;
+      return { ...cu, y0: top, y1: bot };
+    });
     // an open-edged room has sky past its edge, not stone. The simulator has
     // to know, or it verifies a room with walls the game does not have.
     this.openEdges = openEdges;
@@ -242,6 +259,15 @@ export function step(s, input, dt = DT) {
       }
     }
     if (!s.jumpHeld && !s.jumpCut && s.vy > 0) { s.vy *= 0.45; s.jumpCut = true; }
+  }
+
+  // the updraft carries, before the fall governor: it lifts like a breath and
+  // is capped so it can never outrun the spark (P5)
+  for (const cu of s.world.currents ?? []) {
+    if (s.px > cu.x0 && s.px < cu.x1 + 1
+      && -s.py > cu.y0 && -s.py < cu.y1 + 1 && s.vy < C.CURRENT_RISE) {
+      s.vy = Math.min(C.CURRENT_RISE, s.vy + cu.force * dt);
+    }
   }
 
   const falling = s.vy < 0;

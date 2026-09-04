@@ -65,7 +65,13 @@ function loadRooms() {
     const i = m.index, j = src.indexOf("glyph: '", i + 20);
     const seg = src.slice(i, j < 0 ? src.length : j);
     const rows = [...seg.matchAll(/^      '(.*)',?$/gm)].map(x => x[1]);
-    if (rows.length) out.push({ glyph: m[1], rows });
+    // the room's updraft columns, so a route up a wind channel can be proved
+    const cm = seg.match(/currents: \[([\s\S]*?)\n    \]/);
+    const currents = cm ? [...cm[1].matchAll(
+      /x0: (-?[\d.]+), y0: (-?[\d.]+), x1: (-?[\d.]+), y1: (-?[\d.]+), force: (-?[\d.]+)/g)]
+      .map(c => ({ x0: +c[1], y0: +c[2], x1: +c[3], y1: +c[4], force: +c[5] })) : [];
+    const openEdges = /openEdges: true/.test(seg);
+    if (rows.length) out.push({ glyph: m[1], rows, currents, openEdges });
   }
   return out;
 }
@@ -101,6 +107,21 @@ function platforms(w) {
   return out;
 }
 
+/**
+ * How much height an updraft could give this traversal: the tallest current
+ * column that stands between the two platforms and is reachable from A.
+ */
+function liftBetween(w, a, b) {
+  let best = 0;
+  for (const cu of w.currents ?? []) {
+    const lo = Math.min(a.x0, b.x0) - 1, hi = Math.max(a.x1, b.x1) + 1;
+    if (cu.x1 < lo || cu.x0 > hi) continue;
+    if (cu.y1 < b.y - 1 || cu.y0 > a.y + 1) continue;   // it spans the climb
+    best = Math.max(best, cu.y1 - cu.y0 + 1);
+  }
+  return best;
+}
+
 // ---------------------------------------------------------------------------
 // one traversal: can the body get from platform A to platform B, and by how
 // many frames could the jump have been mistimed?
@@ -130,7 +151,11 @@ function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jum
   for (let i = 0; i < runUp + jumpDelay; i++) step(s, hold1(dir));
   step(s, { ...hold1(dir), press: true });
   let steer = dir;
-  for (let f = 0; f < 140; f++) {
+  // 140 frames is a jump and a half. A current ride is neither: twelve courses
+  // at CURRENT_RISE is most of two seconds, so a tape that ends at 140 lands
+  // the body back where it started and calls the channel impossible.
+  const FLY = (w.currents ?? []).length ? 420 : 140;
+  for (let f = 0; f < FLY; f++) {
     const k = kicks.find(q => q.at === f);
     if (k) steer = k.dir;
     const inp = { ...hold1(steer), jump: f < hold };
@@ -275,8 +300,8 @@ const FLAT_MAX = 10;
 console.log(`solvability harness · body ${(C.HW * 2).toFixed(2)}×${(C.HH * 2).toFixed(2)} tiles`);
 console.log(`running jump ${MAXJ.toFixed(2)} across / ${m.standing.height.toFixed(2)} up · margin threshold ${MARGIN}f\n`);
 
-for (const { glyph, rows } of rooms) {
-  const w = new World(rows);
+for (const { glyph, rows, currents, openEdges } of rooms) {
+  const w = new World(rows, openEdges, currents);
   const flat = longestUndecided(w);
   if (flatOnly) {
     const bad = flat.worst > FLAT_MAX;
@@ -296,7 +321,14 @@ for (const { glyph, rows } of rooms) {
       const dx = b.x0 > a.x1 ? b.x0 - a.x1 : b.x1 < a.x0 ? a.x0 - b.x1 : 0;
       const dy = a.y - b.y;                       // + is upward
       if (dx > MAXJ + 4 || dx < 0) continue;
-      if (dy > 5 || dy < -14) continue;
+      // A CURRENT CHANGES WHAT "UP" COSTS. The five-course ceiling on an
+      // upward pair is the body's own reach with a jump and a kick or two; an
+      // updraft carries it as far as the column is tall, so a pair joined by
+      // one is allowed the height of that column. Without this the channel
+      // edge was thrown away before it was ever simulated, and a room built
+      // around wind read as a room with no way up.
+      const lift = liftBetween(w, a, b);
+      if (dy > 5 + lift || dy < -14) continue;
       if (dx === 0 && Math.abs(dy) <= 1) continue; // same shelf, no traversal
       edges.push([a, b, dx, dy]);
     }

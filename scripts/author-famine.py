@@ -1,215 +1,198 @@
-"""THE FAMINE — "every lit thing became a spent thing". 88 x 30.
+"""THE FAMINE — built to the drawing. 56 x 48.
 
-    threshold -> down -> up -> DECISION -> down -> up -> the stone
+    start ---> hall A ---> [wind] ---> hall B <--- [wind] ---> hall C ---> finish
+                             up                     up
 
-A shallow W, as §II.2 asks, so that every walk-back after a theft is short.
+A SERPENTINE: three halls stacked, run in alternating directions and joined by
+two updraft channels. You start at the bottom left, cross right, are lifted,
+cross back left, are lifted again, and cross right to the stone. Nothing on the
+route can be skipped, which is the whole reason for the shape — an open room
+lets a solver cut the middle out, a serpentine makes every beat serial.
 
-THE ONE IDEA, stated in stone: **the ground does not give the breath back.**
-Drank stone (`=`) carries you and refunds nothing. Live stone (`#`) refills.
-The famine is built almost entirely of the first, so live stone stops being
-scenery and becomes the thing you route between — and `deadLight` means the
-sconces save your place and hand you nothing either.
+THE THREE OBSTACLES, and nothing else:
 
-THE FAMINE IS NOT THE WICK. That room is open sky and a miss is a fall; this
-one has a floor and a miss is a *cost*. The low road is real, drank, and slow:
-fall anywhere and you land on it, keep your life, lose your breath, and climb
-back on legs. Softness in the failure is what buys the room its cruelty in the
-economy, and nine rooms of open sky would be one room nine times.
+  * STUDS set into the floor — a fang at ankle height with solid stone under
+    it, so it is jumped, not fallen into. Runs of one to four, widening as the
+    room goes on.
+  * LASER RAILS — vertical bolt shuttles strung floor to ceiling across a
+    hall. They cannot be gone under or over; you read the bolt and run when it
+    is at the far end. The room's clock.
+  * THE CHANNELS — updraft columns. You jump in and are carried; the wind was
+    the enemy everywhere else and here it is the road.
 
-The phrase unit here is **live stone -> n gaps, one spark -> live stone**. A
-dry archipelago with one gap past the legs' reach has exactly one solution and
-is a puzzle; with a branch it is a decision. That is the whole grammar.
+The halls are SIX courses of air over their floor. That is enough to jump a
+stud (the body rises 2.68) and enough that a laser reads as a wall of light
+rather than a dash, and not so much that the hall stops being a corridor.
 
-Distances are fractions of the MEASURED running jump (5.45 across, 2.68 up —
-docs/movement-metrics.md). Anything at or under 1.10x is legs; 1.47x is the
-spark. There is nothing in between, on purpose: a gap in this room is either
-free or it costs you the only thing you have.
+Distances are fractions of the MEASURED running jump (5.45 tiles across, 2.68
+up — docs/movement-metrics.md). A stud run of n columns is a crossing of n+1
+tiles, so a run of four is 0.92x and a run of five is past what legs can do.
 """
 import io
 
-W, HGT = 88, 30
+W, HGT = 56, 48
 MAXJ = 5.45
-LOW = 26                                     # the low road, drank the whole way
+PULSE = 0.85
 
-g = [['.'] * W for _ in range(HGT)]
-PATH = []
+g = [['#'] * W for _ in range(HGT)]          # solid, and the halls are cut out
+
+# hall floor rows, bottom to top, and the six courses of air over each
+HALL = [42, 30, 18]
+AIR = 6
+LEFT, RIGHT = 2, W - 3
+
+# the two channels: (columns, from hall, to hall)
+CH1 = (49, 52)                                # right end: hall A -> hall B
+CH2 = (3, 6)                                  # left end:  hall B -> hall C
 
 
-def rock(x0, x1, y0, y1, ch='#'):
+def carve(x0, x1, y0, y1):
     for y in range(y0, y1 + 1):
         for x in range(x0, x1 + 1):
             if 0 <= x < W and 0 <= y < HGT:
-                g[y][x] = ch
-
-
-def shelf(x0, x1, y, ch='#', note='', sect=''):
-    rock(x0, x1, y, y, ch)
-    PATH.append({'x0': x0, 'x1': x1, 'y': y, 'ch': ch, 'note': note, 'sect': sect})
+                g[y][x] = '.'
 
 
 def put(x, y, ch):
     g[y][x] = ch
 
 
-def arc(y, x0, x1):
+def studs(floor, x0, n):
+    """A fang run set ON the floor: lethal at ankle height, stone underneath."""
+    for x in range(x0, x0 + n):
+        put(x, floor - 1, 'X')
+
+
+def ledge(floor, x0, x1, rise):
     for x in range(x0, x1 + 1):
-        if 0 <= x < W and 0 <= y < HGT and g[y][x] == '.':
-            g[y][x] = 'o'
+        put(x, floor - rise, '#')
 
 
-# the shell: this room has walls and a bottom, and that is the point of it
-rock(0, W - 1, 0, 1)
-rock(0, W - 1, HGT - 2, HGT - 1)
-rock(0, 1, 0, HGT - 1)
-rock(W - 2, W - 1, 0, HGT - 1)
+# --- the halls -------------------------------------------------------------
+for f in HALL:
+    carve(LEFT, RIGHT, f - AIR, f - 1)
 
-# ===========================================================================
-# THE LOW ROAD · row 26 · drank from end to end.
-# It catches every miss in the room and it gives nothing back. Walking it is
-# always possible and always slow, and you arrive at the far end carrying
-# exactly what you were carrying when you fell — which, after a spark, is
-# nothing. This is the safe line of rule 6, and the reason a miss here costs
-# position and breath instead of a life.
-# ===========================================================================
-rock(2, W - 3, LOW, LOW, '=')
+# --- the channels: cut through the rock between the halls ------------------
+carve(CH1[0], CH1[1], HALL[1] - 1, HALL[0] - 1)      # A -> B, right end
+carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C, left end
 
 # ===========================================================================
-# §1 · THRESHOLD · cols 2-14 · live stone, and the act's one honest light.
-# Two hops on stone that refills, so that the moment it stops refilling is
-# legible as a change rather than as a rule you never knew.
+# THE THREE HALLS, as tables. A hall is authored left to right whichever way it
+# is run: the direction is a property of the route, not of the stone.
+#
+#   stud runs   (column, width)   a run of n is a crossing of n+1 tiles
+#   ledges      (column, width)   always TWO courses up, never three. The body
+#                                 rises 2.68, so a three-course step is one it
+#                                 cannot make -- and the first pass authored
+#                                 every single ledge that way.
+#   lasers      (column, pulses, phase)
 # ===========================================================================
-shelf(2, 8, 14, '#', 'the threshold, and the last light that gives', 'threshold')
-shelf(12, 14, 14, '#', '0.73x, and the stone hands it back', 'threshold')
+STUDS = [
+    [(13, 2), (28, 3), (43, 3)],                   # A - 0.55x, 0.73x, 0.73x
+    [(40, 3), (26, 3), (12, 3)],                   # B - read right to left
+    [(14, 3), (30, 4), (46, 3)],                   # C - the widest run, 0.92x
+]
+LEDGES = [
+    [(18, 4), (34, 4)],
+    [(31, 4), (17, 4)],
+    [(23, 4), (40, 4)],
+]
+LASERS = [
+    [(24, 4, 0.0), (40, 3, 0.25), (47, 3, 0.5)],   # A - slow, and spread
+    [(37, 3, 0.0), (23, 2, 0.25), (9, 3, 0.75)],   # B - one guarding the exit
+    [(19, 2, 0.0), (36, 2, 0.5), (45, 2, 0.25)],   # C - the fastest in the room
+]
+LEDGE_RISE = 2
 
-# ===========================================================================
-# §2 · KI · cols 18-40 · the descent, and the first stone that keeps.
-# The shelves go drank at the first step down. Three crossings the legs can
-# make, then one they cannot — and the spark spent there does not come back,
-# because everything it lands on is dead. The dead sconce at the bottom saves
-# your place and refuses you the breath, which is the lesson stated twice.
-# ===========================================================================
-shelf(18, 19, 16, '=', '0.73x — and this one keeps what you spend', 'ki')
-shelf(23, 24, 19, '=', '0.92x, dropping', 'ki')
-shelf(28, 29, 21, '=', '0.92x', 'ki')
-shelf(37, 40, 22, '=', '1.47x — THE SPARK, and nothing here returns it', 'ki')
+for h, f in enumerate(HALL):
+    for x0, n in STUDS[h]:
+        assert n <= 4, 'hall %d: a %d-wide run is %.2fx, past the legs' % (h, n, (n + 1) / MAXJ)
+        studs(f, x0, n)
+    for x0, n in LEDGES[h]:
+        ledge(f, x0, x0 + n - 1, LEDGE_RISE)
 
-# ===========================================================================
-# §3 · SHO · cols 44-60 · the climb out, on legs, because there is no choice.
-# You reach the foot of this with an empty hand, so every rung is 1.10x or
-# under by necessity. It ends on the first live stone since the threshold —
-# and the room lets you feel that as relief before taking it away again.
-# ===========================================================================
-shelf(44, 45, 20, '=', '0.73x, climbing on nothing', 'sho')
-shelf(49, 50, 17, '=', '0.73x', 'sho')
-shelf(54, 55, 14, '=', '0.73x', 'sho')
-shelf(59, 62, 12, '#', 'LIVE STONE — the first breath since the threshold', 'sho')
+# --- entry, the stone, and the lights --------------------------------------
+# Entry + three, all dead (SII.2): the famine's sconces hold your place and
+# hand you nothing. One at the start, one where each channel sets you down, so
+# a fall costs the hall you are in and never the hall behind it.
+SCONCE = [(7, 0), (46, 1), (9, 2)]
+put(4, HALL[0] - 1, '@')
+for x, h in SCONCE:
+    put(x, HALL[h] - 1, 'S')
+put(RIGHT - 2, HALL[2] - 1, 'M')
+put(RIGHT - 4, HALL[2] - 1, 'K')             # the figure, curled by the stone
 
-# ===========================================================================
-# §4 · THE DECISION · cols 63-72 · two roads, and the light is on the wrong one.
-# HIGH: three drank ledges straight on, fast, and no refill until the island.
-# LOW:  a dead sconce a storey down. Lighting it buys your place and costs you
-#       the height — you climb back on legs with nothing in hand.
-# The wager the spec asks for, made of geometry: the checkpoint is not on the
-# fast line, and taking it is a real price rather than a detour.
-# ===========================================================================
-shelf(67, 68, 11, '=', 'HIGH — 0.92x, straight on', 'decide')
-shelf(72, 73, 11, '=', 'HIGH — 0.92x', 'decide')
+# A checkpoint you cannot breathe after is not a checkpoint (grammar S4.2):
+# four clear tiles to the nearest fang, four columns to the nearest wall of
+# light. Asserted here rather than left to the lint, because a light standing
+# in a stud run is not a near miss -- it is a room that kills you as control
+# comes back.
+for x, h in SCONCE:
+    for x0, n in STUDS[h]:
+        gap = min(abs(x - x0), abs(x - (x0 + n - 1)))
+        assert gap >= 4, 'sconce %d in hall %d is %d from the studs at %d' % (x, h, gap, x0)
+    for c, _, _ in LASERS[h]:
+        assert abs(x - c) >= 4, 'sconce %d in hall %d is %d from the laser at %d' % (x, h, abs(x - c), c)
 
-shelf(66, 70, 17, '=', 'LOW — the dead sconce, a storey below the fast line', 'decide')
-shelf(74, 75, 14, '=', 'LOW — 0.73x, climbing back with nothing', 'decide')
+# motes: over the apex of every stud run, and filling the channel mouths so
+# the road up reads as a road before you have to commit to it
+for h, f in enumerate(HALL):
+    for x0, n in STUDS[h]:
+        for k in range(n):
+            if g[f - 4][x0 + k] == '.':
+                g[f - 4][x0 + k] = 'o'
+for (c0, c1), f in ((CH1, HALL[0]), (CH2, HALL[1])):
+    for y in range(f - 5, f):
+        for x in range(c0, c1 + 1):
+            if g[y][x] == '.':
+                g[y][x] = 'o'
 
-# ===========================================================================
-# §5 · TEN · cols 76-82 · the only live stone on the crossing, and it is
-# guarded. Re-arming means timing the island against the moth: the refill
-# point IS the dangerous point, which is the famine's thesis as a route.
-# ===========================================================================
-shelf(78, 81, 11, '#', 'THE ISLAND — live, and a moth patrols it', 'ten')
-
-# ===========================================================================
-# §6 · KETSU · cols 82-86 · studs, and one spark carried past two moths.
-# Nothing new: drank stone, a dead sconce, a stud, and the moths. The gap to
-# the stone is 1.47x, so the spark has to arrive with you — and the corridor
-# exists to take it off you before it can.
-# ===========================================================================
-shelf(82, 83, 8, '=', '0.73x off the island, spark in hand', 'ketsu')
-shelf(85, 86, 5, '#', 'the stone', 'ketsu')
-
-# the studs of the last corridor: a fang in the wall of the climb, so the
-# line past the moths is narrow without being invisible
-put(84, 7, 'X')
-put(81, 6, 'X')
-
-# ---------------------------------------------------------------------------
-# THE CLIMB OFF THE LOW ROAD. A room whose resource runs out must never stand
-# you somewhere the stone cannot be reached from, so the road back up is drank
-# stone at 0.73x the whole way — legs only, no spark anywhere in it. It is
-# long because it is safe; that is the trade the low road is for.
-# ---------------------------------------------------------------------------
-for i, (x0, x1, y) in enumerate([
-        (34, 35, 24), (39, 40, 24), (44, 45, 24), (49, 50, 24),
-        (54, 55, 24), (59, 60, 24), (64, 65, 24), (69, 70, 22),
-        (74, 75, 20), (79, 80, 17), (84, 85, 14), (79, 80, 11)]):
-    shelf(x0, x1, y, '=', 'the long way up, on legs', 'lowroad')
-
-# ---------------------------------------------------------------------------
-# sconces: entry + three, all dead (§II.2). None of them refill; the first is
-# the act's one honest cup and it is behind you within eight tiles.
-# ---------------------------------------------------------------------------
-put(4, 13, '@')
-put(7, 13, 'S')                 # threshold
-put(38, 21, 'S')                # the bottom of the ki, where the spark went
-put(67, 16, 'S')                # THE DECISION — a storey off the fast line
-put(85, 4, 'M')
-put(83, 4, 'K')                 # one figure, curled around an empty lamp
-
-# motes over the apex of every crossing that the golden line asks for
-for a, b in zip(PATH, PATH[1:]):
-    if a['sect'] == 'lowroad' or b['sect'] == 'lowroad':
-        continue
-    if b['x0'] > a['x1']:
-        mx = (a['x1'] + b['x0']) // 2
-        arc(min(a['y'], b['y']) - 2, mx - 1, mx + 1)
-
-# the spark's own breadcrumb over the ki gap: straight and rising where every
-# other arc in the room is a curve
-near, far = PATH[4], PATH[5]
-for i, x in enumerate(range(near['x1'] + 1, far['x0'])):
-    arc(near['y'] - 1 - (i // 3), x, x)
 
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
-defn = """  // 2 · THE FAMINE — every lit thing became a spent thing. The ground does
-  // not give the breath back: this room is built of DRANK stone (`=`), which
-  // carries you and refunds nothing, and `deadLight` means its sconces save
-  // your place and hand you nothing either. Live stone is the scarce thing,
-  // and the room is the business of routing between the little of it there is.
+shuttles = ',\n'.join(
+    "      { x0: %d, y0: %d, x1: %d, y1: %d, period: %.2f, phase: %s }"
+    % (c, HALL[h] - AIR, c, HALL[h] - 1, n * PULSE, ph)
+    for h in range(3) for c, n, ph in LASERS[h])
+
+defn = """  // 2 · THE FAMINE — a serpentine, to the drawing. Three halls stacked and run
+  // in alternating directions, joined by two updraft channels: start at the
+  // bottom left, cross right, get lifted, cross back left, get lifted, and
+  // cross right to the stone. Nothing on the route can be skipped — an open
+  // room lets a solver cut the middle out, a serpentine makes every beat
+  // serial, and that is the whole reason for the shape.
   //
-  // A shallow W — down, up, down, up — so a walk-back after a theft is short.
-  // Unlike THE WICK this room has a floor: the LOW ROAD at row 26 is drank
-  // from end to end, catches every miss, and gives nothing back. Falling costs
-  // your position and your breath, never your life, and the way off it is a
-  // twelve-beat legs-only climb. Safe and slow, against fast and exposed.
+  // Three obstacles and nothing else. STUDS set on the floor at ankle height
+  // with stone underneath, so they are jumped rather than fallen into.
+  // LASER RAILS strung floor to ceiling, which cannot be gone under or over:
+  // you read the bolt and run when it is at the far end. And THE CHANNELS,
+  // updraft columns you jump into and are carried by — wind is the enemy
+  // everywhere else in this act and here it is the road.
   //
-  // The moths are the other half. A snuffer takes a CHARGED spark and leaves
-  // you standing — so in a room with no refills, carrying the spark is itself
-  // the difficulty, and the climax is one breath walked past two of them.
+  // Six courses of air over each floor: enough to jump a stud (the body rises
+  // 2.68), enough that a laser reads as a wall of light, and not so much that
+  // the hall stops being a corridor.
+  //
+  // deadLight: the sconces hold your place and hand you nothing back. One at
+  // the start and one at the head of each channel, so a fall costs the hall
+  // you are in and never the hall behind it.
   {
     glyph: 'famine',
-    chambers: [21, 43, 65],
+    chambers: [17, 35],
     deadLight: true,
-    // the beat clock: 2 / 3 / 4 pulses, phases on the quarter-pulse
+    // the beat clock: 2-4 pulses, phases on the quarter-pulse
     shuttles: [
-      // asleep on the wall past the first live stone since the threshold —
-      // walk near, it wakes, drinks the breath, and the stone you refilled at
-      // is eight tiles behind you. Cheap, legible, complete (grammar §1.3)
-      { x0: 64, y0: 10, x1: 71, y1: 10, period: 1.7, phase: 0, snuff: true },
-      // TEN: this one patrols the only live stone on the crossing, so the
-      // refill point is the dangerous point
-      { x0: 77, y0: 10, x1: 82, y1: 10, period: 2.55, phase: 0.25, snuff: true },
-      // KETSU: the last corridor, where the spark has to survive the walk
-      { x0: 80, y0: 7, x1: 86, y1: 7, period: 3.4, phase: 0.5, snuff: true },
+%s
+    ],
+    currents: [
+      // The two roads up, at opposite ends: jump in and be carried. Named by
+      // the SHAFT they cut through the rock -- the wind then fills whatever
+      // that shaft opens into, at both ends, because a current that stopped
+      // partway up a shaft would stop for no reason a player could see.
+      { x0: %d, y0: %d, x1: %d, y1: %d, force: 46 },
+      { x0: %d, y0: %d, x1: %d, y1: %d, force: 46 },
     ],
     map: [
 %s
@@ -217,7 +200,10 @@ defn = """  // 2 · THE FAMINE — every lit thing became a spent thing. The gro
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % body
+out = defn % (shuttles,
+              CH1[0], HALL[1], CH1[1], HALL[0] - AIR - 1,
+              CH2[0], HALL[2], CH2[1], HALL[1] - AIR - 1,
+              body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
@@ -225,18 +211,7 @@ start = s.index('  // 2 · THE FAMINE')
 end = s.index('  // 3 · THE LAST SHIFT')
 io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
 
-print(f'THE FAMINE · {HGT} rows x {W} · {len(PATH)} shelves')
-live = sum(1 for p in PATH if p['ch'] == '#')
-print(f'  live shelves {live} / {len(PATH)} — the rest is drank\n')
-print('  sect       from       to        gap  xjump  rise  stone  note')
-for a, b in zip(PATH, PATH[1:]):
-    if a['sect'] == 'lowroad' or b['sect'] == 'lowroad':
-        continue
-    gap = (b['x0'] - a['x1'] - 1) if b['x0'] > a['x1'] else (a['x0'] - b['x1'] - 1)
-    print(f"  {b['sect']:<9}  ({a['x0']:>2},{a['y']:>2})   ({b['x0']:>2},{b['y']:>2})"
-          f"   {gap:>3}  {(gap + 1) / MAXJ:>5.2f}  {a['y'] - b['y']:>+4}"
-          f"   {'live' if b['ch'] == '#' else 'dry ':<5}  {b['note']}")
-print()
+print(f'THE FAMINE · {HGT} rows x {W} · 3 halls · {sum(len(x) for x in LASERS)} lasers · 2 channels\n')
 print('    ' + ''.join(str(i // 10 % 10) for i in range(W)))
 print('    ' + ''.join(str(i % 10) for i in range(W)))
 for i, r in enumerate(rows):

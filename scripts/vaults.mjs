@@ -468,22 +468,32 @@ await stage('famine', ['the famine', 'light shuttles'], async () => {
     const shuttles = (window.__VAULTS.find(x => x.glyph === 'famine').shuttles ?? []).length;
     return { lit, starved, dead: !!window.__VAULTS.find(x => x.glyph === 'famine').deadLight, shuttles };
   });
-  ok('the famine', famine, famine.lit && famine.dead && famine.shuttles === 3);
+  // What is under test is dead light, not an inventory. `shuttles === 3` was
+  // the number the room happened to hold the day it was written, and the
+  // rebuild to the serpentine failed it for having more lasers.
+  ok('the famine', famine, famine.lit && famine.dead && famine.shuttles > 0);
 
   // --- shuttles move and kill ---
   const shuttle = await page.evaluate(async () => {
     const { g, until } = window.__H();
     const v = g.vault;
+    // measure travel along whatever axis the rail runs: shuttle 0 is a
+    // vertical laser in this room and a horizontal bolt in others, and a
+    // check that only watches x reports a plumb rail as motionless
     const p0 = v.shuttlePos(0);
     await new Promise(r => setTimeout(r, 700));
     const p1 = v.shuttlePos(0);
-    const moves = Math.abs(p1.x - p0.x) > 0.2;
+    const moves = Math.hypot(p1.x - p0.x, p1.y - p0.y) > 0.2;
     // STAND ON THE GROUND UNDER THE RAIL AND YOU ARE HIT. That is the whole
     // rule now that a level rail seats one course above its floor, so the
     // check states it that way rather than naming the row the rail used to be
     // on — which it did, and which stopped meaning anything the moment the
     // rail came down to where it belongs.
-    const sp = v.shuttleSpan[0];
+    // stand under a LEVEL rail, which is the one the ground rule is about;
+    // a plumb rail is a wall of light and has its own answer
+    const si = (v.def.shuttles ?? []).findIndex((q, k) =>
+      !q.snuff && v.shuttleSpan[k].x0 !== v.shuttleSpan[k].x1);
+    const sp = v.shuttleSpan[si < 0 ? 0 : si];
     const p = v.p;
     const mid = Math.round((sp.x0 + sp.x1) / 2);
     let f = sp.y0;
@@ -858,7 +868,10 @@ await stage('proving', ['the proving ground', 'dead surface', 'brazier relight',
     await until(() => v.grounded, 30);
     v.spark = false;
     const liveRefunds = await until(() => v.spark, 20, 40);
-    // the drank course: walkable, harmless, and it gives nothing
+    // the drank course: walkable, harmless, and it gives nothing. Let the body
+    // SETTLE before the breath is taken away — spark is re-armed on the frame
+    // the feet touch stone, so clearing it while still falling measures the
+    // landing rather than the floor
     v.px = 19.5; v.py = -21.0; v.vx = 0; v.vy = 0;
     await until(() => v.grounded, 30);
     const r0 = v.reforms;
@@ -987,17 +1000,25 @@ await stage('proving', ['the proving ground', 'dead surface', 'brazier relight',
   const current = await page.evaluate(async () => {
     const { g, until } = window.__H();
     const v = g.vault;
-    const cu = window.__TEST_VAULTS.find(x => x.glyph === 'proving').currents[0];
+    // the SEATED span, not the def: the def names the shaft and the room says
+    // how far the wind reaches, so the def's rows are no longer where the
+    // current is -- and a check reading them is measuring the author's guess
+    const cu = v.currentSpan[0];
     v.invuln = 999;
-    v.px = cu.x0 + 1; v.py = -(cu.y1 + 0.5); v.vx = 0; v.vy = 0;
+    const foot = cu.y1, head = cu.y0, tall = foot - head;
+    v.px = cu.x0 + 1; v.py = -(foot + 0.5); v.vx = 0; v.vy = 0;
     const rose = await until(() => v.vy > 2, 20, 50);
-    const carried = await until(() => -v.py < cu.y0 + 2, 100, 50);
-    // ride the momentum past the column's mouth, drift out at the crest,
-    // and the loft takes you — the spring, completed
-    const crested = await until(() => -v.py < cu.y0 + 0.3, 40, 50);
-    v.px = 44.5; v.vx = 0;
-    const landed = await until(() => v.grounded && -v.py < cu.y0, 60, 50);
-    return { rose, carried, crested, landed, y: +v.py.toFixed(1) };
+    // carried the LENGTH OF ITS OWN SHAFT, whatever that is. The old check
+    // named rows off the def; the def now names the shaft and the room says
+    // how far the wind reaches, so anything absolute here is the author's
+    // guess rather than the mechanic.
+    const carried = await until(() => -v.py < foot - tall / 2, 120, 50);
+    const crested = await until(() => -v.py < head + 2, 120, 50);
+    // step out of the column at the crest and the loft sets you down on stone
+    // well above where you got in — the spring, completed
+    v.px = cu.x1 + 3.5; v.vx = 0;
+    const landed = await until(() => v.grounded && -v.py < foot - 4, 80, 50);
+    return { rose, carried, crested, landed, tall, y: +v.py.toFixed(1) };
   });
   ok('the current', current, current.rose && current.carried && current.crested && current.landed);
 
