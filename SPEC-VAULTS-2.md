@@ -848,6 +848,49 @@ re-proves reachability at BODY 2 per room. *Adds:* the P4 climax-census
 lint, the P5 reach-model golden path, sconce-buffer spacing lint (≥ 4 / ≥ 5
 crusher), flat-walk lint (≤ 8 tiles).
 
+**V4 DONE 2026-09-03.** Rooms 5, 4, 6, 7, 8, 9 authored against the final
+kit, in that order, each in its own commit and each green before the next
+began.
+
+*The guardrails landed first,* because authoring six rooms without them is
+authoring blind. Three layout lints (P4 climax census, sconce buffer, flat
+walk) and the P5 reach model. All four grade the rooms in
+`scripts/v4-done.json` and only report on the rest, so the suite stayed
+green for the length of the phase and a room's numbers started counting on
+the commit that authored it.
+
+*The reach model is the one that mattered.* The pre-existing fit walk is a
+4-connected flood that moves like a ghost: it proves what is certainly
+unreachable and can never prove a room is playable. The new one moves like
+the body — jump 2.8, spark +2.1, one charge, refilled on live stone and
+never on drank, wall-jumps included — and it caught things reading the map
+could not: an ascent whose gallery floor lay straight over the last rung,
+leaving one course of clearance for a two-course body; a doorway cut through
+only one of a two-course wall; a whole movement sealed under an unbroken
+floor. Adding wall-jumps to it turned five rooms from NOT REACHED to proved,
+which is the evidence it is honest rather than merely strict.
+
+*Known limit, recorded rather than papered over:* the model is
+GRAVITY-BLIND. It treats `^` `>` `<` as air and walks them as though down
+were down. THE DEBT and THE RETURN both build on rotated gravity, so their
+"golden path proved" is weaker than the other four rooms' — it proves the
+geometry admits a path, not that the path survives the room's own down. A
+gravity-aware model is the honest next step and it is not V4's.
+
+*Six checks were rewritten to follow rules instead of coordinates.* Several
+were quietly testing the map they were written beside: the door check
+assumed door `1` parsed before door `2`, the return check teleported into
+geometry that no longer existed, and the kindled check asserted five or more
+sconces when §IV specifies THREE and says scarcity is the whole difficulty
+of the exam register. A check that breaks when a map is rearranged is
+testing the map, not the rule.
+
+*Left out, on purpose:* THE DEBT's walled-up doorway with a lit sconce
+visible through the gap and no route to it (atmosphere §3.5). It is a fine
+beat, but an unreachable sconce is exactly what `vaultfit` exists to fail,
+and teaching the suite to ignore one costs more than the beat is worth. It
+wants a decor-only glyph, which is a parser change rather than a map change.
+
 **V5 — Rooms 3, then 1–2,** built last from the surviving vocabulary,
 including WICK's teaching gap tuned against how real hands actually failed
 in V4 playtests. ~20–35 h. Same per-room breakage pattern.

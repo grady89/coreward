@@ -805,83 +805,109 @@ export const VAULTS: VaultDef[] = [
       '########################################################'
     ],
   },
-  // 9 · THE KINDLED — the exam, in four movements, in the dark: bolts
-  // you meet by lamplight, a censer gallery over unlight, a piston
-  // shaft climbed between cycles, and then the long floor where the
-  // dark itself follows you to the four who stayed.
+  // 9 · THE KINDLED — the exam. Four movements in the dark, each recombining
+  // two acts' vocabulary, ending with the dark itself at your heels. It
+  // introduces NOTHING: the Summit rule, and the only thing that feels new is
+  // the spark rule biting at full strength, because with the breath spent you
+  // are a silhouette and this room is built dark enough to prove it.
+  //
+  // Three sconces for the whole exam. Scarcity is the difficulty at this
+  // register, and the exhale is the one steady light in it.
   {
     glyph: 'kindled',
-    // four movements, four chambers wide enough to hold one each — and the
-    // last one holds the four who stayed and no sconce at all (P4)
-    chambers: [16, 32, 48],
-    pursuit: {
-      zone: [2, 4, 46, 8],
-      dir: 'right',
-      speed: 3.4,
-      trigger: [13, 4, 15, 8],
-    },
-    shuttles: [
-      { x0: 10, y0: 38, x1: 22, y1: 38, period: 2.55, phase: 0 },
-      { x0: 34, y0: 39, x1: 48, y1: 39, period: 1.7, phase: 0.5 },
-    ],
-    // the gallery's third-apart phasing survives the clock: 1/3 of a
-    // 3-pulse period is exactly one pulse — four quarter-pulses
+    chambers: [19, 38],
     censers: [
-      { x: 16, y: 24, len: 3.2, arc: 1.0, period: 2.55, phase: 0 },
-      { x: 28, y: 24, len: 3.2, arc: 1.0, period: 2.55, phase: 1 / 3 },
-      { x: 40, y: 24, len: 3.2, arc: 1.0, period: 2.55, phase: 2 / 3 },
+      // the gallery: quarter-pulse apart over the unlight, and the middle one
+      // is not a hazard to dodge — it is the floor, and there is no other
+      { x: 26, y: 13, len: 3.4, arc: 1.0, period: 2.55, phase: 0 },
+      { x: 39, y: 13, len: 3.4, arc: 1.0, period: 2.55, phase: 0.25 },
+      { x: 52, y: 13, len: 3.4, arc: 1.0, period: 2.55, phase: 0.5 },
+    ],
+    shuttles: [
+      // I: bolts on self-luminous rails, and the moth whose rim is the only
+      // warm thing moving in the whole movement
+      { x0: 14, y0: 6, x1: 30, y1: 6, period: 3.4, phase: 0 },
+      { x0: 48, y0: 4, x1: 28, y1: 4, period: 3.4, phase: 0.5 },
+      { x0: 12, y0: 7, x1: 44, y1: 3, period: 3.4, phase: 0.25, snuff: true },
+      // IV: the last wire, run under the wave
+      { x0: 6, y0: 43, x1: 22, y1: 43, period: 1.7, phase: 0.75 },
     ],
     crushers: [
-      { x: 2, y: 19, w: 2, h: 2, dx: 3, dy: 0, period: 2.55, phase: 0 },
-      { x: 7, y: 14, w: 2, h: 2, dx: -3, dy: 0, period: 2.55, phase: 0.5 },
+      // III: climbed between cycles, both banks on the one pulse
+      { x: 15, y: 21, w: 2, h: 2, dx: 0, dy: 3, period: 3.4, phase: 0 },
+      { x: 34, y: 25, w: 2, h: 2, dx: 0, dy: 3, period: 3.4, phase: 0.5 },
+      { x: 20, y: 29, w: 2, h: 2, dx: 0, dy: 3, period: 3.4, phase: 0.25 },
+      { x: 47, y: 26, w: 2, h: 2, dx: 0, dy: -3, period: 3.4, phase: 0.75 },
     ],
+    beams: [
+      // watch-lights on both halves of the chimney, parked until it is entered
+      { x: 5.5, y: 26.5, period: 4.25, phase: 0, spin: true, parked: true, arm: [1, 20, 56, 22] },
+      { x: 52.5, y: 30.5, period: 4.25, phase: 0.5, spin: true, parked: true, arm: [1, 20, 56, 22] },
+    ],
+    gates: [
+      // between the movements, so the exam never un-happens either
+      { x0: 50, y0: 11, x1: 56, y1: 11 },
+      { x0: 1, y0: 34, x1: 6, y1: 34 },
+    ],
+    currents: [
+      { x0: 36, y0: 20, x1: 38, y1: 32, force: 46 },
+    ],
+    pursuit: {
+      // IV: the dark, arriving, and its edge is how you read the floor
+      zone: [1, 40, 56, 46],
+      dir: 'right',
+      speed: 3.1,
+      trigger: [1, 40, 8, 45],
+    },
     map: [
       '##########################################################',
       '##########################################################',
-      '##########################################################',
-      '##########################################################',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
-      '##ddddddddddddddddddddddddddddddddddddddddddddddddddddMd##',
-      '##ddSddddddddddddddddddddddddddddddddddddddddddddddddddd##',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddKFCNddd##',
-      '####ddd#############XXX#########XXX########XX#############',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####dSd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '####ddd###################################################',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '##ddddddSdddddddddddddddddddddddddddddddddddddddSddddd####',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '##############XXXXX#######XXXXX#######XXXXX########ddd####',
-      '###################################################ddd####',
-      '###################################################ddd####',
-      '###################################################ddd####',
-      '###################################################dXd####',
-      '###################################################ddd####',
-      '###################################################ddd####',
-      '###################################################ddd####',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '##d@ddddddddddddSdddddddddddddddSdddddddSddddddddddddd####',
-      '##dddddddddddddddddddddddddddddddddddddddddddddddddddd####',
-      '############XXXX############XXXX##########################',
-      '##########################################################',
-      '##########################################################',
-      '##########################################################',
-      '##########################################################',
+      '#........................................................#',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#ddddddddddd###ddddddddddd####ddddddddddd###ddddddddddddd#',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#dddddddddooooooodddddddddddddooooooooodddddddddddddddddd#',
+      '#dd@ddSdddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '####################XX###########XX##########XX###########',
+      '#.................................................ddddddd#',
+      '#.................................................ddddddd#',
+      '#.................................................########',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#ddddddddddddddddddSoooodddddddddddddddoooooddddddddddddd#',
+      '#ddddddddddddddddd####ddddddddddddddddddddddddddddddddddd#',
+      '#ddddddddd#######ddddddddddddddd#######ddddd######ddddddd#',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#########XXXXXXXXXXXXXXX#######XXXXXXXXXXXXXXXXXXX########',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^^^^^^^^^^^^^^^^^#',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^#################',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^^^^^^^^^^^^^^^^^#',
+      '#ddooooooooddddddddddddddddddddddddd^^^^^^^^^^^^^^^^^^^^^#',
+      '#############ddddd##########dddddddd^^^^^X^^^^^^^^^^^^^^^#',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^^^^##############',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^^^^^^ooooooooo^^#',
+      '#dddddddddddddddddddddddddddddddoooo^^^^^^^^^^^^^^^^^^^^^#',
+      '#ddddd############dddddddddddd######^^^^^^^^^^^^^^^^^^^^^#',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^############^^^^#',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^^^^^^^^^^^^^^^^X#',
+      '#dddddddddddddddddddddddoooooooooddd^^^^^^^^^^^^^^^^^^^^^#',
+      '###############ddddddd#############d^^^^^^^^^^^^^^^^^^^^^#',
+      '#ddddddddddddddddddddddddddddddddddd^^^^^#################',
+      '###....................................................###',
+      '###....................................................###',
+      '###.....ooooooooooooo.....................ooooooooooo..###',
+      '###....................................................###',
+      '###...........................K.F.C.N.S................###',
+      '##...#####################################################',
+      '#dddddddddddddddddddddddddddddddddddddddddddddddddddddddd#',
+      '#ddddddddddddddddddddddddddddddddddddddddddddddd.........#',
+      '#dddddddddddddddRRRRRRRdddddddddddddoooooooooddd.........#',
+      '#ddddddddddddd**ddddddddddddRRRRRRRddddddddddd**.........#',
+      '#dddoooooooooddddddddddddddddddddddddddddddddddd.........#',
+      '#ddddddddddddddddddddddddddddddddddddddddddddddd..F.M....#',
+      '#########XX#############XX#############XX#################',
+      '##########################################################'
     ],
   },
 ];

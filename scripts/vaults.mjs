@@ -568,13 +568,23 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     await until(() => g.mode === 'vault', 20);
     const p = vaultOf('kindled');
     const def = window.__VAULTS.find(x => x.glyph === 'kindled');
+    // the densest cluster in the game is a comparison, not a number: it has
+    // to out-crowd every other room, whatever those rooms end up holding
+    const densest = Math.max(...window.__VAULTS
+      .filter(x => x.glyph !== 'kindled')
+      .map(x => window.__parseVault(x).figures.length));
     return {
-      figures: p.figures.length,
+      figures: p.figures.length, densest,
       sconces: p.sconces.length,
       kit: !!(def.shuttles && def.censers && def.crushers && def.pursuit),
     };
   });
-  ok('the kindled', kindled, kindled.figures === 4 && kindled.sconces >= 5 && kindled.kit);
+  // three sconces, and the assertion says THREE rather than "at least": the
+  // exam register's whole difficulty is scarcity (§IV.9, grammar §4.3), so a
+  // room that grew a fourth would have stopped being this room. The old
+  // `>= 5` was measuring the map it was written beside, not the rule.
+  ok('the kindled', kindled,
+    kindled.figures >= kindled.densest && kindled.sconces === 3 && kindled.kit);
   await page.screenshot({ path: OUT + '/v-kindled.png' });
 
   // --- THE SCONCE CHORD: five systems on one frame, settling together ---
@@ -685,15 +695,27 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     const { g, until } = window.__H();
     const v = g.vault;
     await until(() => v.phase === 'run', 20);
-    const poses = v.p.figures.map(f => f.pose).sort();
+    // the posture grammar is four poses reused, so the SET is the rule and
+    // the tally is the room's business (§VI atmosphere §3.1)
+    const poses = [...new Set(v.p.figures.map(f => f.pose))].sort();
     const el = () => document.querySelector('#vault-voice');
     const before = el().textContent;
-    // stand well clear of them: the lamp lifts, but nobody answers
-    v.px = 10.5; v.py = -39.5; v.invuln = 999;
+    // stand well clear of them: the lamp lifts, but nobody answers. The empty
+    // spot is found, not hardcoded — a rewrite moves the dead around.
+    const far = v.p.figures[0];
+    let away = null;
+    for (let x = 1; x < v.p.w - 1 && !away; x++) {
+      for (let y = 1; y < v.p.h - 1; y++) {
+        if (v.p.solid[y * v.p.w + x] || v.p.kill[y * v.p.w + x]) continue;
+        if (v.p.figures.some(f => Math.hypot(f.x - x, f.y - y) < 8)) continue;
+        away = { x, y }; break;
+      }
+    }
+    v.px = away.x + 0.5; v.py = -(away.y + 0.5); v.invuln = 999;
     v.raiseLamp();
     const quiet = el().textContent === before;
-    // now stand with the four
-    v.px = 50.5; v.py = -7.5;
+    // now stand with one of the dead
+    v.px = far.x + 0.5; v.py = -(far.y + 0.5);
     const spark0 = v.spark;
     v.raiseLamp();
     const said = el().textContent;
