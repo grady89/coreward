@@ -1,32 +1,59 @@
 import * as THREE from 'three';
 
 /**
- * The four colony structures — fuel depot, trade post, garage, assay office.
+ * The five colony structures — quarters, fuel depot, trade post, garage,
+ * assay office.
  *
- * Styled as retro-futurist miniatures after the reference plates: cream
- * enamel bodies, burnt-orange dome caps and stripe bands, gunmetal pipework,
- * warm rounded windows, and railings everywhere a person could stand. Every
+ * Styled as retro-futurist miniatures after the reference plates: slate
+ * blue-grey hulls, gunmetal pipework, orange only as conduit and trim, and
+ * warm interior light as the only heat in the frame. Every
  * builder returns a group centered on its dock (x=0, ground y=0) with all
  * geometry kept behind z ≈ -0.5 so the pod never clips a wall.
  */
 
 // ---------- shared palette ----------
-const CREAM = new THREE.MeshStandardMaterial({ color: 0xe6dcc4, roughness: 0.55 });
+// Slate blue-grey hulls with warm light as the only heat in the frame. Every
+// structure on the row is painted out of this one set so the colony reads as
+// a single fabrication run — orange survives as trim, conduit and signal, not
+// as bodywork.
+//
+// The hulls carry a low cool emissive on purpose. Lit only by the sodium key,
+// a blue diffuse multiplies down to olive; the emissive floor keeps the slate
+// reading as slate here and under the blue and teal skies of the later worlds.
+const HULL = new THREE.MeshStandardMaterial({
+  color: 0x3d5b6c, roughness: 0.62, metalness: 0.2, emissive: 0x1e4055, emissiveIntensity: 0.6,
+});
+const HULL_DK = new THREE.MeshStandardMaterial({
+  color: 0x273e4c, roughness: 0.66, metalness: 0.2, emissive: 0x142c3c, emissiveIntensity: 0.6,
+});
+const HULL_LT = new THREE.MeshStandardMaterial({
+  color: 0x50707f, roughness: 0.58, metalness: 0.18, emissive: 0x264a60, emissiveIntensity: 0.6,
+});
+const CONDUIT = new THREE.MeshStandardMaterial({ color: 0xc2551f, roughness: 0.45, metalness: 0.12 });
+const RUST = new THREE.MeshStandardMaterial({ color: 0x553a30, roughness: 0.78, metalness: 0.15 });
+const CONCRETE = new THREE.MeshStandardMaterial({ color: 0x33383c, roughness: 0.95 });
 const ORANGE = new THREE.MeshStandardMaterial({ color: 0xc4571f, roughness: 0.5 });
 const ORANGE_DK = new THREE.MeshStandardMaterial({ color: 0x9c431c, roughness: 0.55 });
 // modest metalness only — with no environment map, high metalness reads as
 // pitch black; these still catch the key light as brushed steel
-const GUNMETAL = new THREE.MeshStandardMaterial({ color: 0x4b545e, roughness: 0.45, metalness: 0.35 });
-const DARKPIPE = new THREE.MeshStandardMaterial({ color: 0x363d45, roughness: 0.5, metalness: 0.3 });
-const SLATE = new THREE.MeshStandardMaterial({ color: 0x53646c, roughness: 0.7, metalness: 0.15 });
-const SLATE_DK = new THREE.MeshStandardMaterial({ color: 0x39454d, roughness: 0.65, metalness: 0.2 });
+const GUNMETAL = new THREE.MeshStandardMaterial({
+  color: 0x3f4b57, roughness: 0.45, metalness: 0.35, emissive: 0x121f2b, emissiveIntensity: 0.6,
+});
+const DARKPIPE = new THREE.MeshStandardMaterial({
+  color: 0x363d45, roughness: 0.5, metalness: 0.3, emissive: 0x101822, emissiveIntensity: 0.6,
+});
+const SLATE = new THREE.MeshStandardMaterial({
+  color: 0x3f5b69, roughness: 0.7, metalness: 0.15, emissive: 0x1e4055, emissiveIntensity: 0.6,
+});
+const SLATE_DK = new THREE.MeshStandardMaterial({
+  color: 0x2a3f4a, roughness: 0.65, metalness: 0.2, emissive: 0x142c3c, emissiveIntensity: 0.6,
+});
 const RED_PAINT = new THREE.MeshStandardMaterial({ color: 0xa83a24, roughness: 0.6 });
 const TEAL_GLASS = new THREE.MeshStandardMaterial({
   color: 0x2f8a78, roughness: 0.25, metalness: 0.1, emissive: 0x0d4034, emissiveIntensity: 1.0,
 });
 const TEAL_PAINT = new THREE.MeshStandardMaterial({ color: 0x2e6e64, roughness: 0.6 });
 const PLINTH = new THREE.MeshStandardMaterial({ color: 0x272b31, roughness: 0.8, metalness: 0.3 });
-
 const WARM_GLOW = new THREE.MeshBasicMaterial({ color: 0xffc06a, toneMapped: false });
 const WARM_BRIGHT = new THREE.MeshBasicMaterial({ color: 0xffdfae, toneMapped: false });
 const RED_GLOW = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
@@ -274,6 +301,126 @@ function valve(x: number, y: number, z: number): THREE.Group {
   return g;
 }
 
+/**
+ * Long lit window band: dark bezel, warm panes split by slim louvre bars and
+ * a hot line where the ceiling strip lamp hangs inside. This is the one place
+ * warmth is allowed to shout against the slate.
+ */
+function stripWindow(w: number, h: number, x: number, y: number, z: number, panes = 5): THREE.Mesh {
+  const H = Math.max(48, Math.round(512 * (h / w)));
+  const tex = canvasTex(512, H, g => {
+    g.clearRect(0, 0, 512, H);
+    g.fillStyle = '#1b2026';
+    rr(g, 0, 0, 512, H, H * 0.42); g.fill();
+    const grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#ffd28c');
+    grad.addColorStop(0.5, '#ff9c3e');
+    grad.addColorStop(1, '#c85c1c');
+    g.fillStyle = grad;
+    rr(g, 12, 11, 488, H - 22, (H - 22) * 0.4); g.fill();
+    g.strokeStyle = 'rgba(28,20,14,0.55)'; g.lineWidth = 7;
+    for (let i = 1; i < panes; i++) {
+      const px = 12 + (i / panes) * 488;
+      g.beginPath(); g.moveTo(px, 11); g.lineTo(px, H - 11); g.stroke();
+    }
+    g.strokeStyle = 'rgba(255,240,214,0.72)'; g.lineWidth = Math.max(2, H * 0.08);
+    g.beginPath(); g.moveTo(30, H * 0.29); g.lineTo(482, H * 0.29); g.stroke();
+  });
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false })
+  );
+  m.position.set(x, y, z);
+  return m;
+}
+
+/**
+ * Quarter-turn pipe elbow lying in the XZ-facing plane. `quadrant` picks which
+ * corner it turns: 0 rises on the right and runs left, 1 rises on the left and
+ * runs right — so a pair of them staples a conduit across a facade.
+ */
+function elbow(r: number, tube: number, mat: THREE.Material, x: number, y: number, z: number, quadrant: 0 | 1): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 7, 12, Math.PI / 2), mat);
+  m.position.set(x, y, z);
+  if (quadrant === 1) m.rotation.z = Math.PI / 2;
+  return m;
+}
+
+/**
+ * Orange service conduit stapled across a facade: up one side, along under the
+ * roofline, down the other. The signature of the reference plates — the only
+ * warm-painted metal on an otherwise cold hull.
+ */
+function conduitStaple(halfW: number, yTop: number, yBase: number, tube: number, x: number, z: number): THREE.Group {
+  const g = new THREE.Group();
+  const R = 0.2;
+  const runH = yTop - yBase - R;
+  for (const s of [-1, 1]) {
+    g.add(cyl(tube, runH, CONDUIT, x + s * halfW, yBase + runH / 2, z, 10));
+    g.add(elbow(R, tube, CONDUIT, x + s * (halfW - R), yTop - R, z, s < 0 ? 1 : 0));
+    // pipe clamps holding the run to the wall
+    for (const cy of [yBase + runH * 0.3, yBase + runH * 0.75]) {
+      g.add(box(tube * 3.4, tube * 1.4, tube * 1.6, GUNMETAL, x + s * halfW, cy, z - tube * 0.7));
+    }
+  }
+  const span = cyl(tube, (halfW - R) * 2, CONDUIT, x, yTop, z, 10);
+  span.rotation.z = Math.PI / 2;
+  g.add(span);
+  return g;
+}
+
+/** parabolic comms dish on a short mast — the colony listening upward */
+function commsDish(r: number, x: number, y: number, z: number, tilt: number, yaw: number): THREE.Group {
+  const g = new THREE.Group();
+  g.add(cyl(0.035, 0.4, DARKPIPE, x, y + 0.2, z, 6));
+  const head = new THREE.Group();
+  const bowl = new THREE.Mesh(
+    new THREE.SphereGeometry(r, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2.6),
+    new THREE.MeshStandardMaterial({
+      color: 0x7e8892, roughness: 0.55, metalness: 0.25, side: THREE.DoubleSide,
+      emissive: 0x243a48, emissiveIntensity: 0.6,
+    })
+  );
+  bowl.scale.y = 0.5;
+  head.add(bowl);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.97, r * 0.06, 6, 22), GUNMETAL);
+  ring.rotation.x = Math.PI / 2;
+  head.add(ring);
+  head.add(cyl(0.014, r * 1.4, DARKPIPE, 0, r * 0.7, 0, 5));
+  head.add(cyl(0.04, 0.07, GUNMETAL, 0, r * 1.4, 0, 8));
+  head.rotation.set(tilt, yaw, 0);
+  head.position.set(x, y + 0.4, z);
+  g.add(head);
+  return g;
+}
+
+/** slim lattice antenna mast with cross-arms and a hazard beacon */
+function latticeMast(h: number, x: number, y: number, z: number): THREE.Group {
+  const g = new THREE.Group();
+  for (const s of [-1, 1]) g.add(box(0.026, h, 0.026, GUNMETAL, x + s * 0.07, y + h / 2, z - 0.04));
+  g.add(box(0.026, h, 0.026, GUNMETAL, x, y + h / 2, z + 0.08));
+  const rungs = Math.floor(h / 0.24);
+  for (let i = 1; i <= rungs; i++) {
+    g.add(box(0.16, 0.018, 0.018, GUNMETAL, x, y + (i / (rungs + 1)) * h, z - 0.04));
+  }
+  for (const [ah, aw] of [[h * 0.68, 0.46], [h * 0.84, 0.32]] as const) {
+    g.add(box(aw, 0.016, 0.016, DARKPIPE, x, y + ah, z));
+  }
+  g.add(cyl(0.009, 0.6, DARKPIPE, x, y + h + 0.3, z, 4));
+  g.add(glowDot(RED_GLOW, x, y + h + 0.62, z, 0.035));
+  return g;
+}
+
+/** louvred vent ring: thin dark bars standing over a glowing band */
+function louvreBars(r: number, h: number, x: number, y: number, z: number, count = 26): THREE.Group {
+  const g = new THREE.Group();
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    g.add(box(0.03, h, 0.03, DARKPIPE, x + Math.cos(a) * r, y, z + Math.sin(a) * r));
+  }
+  return g;
+}
+
 // ---------- signage (shared with backdrop) ----------
 export function textSign(text: string, color: string): THREE.Mesh {
   const tex = canvasTex(512, 96, g => {
@@ -327,178 +474,225 @@ export function gantrySign(text: string, color: string, x: number, y: number, z:
 }
 
 // =====================================================================
-// FUEL DEPOT — a tank farm of three bullet silos: cream enamel bodies,
-// orange dome caps and stripe bands, coiled pipe skirts, a pump kiosk.
+// FUEL DEPOT — a cryo tank farm: three slate columns with domed caps on a
+// poured pad, ganged by heavy dark pipework, an overhead main elbowing in
+// from the yard, and red valve blocks at working height.
 // =====================================================================
 export function buildFuelDepot(): THREE.Group {
   const g = new THREE.Group();
 
-  // shared ground plinth with an orange safety stripe on its front face
-  g.add(box(5.6, 0.12, 2.7, PLINTH, 0, 0.06, -1.75));
-  g.add(box(5.6, 0.05, 0.01, ORANGE, 0, 0.095, -0.398));
+  // poured concrete pad with a kerb — the farm stands on its own slab
+  g.add(box(5.6, 0.16, 2.9, CONCRETE, 0, 0.08, -1.85));
+  g.add(box(5.6, 0.07, 0.07, HULL_DK, 0, 0.19, -0.43));
+  g.add(box(0.06, 0.07, 2.9, HULL_DK, -2.77, 0.19, -1.85));
+  g.add(box(0.06, 0.07, 2.9, HULL_DK, 2.77, 0.19, -1.85));
 
-  interface TankSpec { x: number; z: number; r: number; body: number; stripes: number[]; }
+  interface TankSpec { x: number; z: number; r: number; body: number; stripe: number | null; }
   const tanks: TankSpec[] = [
-    { x: -1.8, z: -1.7, r: 0.6, body: 1.55, stripes: [0.72] },
-    { x: 0, z: -2.0, r: 0.85, body: 2.3, stripes: [0.62, 0.76] },
-    { x: 1.8, z: -1.6, r: 0.55, body: 1.35, stripes: [0.68] },
+    { x: -1.55, z: -2.1, r: 0.62, body: 2.05, stripe: null },   // the left column
+    { x: 0.5, z: -2.7, r: 0.56, body: 2.95, stripe: null },     // the tall one, set back
+    { x: 0.1, z: -1.7, r: 0.92, body: 1.5, stripe: 0.6 },       // the fat drum out front
   ];
 
   for (const t of tanks) {
-    // orange base skirt + coiled pipe wrap (the greebled foot of each silo)
-    g.add(cyl(t.r * 1.08, 0.4, ORANGE_DK, t.x, 0.2, t.z, 24));
-    for (let i = 0; i < 3; i++) {
-      const coil = new THREE.Mesh(new THREE.TorusGeometry(t.r * 1.06, 0.045, 8, 26), DARKPIPE);
-      coil.rotation.x = Math.PI / 2;
-      coil.position.set(t.x, 0.44 + i * 0.11, t.z);
-      g.add(coil);
+    // dark foot collar the shell is bolted through, banded in steel
+    g.add(cyl(t.r * 1.07, 0.3, HULL_DK, t.x, 0.31, t.z, 24));
+    const foot = new THREE.Mesh(new THREE.TorusGeometry(t.r * 1.05, 0.035, 6, 26), GUNMETAL);
+    foot.rotation.x = Math.PI / 2;
+    foot.position.set(t.x, 0.44, t.z);
+    g.add(foot);
+
+    const y0 = 0.44;
+    g.add(cyl(t.r, t.body, HULL, t.x, y0 + t.body / 2, t.z, 28));
+    // welded seam rings up the shell
+    for (const f of [0.3, 0.62, 0.88]) {
+      const seam = new THREE.Mesh(new THREE.TorusGeometry(t.r + 0.004, 0.013, 5, 28), HULL_DK);
+      seam.rotation.x = Math.PI / 2;
+      seam.position.set(t.x, y0 + t.body * f, t.z);
+      g.add(seam);
     }
-    // cream body
-    const y0 = 0.72;
-    g.add(cyl(t.r, t.body, CREAM, t.x, y0 + t.body / 2, t.z, 28));
-    // painted stripe bands
-    for (const [i, frac] of t.stripes.entries()) {
-      g.add(stripeBand(t.r + 0.006, i === 0 ? 0.16 : 0.07, ORANGE, t.x, y0 + t.body * frac, t.z));
+    // the only paint on the shell: a stripe pair, thin over thick
+    if (t.stripe !== null) {
+      const sy = y0 + t.body * t.stripe;
+      g.add(stripeBand(t.r + 0.006, 0.045, ORANGE, t.x, sy + 0.13, t.z));
+      g.add(stripeBand(t.r + 0.007, 0.1, ORANGE, t.x, sy, t.z));
+      g.add(stripeBand(t.r + 0.006, 0.03, ORANGE_DK, t.x, sy - 0.13, t.z));
     }
-    // porthole, lit from inside
-    g.add(porthole(0.13, t.x, y0 + t.body * 0.42, t.z + t.r + 0.01));
-    // shoulder catwalk ring + railing
+    // service hatch on the face, a valve wheel under it, a lit slot below that
+    g.add(box(0.17, 0.24, 0.07, ORANGE, t.x, y0 + t.body * 0.76, t.z + t.r - 0.01));
+    g.add(box(0.2, 0.03, 0.05, GUNMETAL, t.x, y0 + t.body * 0.76 + 0.14, t.z + t.r - 0.01));
+    g.add(glowDot(RED_GLOW, t.x, y0 + t.body * 0.62, t.z + t.r + 0.01, 0.05));
+    g.add(box(0.05, 0.26, 0.02, WARM_GLOW, t.x - t.r * 0.42, y0 + t.body * 0.42, t.z + t.r * 0.91));
+    g.add(porthole(0.1, t.x + t.r * 0.4, y0 + t.body * 0.4, t.z + t.r * 0.92));
+
+    // shoulder: steel collar, handrail, slate cap, crown hatch and whip
     const shoulderY = y0 + t.body;
-    const deck = new THREE.Mesh(new THREE.CylinderGeometry(t.r + 0.14, t.r + 0.14, 0.05, 28), GUNMETAL);
-    deck.position.set(t.x, shoulderY + 0.02, t.z);
-    g.add(deck);
-    g.add(ringRail(t.r + 0.12, t.x, shoulderY + 0.05, t.z, 12));
-    // orange dome cap + vent cap + finial
-    g.add(dome(t.r, ORANGE, t.x, shoulderY + 0.04, t.z, 0.8));
-    g.add(cyl(t.r * 0.28, 0.08, GUNMETAL, t.x, shoulderY + t.r * 0.8 + 0.05, t.z, 12));
-    g.add(cyl(0.02, 0.28, DARKPIPE, t.x, shoulderY + t.r * 0.8 + 0.2, t.z, 6));
+    g.add(cyl(t.r + 0.06, 0.11, GUNMETAL, t.x, shoulderY + 0.03, t.z, 28));
+    g.add(ringRail(t.r + 0.05, t.x, shoulderY + 0.07, t.z, 12));
+    g.add(dome(t.r * 0.99, HULL_LT, t.x, shoulderY + 0.08, t.z, 0.78));
+    const crown = shoulderY + t.r * 0.78 + 0.08;
+    g.add(box(0.18, 0.11, 0.18, ORANGE_DK, t.x, crown + 0.05, t.z));
+    g.add(cyl(0.016, 0.26, DARKPIPE, t.x, crown + 0.23, t.z, 5));
   }
 
-  // center tank wears the depot's unit number and a red masthead beacon
-  g.add(decal('03', '#c4571f', 0.42, 0, 1.35, -2.0 + 0.85 + 0.012));
-  g.add(glowDot(RED_GLOW, 0, 3.02 + 0.68 + 0.34, -2.0, 0.05));
-  // right tank: instrument mast with a teal marker lamp
-  g.add(cyl(0.018, 0.5, DARKPIPE, 1.95, 2.68, -1.6, 5));
-  g.add(glowDot(TEAL_GLOW, 1.95, 2.96, -1.6, 0.045));
+  // the overhead main: a fat pipe rising in the yard, elbowing across at
+  // shoulder height into the tall column — the depot's strongest line
+  const MY = 2.5, MR = 0.32;
+  g.add(cyl(0.11, MY - MR, DARKPIPE, 2.32, (MY - MR) / 2, -2.35, 14));
+  g.add(elbow(MR, 0.11, DARKPIPE, 2.32 - MR, MY - MR, -2.35, 0));
+  const main = cyl(0.11, 1.28, DARKPIPE, 1.36, MY, -2.35, 14);
+  main.rotation.z = Math.PI / 2;
+  g.add(main);
+  for (const fx of [1.05, 1.9]) {
+    const flange = cyl(0.15, 0.05, GUNMETAL, fx, MY, -2.35, 12);
+    flange.rotation.z = Math.PI / 2;
+    g.add(flange);
+  }
+  // guy wires from the riser down to the pad
+  for (const s of [-1, 1]) {
+    const guy = cyl(0.008, 2.35, DARKPIPE, 2.32 + s * 0.3, 1.28, -2.35 - s * 0.35, 4);
+    guy.rotation.z = s * 0.24;
+    guy.rotation.x = -s * 0.28;
+    g.add(guy);
+  }
 
-  // access ladder up the center silo
-  g.add(ladder(2.3, -0.55, 0.7, -1.32));
+  // riser gang across the fat drum's face — thin pipes with hanger clamps
+  for (let i = 0; i < 5; i++) {
+    const rx = 0.1 + (i - 2) * 0.3;
+    g.add(cyl(0.035, 1.5, DARKPIPE, rx, 1.2, -0.85, 8));
+    g.add(box(0.11, 0.05, 0.07, GUNMETAL, rx, 1.68, -0.85));
+  }
+  g.add(box(1.72, 0.06, 0.1, GUNMETAL, 0.1, 1.92, -0.85));
 
-  // linking pipework: one fat flanged main at knee height, risers, valves
-  g.add(pipeRun(3.4, 0.09, 0, 0.62, -1.05));
-  g.add(cyl(0.07, 0.62, DARKPIPE, -1.8, 0.31, -1.05, 10));
-  g.add(cyl(0.07, 0.62, DARKPIPE, 1.8, 0.31, -1.05, 10));
-  g.add(valve(-0.9, 0.82, -1.05));
-  g.add(valve(0.9, 0.82, -1.05));
-  g.add(glowDot(TEAL_GLOW, 0, 0.82, -0.98, 0.05));
+  // base manifold: the working plumbing, out front where it can be read
+  g.add(pipeRun(4.2, 0.085, 0, 0.5, -0.55));
+  g.add(pipeRun(3.0, 0.055, -0.3, 0.78, -0.62));
+  for (const vx of [-1.9, -0.55, 1.0, 2.05]) {
+    g.add(box(0.24, 0.3, 0.22, RED_PAINT, vx, 0.62, -0.55));
+    g.add(cyl(0.05, 0.16, DARKPIPE, vx, 0.85, -0.55, 8));
+    g.add(glowDot(WARM_GLOW, vx, 0.94, -0.5, 0.03));
+  }
+  g.add(valve(-1.2, 0.78, -0.5));
+  g.add(valve(1.65, 0.78, -0.5));
+  g.add(glowDot(TEAL_GLOW, 0.2, 0.78, -0.48, 0.05));
 
-  // pump kiosk: the little orange booth where the meter runs
-  g.add(box(0.72, 0.78, 0.6, ORANGE, -2.45, 0.51, -1.05));
-  g.add(box(0.8, 0.06, 0.68, GUNMETAL, -2.45, 0.93, -1.05));
-  g.add(roundWindow(0.4, 0.3, -2.45, 0.62, -0.74, false));
-  g.add(box(0.1, 0.22, 0.1, GUNMETAL, -2.2, 1.06, -1.05));
-  g.add(glowDot(WARM_GLOW, -2.2, 1.2, -1.05, 0.05));
+  // access ladder up the left column, cage bars and all
+  g.add(ladder(2.1, -2.05, 0.44, -1.7));
 
-  // spare fuel drums by the kiosk
-  g.add(cyl(0.15, 0.34, RED_PAINT, -2.75, 0.29, -0.7, 12));
-  g.add(cyl(0.13, 0.3, ORANGE_DK, -2.5, 0.27, -0.62, 12));
+  // pump kiosk: slate box, orange lintel, one lit slot, drums stacked beside
+  g.add(box(0.78, 0.9, 0.66, HULL_DK, -2.32, 0.61, -0.95));
+  g.add(box(0.86, 0.08, 0.74, GUNMETAL, -2.32, 1.09, -0.95));
+  g.add(box(0.8, 0.05, 0.05, CONDUIT, -2.32, 1.03, -0.6));
+  g.add(roundWindow(0.48, 0.34, -2.32, 0.76, -0.61, false));
+  g.add(box(0.56, 0.05, 0.05, WARM_BRIGHT, -2.32, 0.98, -0.61));
+  g.add(box(0.1, 0.2, 0.1, GUNMETAL, -2.6, 1.2, -0.95));
+  g.add(glowDot(WARM_GLOW, -2.6, 1.33, -0.95, 0.045));
+  g.add(cyl(0.15, 0.34, RED_PAINT, -2.55, 0.33, -1.75, 12));
+  g.add(cyl(0.13, 0.3, HULL_DK, -2.3, 0.31, -1.55, 12));
 
-  // wide gantry so the legs frame the tank farm instead of piercing it
   g.add(gantrySign('FUEL', '#3ce6c8', 0, 4.55, -0.55, 2.6));
   return g;
 }
-
 // =====================================================================
-// TRADE POST — a bulbous cream hut under a burnt-orange dome, with the
-// glowing halo band between them, a red door under an awning, a lit shop
-// window annex, and cargo crates stacked on the deck.
+// TRADE POST — a slate counting-house: a low wide slab with a cantilevered
+// canopy over a long lit shop window, a set-back drum wearing a louvred
+// lantern band, and the big grey dome above it all.
 // =====================================================================
 export function buildTradePost(): THREE.Group {
   const g = new THREE.Group();
 
-  // raised trading deck with railing and front steps
-  g.add(box(5.4, 0.14, 2.9, PLINTH, 0, 0.07, -1.85));
-  g.add(straightRail(1.6, -2.6 + 0.8, 0.14, -0.55));
-  g.add(straightRail(1.6, 2.6 - 0.8, 0.14, -0.55));
-  g.add(box(0.9, 0.05, 0.28, GUNMETAL, 0, 0.1, -0.35));
-  g.add(box(0.9, 0.05, 0.28, GUNMETAL, 0, 0.045, -0.2));
+  // pad and stepped base course — the building sits in layers, not on a box
+  g.add(box(5.6, 0.16, 2.9, CONCRETE, 0, 0.08, -1.85));
+  g.add(box(5.0, 0.36, 2.2, HULL_DK, 0, 0.34, -1.9));
+  g.add(box(5.06, 0.05, 2.26, GUNMETAL, 0, 0.54, -1.9));
 
-  // main body: a pressure hull that bulges like a kettle
-  const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 20), CREAM);
-  body.position.set(0, 1.18, -2.0);
-  body.scale.set(1.15, 0.85, 0.94);
-  g.add(body);
-  g.add(cyl(1.62, 0.22, GUNMETAL, 0, 0.24, -2.0, 32));
+  // the main slab, with a bullnose rolled along its top edges
+  g.add(box(4.3, 1.02, 1.95, HULL, 0, 1.07, -1.95));
+  for (const [bz, mat] of [[-0.98, HULL_LT], [-2.92, HULL_DK]] as const) {
+    const roll = cyl(0.24, 4.3, mat, 0, 1.58, bz, 20);
+    roll.rotation.z = Math.PI / 2;
+    g.add(roll);
+  }
+  g.add(box(4.3, 0.1, 1.94, HULL_LT, 0, 1.77, -1.95));
 
-  // the signature halo: a glowing lantern band between body and dome
-  g.add(cyl(1.06, 0.05, GUNMETAL, 0, 2.14, -2.0, 28));
-  g.add(stripeBand(1.02, 0.13, WARM_BRIGHT, 0, 2.23, -2.0));
-  g.add(cyl(1.1, 0.06, GUNMETAL, 0, 2.32, -2.0, 28));
-  const halo = new THREE.PointLight(0xffd9a0, 6, 6, 2);
-  halo.position.set(0, 2.3, -1.6);
+  // the shop window: recessed into the facade, warm and stocked
+  g.add(box(3.1, 0.78, 0.1, HULL_DK, 0.1, 1.06, -0.94));
+  g.add(stripWindow(2.78, 0.52, 0.1, 1.06, -0.88, 6));
+  const shop = new THREE.PointLight(0xffb066, 5, 5.5, 2);
+  shop.position.set(0.1, 1.15, -0.55);
+  g.add(shop);
+
+  // cantilevered canopy over the counter, with a cold LED line under its lip
+  g.add(box(3.65, 0.1, 0.92, HULL_LT, 0.05, 1.56, -0.9));
+  g.add(box(3.65, 0.06, 0.06, HULL_DK, 0.05, 1.49, -0.46));
+  g.add(box(3.2, 0.035, 0.035, WARM_BRIGHT, 0.05, 1.47, -0.52));
+  for (const s of [-1, 1]) {
+    const stay = cyl(0.026, 0.5, DARKPIPE, 0.05 + s * 1.7, 1.36, -0.82, 6);
+    stay.rotation.x = 0.72;
+    g.add(stay);
+  }
+
+  // set-back drum and the louvred lantern band — the halo, but vented now
+  g.add(cyl(1.5, 0.42, HULL_DK, 0, 2.03, -2.0, 32));
+  g.add(cyl(1.53, 0.06, GUNMETAL, 0, 2.26, -2.0, 32));
+  g.add(stripeBand(1.46, 0.2, WARM_BRIGHT, 0, 2.39, -2.0));
+  g.add(louvreBars(1.48, 0.19, 0, 2.39, -2.0, 30));
+  g.add(cyl(1.5, 0.07, GUNMETAL, 0, 2.52, -2.0, 32));
+  const halo = new THREE.PointLight(0xffc98a, 7, 7, 2);
+  halo.position.set(0, 2.42, -1.5);
   g.add(halo);
 
-  // burnt-orange dome, capped and finialed
-  g.add(dome(1.04, ORANGE, 0, 2.33, -2.0, 0.85));
-  g.add(cyl(0.16, 0.1, GUNMETAL, 0, 3.24, -2.0, 12));
-  g.add(cyl(0.02, 0.34, DARKPIPE, 0, 3.44, -2.0, 6));
-  g.add(glowDot(WARM_GLOW, 0, 3.63, -2.0, 0.04));
-  // dome portholes — raised bezels so the rings sit proud of the curve
-  for (const s of [-1, 1]) {
-    const bezel = cyl(0.1, 0.12, GUNMETAL, s * 0.42, 2.72, -1.13, 14);
-    bezel.rotation.x = Math.PI / 2;
-    g.add(bezel);
-    g.add(porthole(0.09, s * 0.42, 2.72, -1.06, WARM_GLOW));
+  // the dome: cold slate, seamed, with a low finial
+  g.add(dome(1.45, HULL_LT, 0, 2.55, -2.0, 0.72));
+  for (const ry of [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4]) {
+    const seam = new THREE.Mesh(new THREE.TorusGeometry(1.44, 0.012, 5, 22, Math.PI), HULL_DK);
+    seam.position.set(0, 2.56, -2.0);
+    seam.rotation.y = ry;
+    seam.scale.y = 0.72;
+    g.add(seam);
   }
+  g.add(cyl(0.2, 0.09, GUNMETAL, 0, 3.6, -2.0, 14));
+  g.add(cyl(0.02, 0.3, DARKPIPE, 0, 3.79, -2.0, 6));
+  g.add(glowDot(RED_GLOW, 0, 3.96, -2.0, 0.04));
 
-  // stovepipe chimney and a little comms whip on the shoulder
-  g.add(cyl(0.06, 0.9, DARKPIPE, -0.85, 2.6, -2.35, 10));
-  g.add(cyl(0.08, 0.1, GUNMETAL, -0.85, 3.06, -2.35, 10));
-  g.add(cyl(0.014, 0.85, DARKPIPE, 0.95, 2.95, -2.5, 5));
-  g.add(glowDot(RED_GLOW, 0.95, 3.4, -2.5, 0.035));
+  // rust-brown machinery block at the west end, bullnosed and piped
+  g.add(box(0.95, 1.55, 1.25, RUST, -2.3, 0.95, -1.7));
+  const cap = cyl(0.3, 0.95, RUST, -2.3, 1.68, -1.7, 18);
+  cap.rotation.z = Math.PI / 2;
+  g.add(cap);
+  g.add(box(1.0, 0.06, 1.3, GUNMETAL, -2.3, 1.76, -1.7));
+  g.add(box(0.4, 0.5, 0.12, HULL_DK, -2.3, 1.0, -1.09));
+  g.add(glowDot(RED_GLOW, -2.3, 1.14, -1.02, 0.04));
+  g.add(cyl(0.06, 1.1, DARKPIPE, -2.78, 0.75, -1.2, 8));
+  g.add(box(0.09, 0.5, 0.09, CONDUIT, -1.85, 0.75, -1.06));
+  g.add(box(0.09, 0.5, 0.09, CONDUIT, -1.72, 0.75, -1.06));
 
-  // entry vestibule: a porch that steps OUT of the curved hull, so the door
-  // sits on a flat face instead of clipping into the sphere
-  g.add(box(0.95, 1.15, 0.55, CREAM, 0, 0.715, -0.86));
-  g.add(box(1.05, 0.07, 0.62, GUNMETAL, 0, 1.32, -0.87));
-  g.add(doorway(0.62, 0.98, 0, 0.14, -0.57, RED_PAINT));
-  g.add(glowDot(WARM_GLOW, 0, 1.24, -0.57, 0.045));
-  // orange awning canopy seated on the porch roof, leaning back to the hull
-  const awning = box(1.05, 0.06, 0.52, ORANGE, 0, 1.41, -0.72);
-  awning.rotation.x = -0.28;
-  g.add(awning);
+  // the door, on a slate pier at the east end where the ledger gets signed —
+  // stepped down to the deck so it reads as a way in, not a lit panel
+  g.add(box(1.0, 1.5, 1.3, HULL_DK, 1.85, 0.91, -1.42));
+  g.add(box(1.08, 0.07, 1.38, GUNMETAL, 1.85, 1.7, -1.42));
+  g.add(doorway(0.58, 1.05, 1.85, 0.16, -0.75, GUNMETAL));
+  g.add(box(0.66, 0.05, 0.05, WARM_BRIGHT, 1.85, 1.35, -0.75));
+  g.add(box(0.76, 0.05, 0.14, DARKPIPE, 1.85, 1.39, -0.78));
+  g.add(box(0.74, 0.05, 0.24, GUNMETAL, 1.85, 0.13, -0.62));
+  g.add(box(0.74, 0.05, 0.24, GUNMETAL, 1.85, 0.07, -0.48));
 
-  // body portholes flanking the door — on raised bezels welded to the hull,
-  // standing proud of the curve rather than sunk into it
-  for (const s of [-1, 1]) {
-    const bezel = cyl(0.16, 0.18, GUNMETAL, s * 0.95, 1.25, -0.79, 16);
-    bezel.rotation.x = Math.PI / 2;
-    g.add(bezel);
-    g.add(porthole(0.14, s * 0.95, 1.25, -0.69));
-  }
-
-  // shop-window annex: the vending counter, warm and stocked
-  g.add(box(1.5, 1.15, 1.15, CREAM, -2.05, 0.72, -1.5));
-  g.add(box(1.6, 0.08, 1.25, GUNMETAL, -2.05, 1.33, -1.5));
-  g.add(roundWindow(1.0, 0.62, -2.05, 0.82, -0.91));
-  g.add(box(0.08, 0.5, 0.08, DARKPIPE, -2.72, 1.62, -1.5));
-  g.add(glowDot(TEAL_GLOW, -2.72, 1.92, -1.5, 0.045));
-
-  // cargo on the deck: strapped crates and a barrel, freshly landed
+  // freight on the deck, in the muted crate greys of the reference plate
   const crate = (w: number, h: number, mat: THREE.Material, x: number, y: number, z: number): void => {
-    g.add(box(w, h, w, mat, x, y + h / 2, z));
-    g.add(box(w + 0.02, 0.05, w + 0.02, DARKPIPE, x, y + h * 0.3, z));
-    g.add(box(w + 0.02, 0.05, w + 0.02, DARKPIPE, x, y + h * 0.75, z));
+    g.add(box(w, h, w * 0.8, mat, x, y + h / 2, z));
+    g.add(box(w + 0.02, 0.045, w * 0.8 + 0.02, DARKPIPE, x, y + h * 0.28, z));
+    g.add(box(w + 0.02, 0.045, w * 0.8 + 0.02, DARKPIPE, x, y + h * 0.76, z));
+    g.add(box(w * 0.34, 0.05, 0.02, ORANGE, x, y + h * 0.52, z + w * 0.405));
   };
-  crate(0.52, 0.42, TEAL_PAINT, 2.05, 0.14, -1.15);
-  crate(0.44, 0.38, ORANGE_DK, 2.55, 0.14, -0.95);
-  crate(0.4, 0.34, TEAL_PAINT, 2.25, 0.56, -1.1);
-  g.add(cyl(0.16, 0.36, RED_PAINT, 1.6, 0.32, -0.85, 12));
+  crate(0.62, 0.5, HULL_DK, -1.6, 0.16, -0.8);
+  crate(0.5, 0.42, SLATE_DK, -1.0, 0.16, -0.7);
+  crate(0.46, 0.36, HULL_DK, -1.55, 0.66, -0.82);
+  g.add(cyl(0.17, 0.4, RUST, 0.95, 0.36, -0.7, 12));
+  g.add(cyl(0.17, 0.4, HULL_DK, 1.28, 0.36, -0.62, 12));
 
-  g.add(gantrySign('TRADE', '#ff9a3c', 0, 4.1, -0.55, 1.6));
+  g.add(gantrySign('TRADE', '#ff9a3c', 0, 4.4, -0.55, 2.4));
   return g;
 }
-
 // =====================================================================
 // GARAGE — a quonset repair bay: slate vault under a heavy gunmetal arch
 // rib, a glowing roller door with a tube lamp, an office annex, and a
@@ -738,87 +932,116 @@ export function buildAssay(): THREE.Group {
 }
 
 // =====================================================================
-// THE QUARTERS — the driller's own hab, west of the pad: a low cream
-// barrel on a slab, orange-banded, one stovepipe, wash on the line.
-// The only structure on the row that isn't Cindral's. Walk in.
+// THE QUARTERS — the driller's own hab, west of the pad: a squared slate
+// box with orange conduit stapled across its face, a lit galley window, and
+// a machine house and dish farm on the flat roof. The only structure on the
+// row that isn't Cindral's — and the only one with a fern on the step. The
+// hard corners are the point: nothing here is a pressure hull. Walk in.
 // =====================================================================
 export function buildQuarters(): THREE.Group {
   const g = new THREE.Group();
   const FERN = new THREE.MeshStandardMaterial({ color: 0x6e9668, roughness: 0.8 });
 
-  // slab with a short rail and thin front steps
-  g.add(box(4.9, 0.14, 2.6, PLINTH, 0, 0.07, -1.75));
-  g.add(straightRail(1.4, -1.6, 0.14, -0.52));
-  g.add(box(0.85, 0.05, 0.26, GUNMETAL, 0.15, 0.1, -0.4));
-  g.add(box(0.85, 0.05, 0.26, GUNMETAL, 0.15, 0.045, -0.24));
+  // deck slab with a steel kerb and thin front steps
+  g.add(box(5.2, 0.16, 2.7, PLINTH, 0, 0.08, -1.8));
+  g.add(box(5.2, 0.06, 0.06, GUNMETAL, 0, 0.19, -0.48));
+  g.add(box(0.9, 0.05, 0.26, GUNMETAL, -0.85, 0.12, -0.62));
+  g.add(box(0.9, 0.05, 0.26, GUNMETAL, -0.85, 0.055, -0.46));
 
-  // hab barrel: a horizontal pressure tube with domed end caps
-  const barrel = cyl(1.02, 2.9, CREAM, 0, 1.16, -1.95, 26);
-  barrel.rotation.z = Math.PI / 2;
-  g.add(barrel);
-  for (const s of [-1, 1]) {
-    const cap = dome(1.0, CREAM, s * 1.45, 1.16, -1.95);
-    cap.rotation.z = s * -Math.PI / 2;
-    g.add(cap);
+  // the hab block: flat slate walls under a squared cornice, with steel
+  // corner posts so every edge stays hard
+  g.add(box(3.7, 1.28, 1.5, HULL, 0, 0.94, -1.7));
+  g.add(box(3.76, 0.05, 1.56, HULL_DK, 0, 1.56, -1.7));
+  g.add(box(3.82, 0.12, 1.62, HULL, 0, 1.645, -1.7));
+  g.add(box(3.74, 0.07, 1.54, HULL_DK, 0, 1.74, -1.7));
+  g.add(box(3.82, 0.035, 0.05, HULL_LT, 0, 1.7, -0.9));
+  g.add(box(3.76, 0.06, 1.52, GUNMETAL, 0, 0.35, -1.7));
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    g.add(box(0.08, 1.28, 0.08, GUNMETAL, sx * 1.84, 0.94, -1.7 + sz * 0.74));
   }
-  // painted bands where the tube sections join
-  for (const bx of [-0.95, 0.95]) {
-    const band = stripeBand(1.04, 0.12, ORANGE, bx, 1.16, -1.95);
-    band.rotation.z = Math.PI / 2;
-    g.add(band);
+
+  // end volumes: a squared service annex at each end, capped in steel
+  g.add(box(0.65, 1.15, 1.2, HULL_DK, -2.16, 0.87, -1.75));
+  g.add(box(0.72, 0.07, 1.28, GUNMETAL, -2.16, 1.48, -1.75));
+  g.add(box(0.72, 1.2, 1.3, HULL_DK, 2.2, 0.85, -1.75));
+  g.add(box(0.8, 0.07, 1.38, GUNMETAL, 2.2, 1.49, -1.75));
+  g.add(box(0.74, 0.07, 0.02, ORANGE_DK, 2.2, 1.2, -1.09));
+  g.add(porthole(0.15, 2.2, 0.82, -1.09));
+
+  // recessed facade panel holding the door and the galley window
+  g.add(box(2.95, 1.06, 0.1, HULL_DK, 0.05, 0.9, -0.94));
+
+  // the door — warm, on the left, with its own strip lamp and threshold
+  g.add(doorway(0.6, 0.98, -0.85, 0.36, -0.87, GUNMETAL));
+  g.add(box(0.72, 0.05, 0.05, WARM_BRIGHT, -0.85, 1.42, -0.87));
+  g.add(box(0.82, 0.05, 0.14, DARKPIPE, -0.85, 1.46, -0.9));
+  g.add(box(0.8, 0.06, 0.3, GUNMETAL, -0.85, 0.33, -0.78));
+
+  // the galley window: the one place you can see somebody lives here
+  g.add(stripWindow(1.62, 0.66, 0.72, 0.94, -0.87, 4));
+  const galley = new THREE.PointLight(0xffc98a, 5, 5, 2);
+  galley.position.set(0.5, 1.1, -0.5);
+  g.add(galley);
+
+  // orange conduit stapled across the facade — the reference's loudest line
+  g.add(conduitStaple(1.62, 1.52, 0.24, 0.04, 0.05, -0.8));
+  g.add(conduitStaple(1.5, 1.42, 0.24, 0.027, 0.05, -0.75));
+  g.add(box(0.16, 0.22, 0.14, GUNMETAL, -1.67, 0.62, -0.74));
+  g.add(glowDot(TEAL_GLOW, -1.67, 0.76, -0.66, 0.035));
+
+  // roof machine house: a squared plant box with a louvred vent glowing
+  // along its face, flat-capped and beaconed
+  g.add(box(1.62, 0.52, 1.02, HULL_DK, 0.05, 2.035, -1.85));
+  g.add(box(1.4, 0.14, 0.02, WARM_BRIGHT, 0.05, 2.035, -1.33));
+  for (let i = 0; i < 11; i++) {
+    g.add(box(0.032, 0.15, 0.03, DARKPIPE, 0.05 + (i - 5) * 0.127, 2.035, -1.32));
   }
-  g.add(decal('01', '#c4571f', 0.36, -1.05, 1.55, -0.93));
+  g.add(box(1.5, 0.05, 0.94, GUNMETAL, 0.05, 2.32, -1.85));
+  g.add(box(1.7, 0.08, 1.1, HULL, 0.05, 2.375, -1.85));
+  g.add(box(0.3, 0.14, 0.3, HULL_DK, -0.5, 2.485, -1.85));
+  g.add(cyl(0.05, 0.22, DARKPIPE, 0.05, 2.525, -1.85, 8));
+  g.add(glowDot(RED_GLOW, 0.05, 2.655, -1.85, 0.035));
 
-  // entry vestibule stepping out of the curve, door on a flat face
-  g.add(box(0.95, 1.12, 0.5, CREAM, 0.15, 0.7, -0.82));
-  g.add(box(1.05, 0.07, 0.58, GUNMETAL, 0.15, 1.29, -0.83));
-  g.add(doorway(0.6, 0.96, 0.15, 0.14, -0.56, ORANGE_DK));
-  g.add(glowDot(WARM_GLOW, 0.15, 1.21, -0.56, 0.045));
-  const porch = new THREE.PointLight(0xffd9a0, 5, 5, 2);
-  porch.position.set(0.15, 1.5, -0.4);
-  g.add(porch);
-
-  // portholes flanking the vestibule, on raised bezels
-  for (const s of [-1, 1]) {
-    const bezel = cyl(0.13, 0.16, GUNMETAL, 0.15 + s * 0.98, 1.32, -1.02, 14);
-    bezel.rotation.x = Math.PI / 2;
-    g.add(bezel);
-    g.add(porthole(0.11, 0.15 + s * 0.98, 1.32, -0.94));
+  // dish farm and mast: this hab listens too, just not for Cindral
+  g.add(commsDish(0.36, -1.3, 1.78, -1.45, -1.1, 0.4));
+  g.add(commsDish(0.28, 1.32, 1.78, -2.15, -0.95, -0.5));
+  g.add(latticeMast(1.7, 1.8, 1.78, -1.4));
+  for (const [bx, bz] of [[-0.9, -2.3], [1.0, -1.3]] as const) {
+    g.add(box(0.28, 0.16, 0.24, HULL_DK, bx, 1.86, bz));
   }
 
   // stovepipe with a rain cap — somebody cooks here
-  g.add(cyl(0.055, 0.85, DARKPIPE, -0.7, 2.45, -2.2, 10));
-  g.add(cyl(0.09, 0.05, GUNMETAL, -0.7, 2.9, -2.2, 10));
-  g.add(dome(0.085, DARKPIPE, -0.7, 2.93, -2.2, 0.6));
-  g.add(glowDot(WARM_GLOW, -0.7, 2.87, -2.14, 0.028));
+  g.add(cyl(0.055, 0.9, DARKPIPE, -1.55, 2.29, -2.25, 10));
+  g.add(cyl(0.09, 0.05, GUNMETAL, -1.55, 2.76, -2.25, 10));
+  g.add(dome(0.085, DARKPIPE, -1.55, 2.79, -2.25, 0.6));
+  g.add(glowDot(WARM_GLOW, -1.55, 2.73, -2.19, 0.028));
 
-  // wash line from the vestibule roof to a post: two towels drying in dusk,
-  // hung forward of the barrel's curve so they actually read from the pad
-  g.add(cyl(0.03, 1.35, DARKPIPE, 1.95, 0.815, -0.75, 6));
-  const line = cyl(0.008, 1.35, DARKPIPE, 1.28, 1.4, -0.72, 4);
-  line.rotation.z = Math.PI / 2 - 0.09;
+  // wash line off the east annex to a post — two towels drying in the dusk
+  g.add(cyl(0.028, 1.5, DARKPIPE, 2.42, 0.91, -0.72, 6));
+  const line = cyl(0.007, 0.72, DARKPIPE, 2.06, 1.5, -0.72, 4);
+  line.rotation.z = Math.PI / 2 - 0.07;
   g.add(line);
-  g.add(box(0.26, 0.3, 0.012, TEAL_PAINT, 1.05, 1.28, -0.72));
-  g.add(box(0.2, 0.24, 0.012, ORANGE_DK, 1.5, 1.26, -0.73));
+  g.add(box(0.24, 0.28, 0.012, TEAL_PAINT, 1.86, 1.34, -0.72));
+  g.add(box(0.18, 0.22, 0.012, RUST, 2.24, 1.36, -0.73));
 
   // planter crate with a fern grown from greenhouse stock
-  g.add(box(0.44, 0.26, 0.34, TEAL_PAINT, -1.35, 0.27, -0.72));
-  g.add(box(0.48, 0.04, 0.38, DARKPIPE, -1.35, 0.42, -0.72));
-  for (const [fx, fh] of [[-1.43, 0.34], [-1.35, 0.44], [-1.27, 0.3]] as const) {
+  g.add(box(0.44, 0.26, 0.34, TEAL_PAINT, 1.15, 0.29, -0.68));
+  g.add(box(0.48, 0.04, 0.38, DARKPIPE, 1.15, 0.44, -0.68));
+  for (const [fx, fh] of [[1.07, 0.34], [1.15, 0.44], [1.23, 0.3]] as const) {
     const frond = new THREE.Mesh(new THREE.ConeGeometry(0.07, fh, 6), FERN);
-    frond.position.set(fx, 0.4 + fh / 2, -0.72);
+    frond.position.set(fx, 0.42 + fh / 2, -0.68);
     g.add(frond);
   }
 
-  // a squat reserve tank tucked at the far end, strapped and banded
-  g.add(cyl(0.34, 0.72, GUNMETAL, -1.95, 0.5, -2.3, 16));
-  g.add(dome(0.34, ORANGE, -1.95, 0.86, -2.3, 0.6));
-  g.add(stripeBand(0.35, 0.05, DARKPIPE, -1.95, 0.62, -2.3));
+  // a squat reserve tank strapped at the west end, and a spare drum
+  g.add(cyl(0.3, 0.68, HULL_DK, -1.82, 0.5, -0.7, 16));
+  g.add(dome(0.3, HULL_LT, -1.82, 0.84, -0.7, 0.6));
+  g.add(stripeBand(0.31, 0.05, ORANGE_DK, -1.82, 0.6, -0.7));
+  g.add(decal('01', '#c4571f', 0.34, 1.38, 1.3, -0.93));
 
-  g.add(gantrySign('QUARTERS', '#ffc06a', 0.1, 3.3, -0.6, 1.7));
+  g.add(gantrySign('QUARTERS', '#ffc06a', 0.1, 3.5, -0.6, 2.0));
   return g;
 }
-
 export type StructureKey = 'fuel' | 'trade' | 'garage' | 'assay' | 'quarters';
 export const STRUCTURE_BUILDERS: Record<StructureKey, () => THREE.Group> = {
   fuel: buildFuelDepot,
