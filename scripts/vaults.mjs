@@ -5,6 +5,7 @@
 // camera-locked chambers that CUT, and the three pillar lints (chamber
 // width, sconce-at-boundary, dark-hazard-emissive).
 import { chromium } from 'playwright';
+import { readFileSync } from 'fs';
 
 // A full pass is a minute of wall clock, and iterating on one check should
 // not cost that. `--only=` names checks; a stage runs if any of its checks
@@ -21,6 +22,16 @@ import { chromium } from 'playwright';
 // Matching is case-insensitive substring, against the stage key and every
 // check name in it. ALWAYS run bare before you ship.
 const args = process.argv.slice(2);
+
+/**
+ * The rooms rewritten against the final kit (V4). The layout lints assert
+ * over these and only report over the rest: rooms not yet authored under V4
+ * are pre-V4 by definition, and failing on them would leave the suite red
+ * for the length of the phase rather than telling anyone anything. A room
+ * joins this list in its own commit, which is when its numbers start
+ * counting.
+ */
+const V4_DONE = JSON.parse(readFileSync('scripts/v4-done.json', 'utf8'));
 const OUT = args.find(a => !a.startsWith('--')) ?? '.';
 const onlyRaw = args.find(a => a.startsWith('--only='));
 const only = onlyRaw
@@ -1042,7 +1053,7 @@ await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
   // ===================================================================
 });
 
-await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification'], async () => {
+await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · flat walk'], async () => {
   // --- P3a: no chamber is wider than the frame can hold legibly ---
   const chamberW = await page.evaluate(() => {
     const max = window.__CHAMBER_MAX_W;
@@ -1169,6 +1180,185 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
   });
   ok('lint · spark classification', sparkClass,
     sparkClass.kit >= 18 && sparkClass.missing.length === 0);
+
+  // =========================================================================
+  // V4's four. Authoring a room without these is authoring blind, so they
+  // land before the first map is written.
+  //
+  // They assert over V4_DONE — the rooms rewritten against the final kit —
+  // and REPORT over the rest, because rooms 1-3 and the un-rewritten ones
+  // are pre-V4 by definition and failing on them would only mean the suite
+  // is red for the length of the phase. Each room's own commit adds its
+  // glyph to the list, which is the point at which its numbers start
+  // counting.
+  // =========================================================================
+
+  // --- P4: the climax recombines, never introduces. A vault's last chamber
+  // may contain no element type absent from its earlier chambers, and no
+  // sconce at all — ketsu is density of the known (grammar §5.1) ---
+  const climax = await page.evaluate((done) => {
+    const rows = [];
+    for (const v of window.__VAULTS) {
+      const p = window.__parseVault(v);
+      const last = p.chambers[p.chambers.length - 1];
+      if (!last || p.chambers.length < 2) continue;
+      const inLast = (x) => x >= last.x0 && x <= last.x1;
+      // the element census of a column range, by kind
+      const census = (pred) => {
+        const set = new Set();
+        for (let y = 0; y < p.h; y++) {
+          for (let x = 0; x < p.w; x++) {
+            if (!pred(x)) continue;
+            const i = y * p.w + x;
+            if (p.kill[i]) set.add('stud');
+            if (p.dry[i]) set.add('drank');
+            if (p.gravity[i]) set.add('gravity');
+          }
+        }
+        for (const b of p.bridges) if (pred(b.x)) set.add('bridge');
+        for (const r of p.rime) if (pred(r.x)) set.add('rime');
+        for (const m of p.motes) if (pred(m.x)) set.add('mote');
+        for (const b of p.braziers) if (pred(b.x)) set.add('brazier');
+        for (const d of p.doors) for (const t of d.tiles) if (pred(t.x)) set.add('door');
+        for (const c of v.censers ?? []) if (pred(Math.round(c.x))) set.add('censer');
+        for (const sh of v.shuttles ?? []) {
+          if (pred(sh.x0) || pred(sh.x1)) set.add(sh.snuff ? 'snuffer' : 'shuttle');
+        }
+        for (const c of v.crushers ?? []) if (pred(c.x)) set.add('crusher');
+        for (const b of v.beams ?? []) if (pred(Math.round(b.x))) set.add('beam');
+        for (const g of v.gates ?? []) if (pred(g.x0)) set.add('gate');
+        for (const c of v.currents ?? []) if (pred(c.x0)) set.add('current');
+        if (v.pursuit && (pred(v.pursuit.zone[0]) || pred(v.pursuit.zone[2]))) set.add('pursuit');
+        if (v.wind) set.add('wind');
+        return set;
+      };
+      const lastSet = census(inLast);
+      const earlier = census((x) => !inLast(x));
+      const novel = [...lastSet].filter(k => !earlier.has(k) && k !== 'wind');
+      const sconces = p.sconces.filter(sc => inLast(sc.x)).length;
+      rows.push({ glyph: v.glyph, novel, sconces });
+    }
+    const graded = rows.filter(r => done.includes(r.glyph));
+    return {
+      graded: graded.length,
+      bad: graded.filter(r => r.novel.length || r.sconces)
+        .map(r => r.glyph + ':' + (r.novel.join('/') || '') + (r.sconces ? '+' + r.sconces + 'sconce' : '')),
+      report: rows.map(r => r.glyph + ':' + (r.novel.length || r.sconces ? 'X' : 'ok')).join(' '),
+    };
+  }, V4_DONE);
+  ok('lint · P4 climax census', climax, climax.bad.length === 0);
+
+  // --- the sconce buffer (grammar §4.2): a checkpoint you cannot breathe
+  // after is not a checkpoint. ≥ 4 clear tiles between any sconce and the
+  // nearest danger volume, ≥ 5 where that danger is a crusher, and ≥ 3
+  // clear at entry ---
+  const buffer = await page.evaluate((done) => {
+    const rows = [];
+    for (const v of window.__VAULTS) {
+      const p = window.__parseVault(v);
+      // every tile a hazard can occupy, tagged by whether it is a piston
+      const danger = [];
+      for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+        if (p.kill[y * p.w + x]) danger.push({ x, y, crusher: false });
+      }
+      for (const c of v.crushers ?? []) {
+        for (let e = 0; e <= 1; e++) {
+          for (let dx = 0; dx < c.w; dx++) for (let dy = 0; dy < c.h; dy++) {
+            danger.push({ x: c.x + dx + c.dx * e, y: c.y + dy + c.dy * e, crusher: true });
+          }
+        }
+      }
+      for (const sh of v.shuttles ?? []) {
+        if (sh.snuff) continue;            // it steals, it does not kill
+        const n = Math.max(Math.abs(sh.x1 - sh.x0), Math.abs(sh.y1 - sh.y0)) || 1;
+        for (let k = 0; k <= n; k++) {
+          danger.push({
+            x: Math.round(sh.x0 + (sh.x1 - sh.x0) * (k / n)),
+            y: Math.round(sh.y0 + (sh.y1 - sh.y0) * (k / n)), crusher: false });
+        }
+      }
+      for (const c of v.censers ?? []) {
+        for (let k = 0; k <= 12; k++) {
+          const a2 = -c.arc + (2 * c.arc * k) / 12;
+          danger.push({ x: Math.round(c.x + Math.sin(a2) * c.len),
+            y: Math.round(c.y + Math.cos(a2) * c.len), crusher: false });
+        }
+      }
+      for (const b of v.beams ?? []) danger.push({ x: Math.round(b.x), y: Math.round(b.y), crusher: false });
+      for (const sc of p.sconces) {
+        let worst = 99, kind = '';
+        for (const d of danger) {
+          const gap = Math.max(Math.abs(d.x - sc.x), Math.abs(d.y - sc.y));
+          const need = d.crusher ? 5 : 4;
+          if (gap < need && gap - need < worst - (kind === 'crusher' ? 5 : 4)) {
+            worst = gap; kind = d.crusher ? 'crusher' : 'danger';
+          }
+        }
+        if (kind) rows.push({ glyph: v.glyph, at: sc.x + ',' + sc.y, gap: worst, kind });
+      }
+      // and the entry itself
+      let clear = 0;
+      for (let k = 1; k <= 4; k++) {
+        const nx = p.entry.x + k;
+        if (nx >= p.w || p.solid[p.entry.y * p.w + nx] || p.kill[p.entry.y * p.w + nx]) break;
+        clear++;
+      }
+      if (clear < 3) rows.push({ glyph: v.glyph, at: 'entry', gap: clear, kind: 'entry' });
+    }
+    const graded = rows.filter(r => done.includes(r.glyph));
+    return { flagged: rows.length, graded: graded.length,
+      bad: graded.map(r => r.glyph + '@' + r.at + ':' + r.kind + ' ' + r.gap) };
+  }, V4_DONE);
+  ok('lint · sconce buffer', buffer, buffer.bad.length === 0);
+
+  // --- the flat walk (grammar §6): no run of level floor longer than 8
+  // tiles without something on it to decide about. A corridor you hold right
+  // through is the one thing a precision room may never be ---
+  const flatWalk = await page.evaluate((done) => {
+    const rows = [];
+    for (const v of window.__VAULTS) {
+      const p = window.__parseVault(v);
+      const at = (x, y) => (x < 0 || y < 0 || x >= p.w || y >= p.h) ? 1 : p.solid[y * p.w + x];
+      // anything in the two courses above a floor tile that is worth a thought
+      const interest = new Set();
+      const mark = (x) => { for (let d = -1; d <= 1; d++) interest.add(x + d); };
+      for (const s2 of p.sconces) mark(s2.x);
+      for (const m of p.motes) mark(m.x);
+      for (const b of p.braziers) mark(b.x);
+      for (const r of p.rime) mark(r.x);
+      for (const b of p.bridges) mark(b.x);
+      for (const d of p.doors) for (const t of d.tiles) mark(t.x);
+      for (let i = 0; i < p.kill.length; i++) if (p.kill[i]) mark(i % p.w);
+      for (let i = 0; i < p.dry.length; i++) if (p.dry[i]) mark(i % p.w);
+      for (const c of v.crushers ?? []) for (let d = 0; d < c.w; d++) mark(c.x + d);
+      for (const sh of v.shuttles ?? []) { mark(sh.x0); mark(sh.x1); }
+      for (const c of v.censers ?? []) mark(Math.round(c.x));
+      for (const b of v.beams ?? []) mark(Math.round(b.x));
+      for (const g of v.gates ?? []) { mark(g.x0); mark(g.x1); }
+      for (const c of v.currents ?? []) { mark(c.x0); mark(c.x1); }
+      for (let y = 1; y < p.h; y++) {
+        let run = 0, start = 0;
+        for (let x = 0; x <= p.w; x++) {
+          // a walkable course: floor under two clear tiles
+          const walk = x < p.w && at(x, y) && !at(x, y - 1) && !at(x, y - 2);
+          if (walk) { if (!run) start = x; run++; }
+          if ((!walk || x === p.w) && run) {
+            if (run > 8) {
+              let decided = false;
+              for (let k = start; k < start + run; k++) if (interest.has(k)) { decided = true; break; }
+              if (!decided) rows.push({ glyph: v.glyph, y, from: start, len: run });
+            }
+            run = 0;
+          }
+        }
+      }
+    }
+    const graded = rows.filter(r => done.includes(r.glyph));
+    return { flagged: rows.length, graded: graded.length,
+      bad: graded.map(r => r.glyph + '@y' + r.y + 'x' + r.from + ':' + r.len),
+      report: rows.map(r => r.glyph).filter((g, i, a2) => a2.indexOf(g) === i).join(' ') };
+  }, V4_DONE);
+  ok('lint · flat walk', flatWalk, flatWalk.bad.length === 0);
 });
 
 if (!listing) {
