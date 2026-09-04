@@ -1204,7 +1204,7 @@ await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
   // ===================================================================
 });
 
-await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · flat walk'], async () => {
+await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'lint · dark hazards emissive', 'lint · pulse ratio', 'lint · spark classification', 'lint · P4 climax census', 'lint · sconce buffer', 'lint · the stone on foot', 'lint · flat walk'], async () => {
   // --- P3a: no chamber is wider than the frame can hold legibly ---
   const chamberW = await page.evaluate(() => {
     const max = window.__CHAMBER_MAX_W;
@@ -1479,6 +1479,37 @@ await stage('lints', ['lint · chamber width', 'lint · sconce at boundary', 'li
       bad: graded.map(r => r.glyph + '@' + r.at + ':' + r.kind + ' ' + r.gap) };
   }, V4_DONE);
   ok('lint · sconce buffer', buffer, buffer.bad.length === 0);
+
+  // --- the stone is taken ON FOOT. Completion now waits for the feet — a
+  // radius that fired mid-air froze the run wherever the body happened to be
+  // and the ending was read by an astronaut hovering over the floor. That
+  // makes "there is somewhere to stand inside the radius" load-bearing: a
+  // master stone placed over a gap is a room that cannot be finished, and
+  // nothing else in the suite would notice. ---
+  const stoneFooting = await page.evaluate(() => {
+    const bad = [];
+    const rows = [];
+    for (const v of window.__VAULTS) {
+      const p = window.__parseVault(v);
+      const m = p.master;
+      const solid = (x, y) => x >= 0 && y >= 0 && x < p.w && y < p.h
+        && !!p.solid[y * p.w + x];
+      // a standing spot: floor underfoot, and two clear courses for the body
+      let best = null;
+      for (let y = m.y - 1; y <= m.y + 2; y++) {
+        for (let x = m.x - 2; x <= m.x + 2; x++) {
+          if (!solid(x, y + 1) || solid(x, y) || solid(x, y - 1)) continue;
+          const d = Math.hypot((x + 0.5) - (m.x + 0.5), (y + 0.5) - (m.y + 0.5));
+          if (d < 1.5 && (!best || d < best.d)) best = { x, y, d: +d.toFixed(2) };
+        }
+      }
+      if (best) rows.push(v.glyph + ':' + best.d);
+      else bad.push(v.glyph + '@' + m.x + ',' + m.y);
+    }
+    return { rooms: rows.length, bad, report: rows.join(' ') };
+  });
+  ok('lint · the stone on foot', stoneFooting,
+    stoneFooting.rooms === 9 && stoneFooting.bad.length === 0);
 
   // --- the flat walk (grammar §6): no run of level floor longer than 8
   // tiles without something on it to decide about. A corridor you hold right

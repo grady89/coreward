@@ -1576,9 +1576,16 @@ export class VaultRun {
       }
     }
 
-    // the master stone
+    // The master stone, taken ON FOOT. The radius alone fired the moment the
+    // body entered it, which for a stone you arrive at by jumping meant the
+    // run froze mid-air and the ending was read by an astronaut hovering over
+    // the floor. The stone is never solid and always seated a course above its
+    // platform, so a body standing under it is comfortably inside the radius:
+    // waiting for the feet costs about ten frames and buys a pose that looks
+    // like the end of a climb rather than a pause button.
     const m = this.p.master;
-    if (Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5) < 1.5) {
+    if (this.grounded
+      && Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5) < 1.5) {
       this.phase = 'complete';
       this.phaseT = 0;
       this.vx = 0; this.vy = 0;
