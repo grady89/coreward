@@ -128,7 +128,8 @@ function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jum
     if (s.dead) return false;
     if (s.grounded && f > 3) {
       const fx = Math.floor(s.px), fy = Math.round(-(s.py - C.HH));
-      return fy === to.y && fx >= to.x0 && fx <= to.x1;
+      const ok = fy === to.y && fx >= to.x0 && fx <= to.x1;
+      return ok ? { frames: runUp + jumpDelay + f + 1 } : false;
     }
   }
   return false;
@@ -157,7 +158,8 @@ function solve(w, from, to, dashes = DASHES) {
         for (const kicks of kickSets) {
           for (const dash of dashes) {
             const opt = { launchX, dir, runUp, hold, dash, kicks };
-            if (attempt(w, from, to, opt)) return opt;
+            const r = attempt(w, from, to, opt);
+            if (r) return { ...opt, frames: r.frames };
           }
         }
       }
@@ -332,6 +334,19 @@ for (const { glyph, rows } of rooms) {
     if (!sparkForced) sparkOptional++;
   }
 
+  // PRICE THE PATH. The clear time is the number a room is actually designed
+  // against — "it takes ten seconds" is the only feedback that matters and it
+  // was not measurable before. This sums the frames of each beat's tape plus
+  // the walk between landings, over the EXPERT line (BFS minimises beats), so
+  // it is a floor on the clear time and not an average.
+  let frames = 0;
+  for (const e of route) {
+    frames += (e.opt && e.opt.frames) || 60;
+    const walk = Math.max(0, Math.abs(e.b.x0 - e.a.x1) - MAXJ);
+    frames += (walk / C.WALK) * 60;
+  }
+  const seconds = +(frames / 60).toFixed(1);
+
   const hard = [];
   for (const e of route) {
     if (!e) continue;
@@ -345,6 +360,7 @@ for (const { glyph, rows } of rooms) {
     + ` · tight(<${MARGIN}f) ${String(hard.length).padStart(2)}`
     + ` · stone ${reachesStone ? 'reached' : 'UNREACHED'}`
     + (sparkForced === null ? '' : ` · spark ${sparkForced ? 'FORCED' : 'OPTIONAL'}`)
+    + ` · fast line ${String(seconds).padStart(5)}s`
     + ` · undecided ${String(flat.worst).padStart(3)}t${flat.worst > FLAT_MAX ? ' FLAT' : ''}`);
   if (flat.worst > FLAT_MAX && graded) flatFail++;
   if (verbose) {

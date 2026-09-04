@@ -92,16 +92,16 @@ floor(29, 1, 6)                     # the threshold — wide, a breath
 put(2, 28, '@')
 put(4, 28, 'S')                     # the free light, at your feet
 arc(27, 7, 9)                       # 3 empty = 0.55x
-floor(28, 10, 12)                   # short: you land near its lip
+floor(28, 11, 13)                   # 0.73x, and two tiles of landing
 arc(26, 13, 15)                     # 3 empty, +1 rise = 0.62x
-floor(27, 16, 18)
+floor(27, 18, 19)                   # 0.85x — the hardest the legs are asked
 put(12, 27, 'S')                    # the cut-13 light, standing on the shelf
 
 # ===========================================================================
 # CHAMBER B · cols 14-33 · DEVELOP → the spark, discovered by elimination
 # ===========================================================================
 arc(25, 19, 22)                     # 4 empty = 0.73x — the first HELD jump
-floor(26, 23, 26)
+floor(26, 24, 26)                   # 0.85x again, on a three-tile shelf
 
 # THE TEACHING GAP · 7 empty columns = 1.28x. It cannot be jumped, and that is
 # the point. It is fully visible from the shelf you stand on, its far lip is in
@@ -154,6 +154,13 @@ floor(11, 45, 54)                   # the reveal's floor — cols 43-44 stay ope
 arc(9, 48, 50)                      # 3 empty, +2 rise: the last held jump
 floor(8, 51, 54)
 arc(6, 50, 52)
+# THE UNLIGHT, chamber D only. Chambers A, B and C keep their promise that
+# nothing there can hurt you; the room's last two jumps are the only ones in
+# the tutorial that cost more than four seconds, which is how a tutorial ends
+# with stakes without opening with them.
+floor(10, 48, 49, 'X')
+floor(9, 52, 53, 'X')
+
 put(53, 7, 'M')
 put(51, 7, 'K')                     # one still reaching, at the top
 
