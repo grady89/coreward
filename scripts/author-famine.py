@@ -42,7 +42,7 @@ AIR = 6
 LEFT, RIGHT = 2, W - 3
 
 # the two channels: (columns, from hall, to hall)
-CH1 = (49, 52)                                # right end: hall A -> hall B
+CH1 = (50, 53)                                # right end: hall A -> hall B
 CH2 = (3, 6)                                  # left end:  hall B -> hall C
 
 
@@ -77,39 +77,72 @@ carve(CH1[0], CH1[1], HALL[1] - 1, HALL[0] - 1)      # A -> B, right end
 carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C, left end
 
 # ===========================================================================
-# THE THREE HALLS, as tables. A hall is authored left to right whichever way it
-# is run: the direction is a property of the route, not of the stone.
+# THE HALLS, in the drawing's own vocabulary.
 #
-#   stud runs   (column, width)   a run of n is a crossing of n+1 tiles
-#   ledges      (column, width)   always TWO courses up, never three. The body
-#                                 rises 2.68, so a three-course step is one it
-#                                 cannot make -- and the first pass authored
-#                                 every single ledge that way.
-#   lasers      (column, pulses, phase)
+#   SOLID  (x0, x1)   ground you can stand on
+#   PIT    (x0, x1)   a hole with unlight at the bottom. Falling in is death
+#                     and a walk back from the last light -- NOT a spike set
+#                     into a floor, which is what the first pass built.
+#   LEDGE  (x0, w)    a shelf two courses up. Never three: the body rises 2.68
+#   LASER  ('v', col, pulses, phase)          a wall of light, floor to ceiling
+#          ('h', x0, x1, pulses, phase)       a bolt laid along the ground
+#
+# HALL A, to the brief: a starting section, a WIDE jump over a pit, a long
+# flat run crossed by one horizontal rail AND two vertical ones over the top
+# of it, four jumps onto one-tile landings, and the lift out.
 # ===========================================================================
+PIT_DEPTH = 4
+
+SOLID = [
+    [(2, 13), (19, 34), (38, 38), (42, 42), (46, 46), (49, 49)],
+    [(2, RIGHT)],
+    [(2, RIGHT)],
+]
+PIT = [
+    [(14, 18), (35, 37), (39, 41), (43, 45), (47, 48)],
+    [],
+    [],
+]
 STUDS = [
-    [(13, 2), (28, 3), (43, 3)],                   # A - 0.55x, 0.73x, 0.73x
-    [(40, 3), (26, 3), (12, 3)],                   # B - read right to left
-    [(14, 3), (30, 4), (46, 3)],                   # C - the widest run, 0.92x
+    [],
+    [(40, 3), (26, 3), (12, 3)],
+    [(14, 3), (30, 4), (46, 3)],
 ]
 LEDGES = [
-    [(18, 4), (34, 4)],
+    [],
     [(31, 4), (17, 4)],
     [(23, 4), (40, 4)],
 ]
-LASERS = [
-    [(24, 4, 0.0), (40, 3, 0.25), (47, 3, 0.5)],   # A - slow, and spread
-    [(37, 3, 0.0), (23, 2, 0.25), (9, 3, 0.75)],   # B - one guarding the exit
-    [(19, 2, 0.0), (36, 2, 0.5), (45, 2, 0.25)],   # C - the fastest in the room
+LASER = [
+    # the long flat run, all three lights over the same stretch of floor
+    [('h', 20, 33, 3, 0.0), ('v', 24, 2, 0.25), ('v', 30, 2, 0.75)],
+    [('v', 37, 3, 0.0), ('v', 23, 2, 0.25), ('v', 9, 3, 0.75)],
+    [('v', 19, 2, 0.0), ('v', 36, 2, 0.5), ('v', 45, 2, 0.25)],
 ]
 LEDGE_RISE = 2
 
+# a hall's floor exists only where the table says it does
 for h, f in enumerate(HALL):
+    for x in range(LEFT, RIGHT + 1):
+        if not any(a <= x <= b for a, b in SOLID[h]):
+            g[f][x] = '.'
+    for x0, x1 in PIT[h]:
+        carve(x0, x1, f, f + PIT_DEPTH - 1)
+        for x in range(x0, x1 + 1):
+            put(x, f + PIT_DEPTH, 'X')          # the bottom of it is unlight
     for x0, n in STUDS[h]:
-        assert n <= 4, 'hall %d: a %d-wide run is %.2fx, past the legs' % (h, n, (n + 1) / MAXJ)
         studs(f, x0, n)
     for x0, n in LEDGES[h]:
         ledge(f, x0, x0 + n - 1, LEDGE_RISE)
+
+# A pit of n columns is a crossing of n+1 tiles. Six tiles is 1.10x the
+# measured jump, which THE WICK proves the legs can do -- caught on the falling
+# half of the arc, with eleven frames to spare. Seven is the spark's business.
+for h in range(3):
+    for x0, x1 in PIT[h]:
+        tiles = x1 - x0 + 2
+        assert tiles <= 6, ('hall %d: the pit at %d is a %d-tile crossing (%.2fx), '
+                            'past the legs' % (h, x0, tiles, tiles / MAXJ))
 
 # --- entry, the stone, and the lights --------------------------------------
 # Entry + three, all dead (SII.2): the famine's sconces hold your place and
@@ -131,12 +164,19 @@ for x, h in SCONCE:
     for x0, n in STUDS[h]:
         gap = min(abs(x - x0), abs(x - (x0 + n - 1)))
         assert gap >= 4, 'sconce %d in hall %d is %d from the studs at %d' % (x, h, gap, x0)
-    for c, _, _ in LASERS[h]:
-        assert abs(x - c) >= 4, 'sconce %d in hall %d is %d from the laser at %d' % (x, h, abs(x - c), c)
+    for L in LASER[h]:
+        cols = [L[1]] if L[0] == 'v' else [L[1], L[2]]
+        for c in cols:
+            assert abs(x - c) >= 4, ('sconce %d in hall %d is %d from a laser at %d'
+                                     % (x, h, abs(x - c), c))
 
 # motes: over the apex of every stud run, and filling the channel mouths so
 # the road up reads as a road before you have to commit to it
 for h, f in enumerate(HALL):
+    for x0, x1 in PIT[h]:
+        for x in range(x0, x1 + 1):
+            if g[f - 4][x] == '.':
+                g[f - 4][x] = 'o'
     for x0, n in STUDS[h]:
         for k in range(n):
             if g[f - 4][x0 + k] == '.':
@@ -152,10 +192,20 @@ rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
+def laser_def(h, L):
+    # A vertical rail is given its column and seats itself floor to ceiling.
+    # A horizontal one is given its run and seats itself a course above the
+    # ground -- so both say WHERE and let the room say how far.
+    if L[0] == 'v':
+        _, c, n, ph = L
+        return (c, HALL[h] - AIR, c, HALL[h] - 1, n * PULSE, ph)
+    _, x0, x1, n, ph = L
+    return (x0, HALL[h] - 1, x1, HALL[h] - 1, n * PULSE, ph)
+
+
 shuttles = ',\n'.join(
-    "      { x0: %d, y0: %d, x1: %d, y1: %d, period: %.2f, phase: %s }"
-    % (c, HALL[h] - AIR, c, HALL[h] - 1, n * PULSE, ph)
-    for h in range(3) for c, n, ph in LASERS[h])
+    "      { x0: %d, y0: %d, x1: %d, y1: %d, period: %.2f, phase: %s }" % laser_def(h, L)
+    for h in range(3) for L in LASER[h])
 
 defn = """  // 2 · THE FAMINE — a serpentine, to the drawing. Three halls stacked and run
   // in alternating directions, joined by two updraft channels: start at the
@@ -211,7 +261,7 @@ start = s.index('  // 2 · THE FAMINE')
 end = s.index('  // 3 · THE LAST SHIFT')
 io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
 
-print(f'THE FAMINE · {HGT} rows x {W} · 3 halls · {sum(len(x) for x in LASERS)} lasers · 2 channels\n')
+print(f'THE FAMINE · {HGT} rows x {W} · 3 halls · {sum(len(x) for x in LASER)} lasers · 2 channels\n')
 print('    ' + ''.join(str(i // 10 % 10) for i in range(W)))
 print('    ' + ''.join(str(i % 10) for i in range(W)))
 for i, r in enumerate(rows):
