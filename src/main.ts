@@ -2234,7 +2234,9 @@ class Game {
 
     {
       const px = this.ctrl.px;
-      const onPad = this.ctrl.py < 2.2 && (
+      // surface band only: down a shaft py runs negative, and a dock's
+      // columns must never read as a deck under the world
+      const onPad = this.ctrl.py > -0.5 && this.ctrl.py < 2.2 && (
         (px > PAD_X0 - 0.3 && px < PAD_X1 + 1.3) ||
         DOCKS.some(d => px > d.x0 - 0.3 && px < d.x1 + 0.3));
       this.podLift += ((onPad ? 0.2 : 0) - this.podLift) * Math.min(1, dt * 7);
