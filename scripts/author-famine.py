@@ -9,20 +9,26 @@ cross back left, are lifted again, and cross right to the stone. Nothing on the
 route can be skipped, which is the whole reason for the shape — an open room
 lets a solver cut the middle out, a serpentine makes every beat serial.
 
-THE THREE OBSTACLES, and nothing else:
+THE OBSTACLES, to the drawing (2026-09-05):
 
-  * STUDS set into the floor — a fang at ankle height with solid stone under
-    it, so it is jumped, not fallen into. Runs of one to four, widening as the
-    room goes on.
-  * LASER RAILS — vertical bolt shuttles strung floor to ceiling across a
-    hall. They cannot be gone under or over; you read the bolt and run when it
-    is at the far end. The room's clock.
+  * LASER RAILS — vertical bolts six courses tall (a wall of light that legs
+    cannot clear), bolts laid along the ground to be jumped, and one hung
+    over hall C's gaps so every jump is timed against it. The room's clock.
   * THE CHANNELS — updraft columns. You jump in and are carried; the wind was
     the enemy everywhere else and here it is the road.
+  * SPIKED BLOCKS — hanging stones with death spikes on the bottom, staggered
+    through both channels: the ride up is a weave, and a cap over each exit
+    turns the way out sideways.
 
-The halls are SIX courses of air over their floor. That is enough to jump a
+Built the way THE WICK is built (openEdges): open sky, one-course floors laid
+into it, no roof, no side walls, no rock below. What keeps a fall honest is
+the unseen `_` plane eight courses under each floor -- and past the map's
+edge, the openEdges void.
+
+A hall's lasers stand SIX courses over its floor. That is enough to jump a
 stud (the body rises 2.68) and enough that a laser reads as a wall of light
-rather than a dash, and not so much that the hall stops being a corridor.
+rather than a dash -- and six courses is past what legs can clear, so a rail
+with no ceiling over it is still a wall.
 
 Distances are fractions of the MEASURED running jump (5.45 tiles across, 2.68
 up — docs/movement-metrics.md). A stud run of n columns is a crossing of n+1
@@ -34,7 +40,7 @@ W, HGT = 56, 58
 MAXJ = 5.45
 PULSE = 0.85
 
-g = [['#'] * W for _ in range(HGT)]          # solid, and the halls are cut out
+g = [['.'] * W for _ in range(HGT)]          # open sky, and the halls float in it
 
 # Hall floor rows, bottom to top, and the six courses of air over each. They
 # sit SIXTEEN apart, not twelve, because every hall needs eight courses of open
@@ -46,13 +52,6 @@ LEFT, RIGHT = 2, W - 3
 # the two channels: (columns, from hall, to hall)
 CH1 = (50, 53)                                # right end: hall A -> hall B
 CH2 = (19, 22)                                # hall B's left end -> hall C
-
-
-def carve(x0, x1, y0, y1):
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if 0 <= x < W and 0 <= y < HGT:
-                g[y][x] = '.'
 
 
 def put(x, y, ch):
@@ -76,14 +75,9 @@ def ledge(floor, x0, x1, rise):
 # the second lift is simply rock.
 HALL_X = [(LEFT, RIGHT), (CH2[0], RIGHT), (CH2[0], RIGHT)]
 
-for f, (a, b) in zip(HALL, HALL_X):
-    carve(a, b, f - AIR, f - 1)
-
-# --- the channels: cut through the rock between the halls ------------------
+# --- the channels: columns of wind in the open air between the halls -------
 CH1_ROWS = (HALL[1] - 1, HALL[0] - 1)
 CH2_ROWS = (HALL[2] - 1, HALL[1] - 1)
-carve(CH1[0], CH1[1], HALL[1] - 1, HALL[0] - 1)      # A -> B, right end
-carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C
 
 # ===========================================================================
 # THE HALLS, in the drawing's own vocabulary.
@@ -93,8 +87,10 @@ carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C
 #                     and a walk back from the last light -- NOT a spike set
 #                     into a floor, which is what the first pass built.
 #   LEDGE  (x0, w)    a shelf two courses up. Never three: the body rises 2.68
-#   LASER  ('v', col, pulses, phase)          a wall of light, floor to ceiling
+#   LASER  ('v', col, pulses, phase)          a wall of light, six courses tall
 #          ('h', x0, x1, pulses, phase)       a bolt laid along the ground
+#          ('H', x0, x1, rise, pulses, phase) a bolt hung `rise` over it, from
+#                                             one-tile anchor stones
 #
 # HALL A, to the brief: a starting section, a WIDE jump over a pit, a long
 # flat run crossed by one horizontal rail AND two vertical ones over the top
@@ -115,20 +111,33 @@ FALL = 8
 
 SOLID = [
     [(2, 13), (19, 34), (37, 37), (40, 40), (43, 43), (46, 46), (CH1[0], CH1[1])],
-    # HALL B, read RIGHT TO LEFT: the pad at the top of the first lift, then
-    # three jumps onto small pads with a wall of light standing in each gap --
-    # and TWO in the last one, both to be threaded in a single jump -- landing
-    # in the second lift.
-    [(CH2[0], CH2[1]), (28, 31), (36, 39), (44, 49)],
-    [(CH2[0], RIGHT)],          # hall C is a placeholder until its brief
+    # HALL B, read RIGHT TO LEFT (the drawing): the arrival slab at the top
+    # of the first lift, a rail-guarded jump onto a small pad, then the
+    # DOUBLE-RAIL PAD -- a wall of light on EACH lip with two safe tiles
+    # between them, entered through one and left through the other -- then
+    # a slab with a bolt laid along it, and the launch pad into the wind.
+    [(CH2[0], CH2[1]), (27, 32), (35, 38), (40, 42), (44, 49)],
+    # HALL C, to the drawing: the landing out of the wind, three gap jumps
+    # under the hung rail, and the finish slab with the stone.
+    [(23, 28), (32, 35), (39, 41), (45, RIGHT)],
 ]
 PIT = [
     [(14, 18), (35, 36), (38, 39), (41, 42), (44, 45), (47, 49)],
-    [(23, 27), (32, 35), (40, 43)],
-    [],
+    [(23, 26), (33, 34), (39, 39), (43, 43)],
+    [(29, 31), (36, 38), (42, 44)],
 ]
 STUDS = [[], [], []]
 LEDGES = [[], [], []]
+# SPIKED -- the drawing's new noun: a hanging block with death spikes on its
+# BOTTOM. (x0, x1, row): stone across the run, unlight hung beneath it. Two
+# per wind channel, staggered to opposite sides so the ride up is a weave;
+# a third caps each channel's exit so you leave the wind SIDEWAYS, not
+# straight up. Their tops are plain stone -- inside the wind that is no
+# rest, the updraft takes you off them.
+SPIKED = [
+    (50, 51, 40), (52, 53, 34), (52, 53, 26),    # CH1: weave right, left, out left
+    (21, 22, 24), (19, 20, 18), (19, 20, 10),    # CH2: weave left, right, out right
+]
 LASER = [
     # the long flat run, all three lights over the same stretch of floor
     [('h', 20, 33, 3, 0.0), ('v', 24, 2, 0.25), ('v', 30, 2, 0.75)],
@@ -138,11 +147,18 @@ LASER = [
     # the wall of light stops being a wall. On a lip it stands on stone, spans
     # exactly the hall, and is in the way for the whole of its round.
     #
-    # Read right to left, so a landing's near edge is its RIGHT one. The last
-    # gap gets both of its lips lit: you leave through one and arrive through
-    # the other, in a single jump.
-    [('v', 39, 3, 0.0), ('v', 31, 3, 0.5), ('v', 28, 2, 0.25), ('v', 22, 2, 0.75)],
-    [('v', 19, 2, 0.0), ('v', 36, 2, 0.5), ('v', 45, 2, 0.25)],
+    # Read right to left, so a landing's near edge is its RIGHT one. Rails on
+    # BOTH lips of the pad at 35-38 make the drawing's double gate: land in
+    # the two safe tiles between them, breathe, leave through the second.
+    # Then hall A's ground bolt is met again on the left slab's crossing.
+    [('v', 44, 3, 0.0), ('v', 40, 2, 0.5), ('v', 38, 2, 0.25), ('v', 35, 2, 0.75),
+     ('h', 28, 31, 3, 0.5)],
+    # HALL C is the horizontal hall, one of each kind: a long bolt hung OVER
+    # the three gap jumps from one-tile anchor stones (the drawing's
+    # squares) -- every full jump's apex grazes its line, so the gaps are
+    # timed against it -- and a ground bolt laid along the finish slab,
+    # jumped over on the run home to the stone.
+    [('H', 28, 44, 3, 4, 0.0), ('h', 46, 50, 3, 0.5)],
 ]
 LEDGE_RISE = 2
 
@@ -152,34 +168,53 @@ for h in range(1, 3):
         "hall %d kill plane at %d is inside hall %d, whose ceiling is %d"
         % (h, HALL[h] + FALL, h - 1, ceiling))
 
-# a hall's floor exists only where the table says it does
+# a hall's floor exists only where the table says it does: one course of
+# stone laid into the sky, nothing above it and nothing below (a pit is
+# simply the floor's absence, so PIT needs no carving)
 for h, f in enumerate(HALL):
+    for x0, x1 in SOLID[h]:
+        for x in range(x0, x1 + 1):
+            g[f][x] = '#'
+    # The kill plane, eight courses under the floor -- `_`, never drawn, so a
+    # missed jump reads as falling out of the level, not landing on a thing.
+    # It exists so a fall from a hall costs THAT hall and never drops you
+    # onto the hall below, standing and confused. NOT laid across a lift
+    # shaft: a plane drawn straight over one puts unlight inside the wind --
+    # you get in at the bottom, are carried up, and are killed on the way by
+    # a floor that is not there for anyone standing on it. Tested as a
+    # RECTANGLE and not a column, because a shaft only runs between two
+    # particular halls.
     for x in range(HALL_X[h][0], HALL_X[h][1] + 1):
-        if not any(a <= x <= b for a, b in SOLID[h]):
-            g[f][x] = '.'
-    # Hollow the whole hall out beneath its floor, then lay the kill plane --
-    # but NOT across a lift shaft. The shafts run through these bands, and a
-    # plane drawn straight over them puts unlight inside the wind: you get in
-    # at the bottom, are carried up, and are killed on the way by a floor that
-    # is not there for anyone standing on it.
-    carve(HALL_X[h][0], HALL_X[h][1], f + 1, f + FALL - 1)
-    for x in range(HALL_X[h][0], HALL_X[h][1] + 1):
-        # Inside a shaft the plane is OPEN, not merely un-lethal -- leaving the
-        # base rock there hangs a ledge across the wind for the body to land
-        # on. Tested as a RECTANGLE and not a column: a shaft only runs between
-        # two particular halls, and skipping by column alone punched holes in
-        # kill planes the shaft never passes through, leaving standable ledges
-        # in the basement.
         y = f + FALL
         inShaft = any(c0 <= x <= c1 and r0 <= y <= r1
                       for (c0, c1), (r0, r1) in ((CH1, CH1_ROWS), (CH2, CH2_ROWS)))
-        put(x, y, '.' if inShaft else '_')
-    for x0, x1 in PIT[h]:
-        carve(x0, x1, f, f)                     # and the floor is simply absent
+        if not inShaft:
+            put(x, y, '_')
     for x0, n in STUDS[h]:
         studs(f, x0, n)
     for x0, n in LEDGES[h]:
         ledge(f, x0, x0 + n - 1, LEDGE_RISE)
+
+# the hanging spiked blocks: stone across the run, unlight hung beneath
+for x0, x1, y in SPIKED:
+    for x in range(x0, x1 + 1):
+        put(x, y, '#')
+        put(x, y + 1, 'X')
+
+# the drawing's anchor squares: a one-tile stone over each end of a hung
+# horizontal rail, and one over the TOP of every vertical rail. The vertical
+# ones are load-bearing: the game seats a vertical rail upward to the first
+# stone it finds (vault.ts, shuttleSpan), and under open sky the first stone
+# is nothing -- the wire ran to the top of the world and the bolt spent its
+# round above the hall. The anchor pins the span to its six courses.
+for h, f in enumerate(HALL):
+    for L in LASER[h]:
+        if L[0] == 'H':
+            _, x0, x1, rise, _, _ = L
+            put(x0, f - 2 - rise, '#')
+            put(x1, f - 2 - rise, '#')
+        elif L[0] == 'v':
+            put(L[1], f - AIR - 1, '#')
 
 # A pit of n columns is a crossing of n+1 tiles. Six tiles is 1.10x the
 # measured jump, which THE WICK proves the legs can do -- caught on the falling
@@ -194,7 +229,7 @@ for h in range(3):
 # Entry + three, all dead (SII.2): the famine's sconces hold your place and
 # hand you nothing. One at the start, one where each channel sets you down, so
 # a fall costs the hall you are in and never the hall behind it.
-SCONCE = [(7, 0), (47, 1), (24, 2)]
+SCONCE = [(7, 0), (48, 1), (24, 2)]
 put(4, HALL[0] - 1, '@')
 for x, h in SCONCE:
     put(x, HALL[h] - 1, 'S')
@@ -219,10 +254,14 @@ for x, h in SCONCE:
 # motes: over the apex of every stud run, and filling the channel mouths so
 # the road up reads as a road before you have to commit to it
 for h, f in enumerate(HALL):
+    # the arc's apex row -- dropped one course where a hung rail runs along
+    # it, because a mote is safe-language and may not trace a lethal line
+    hung = {f - 1 - L[3] for L in LASER[h] if L[0] == 'H'}
+    ay = f - 3 if f - 4 in hung else f - 4
     for x0, x1 in PIT[h]:
         for x in range(x0, x1 + 1):
-            if g[f - 4][x] == '.':
-                g[f - 4][x] = 'o'
+            if g[ay][x] == '.':
+                g[ay][x] = 'o'
     for x0, n in STUDS[h]:
         for k in range(n):
             if g[f - 4][x0 + k] == '.':
@@ -239,12 +278,16 @@ for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
 def laser_def(h, L):
-    # A vertical rail is given its column and seats itself floor to ceiling.
+    # A vertical rail is given its column and seats itself six courses tall.
     # A horizontal one is given its run and seats itself a course above the
-    # ground -- so both say WHERE and let the room say how far.
+    # ground -- or `rise` courses over it for the hung kind ('H') -- so each
+    # says WHERE and lets the room say how far.
     if L[0] == 'v':
         _, c, n, ph = L
         return (c, HALL[h] - AIR, c, HALL[h] - 1, n * PULSE, ph)
+    if L[0] == 'H':
+        _, x0, x1, rise, n, ph = L
+        return (x0, HALL[h] - 1 - rise, x1, HALL[h] - 1 - rise, n * PULSE, ph)
     _, x0, x1, n, ph = L
     return (x0, HALL[h] - 1, x1, HALL[h] - 1, n * PULSE, ph)
 
@@ -260,12 +303,14 @@ defn = """  // 2 · THE FAMINE — a serpentine, to the drawing. Three halls sta
   // room lets a solver cut the middle out, a serpentine makes every beat
   // serial, and that is the whole reason for the shape.
   //
-  // Three obstacles and nothing else. STUDS set on the floor at ankle height
-  // with stone underneath, so they are jumped rather than fallen into.
-  // LASER RAILS strung floor to ceiling, which cannot be gone under or over:
-  // you read the bolt and run when it is at the far end. And THE CHANNELS,
+  // Three obstacles and one new noun. LASER RAILS — vertical walls of light
+  // six courses tall (past what legs can clear, so open sky above them
+  // changes nothing), bolts laid along the ground to be jumped, and one hung
+  // over hall C's gaps so every jump is timed against it. THE CHANNELS,
   // updraft columns you jump into and are carried by — wind is the enemy
-  // everywhere else in this act and here it is the road.
+  // everywhere else in this act and here it is the road. And SPIKED BLOCKS
+  // hanging in both channels — stone above, unlight beneath — so the ride
+  // up is a weave, and each channel's cap turns its exit sideways.
   //
   // Six courses of air over each floor: enough to jump a stud (the body rises
   // 2.68), enough that a laser reads as a wall of light, and not so much that
@@ -274,19 +319,27 @@ defn = """  // 2 · THE FAMINE — a serpentine, to the drawing. Three halls sta
   // deadLight: the sconces hold your place and hand you nothing back. One at
   // the start and one at the head of each channel, so a fall costs the hall
   // you are in and never the hall behind it.
+  //
+  // Built the way THE WICK is built: open sky, and the halls float in it.
+  // No roof, no side walls, no rock under the route — a missed jump falls
+  // past an unseen kill plane eight courses down (or clean out of the map,
+  // which openEdges ends the same way) and re-forms at the last sconce.
   {
     glyph: 'famine',
     chambers: [17, 35],
     deadLight: true,
+    openEdges: true,
     // the beat clock: 2-4 pulses, phases on the quarter-pulse
     shuttles: [
 %s
     ],
     currents: [
-      // The two roads up, at opposite ends: jump in and be carried. Named by
-      // the SHAFT they cut through the rock -- the wind then fills whatever
-      // that shaft opens into, at both ends, because a current that stopped
-      // partway up a shaft would stop for no reason a player could see.
+      // The two roads up, at opposite ends: jump in and be carried. Standing
+      // columns of wind in the open air between the halls, read by the motes
+      // that fill them -- the shaft is drawn by what rises through it, not
+      // by rock around it. Each reaches down to ONE COURSE over its launch
+      // pad: with the shaft walls gone there is nothing to wall-jump, so the
+      // wind itself must meet the jump that enters it.
       { x0: %d, y0: %d, x1: %d, y1: %d, force: 46 },
       { x0: %d, y0: %d, x1: %d, y1: %d, force: 46 },
     ],
@@ -297,8 +350,8 @@ defn = """  // 2 · THE FAMINE — a serpentine, to the drawing. Three halls sta
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
 out = defn % (shuttles,
-              CH1[0], HALL[1], CH1[1], HALL[0] - AIR - 1,
-              CH2[0], HALL[2], CH2[1], HALL[1] - AIR - 1,
+              CH1[0], HALL[1], CH1[1], HALL[0] - 2,
+              CH2[0], HALL[2], CH2[1], HALL[1] - 2,
               body)
 
 p = 'src/world/vaults.ts'
