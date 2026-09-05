@@ -4,6 +4,11 @@
 // walks a focus ring through whatever is on screen, so a pad can shop, spend
 // and read without ever touching the keyboard. Panels rebuild themselves on
 // every purchase, so the ring re-seeds itself whenever its element goes away.
+//
+// The ring only ever lands on things you can press, and the longest panels —
+// the assay office, the catalog — are mostly prose between them. So the right
+// stick scrolls the panel itself, exactly as a mouse wheel does, independent
+// of wherever the ring happens to be sitting.
 
 const FOCUSABLE = 'button:not([disabled]), input[type="range"], a.ghost-link';
 
@@ -55,6 +60,31 @@ export class MenuNav {
     if (!el || el instanceof HTMLInputElement) return false;
     el.click();
     return true;
+  }
+
+  /**
+   * Right stick: scroll the pane under the ring, by pixels. Returns false when
+   * nothing on screen has anything left to scroll in that direction, so the
+   * caller can leave the stick to whatever else wants it.
+   */
+  scroll(root: HTMLElement, px: number): boolean {
+    const pane = this.scrollable(root);
+    if (!pane) return false;
+    const max = pane.scrollHeight - pane.clientHeight;
+    const before = pane.scrollTop;
+    pane.scrollTop = Math.max(0, Math.min(max, before + px));
+    return pane.scrollTop !== before;
+  }
+
+  /** the deepest scrolling box the ring is inside, else the tallest one in it */
+  private scrollable(root: HTMLElement): HTMLElement | null {
+    const overflows = (el: HTMLElement) =>
+      el.scrollHeight - el.clientHeight > 1 && getComputedStyle(el).overflowY !== 'visible';
+    for (let el = this.cur; el && el !== root.parentElement; el = el.parentElement) {
+      if (overflows(el)) return el;
+    }
+    if (overflows(root)) return root;
+    return Array.from(root.querySelectorAll<HTMLElement>('*')).find(overflows) ?? null;
   }
 
   blur(): void {

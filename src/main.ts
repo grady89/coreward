@@ -56,6 +56,9 @@ import { PROMPTS, glyphs } from './input/prompts';
 
 type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault' | 'interior';
 
+/** right stick, pixels a second: a menu scrolls about a panel-height per push */
+const MENU_SCROLL = 1100;
+
 /** one discrete request from the player, whichever device made it */
 type Action =
   | 'interact' | 'escape' | 'dash' | 'lance' | 'flare' | 'charge' | 'arrestor'
@@ -562,6 +565,7 @@ class Game {
       meta: this.meta,
       unread: () => this.panels.unreadCount(),
       openPanel: (k: InteriorPanel) => { this.audio.click(); this.panels.open(k); },
+      openMineral: (t: number) => { this.audio.click(); this.panels.open('mineral', { mineral: t }); },
     }, innerWidth / innerHeight, this.ui);
     this.mode = 'interior';
   }
@@ -1380,6 +1384,9 @@ class Game {
       this.padEHeld = false;
       this.padUpWas = false;
       this.nav.sync(menu);
+      // the right stick is the mouse wheel: a long panel is mostly prose, and
+      // the focus ring only ever lands on the parts you can press
+      if (p.ry !== 0) this.nav.scroll(menu, p.ry * MENU_SCROLL * dt);
       if (p.repeated('up')) this.nav.move(menu, -1);
       if (p.repeated('down')) this.nav.move(menu, 1);
       if (p.repeated('left')) this.nav.adjust(menu, -1);
@@ -1626,7 +1633,7 @@ class Game {
       return;
     }
     if (this.panels.isOpen) {
-      const shop = ['fuel', 'trade', 'garage', 'assay', 'ledger', 'wardrobe', 'catalog', 'faunalog', 'depot']
+      const shop = ['fuel', 'trade', 'garage', 'assay', 'ledger', 'wardrobe', 'catalog', 'faunalog', 'depot', 'mineral']
         .includes(this.panels.current ?? '');
       if (shop) { this.audio.click(); this.panels.close(); }
       return;

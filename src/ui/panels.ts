@@ -16,6 +16,7 @@ import {
 } from '../game/cosmetics';
 import { WINGS, FURNISHINGS, WALL_PALETTES, STOCK_PALETTE, WING_VIVARIUM, wingPrereq } from '../game/furnish';
 import { T, def, oreValue } from '../world/tiles';
+import { blurbOf, facts, rarityLabel } from '../game/minerals';
 import { ACTIVE, WORLDS, nextWorld, worldById } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
 import { Settings } from '../game/settings';
@@ -48,7 +49,7 @@ function describe(c: Contract, maxFuel: number): string {
 }
 
 export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale' | 'transcript'
-  | 'ledger' | 'wardrobe' | 'catalog' | 'faunalog' | 'depot';
+  | 'ledger' | 'wardrobe' | 'catalog' | 'faunalog' | 'depot' | 'mineral';
 
 /** what a sponsorship costs, by temperament (SPEC-KEEPING §5) */
 const SPONSOR_COST: Record<string, number> = {
@@ -91,6 +92,8 @@ export class Panels {
   private lostCargo = 0;
   private spilled: { value: number; count: number } | null = null;
   private endingKind: EndingKind = 'extract';
+  /** which stone's placard is open, as a tile type */
+  private mineralT: number = T.COPPER;
 
   constructor(private ui: HTMLElement, private ctx: PanelCtx) {}
 
@@ -102,11 +105,12 @@ export class Panels {
     this.current = null;
   }
 
-  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind; spilled?: { value: number; count: number } | null }): void {
+  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind; mineral?: number; spilled?: { value: number; count: number } | null }): void {
     this.close();
     this.current = kind;
     if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause, opts.spilled ?? null);
     if (kind === 'finale' && opts?.ending) this.endingKind = opts.ending;
+    if (kind === 'mineral' && opts?.mineral !== undefined) this.mineralT = opts.mineral;
     this.scrim = document.createElement('div');
     this.scrim.className = 'panel-scrim';
     this.scrim.innerHTML = `<div class="panel" id="panel-body"></div>`;
@@ -114,7 +118,8 @@ export class Panels {
     // click outside closes shop panels (not fate panels)
     if (kind === 'fuel' || kind === 'trade' || kind === 'garage' || kind === 'assay' ||
       kind === 'pause' || kind === 'settings' || kind === 'contracts' || kind === 'transcript' ||
-      kind === 'ledger' || kind === 'wardrobe' || kind === 'catalog' || kind === 'faunalog' || kind === 'depot') {
+      kind === 'ledger' || kind === 'wardrobe' || kind === 'catalog' || kind === 'faunalog' ||
+      kind === 'depot' || kind === 'mineral') {
       this.scrim.addEventListener('pointerdown', e => {
         if (e.target === this.scrim) { this.ctx.audio.click(); this.close(); }
       });
@@ -145,6 +150,7 @@ export class Panels {
       case 'catalog': this.renderCatalog(); break;
       case 'faunalog': this.renderFaunaLog(); break;
       case 'depot': this.renderDepot(); break;
+      case 'mineral': this.renderMineral(); break;
     }
   }
 
@@ -1068,6 +1074,41 @@ export class Panels {
   }
 
   /** the census at its new home, with the vivarium's sponsorship book */
+  /**
+   * A placard from the gallery, read up close: what the stone is, where in the
+   * column it lies, and what it costs to cut. Every number comes off the
+   * generator's own ore bands, so the label cannot drift from the rock.
+   */
+  private renderMineral(): void {
+    const t = this.mineralT;
+    const d = def(t);
+    const kept = this.ctx.meta.trophies
+      .filter(tr => tr.t === t)
+      .sort((a, b) => b.grade - a.grade)[0];
+    const from = kept ? worldById(kept.world)?.name ?? kept.world : '';
+    const provenance = kept
+      ? `${kept.grade >= 2 ? 'A FLAWLESS' : 'A FINE'} cut, kept from ${from}`
+      : 'Not yet cut for the gallery';
+    const rows = facts(t).map(f => `
+      <div class="row"><span class="r-name">${f.name}</span><span class="r-val">${f.val}</span></div>`).join('');
+    // no purse in the corner: a placard is the one screen in the game that is
+    // not trying to sell you anything
+    this.body().innerHTML = `
+      <h2><span>${d.name.toUpperCase()}<span class="accent"> ▮</span></span></h2>
+      <div class="specimen">
+        <img class="ore-icon spec-gem" src="${oreIcon(t)}" alt="" style="--glow:${oreGlow(t)}" />
+        <span>
+          <div class="spec-rarity">${rarityLabel(t)}</div>
+          <div class="spec-kept">${provenance}</div>
+        </span>
+      </div>
+      <div class="lore-note"><p>${blurbOf(t)}</p></div>
+      <div class="forge-head">WHERE IT LIES<span class="forge-shards">depths below the pad</span></div>
+      <div class="stat-grid">${rows}</div>
+      <div class="hint">Press E or Esc to leave</div>
+    `;
+  }
+
   private renderFaunaLog(): void {
     const st = this.ctx.state;
     const m = this.ctx.meta;

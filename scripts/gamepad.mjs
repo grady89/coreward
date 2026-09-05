@@ -67,6 +67,12 @@ async function stick(x, y) {
   }, want, { timeout: 8000 });
 }
 
+/** push the right stick and wait until the game has polled it */
+async function rstick(y) {
+  await set({ axes: [0, 0, 0, y] });
+  await page.waitForFunction(w => Math.abs(window.__game.pad.ry - w) < 0.001, y, { timeout: 8000 });
+}
+
 const results = [];
 const check = (label, ok, detail = '') => {
   results.push(ok);
@@ -213,6 +219,27 @@ await page.evaluate(() => {
 await page.waitForTimeout(900);
 check('settings opens', await page.evaluate(() => window.__game.panels.current === 'settings'),
   'panel=' + await page.evaluate(() => window.__game.panels.current));
+// ---- the right stick scrolls the panel, wherever the ring is sitting ----
+// the ring only lands on controls; the long panels are mostly prose between
+// them, and a pad that cannot read them is not support
+const pane = () => page.evaluate(() => {
+  const p = document.querySelector('.panel-scrim .panel');
+  return p ? { top: Math.round(p.scrollTop), max: Math.round(p.scrollHeight - p.clientHeight) } : null;
+});
+const scroll0 = await pane();
+await rstick(1);
+await page.waitForTimeout(700);
+await rstick(0);
+const scroll1 = await pane();
+check('the right stick scrolls the menu', scroll0.max > 0 && scroll1.top > scroll0.top + 40,
+  `${scroll0.top} -> ${scroll1.top} of ${scroll0.max}`);
+await page.screenshot({ path: OUT + '/g-settings-scrolled.png' });
+await rstick(-1);
+await page.waitForTimeout(1000);
+await rstick(0);
+const scroll2 = await pane();
+check('and back to the top', scroll2.top === 0, 'top=' + scroll2.top);
+
 // walk the ring until it is sitting on a volume slider, whichever one
 const sliderKey = async () => page.evaluate(() => {
   const el = document.querySelector('.panel-scrim .nav-focus');

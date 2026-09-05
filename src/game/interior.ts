@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { Suit, buildSuit, poseSuit, suitPoseYOffset } from '../player/suit';
 import { Input } from '../player/controller';
-import { Meta } from './meta';
+import { Meta, Trophy } from './meta';
 import { wallPalette, WING_GALLERY, WING_VIVARIUM } from './furnish';
 import { FAUNA, FaunaEntry } from './bestiary';
 import { GEM_GEOS, DISPLAY_CUT, gemScaleOf } from '../world/gemshapes';
 import { def as tileDef } from '../world/tiles';
+import { depthLine, rarityRank } from './minerals';
 import { glyphs } from '../input/prompts';
 
 // THE QUARTERS, inside — the one room on VEIL-3 that is yours. A side-view
@@ -24,6 +25,8 @@ export interface InteriorCtx {
   /** undelivered transmissions, for the console's amber dot */
   unread(): number;
   openPanel(kind: InteriorPanel): void;
+  /** a gallery placard was read — the stone's page, by tile type */
+  openMineral(t: number): void;
 }
 
 // room proportions: the suit is ~0.5 tall, the ceiling clears three of him
@@ -39,7 +42,11 @@ const HALL_X1 = 23;
 const GALLERY_X1 = 35;
 const VIVARIUM_X1 = 47;
 
-interface Station { x: number; r: number; label: string; panel: InteriorPanel | null; }
+interface Station {
+  x: number; r: number; label: string; panel: InteriorPanel | null;
+  /** a gallery placard, by tile type — read instead of opening a station panel */
+  mineral?: number;
+}
 
 // shared fixed-color materials (palette materials are per-instance fields)
 const GUNMETAL = new THREE.MeshStandardMaterial({ color: 0x4b545e, roughness: 0.45, metalness: 0.35 });
@@ -175,6 +182,58 @@ function duskWindow(w: number, x: number, y: number): THREE.Group {
   return g;
 }
 
+/** brushed brass, engraved: the museum label under a cut stone */
+const PLACARD_PLATE = new THREE.MeshStandardMaterial({ color: 0x6b5a3a, roughness: 0.42, metalness: 0.6 });
+
+function placardTexture(name: string, sub: string): THREE.CanvasTexture {
+  return canvasTex(512, 180, gg => {
+    gg.fillStyle = '#d9cfb2';
+    gg.fillRect(0, 0, 512, 180);
+    // a bevel, so the plate reads as metal and not as a sticker
+    gg.strokeStyle = 'rgba(58, 46, 30, 0.32)';
+    gg.lineWidth = 7;
+    gg.strokeRect(11, 11, 490, 158);
+    gg.textAlign = 'center';
+    gg.textBaseline = 'alphabetic';
+    // the name owns the plate: shrink to fit rather than ever clipping
+    const label = name.toUpperCase();
+    gg.letterSpacing = '7px';
+    let size = 66;
+    gg.font = `700 ${size}px "Chakra Petch", system-ui, sans-serif`;
+    while (gg.measureText(label).width > 440 && size > 26) {
+      size -= 2;
+      gg.font = `700 ${size}px "Chakra Petch", system-ui, sans-serif`;
+    }
+    gg.fillStyle = '#2a2216';
+    gg.fillText(label, 256, 92);
+    gg.letterSpacing = '2px';
+    gg.strokeStyle = 'rgba(58, 46, 30, 0.28)';
+    gg.lineWidth = 3;
+    gg.beginPath(); gg.moveTo(150, 110); gg.lineTo(362, 110); gg.stroke();
+    // the small print still has to survive being 60 pixels wide on screen
+    gg.fillStyle = 'rgba(42, 34, 22, 0.82)';
+    gg.font = '700 40px "Chakra Petch", system-ui, sans-serif';
+    gg.fillText(sub, 256, 152);
+  });
+}
+
+/**
+ * The angled label on the front of a plinth. Returned as its own mesh so the
+ * gallery can raycast it: reading a stone is a click as well as a keypress.
+ */
+function placard(name: string, sub: string, x: number, y: number, z: number): THREE.Mesh {
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.64, 0.225),
+    new THREE.MeshBasicMaterial({ map: placardTexture(name, sub), toneMapped: false })
+  );
+  plate.position.set(x, y, z);
+  plate.rotation.x = -0.38;   // the angle every museum label in the world sits at
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.265, 0.02), PLACARD_PLATE);
+  back.position.set(0, 0, -0.012);
+  plate.add(back);
+  return plate;
+}
+
 /** which display archetype a sponsored species takes in its tank */
 const LIGHTFORM: Record<string, 'swarm' | 'serpent' | 'walker' | 'motes'> = {
   glimmerflies: 'swarm', rimewings: 'swarm', polyps: 'motes', frostbloom: 'motes',
@@ -209,10 +268,16 @@ export class Interior {
   private roomGroup = new THREE.Group();
   private forms: FormAnim[] = [];
   private gems: THREE.Mesh[] = [];
+  /** the gallery labels, kept apart from the room so a pointer can hit them */
+  private placards: THREE.Mesh[] = [];
   private consoleDot: THREE.Mesh | null = null;
   private stations: Station[] = [];
   private hud: HTMLDivElement;
   private lastPrompt = '';
+  private paused = false;
+  private hovering = false;
+  private ray = new THREE.Raycaster();
+  private ndc = new THREE.Vector2();
   // palette materials, retinted in place when the walls are repainted
   private wallMat = new THREE.MeshStandardMaterial({ roughness: 0.75 });
   private trimMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
@@ -243,7 +308,37 @@ export class Interior {
       <div class="ih-name">THE QUARTERS</div>
       <div class="ih-prompt"></div>`;
     ui.appendChild(this.hud);
+
+    addEventListener('pointerdown', this.onPointerDown);
+    addEventListener('pointermove', this.onPointerMove);
   }
+
+  // ---------------- reading a placard with a mouse ----------------
+
+  /**
+   * The placards are the one thing in the room a pointer can touch. Anything
+   * over the UI is somebody else's click — panels lay a scrim over the whole
+   * screen, so only hits that land on the canvas itself get this far.
+   */
+  private placardUnder(e: PointerEvent): THREE.Mesh | null {
+    if (this.paused || this.placards.length === 0) return null;
+    if ((e.target as HTMLElement | null)?.tagName !== 'CANVAS') return null;
+    this.ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    return (this.ray.intersectObjects(this.placards, false)[0]?.object as THREE.Mesh) ?? null;
+  }
+
+  private onPointerDown = (e: PointerEvent): void => {
+    const hit = this.placardUnder(e);
+    if (hit) this.ctx.openMineral(hit.userData.mineral as number);
+  };
+
+  private onPointerMove = (e: PointerEvent): void => {
+    const over = this.placardUnder(e) !== null;
+    if (over === this.hovering) return;
+    this.hovering = over;
+    document.body.style.cursor = over ? 'pointer' : '';
+  };
 
   /** east edge of the walkable room, given which wings are owned */
   private maxX(): number {
@@ -268,6 +363,7 @@ export class Interior {
     this.roomGroup.clear();
     this.forms = [];
     this.gems = [];
+    this.placards = [];
     this.consoleDot = null;
     this.stations = [];
     this.applyPalette();
@@ -492,17 +588,30 @@ export class Interior {
     this.stations.push({ x: atX - 0.35, r: 0.8, label: `SEALED — ${name} · THE CATALOG SELLS THE KEY`, panel: 'catalog' });
   }
 
+  /**
+   * Six pedestals, hung the way a gallery hangs anything: one stone per kind,
+   * the best cut you own of each, and read left to right in the order the
+   * column gives them up — the commonest thing in the ground by the door, the
+   * rarest at the far end. Each occupied plinth carries a placard you can read
+   * with E or with a click.
+   */
   private buildGallery(g: THREE.Group): void {
-    // six pedestals; the six most valuable kept stones stand on them
-    const sorted = [...this.ctx.meta.trophies]
-      .sort((a, b) => (tileDef(b.t).value * b.grade) - (tileDef(a.t).value * a.grade))
-      .slice(0, 6);
+    const best = new Map<number, Trophy>();
+    for (const tr of this.ctx.meta.trophies) {
+      const held = best.get(tr.t);
+      if (!held || tr.grade > held.grade) best.set(tr.t, tr);
+    }
+    const shown = [...best.values()]
+      .sort((a, b) => rarityRank(b.t) - rarityRank(a.t))    // keep the six rarest,
+      .slice(0, 6)
+      .sort((a, b) => rarityRank(a.t) - rarityRank(b.t));   // then walk common → rare
+
     for (let i = 0; i < 6; i++) {
       const px = HALL_X1 + 1.7 + i * 1.95;
       g.add(cyl(0.3, 0.1, GUNMETAL, px, 0.05, -1.1, 16));
       g.add(cyl(0.22, 0.85, PLINTH, px, 0.52, -1.1, 12));
       g.add(cyl(0.28, 0.06, GUNMETAL, px, 0.97, -1.1, 16));
-      const trophy = sorted[i];
+      const trophy = shown[i];
       if (!trophy) {
         g.add(glowDot(new THREE.MeshBasicMaterial({ color: 0x3a4048, toneMapped: false }), px, 1.12, -1.1, 0.04));
         continue;
@@ -519,6 +628,17 @@ export class Interior {
       gem.position.set(px, 1.28, -1.1);
       g.add(gem);
       this.gems.push(gem);
+
+      const plate = placard(d.name, depthLine(trophy.t), px, 0.66, -0.79);
+      plate.userData.mineral = trophy.t;
+      g.add(plate);
+      this.placards.push(plate);
+      // 0.85 leaves the sealed vivarium door, half a metre past the last
+      // plinth, a band of its own to be found in
+      this.stations.push({
+        x: px, r: 0.85, mineral: trophy.t, panel: null,
+        label: `READ — ${d.name.toUpperCase()}${trophy.grade >= 2 ? ' · FLAWLESS' : ''}`,
+      });
     }
     for (const wx of [HALL_X1 + 3.6, HALL_X1 + 7.5]) g.add(duskWindow(0.7, wx, 1.7));
   }
@@ -579,6 +699,7 @@ export class Interior {
 
   frame(dt: number, input: Input, paused: boolean): void {
     this.time += dt;
+    this.paused = paused;
     if (!paused) this.step(dt, input);
     this.animate(dt);
 
@@ -675,7 +796,8 @@ export class Interior {
   interact(): void {
     const s = this.nearestStation();
     if (!s) return;
-    if (s.panel) this.ctx.openPanel(s.panel);
+    if (s.mineral !== undefined) this.ctx.openMineral(s.mineral);
+    else if (s.panel) this.ctx.openPanel(s.panel);
     else this.closed = true;
   }
 
@@ -691,6 +813,9 @@ export class Interior {
   }
 
   dispose(): void {
+    removeEventListener('pointerdown', this.onPointerDown);
+    removeEventListener('pointermove', this.onPointerMove);
+    if (this.hovering) document.body.style.cursor = '';
     this.hud.remove();
     this.scene.traverse(o => {
       const m = o as THREE.Mesh;

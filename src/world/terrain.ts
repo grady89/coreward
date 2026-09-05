@@ -49,7 +49,18 @@ function window_(y: number, mid: number, halfRange: number, peak: number): numbe
   return peak * Math.exp(-d * d * 2.2);
 }
 
-const ORE_BANDS: { t: T; mid: number; half: number; peak: number }[] = [
+export interface OreBand {
+  t: T;
+  /** row the vein is richest at */
+  mid: number;
+  /** rows either side of `mid` before it thins to a tenth of peak */
+  half: number;
+  /** per-cell chance at `mid` — the inverse of how rare the stone feels */
+  peak: number;
+}
+
+/** the depth window every ore in the column is rolled against */
+export const ORE_BANDS: OreBand[] = [
   { t: T.COPPER, mid: 34, half: 34, peak: 0.052 },
   { t: T.IRON, mid: 85, half: 55, peak: 0.042 },
   { t: T.SILVER, mid: 155, half: 65, peak: 0.034 },

@@ -109,13 +109,20 @@ export function oreValue(t: number): number {
   return Math.round(def(t).value * ACTIVE.valueMul);
 }
 
+/** which of a world's six named strata a row falls in (0..4; 5 is the core) */
+export function strataBand(row: number): number {
+  if (row < 16) return 0;
+  if (row < 60) return 1;
+  if (row < 160) return 2;
+  if (row < 300) return 3;
+  return 4;
+}
+
+const BAND_SOLID = [T.DIRT, T.ROCK, T.SLATE, T.VOIDROCK, T.EMBERROCK];
+
 // what a gas pocket disguises as, per stratum solid
 export function strataSolidForRow(row: number): T {
-  if (row < 16) return T.DIRT;
-  if (row < 60) return T.ROCK;
-  if (row < 160) return T.SLATE;
-  if (row < 300) return T.VOIDROCK;
-  return T.EMBERROCK;
+  return BAND_SOLID[strataBand(row)];
 }
 
 // deterministic per-cell hash → [0,1)

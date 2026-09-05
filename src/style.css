@@ -302,6 +302,18 @@ button.btn.wide { width: 100%; margin-top: 12px; padding: 13px; font-size: 13px;
 .lore-note.locked h4 { color: var(--ink-dim); }
 .lore-note.locked p { font-style: normal; letter-spacing: 0.2em; }
 
+/* a gallery placard, read up close */
+.specimen {
+  display: flex; align-items: center; gap: 16px;
+  padding: 6px 2px 16px; border-bottom: 1px solid rgba(232, 226, 213, 0.06);
+}
+.specimen .spec-gem { width: 56px; height: 56px; }
+.spec-rarity {
+  font-family: var(--font-display); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.3em; color: var(--amber);
+}
+.spec-kept { font-size: 11px; color: var(--ink-dim); letter-spacing: 0.06em; margin-top: 4px; }
+
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
 .stat-grid .row { border-bottom: none; padding: 6px 0; }
 
