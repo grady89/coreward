@@ -334,23 +334,41 @@ export class ChunkField {
         this.live.delete(k);
       }
     }
-    // build missing + dirty, animate the rest
+
+    // Collect what needs building, then spend a small per-frame budget on
+    // it nearest-the-camera first. A fast fall used to cross a chunk
+    // boundary and rebuild a whole world-row of chunks in ONE frame — the
+    // deep-shaft hitch. Spread across frames, the work lands in the view
+    // margin where a one-frame delay is invisible; a drilled (dirty)
+    // chunk sits at the camera row, so it always sorts to the front.
+    const work: { cx: number; cy: number; k: number }[] = [];
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = 0; cx < CHUNKS_X; cx++) {
         const k = this.key(cx, cy);
-        let ch = this.live.get(k);
+        if (!this.live.has(k) || this.dirty.has(k)) work.push({ cx, cy, k });
+      }
+    }
+    if (work.length) {
+      const ccy = centerRow / CHUNK;
+      work.sort((a, b) => Math.abs(a.cy + 0.5 - ccy) - Math.abs(b.cy + 0.5 - ccy));
+      // a cold field (arrival, world change) fills whole behind the
+      // transit cover; the budget only paces a field that is already warm
+      let budget = this.live.size < 8 ? work.length : 2;
+      for (const w of work) {
+        if (budget-- <= 0) break;
+        let ch = this.live.get(w.k);
         if (!ch) {
           ch = this.free.pop() ?? new Chunk();
-          ch.build(this.terrain, cx, cy);
           this.scene.add(ch.group);
-          this.live.set(k, ch);
-          this.dirty.delete(k);
-        } else if (this.dirty.has(k)) {
-          ch.build(this.terrain, cx, cy);
-          this.dirty.delete(k);
+          this.live.set(w.k, ch);
         }
-        if (this.animated) ch.animate(time);
+        ch.build(this.terrain, w.cx, w.cy);
+        this.dirty.delete(w.k);
       }
+    }
+
+    if (this.animated) {
+      for (const ch of this.live.values()) ch.animate(time);
     }
   }
 
