@@ -123,11 +123,13 @@ for c0, c1, r0, r1 in SHAFTS:
             if g[y][x] == '.':
                 g[y][x] = 'o'
 
-# the watch-lights: (x, y, period-in-pulses, phase); all spin
+# the watch-lights: (x, y, period-in-pulses, phase, cw); all spin. The
+# standing light turns CLOCKWISE — against its hanging neighbour — so the
+# two sweeps open a readable gap between them instead of chasing one
 BEAMS = [
-    (14.5, 4.5, 5, 0.0),
-    (29.5, 7.2, 4, 0.5),
-    (25.5, 53.3, 4, 0.25),
+    (14.5, 4.5, 5, 0.0, False),
+    (29.5, 7.2, 4, 0.5, True),
+    (25.5, 53.3, 4, 0.25, False),
 ]
 # the ridden lanterns: (x, pivot-row, len, arc, period-in-pulses, phase)
 CENSERS = [
@@ -140,7 +142,7 @@ SINK = -40
 # no sconce respawns inside a watch-light's reach (the lint measures 9 tiles)
 SCONCES = [(6, F[0] - 1), (36, F[1] - 2), (5, F[2] - 1), (40, F[3] - 1)]
 for sx, sy in SCONCES:
-    for bx, by, _, _ in BEAMS:
+    for bx, by, _, _, _ in BEAMS:
         d = math.hypot(sx - bx, sy - by)
         assert d > 9, 'sconce %d,%d is %.1f from the light at %s' % (sx, sy, d, bx)
 
@@ -149,8 +151,9 @@ for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
 beams = ',\n'.join(
-    "      { x: %s, y: %s, period: %.2f, phase: %s, spin: true }"
-    % (x, y, n * PULSE, ph) for x, y, n, ph in BEAMS)
+    "      { x: %s, y: %s, period: %.2f, phase: %s, spin: true%s }"
+    % (x, y, n * PULSE, ph, ', cw: true' if cw else '')
+    for x, y, n, ph, cw in BEAMS)
 censers = ',\n'.join(
     "      { x: %d, y: %d, len: %.1f, arc: %.1f, period: %.2f, phase: %s }"
     % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)

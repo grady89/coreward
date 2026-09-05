@@ -87,6 +87,12 @@ export interface BeamDef {
   a0?: number; a1?: number;   // sweep endpoints, radians — omit for spin
   spin?: boolean;             // continuous rotation: away half the time
   /**
+   * a spinning light turns counter-clockwise unless told otherwise; `cw`
+   * reverses it. Direction is authorable because it is READABLE: the sweep
+   * arrives at a crossing from one side, and a room can need the other
+   */
+  cw?: boolean;
+  /**
    * introduced DORMANT (grammar §1.3): the cone drawn dim and inert until
    * the body enters the `arm` rect — then the rounds begin, from rest
    */
@@ -479,7 +485,7 @@ export const VAULTS: VaultDef[] = [
     openEdges: true,
     beams: [
       { x: 14.5, y: 4.5, period: 4.25, phase: 0.0, spin: true },
-      { x: 29.5, y: 7.2, period: 3.40, phase: 0.5, spin: true },
+      { x: 29.5, y: 7.2, period: 3.40, phase: 0.5, spin: true, cw: true },
       { x: 25.5, y: 53.3, period: 3.40, phase: 0.25, spin: true }
     ],
     censers: [

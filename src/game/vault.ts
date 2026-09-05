@@ -2483,6 +2483,7 @@ export class VaultRun {
       let ang: number;
       if (b.spin) {
         ang = Math.PI * 2 * ((bt / (b.period / hazardMul) + b.phase) % 1);
+        if (b.cw) ang = -ang;      // the author chose the other rotation
       } else {
         const u = (bt / (b.period / hazardMul) + b.phase) % 1;
         const ping = u < 0.5 ? u * 2 : 2 - u * 2;
