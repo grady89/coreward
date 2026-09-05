@@ -359,6 +359,23 @@ export class VaultRun {
   /** THE LEAVE (SPEC-FOLD.md beat 9): one pulse of being taken back */
   private leaveT = 0;
   private leaveVia: 'door' | 'master' = 'door';
+  /**
+   * THE ASSEMBLY — the room is not entered, it ARRIVES: every course of
+   * masonry flies in from past the camera and locks in place, building
+   * outward from the tile you stand on. Leaving runs it backward: the
+   * slabs let go far-side-first and fall away into the dark. The body
+   * never moves; the world is exchanged around it.
+   */
+  private assembly: {
+    mesh: THREE.InstancedMesh;
+    n: number;
+    px: Float32Array; py: Float32Array; sy: Float32Array;
+    dx: Float32Array; dy: Float32Array; dz: Float32Array;
+    rx: Float32Array; rz: Float32Array;
+    delayIn: Float32Array; delayOut: Float32Array;
+  }[] = [];
+  private arriveT = 0;
+  private arriveDone = false;
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
   /** last frame's place, so the moth can turn into where it is going */
@@ -619,6 +636,7 @@ export class VaultRun {
       && !(y > 0 && p.solid[(y - 1) * p.w + x])
       && !(y < p.h - 1 && p.solid[(y + 1) * p.w + x]);
     let k = 0;
+    const solidTiles: { px: number; py: number; sy: number }[] = [];
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         const i = y * p.w + x;
@@ -626,8 +644,10 @@ export class VaultRun {
         if (oneCourse(x, y)) {
           m4.makeScale(1, 0.5, 1);
           m4.setPosition(x + 0.5, -(y + 0.5) + 0.25, 0);
+          solidTiles.push({ px: x + 0.5, py: -(y + 0.5) + 0.25, sy: 0.5 });
         } else {
           m4.makeTranslation(x + 0.5, -(y + 0.5), 0);
+          solidTiles.push({ px: x + 0.5, py: -(y + 0.5), sy: 1 });
         }
         inst.setMatrixAt(k, m4);
         // Band 1 is the lamp core, where the standard material still does
@@ -648,6 +668,7 @@ export class VaultRun {
     }
     inst.instanceMatrix.needsUpdate = true;
     this.scene.add(inst);
+    this.registerAssembly(inst, solidTiles);
 
     // the bronze cramps off the masonry sheet: a strap wrapped around each
     // end of every slab run, the fittings the guild bolted its floors with
@@ -670,6 +691,8 @@ export class VaultRun {
       }
       strap.instanceMatrix.needsUpdate = true;
       this.scene.add(strap);
+      this.registerAssembly(strap,
+        crampEnds.map(c => ({ px: c.x, py: -(c.y + 0.5) + 0.25, sy: 1 })));
     }
 
     // DRANK STONE (`=`). Colour alone said "a bit darker"; what it has to
@@ -2747,7 +2770,8 @@ export class VaultRun {
       }
     } else if (this.phase === 'leave') {
       this.leaveT += dt;
-      if (this.leaveT >= PULSE) this.closed = true;
+      this.driveAssembly(this.leaveT, -1);
+      if (this.leaveT >= PULSE * 1.5) this.closed = true;
     } else {
       this.invuln = Math.max(0, this.invuln - dt);
       this.step(dt, input);
@@ -2771,6 +2795,13 @@ export class VaultRun {
       if (x > f.x1) x = f.x0;
       f.mesh.position.x = x;
     }
+    // THE ASSEMBLY, arriving: the courses fly in and lock, outward from
+    // the entry, while the body already has the first slab underfoot
+    if (!this.arriveDone) {
+      this.arriveT += dt;
+      if (this.driveAssembly(this.arriveT, 1)) this.arriveDone = true;
+    }
+
     // the arrival closes behind you; the door brightens as you return —
     // and when you LEAVE by it, it opens all the way and takes you
     this.doorT = Math.min(1, this.doorT + dt / (2 * PULSE));
@@ -3216,12 +3247,83 @@ export class VaultRun {
     if (Math.hypot(this.px - (e.x + 0.5), this.py + e.y + 0.5) < 1.1) this.beginLeave('door');
   }
 
+  private registerAssembly(mesh: THREE.InstancedMesh, tiles: { px: number; py: number; sy: number }[]): void {
+    const e = this.p.entry;
+    const n = tiles.length;
+    const a = {
+      mesh, n,
+      px: new Float32Array(n), py: new Float32Array(n), sy: new Float32Array(n),
+      dx: new Float32Array(n), dy: new Float32Array(n), dz: new Float32Array(n),
+      rx: new Float32Array(n), rz: new Float32Array(n),
+      delayIn: new Float32Array(n), delayOut: new Float32Array(n),
+    };
+    const rnd = (i: number, m: number): number => {
+      const v = Math.sin(i * 127.1 + m * 311.7) * 43758.5453;
+      return (v - Math.floor(v)) * 2 - 1;
+    };
+    for (let i = 0; i < n; i++) {
+      a.px[i] = tiles[i].px; a.py[i] = tiles[i].py; a.sy[i] = tiles[i].sy;
+      a.dx[i] = rnd(i, 1) * 3;
+      a.dy[i] = rnd(i, 2) * 2.5;
+      a.dz[i] = 11 + Math.abs(rnd(i, 3)) * 9;      // from past the camera
+      a.rx[i] = rnd(i, 4) * 1.1;
+      a.rz[i] = rnd(i, 5) * 1.1;
+      // the room builds OUTWARD from the tile you stand on
+      a.delayIn[i] = Math.hypot(tiles[i].px - (e.x + 0.5), tiles[i].py + e.y + 0.5) * 0.042;
+    }
+    this.assembly.push(a);
+  }
+
+  /** drive every flying course; t counts up, dir +1 arrives, -1 lets go */
+  private driveAssembly(t: number, dir: 1 | -1): boolean {
+    const AD = 0.55;
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const eu = new THREE.Euler();
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+    let all = true;
+    for (const a of this.assembly) {
+      for (let i = 0; i < a.n; i++) {
+        const delay = dir > 0 ? a.delayIn[i] : a.delayOut[i];
+        const f = Math.max(0, Math.min(1, (t - delay) / AD));
+        if (f < 1) all = false;
+        // arrivals settle (heavy ease-out); departures ACCELERATE away
+        const k = dir > 0 ? 1 - Math.pow(1 - f, 3) : 1 - f * f;
+        const off = 1 - k;
+        eu.set(a.rx[i] * off * dir, 0, a.rz[i] * off * dir);
+        q.setFromEuler(eu);
+        pos.set(
+          a.px[i] + a.dx[i] * off,
+          a.py[i] + (dir > 0 ? a.dy[i] * off : -off * off * 9),
+          (dir > 0 ? a.dz[i] : a.dz[i] * 0.7) * off);
+        scl.set(1, a.sy[i], 1);
+        m4.compose(pos, q, scl);
+        a.mesh.setMatrixAt(i, m4);
+      }
+      a.mesh.instanceMatrix.needsUpdate = true;
+    }
+    return all;
+  }
+
   private beginLeave(via: 'door' | 'master'): void {
     this.phase = 'leave';
     this.leaveVia = via;
     this.leaveT = 0;
     this.vx = 0; this.vy = 0;
-    this.audio.duck(0.2, 1);
+    let maxD = 1;
+    for (const a of this.assembly) {
+      for (let i = 0; i < a.n; i++) {
+        maxD = Math.max(maxD, Math.hypot(a.px[i] - this.px, a.py[i] - this.py));
+      }
+    }
+    for (const a of this.assembly) {
+      for (let i = 0; i < a.n; i++) {
+        const d = Math.hypot(a.px[i] - this.px, a.py[i] - this.py);
+        a.delayOut[i] = (1 - d / maxD) * 0.7;    // the far side lets go first
+      }
+    }
+    this.audio.duck(0.2, 1.5);
   }
 
   abandon(): void { this.closed = true; }

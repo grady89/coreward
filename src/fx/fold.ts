@@ -64,6 +64,30 @@ export function buildFoldThroat(g: GlyphDef, hue: number, interior = false): Fol
     group.add(halo);
   }
 
+  // THE MINE FALLS OUT OF THE WORLD: pieces of the dig face let go and
+  // tumble into the dark as the iris closes — and on the way out the same
+  // pieces fly home and lock, the world recompiling around you
+  const shedMat = !interior ? mk(new THREE.MeshBasicMaterial({
+    color: 0x4a3b2e, transparent: true, opacity: 0, depthTest: false, depthWrite: false,
+  })) : null;
+  const shed: { mesh: THREE.Mesh; x: number; y: number; ox: number; oy: number; r: number; ph: number }[] = [];
+  if (shedMat) {
+    for (let i = 0; i < 36; i++) {
+      const h1 = Math.sin(i * 12.9898) * 43758.5453; const r1 = h1 - Math.floor(h1);
+      const h2 = Math.sin(i * 78.233) * 12543.21; const r2 = h2 - Math.floor(h2);
+      const h3 = Math.sin(i * 39.425) * 26711.9; const r3 = h3 - Math.floor(h3);
+      const ang = r1 * Math.PI * 2;
+      const rad = 2.6 + r2 * 6.5;
+      const w = 0.55 + r3 * 0.7;
+      const d = new THREE.Mesh(gm(new THREE.PlaneGeometry(w, w * (0.5 + r1 * 0.5))), shedMat);
+      const x = Math.cos(ang) * rad, y = Math.sin(ang) * rad * 0.7;
+      d.position.set(x, y, 0);
+      d.renderOrder = ro - 1;
+      shed.push({ mesh: d, x, y, ox: Math.cos(ang) * 4, oy: -3 - r2 * 5, r: (r3 - 0.5) * 3.2, ph: r1 * 9 });
+      group.add(d);
+    }
+  }
+
   // the black behind the world
   const backMat = mk(new THREE.MeshBasicMaterial({
     color: 0x050308, transparent: true, opacity: 0, depthTest, depthWrite: false,
@@ -177,6 +201,18 @@ export function buildFoldThroat(g: GlyphDef, hue: number, interior = false): Fol
     const kk = Math.max(0, Math.min(1, k));
     if (irisMat) irisMat.opacity = settle(kk * 1.6) * 0.9;
     if (haloMat) haloMat.opacity = settle(kk * 1.6) * 0.5;
+    if (shedMat) {
+      // visible while the world is mid-exchange, gone at either end
+      shedMat.opacity = Math.sin(Math.min(1, kk * 1.25) * Math.PI) * 0.95;
+      for (const p2 of shed) {
+        const fall = settle(kk);
+        p2.mesh.position.set(
+          p2.x + p2.ox * fall,
+          p2.y + p2.oy * fall * fall,
+          0);
+        p2.mesh.rotation.z = p2.r * fall + Math.sin(time * 1.3 + p2.ph) * 0.05;
+      }
+    }
     backMat.opacity = Math.min(1, kk * 4) * 0.97;
     // the flare: born in the first sixth, gone by the third
     const fl = kk / 0.32;
