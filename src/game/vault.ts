@@ -688,21 +688,17 @@ export class VaultRun {
     this.buildRimLattice();
     this.buildDarkFog();
 
-    // unlight — the only instant-kill terrain in the game, so it is the one
-    // thing in a room that must read as a wound rather than as masonry
-    const isStud = (x: number, y: number): boolean =>
-      x >= 0 && y >= 0 && x < p.w && y < p.h && !!p.kill[y * p.w + x];
+    // unlight — the only instant-kill terrain in the game: a stand of rust
+    // spikes off a scorched bed (the spikes sheet), pointing away from the
+    // stone that carries them — up off a floor, down off a hung block
+    const solidAt = (xx: number, yy: number): boolean =>
+      xx >= 0 && yy >= 0 && xx < p.w && yy < p.h && !!p.solid[yy * p.w + xx];
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         if (!p.kill[y * p.w + x]) continue;
         if (p.voidTile[y * p.w + x]) continue;   // a void is an absence: nothing to draw
-        // a run of studs is ONE hole: the torn edge is drawn only where the
-        // bite meets something that is not another bite
-        const open = [
-          !isStud(x, y - 1), !isStud(x, y + 1),
-          !isStud(x - 1, y), !isStud(x + 1, y),
-        ];
-        const stud = buildStud(x * 37 + y * 11, open);
+        const down = solidAt(x, y - 1) && !solidAt(x, y + 1);
+        const stud = buildStud(x * 37 + y * 11, down);
         stud.group.position.set(x + 0.5, -(y + 0.5), 0);
         this.killMats.push(...stud.mats);
         this.scene.add(stud.group);

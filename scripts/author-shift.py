@@ -84,8 +84,9 @@ put(16, F[1] - 5, '#')                      # censer mounts...
 put(23, F[1] - 5, '#')                      # ...pivots hang one course below
 put(30, F[1] - 5, '#')
 block(34, 38, F[1] - 1, F[1])               # the safe block off the first shaft
-run(39, 43, F[1])                           # the spiked shelf under the wind:
-run(39, 43, F[1] - 1, 'X')                  # land here and the storey repeats
+run(39, 43, F[1])                           # the spiked shelf under the wind —
+run(39, 40, F[1] - 1, 'X')                  # fanged both sides of ONE safe
+run(42, 43, F[1] - 1, 'X')                  # square, threaded from above
 put(36, F[1] - 2, 'S')
 
 # --- storey 3: the fading shelves -------------------------------------------
@@ -97,9 +98,10 @@ run(38, 43, F[2], 'b')
 put(5, F[2] - 1, 'S')
 
 # --- the finish storey, right to left ---------------------------------------
-run(44, 48, F[3])                           # spikes under the last shaft...
-run(44, 48, F[3] - 1, 'X')
-run(39, 42, F[3])                           # ...safe shelf one steer left
+run(44, 48, F[3])                           # spikes under the last shaft —
+run(44, 45, F[3] - 1, 'X')                  # one safe square in the middle,
+run(47, 48, F[3] - 1, 'X')                  # threaded down the wind
+run(39, 42, F[3])                           # ...or the safe shelf, one steer left
 run(28, 33, F[3], 'A')                      # one more breath of group A
 run(13, 23, F[3])                           # the finish platform
 put(25, F[3] - 6, '#')                      # mount stone: the last watch-light
