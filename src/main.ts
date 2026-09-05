@@ -544,7 +544,7 @@ class Game {
     const p = Math.max(0, Math.min(1, f.t / f.dur));
     // stone settles: heavy ease-out, the guild's own curve
     const k = 1 - Math.pow(1 - p, 3);
-    f.throat.update(f.kind === 'out' ? 1 - k : k);
+    f.throat.update(f.kind === 'out' ? 1 - k : k, this.time);
     if (!this.reducedMotion) {
       // the only dolly in the game: drawn through the face, or set back down
       const toward = f.kind === 'out' ? 1 - k : k;

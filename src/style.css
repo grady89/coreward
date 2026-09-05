@@ -1058,6 +1058,8 @@ body.sm-open #survey {
 /* THE FOLD (SPEC-FOLD.md) -- the translation's engraved lines, one per
    pulse; any key completes the engraving at once */
 .vc-line {
+  /* block-level, or clip-path shreds a sentence that wraps mid-line */
+  display: block;
   opacity: 0;
   animation: vc-engrave 0.85s steps(6, end) forwards;
 }

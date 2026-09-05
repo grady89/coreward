@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
+import { buildFoldThroat, FoldThroat } from '../fx/fold';
 import { VaultDef, GateDef, CurrentDef, ParsedVault, parseVault, chamberAt, PULSE, HALF } from '../world/vaults';
 import {
   Suit, SUIT_R, SUIT_H, buildSuit, poseSuit,
@@ -352,6 +353,9 @@ export class VaultRun {
   private slabAnchors = new Set<number>();
   /** the sanctum's poured light — driven by DISTANCE on the approach */
   private sanctumGlow: THREE.MeshBasicMaterial[] = [];
+  /** the interior threshold at the entry — open on arrival, then a door */
+  private door!: FoldThroat;
+  private doorT = 0;
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
   /** last frame's place, so the moth can turn into where it is going */
@@ -1172,11 +1176,14 @@ export class VaultRun {
     this.masterGroup.position.set(this.p.master.x + 0.5, -(this.p.master.y + 0.5), 0);
     this.scene.add(this.masterGroup);
 
-    // entry frame
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.7, 0.15),
-      new THREE.MeshBasicMaterial({ color: this.hue, transparent: true, opacity: 0.22 }));
-    frame.position.set(this.p.entry.x + 0.5, -(this.p.entry.y + 0.5), -0.3);
-    this.scene.add(frame);
+    // THE DOOR (SPEC-FOLD.md beat 5): the throat you came through, seen
+    // from the other side. It arrives OPEN and closes to a dim standing
+    // doorframe behind you over the first two pulses — then waits, and
+    // brightens as the body comes back near: the way out, promised.
+    this.door = buildFoldThroat(this.glyph, this.rimHue, true);
+    this.door.group.position.set(this.p.entry.x + 0.5, -(this.p.entry.y + 0.5), -0.42);
+    this.door.update(1);
+    this.scene.add(this.door.group);
 
     // motes falling the way each zone says down
     const N = 420;
@@ -2758,6 +2765,15 @@ export class VaultRun {
       if (x > f.x1) x = f.x0;
       f.mesh.position.x = x;
     }
+    // the arrival closes behind you; the door brightens as you return
+    this.doorT = Math.min(1, this.doorT + dt / (2 * PULSE));
+    {
+      const e = this.p.entry;
+      const dnear = Math.max(0, 1 - Math.hypot(this.px - (e.x + 0.5), this.py + e.y + 0.5) / 3);
+      const rest = 0.16 + dnear * 0.3;
+      this.door.update((1 - this.doorT) * (1 - rest) + rest, this.time);
+    }
+
     // THE MASTER APPROACH (SPEC-FOLD.md beat 7): the last eight tiles are
     // distance-driven — the sanctum's poured light swells as the body
     // closes and recedes if it backs away. The finale's law, in miniature.
