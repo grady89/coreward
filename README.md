@@ -15,7 +15,9 @@ upgrades, cargo, fuel and hull persist; terrain and position are per-world.
 Post-ending, the **Ember Forge** at the garage sells rule-breaking tech paid in
 embershards (dash, up-drilling, warp-selling, heat-to-fuel conversion), and
 wrecked pods seeded through the caves invite **EVA salvage walks** on a
-45-second oxygen clock. Every ending is walked on foot.
+45-second oxygen clock. A hulk is a body, not scenery — you land on it, you
+are stopped by it, and the rig can shoulder one along a shaft it has tumbled
+into, which is the only reason a falling wreck can never seal you under it. Every ending is walked on foot.
 
 Built with **Vite + TypeScript + Three.js**. No art or audio assets — every
 mesh is procedural geometry, every sound is synthesized WebAudio, the terrain
@@ -43,6 +45,7 @@ node scripts/depths.mjs  out/  # visual tour of all five strata + the core
 node scripts/shops.mjs   out/  # sell → garage → pause → save/continue round-trip
 node scripts/hazards.mjs out/  # side drill, fall damage, gas, death, rescue
 node scripts/spill.mjs   out/  # the spill: claim filed, recovered, expired, replaced
+node scripts/hulks.mjs   out/  # wrecked pods as solid bodies: land, bump, shove, salvage
 node scripts/progression.mjs out/  # wrecks, EVA salvage, core walk ending, forge, dash, world travel
 node scripts/features.mjs out/     # per-stack selling, survey scanner + map, wreck settling, EVA recall
 node scripts/contracts.mjs out/    # contract accept/claim/abandon + settings panel & persistence

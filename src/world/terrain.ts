@@ -286,4 +286,22 @@ export class Terrain {
     const t = this.get(x, y);
     return t !== T.AIR && t !== T.LAVA;
   }
+
+  /**
+   * Index of the hulk occupying this cell, or -1. A dead pod is a body, not
+   * scenery: it holds a tile the way rock does, and there are never more than
+   * 14 of them, so a scan is cheaper than an index to keep in sync.
+   */
+  wreckAt(x: number, y: number): number {
+    for (let i = 0; i < this.wrecks.length; i++) {
+      const w = this.wrecks[i];
+      if (w.x === x && w.y === y) return i;
+    }
+    return -1;
+  }
+
+  /** rock or hulk — everything a pod or a pilot actually bumps into */
+  blockedAt(x: number, y: number): boolean {
+    return this.solidAt(x, y) || this.wreckAt(x, y) >= 0;
+  }
 }

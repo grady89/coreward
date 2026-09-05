@@ -41,21 +41,35 @@ export class WreckField {
     if (b) b.visible = false;
   }
 
-  update(t: number, dt: number): void {
+  /**
+   * @param occupied cells a body is standing in — the pod, or the pilot on
+   * foot. A hulk rests on them the way it rests on rock, so undermining one
+   * drops it onto you rather than through you.
+   */
+  update(t: number, dt: number, occupied: (x: number, y: number) => boolean = () => false): void {
     for (const b of this.beacons) {
       if (b.visible) (b.material as THREE.MeshBasicMaterial).color.setHex(
         Math.sin(t * 3.2 + b.position.x) > 0 ? 0xff4d29 : 0x551a10
       );
     }
-    // settle: a wreck undermined by drilling falls to the next support
+    // settle: a wreck undermined by drilling falls to the next support —
+    // rock, a body, or another hulk. Two of them never share a tile.
     this.terrain.wrecks.forEach((w, i) => {
       let ny = w.y;
-      while (ny + 1 < this.terrain.h && this.terrain.get(w.x, ny + 1) === T.AIR) ny++;
+      while (
+        ny + 1 < this.terrain.h &&
+        this.terrain.get(w.x, ny + 1) === T.AIR &&
+        !occupied(w.x, ny + 1) &&
+        this.terrain.wreckAt(w.x, ny + 1) < 0
+      ) ny++;
       if (ny !== w.y) w.y = ny;
       const body = this.bodies[i];
       if (body) {
-        const targetY = -(w.y + 0.5) - 0.18;
-        body.position.y += (targetY - body.position.y) * Math.min(1, dt * 6);
+        // x follows too: the rig can shoulder a hulk sideways along a shaft
+        const target = new THREE.Vector2(w.x + 0.5, -(w.y + 0.5) - 0.18);
+        const k = Math.min(1, dt * 6);
+        body.position.x += (target.x - body.position.x) * k;
+        body.position.y += (target.y - body.position.y) * k;
       }
     });
   }

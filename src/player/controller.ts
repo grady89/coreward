@@ -39,6 +39,8 @@ export interface PodEvents {
   onSmash(x: number, y: number): void;
   /** a geode that wasn't: something is out, and it has your best ore */
   onMimicHatch(x: number, y: number): void;
+  /** the rig shouldered a dead pod out of its way */
+  onHulkShoved(x: number, y: number): void;
   /** a frostbloom cut: the cold comes out all at once */
   onFrostbloom(x: number, y: number): void;
 }
@@ -401,6 +403,29 @@ export class PodController {
   }
 
   // ---- collision ----
+  /**
+   * A hulk in the way is a body, not a wall: the rig shoulders it one tile
+   * along when the next cell is clear, and is stopped cold when it is not.
+   * That is what keeps a wreck which has tumbled into your shaft from sealing
+   * you under it — the route you dug is by definition open enough to push the
+   * thing back along it. Returns true when the hulk moved and the pod may
+   * carry on into the space it left.
+   */
+  private shove(col: number, row: number, dCol: number, dRow: number): boolean {
+    const i = this.terrain.wreckAt(col, row);
+    if (i < 0) return false; // rock does not move for anyone
+    const nx = col + dCol, ny = row + dRow;
+    if (nx < 0 || nx >= WORLD_W || ny < 0) return false;
+    if (this.terrain.solidAt(nx, ny) || this.terrain.wreckAt(nx, ny) >= 0) return false;
+    const w = this.terrain.wrecks[i];
+    w.x = nx; w.y = ny;
+    // a dead pod weighs what yours does: shifting one costs the push
+    this.vx *= 0.5;
+    this.vy *= 0.5;
+    this.ev.onHulkShoved(nx, ny);
+    return true;
+  }
+
   private moveX(dx: number): void {
     this.px += dx;
     const top = Math.floor(-(this.py + HH - EPS));
@@ -408,12 +433,16 @@ export class PodController {
     if (dx > 0) {
       const c = Math.floor(this.px + HW);
       for (let r = top; r <= bot; r++) {
-        if (this.terrain.solidAt(c, r)) { this.px = c - HW - EPS; this.vx = 0; break; }
+        if (!this.terrain.blockedAt(c, r)) continue;
+        if (this.shove(c, r, 1, 0)) continue;
+        this.px = c - HW - EPS; this.vx = 0; break;
       }
     } else if (dx < 0) {
       const c = Math.floor(this.px - HW);
       for (let r = top; r <= bot; r++) {
-        if (this.terrain.solidAt(c, r)) { this.px = c + 1 + HW + EPS; this.vx = 0; break; }
+        if (!this.terrain.blockedAt(c, r)) continue;
+        if (this.shove(c, r, -1, 0)) continue;
+        this.px = c + 1 + HW + EPS; this.vx = 0; break;
       }
     }
   }
@@ -437,8 +466,9 @@ export class PodController {
       let blocked = false;
       let allRime = true;
       for (let c = left; c <= right; c++) {
-        if (this.terrain.solidAt(c, r)) {
+        if (this.terrain.blockedAt(c, r)) {
           blocked = true;
+          // a hulk is steel, not ice — one under you cancels the punch-through
           if (this.terrain.get(c, r) !== T.RIME) allRime = false;
         }
       }
@@ -479,10 +509,11 @@ export class PodController {
         let blocked = false;
         let allRime = true;
         for (let c = left; c <= right; c++) {
-          if (this.terrain.solidAt(c, r)) {
-            blocked = true;
-            if (this.terrain.get(c, r) !== T.RIME) allRime = false;
-          }
+          if (!this.terrain.blockedAt(c, r)) continue;
+          // thrusters can lift a dead pod out of the way; rock stays put
+          if (this.shove(c, r, 0, -1)) continue;
+          blocked = true;
+          if (this.terrain.get(c, r) !== T.RIME) allRime = false;
         }
         if (blocked) {
           if (allRime && this.vy >= RIME_SMASH_MIN) {
@@ -503,7 +534,7 @@ export class PodController {
       // resting check
       const r = Math.floor(-(this.py - HH - 0.04));
       for (let c = left; c <= right; c++) {
-        if (this.terrain.solidAt(c, r)) { this.grounded = true; break; }
+        if (this.terrain.blockedAt(c, r)) { this.grounded = true; break; }
       }
     }
   }

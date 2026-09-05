@@ -270,7 +270,13 @@ export const SALVAGE_TIME = 1.5;   // seconds holding the wreck open
  * walk. If they were close together you would never leave the pod at all.
  */
 export const WRECK_SPOT_RANGE = 9;
-export const WRECK_SALVAGE_RANGE = 1.0;
+/**
+ * Arm's length, measured from the hulk's centre. Wide enough that a pilot
+ * standing hard against a solid hulk — which is as close as anyone can get
+ * now that a dead pod holds its tile — is comfortably inside it, including
+ * when the footing beside it sits a step lower.
+ */
+export const WRECK_SALVAGE_RANGE = 1.4;
 
 // Found logs recovered from wrecked pods. DEPTH IS CHRONOLOGY: a wreck's
 // `tier` is how deep it lies, and deeper means older. The player assembles the

@@ -7,7 +7,7 @@ import {
   EXTRACT_OFFER, EXTRACT_HOLD, LANCE_SHOT_COST, LANCE_RANGE,
   GLYPHS_TO_TRANSLATE, FORGE,
   RIME_FREEZE_BASE, RIME_FREEZE_PER_TIER, RIME_KEEP_CLEAR,
-  SPILL_TTL, SPILL_WARN, SPILL_PICKUP_R,
+  SPILL_TTL, SPILL_WARN, SPILL_PICKUP_R, POD_W, POD_H,
 } from './config';
 import { T, def, oreValue, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
@@ -832,6 +832,18 @@ class Game {
       onMimicHatch: (x: number, y: number) => {
         this.threats.hatchMimic(x, y);
       },
+      onHulkShoved: (x: number, y: number) => {
+        this.particles.landingDust(x + 0.5, -(y + 0.5), 8);
+        this.audio.landing(9);
+        this.cam.addShake(0.16);
+        this.pad.rumble(0.5, 0.3, 160);
+        // taught once: a hulk that has fallen into your shaft is movable, and
+        // a driller who does not know that will burn a tank finding out
+        if (!this.state.firedEvents.has('hulk-shove-taught')) {
+          this.state.firedEvents.add('hulk-shove-taught');
+          this.hud.toast('THE HULK SHIFTS — YOU CAN PUSH IT CLEAR');
+        }
+      },
       onFrostbloom: (x: number, y: number) => {
         // the cold comes out all at once: the tank takes it, the air sets
         const st = this.state;
@@ -945,7 +957,7 @@ class Game {
 
     const here = c.world === this.state.activeWorld;
     if (here) {
-      this.spill.settle((x, y) => this.terrain.solidAt(x, y), this.terrain.h);
+      this.spill.settle((x, y) => this.terrain.blockedAt(x, y), this.terrain.h);
       this.spill.update(this.time, dt);
       if (this.mode === 'play') this.recoverSpill(c);
       if (!st.spill) return; // reclaimed on this frame; the clock is already down
@@ -1072,7 +1084,13 @@ class Game {
       side = Math.sign(stone.x + 0.5 - this.ctrl.px) || 1;
     }
     // step clear of the boarding radius, or E would put you straight back in
-    this.pilot.spawnAt(this.ctrl.px + side * 1.35, this.ctrl.py - 0.1);
+    // — but never into the hulk itself, now that a dead pod holds its tile
+    let out = side * 1.35;
+    const foot = (dx: number) => this.terrain.wreckAt(
+      Math.floor(this.ctrl.px + dx), Math.floor(-(this.ctrl.py - 0.1))) >= 0;
+    if (foot(out)) out = side * 0.9;
+    if (foot(out)) out = -side * 1.35;
+    this.pilot.spawnAt(this.ctrl.px + out, this.ctrl.py - 0.1);
     this.salvaging = null;
     this.mode = 'eva';
     // the core walk is the Communion: HUD, clocks and Dispatch all step
@@ -1665,6 +1683,20 @@ class Game {
     }
   }
 
+  /**
+   * Cells a body of ours is standing in. A settling hulk treats these as
+   * support: undermine one over the pod and it comes to rest on the hull
+   * rather than dropping through it.
+   */
+  private bodyOccupies(x: number, y: number): boolean {
+    const inBox = (px: number, py: number, hw: number, hh: number) =>
+      x >= Math.floor(px - hw + 0.001) && x <= Math.floor(px + hw - 0.001) &&
+      y >= Math.floor(-(py + hh - 0.001)) && y <= Math.floor(-(py - hh + 0.001));
+    if (this.ctrl && inBox(this.ctrl.px, this.ctrl.py, POD_W / 2, POD_H / 2)) return true;
+    if (this.mode === 'eva' && inBox(this.pilot.px, this.pilot.py, 0.15, 0.26)) return true;
+    return false;
+  }
+
   /** arm's length only — the walk between pod and wreck is the whole point */
   private wreckAtPilot(): number {
     for (let i = 0; i < this.terrain.wrecks.length; i++) {
@@ -1836,7 +1868,7 @@ class Game {
 
     this.pumpNarrative(raw);
     this.particles.update(dt);
-    this.wrecks.update(this.time, dt);
+    this.wrecks.update(this.time, dt, (x, y) => this.bodyOccupies(x, y));
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
     this.finale.frame(dt, this.time, camRow);

@@ -86,12 +86,12 @@ export class Pilot {
     if (dx > 0) {
       const c = Math.floor(this.px + HW);
       for (let r = top; r <= bot; r++) {
-        if (this.terrain.solidAt(c, r)) { this.px = c - HW - EPS; this.vx = 0; break; }
+        if (this.terrain.blockedAt(c, r)) { this.px = c - HW - EPS; this.vx = 0; break; }
       }
     } else if (dx < 0) {
       const c = Math.floor(this.px - HW);
       for (let r = top; r <= bot; r++) {
-        if (this.terrain.solidAt(c, r)) { this.px = c + 1 + HW + EPS; this.vx = 0; break; }
+        if (this.terrain.blockedAt(c, r)) { this.px = c + 1 + HW + EPS; this.vx = 0; break; }
       }
     }
   }
@@ -104,7 +104,7 @@ export class Pilot {
     if (dy < 0) {
       const r = Math.floor(-(this.py - HH));
       for (let c = left; c <= right; c++) {
-        if (this.terrain.solidAt(c, r)) {
+        if (this.terrain.blockedAt(c, r)) {
           this.py = -r + HH + EPS;
           this.vy = 0;
           this.grounded = true;
@@ -115,7 +115,7 @@ export class Pilot {
       const r = Math.floor(-(this.py + HH));
       if (r >= 0) {
         for (let c = left; c <= right; c++) {
-          if (this.terrain.solidAt(c, r)) {
+          if (this.terrain.blockedAt(c, r)) {
             this.py = -(r + 1) - HH - EPS;
             this.vy = 0;
             break;
@@ -125,7 +125,7 @@ export class Pilot {
     } else {
       const r = Math.floor(-(this.py - HH - 0.04));
       for (let c = left; c <= right; c++) {
-        if (this.terrain.solidAt(c, r)) { this.grounded = true; break; }
+        if (this.terrain.blockedAt(c, r)) { this.grounded = true; break; }
       }
     }
   }
