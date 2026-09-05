@@ -11,7 +11,7 @@ import {
   buildSconce, SconceMount, SCONCE_FLAME_Y, buildBrazier,
   buildEmitter, seatEmitter, EMITTER_REACH, coneGeometry, coneMaterial, EmitterParts,
   buildRailPost, buildRailMast, buildBolt, BoltParts, buildSnuffer, MothParts,
-  buildCenser, CenserParts, buildArcTelegraph, ArcTelegraph, buildChain,
+  buildCenser, CenserParts, buildChain,
   buildCrusher, buildRime, RimeParts,
   buildPier, buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
@@ -342,9 +342,9 @@ export class VaultRun {
   private crusherFaceMats: THREE.Material[] = [];
   private censerMeshes: {
     parts: CenserParts; chain: THREE.Group; light: THREE.PointLight;
-    /** the arc smoke-trace and its two apex pads (§III, V3.5) */
-    arc: ArcTelegraph;
   }[] = [];
+  /** stones something hangs from: drawn full-mass, never as half slabs */
+  private slabAnchors = new Set<number>();
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
   /** last frame's place, so the moth can turn into where it is going */
@@ -562,8 +562,45 @@ export class VaultRun {
     // surface does not move; only the bulk under it goes. Anything two
     // courses or thicker keeps its full mass, so towers and pillars still
     // read heavy next to the slabs they carry.
+    //
+    // EXCEPT a stone something HANGS FROM. A chain, a watch-light, a rail
+    // wire or a row of fangs bolts to the BOTTOM of its tile; halve that
+    // tile and the fitting dangles from air (the playtest's finding). So
+    // every anchor keeps its full mass — which also makes the mounts read
+    // heavier than the floors, the way a fixing should.
+    const anchors = new Set<number>();
+    const markAnchor = (x: number, y: number): void => {
+      if (x >= 0 && y >= 0 && x < p.w && y < p.h && p.solid[y * p.w + x]) anchors.add(y * p.w + x);
+    };
+    for (const c of this.def.censers ?? []) { markAnchor(Math.round(c.x), c.y - 1); markAnchor(Math.round(c.x), c.y); }
+    for (const b of this.def.beams ?? []) { markAnchor(Math.floor(b.x), Math.floor(b.y) - 1); markAnchor(Math.floor(b.x), Math.floor(b.y)); }
+    for (const s of this.def.shuttles ?? []) {
+      if (s.snuff) continue;
+      if (Math.abs(s.y1 - s.y0) > Math.abs(s.x1 - s.x0)) markAnchor(s.x0, Math.min(s.y0, s.y1) - 1);
+      else { markAnchor(s.x0, s.y0 - 1); markAnchor(s.x1, s.y1 - 1); }
+    }
+    for (const br of p.braziers) {
+      let cy = br.y;
+      while (cy > 0 && !p.solid[(cy - 1) * p.w + br.x]) cy--;
+      markAnchor(br.x, cy - 1);
+    }
+    for (const sc of p.sconces) {
+      let down = 0;
+      while (sc.y + 1 + down < p.h && !p.solid[(sc.y + 1 + down) * p.w + sc.x]) down++;
+      if (down <= 1) continue;                       // floor-standing: no chain
+      let uy = sc.y;
+      while (uy > 0 && !p.solid[(uy - 1) * p.w + sc.x]) uy--;
+      markAnchor(sc.x, uy - 1);                      // the ceiling boss's stone
+    }
+    for (let y = 0; y < p.h - 1; y++) {
+      for (let x = 0; x < p.w; x++) {
+        if (p.solid[y * p.w + x] && p.kill[(y + 1) * p.w + x]) anchors.add(y * p.w + x);
+      }
+    }
+    this.slabAnchors = anchors;
     const oneCourse = (x: number, y: number): boolean =>
       !!p.solid[y * p.w + x]
+      && !anchors.has(y * p.w + x)
       && !(y > 0 && p.solid[(y - 1) * p.w + x])
       && !(y < p.h - 1 && p.solid[(y + 1) * p.w + x]);
     let k = 0;
@@ -924,8 +961,9 @@ export class VaultRun {
       }
     }
 
-    // censers — a lantern on a chain, still swinging after all this time,
-    // and the arc telegraph that says where its swing goes still (V3.5)
+    // censers — a lantern on a chain, still swinging after all this time.
+    // The lantern IS its own telegraph: the playtest retired the arc trace,
+    // apex pads and crown smoke — just the lamp, swinging.
     for (const c of this.def.censers ?? []) {
       const chain = buildChain(c.len);
       chain.position.set(c.x, -c.y, 0.2);
@@ -933,9 +971,8 @@ export class VaultRun {
       const light = new THREE.PointLight(0xffd9a0, 2.2, 7, 1.7);
       light.position.y = CENSER_TOP - 0.4;
       parts.bob.add(light);
-      const arc = buildArcTelegraph(c.x, c.y, c.len, c.arc, CENSER_TOP);
-      this.scene.add(chain, parts.bob, arc.group);
-      this.censerMeshes.push({ parts, chain, light, arc });
+      this.scene.add(chain, parts.bob);
+      this.censerMeshes.push({ parts, chain, light });
     }
 
     // braziers — hanging ember baskets: bronze holds, light works. The
@@ -1250,8 +1287,10 @@ export class VaultRun {
     // share a seam and the boundary between them is a visible joint.
     // a HALF run edges a one-course slab: its bottom seam rides the slab's
     // half-height underside and its side seams stop where the stone does
+    // (anchor stones stay full blocks — the same set the masonry drew with)
     const oneCourse = (x: number, y: number): boolean =>
       !!p.solid[y * p.w + x]
+      && !this.slabAnchors.has(y * p.w + x)
       && !(y > 0 && p.solid[(y - 1) * p.w + x])
       && !(y < p.h - 1 && p.solid[(y + 1) * p.w + x]);
     type Run = { dir: 0 | 1 | 2 | 3; x: number; y: number; len: number; dry: boolean; half: boolean };
@@ -2848,32 +2887,9 @@ export class VaultRun {
       cm.light.intensity = 2 + Math.sin(this.time * 8 + i) * 0.4;
       cm.parts.flame.scale.set(0.8, 1.5 + Math.sin(this.time * 11 + i) * 0.2, 0.8);
 
-      // THE ARC TELEGRAPH. `u` is where in the swing the lantern is: -1 at
-      // one apex, +1 at the other, 0 through the fast bottom. A pendulum is
-      // briefly still at the ends and runs at nearly twice walk through the
-      // middle, and until now nothing on screen said so. The trace is drawn
-      // once, bright where the swing dwells; the pads are the two catchable
-      // places, and the one FILLING is the one arriving -- which is the when
-      // that a still picture could never carry.
-      const u = Math.sin(Math.PI * 2 * (this.time / (c.period / hazardMul) + c.phase));
-      for (const k of [0, 1]) {
-        const near = Math.max(0, u * (k === 0 ? -1 : 1));   // 1 at that apex
-        cm.arc.padMats[k].opacity = 0.16 + Math.pow(near, 3) * 0.7 + (near > 0.985 ? 0.2 : 0);
-        cm.arc.pads[k].scale.setScalar(1 + Math.pow(near, 4) * 0.16);
-      }
-      // and the smoke off the crown, so travel has a direction at a glance
-      for (let k = 0; k < cm.arc.puffs.length; k++) {
-        const lag = (k + 1) * 0.075;
-        const a = c.arc * Math.sin(Math.PI * 2 * ((this.time - lag) / (c.period / hazardMul) + c.phase));
-        const puff = cm.arc.puffs[k];
-        puff.position.set(
-          c.x + Math.sin(a) * c.len,
-          -c.y - Math.cos(a) * c.len + CENSER_TOP + 0.1 + k * 0.06, 0.07);
-        puff.scale.setScalar(0.6 + k * 0.2);
-        (puff.material as THREE.MeshBasicMaterial).opacity = 0.26 * (1 - k / cm.arc.puffs.length);
-      }
       // the deck lights up as it comes to rest -- the crown says "floor"
       // loudest exactly when it is standing still enough to be landed on
+      const u = Math.sin(Math.PI * 2 * (this.time / (c.period / hazardMul) + c.phase));
       cm.parts.crownMat.opacity = 0.18 + Math.pow(Math.abs(u), 4) * 0.5;
     }
     // motes -- each fleck drifts a slow private orbit around its tile
