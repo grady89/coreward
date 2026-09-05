@@ -170,6 +170,13 @@ export const CHAMBER_MAX_W = 22;
 
 /** THE BEAT CLOCK's default pulse, seconds — override per def with `clock` */
 export const PULSE = 0.85;
+/**
+ * The pulse grammar (SPEC-FOLD.md §4): every authored duration in the
+ * glyph/vault experience is one of these. Nothing is ever "about 300ms".
+ */
+export const HALF = PULSE / 2;        // room events: sconce ignitions, plates
+export const QUARTER = PULSE / 4;     // the UI atom
+export const EIGHTH = PULSE / 8;      // the smallest visible event (cuts)
 
 /**
  * P1 — the spark ledger as data, one verb per kit element (the prose and

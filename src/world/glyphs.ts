@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { smokePuff } from '../game/vaultkit';
 
 // THE NINE STONES — the Lamplighters' alphabet (SPEC-GLYPHS.md §2).
 //
@@ -139,6 +140,22 @@ export function buildGlyphMark(g: GlyphDef, size: number, color: number, lit: bo
     }
   }
 
+  // where each whole STROKE ends, as a fraction of the path — the wake
+  // sounds one chord note per stroke completed (SPEC-FOLD.md beat 3)
+  {
+    let at = 0;
+    const ends: number[] = [];
+    for (const stroke of g.strokes) {
+      for (let i = 1; i < stroke.length; i++) {
+        const [ax, ay] = toLocal(stroke[i - 1][0], stroke[i - 1][1]);
+        const [bx, by] = toLocal(stroke[i][0], stroke[i][1]);
+        at += Math.hypot(bx - ax, by - ay);
+      }
+      ends.push(total === 0 ? 1 : at / total);
+    }
+    group.userData.strokeEnds = ends;
+  }
+
   const bars: { mesh: THREE.Mesh; horiz: boolean; seg: typeof segs[number] }[] = [];
   for (const seg of segs) {
     const horiz = Math.abs(seg.bx - seg.ax) > Math.abs(seg.by - seg.ay);
@@ -201,6 +218,39 @@ export function buildGlyphMark(g: GlyphDef, size: number, color: number, lit: bo
       (socket.material as THREE.MeshBasicMaterial).opacity = tail * 0.95;
     }
   };
+  // hungry light: six sparks that converge on the mark while it wakes
+  const sparks: THREE.Mesh[] = [];
+  const sparkMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  for (let i = 0; i < 6; i++) {
+    const sp = new THREE.Mesh(new THREE.PlaneGeometry(0.045, 0.045), sparkMat);
+    sp.position.z = thick * 0.5;
+    group.add(sp);
+    sparks.push(sp);
+  }
+  group.userData.sparks = sparks;
+  group.userData.sparkMat = sparkMat;
+
+  // THE FAMINE breathes cold: a lit socket glyph smokes instead of shining
+  if (!g.light && g.socket) {
+    const puffs: THREE.Mesh[] = [];
+    const [sx2, sy2] = toLocal(g.socket[0], g.socket[1]);
+    for (let i = 0; i < 3; i++) {
+      const pf = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16),
+        new THREE.MeshBasicMaterial({
+          map: smokePuff(), color: 0xbfd4ff, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        }));
+      pf.position.set(sx2, sy2, thick * 0.5);
+      group.add(pf);
+      puffs.push(pf);
+    }
+    group.userData.smoke = puffs;
+    group.userData.smokeAt = [sx2, sy2];
+  }
+
   group.userData.setCharge = setCharge;
   setCharge(lit ? 1 : 0);
   return group;
@@ -228,7 +278,7 @@ export function glyphSvg(g: GlyphDef, cls: string): string {
  */
 export class GlyphMarks {
   private group = new THREE.Group();
-  private marks: { mesh: THREE.Group; id: string; charge: number; done: boolean }[] = [];
+  private marks: { mesh: THREE.Group; id: string; charge: number; done: boolean; strokes: number }[] = [];
 
   constructor(scene: THREE.Scene) {
     scene.add(this.group);
@@ -243,8 +293,38 @@ export class GlyphMarks {
       const done = translated.has(s.id);
       const mark = buildGlyphMark(g, 0.66, color, done);
       mark.position.set(s.x + 0.5, -(s.y + 0.5), 0.52);
+      // THE HERO STONE (SPEC-FOLD.md §3): the mark is set in architecture —
+      // a plinth footing it into the world, two jambs, a bronze crown. A
+      // translated stone hangs one small burning finial off the crown: the
+      // surface slowly accumulates nine lights, progress told in furniture.
+      const stoneMat2 = new THREE.MeshStandardMaterial({ color: 0x6e6878, roughness: 0.85, metalness: 0.05, flatShading: true });
+      const bronze2 = new THREE.MeshStandardMaterial({ color: 0xa8874a, roughness: 0.45, metalness: 0.55, flatShading: true });
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.15, 0.16), stoneMat2);
+      plinth.position.set(0, -0.83, -0.05);
+      const crown = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.13, 0.16), stoneMat2);
+      crown.position.set(0, 0.86, -0.05);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.045, 0.17), new THREE.MeshStandardMaterial({ color: 0x8e3a28, roughness: 0.6, metalness: 0.15, flatShading: true }));
+      band.position.set(0, 0.78, -0.05);
+      mark.add(plinth, crown, band);
+      for (const kx of [-0.78, 0.78]) {
+        const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.56, 0.16), stoneMat2);
+        jamb.position.set(kx, 0, -0.05);
+        mark.add(jamb);
+      }
+      if (done) {
+        const finial = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), bronze2);
+        finial.position.set(0, 0.98, -0.02);
+        const flameMat = new THREE.MeshBasicMaterial({
+          color: 0xffe0b0, transparent: true, opacity: 0.85,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        });
+        const flame = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.2), flameMat);
+        flame.position.set(0, 1.08, 0);
+        flame.name = 'stone-finial';
+        mark.add(finial, flame);
+      }
       this.group.add(mark);
-      this.marks.push({ mesh: mark, id: s.id, charge: done ? 1 : 0, done });
+      this.marks.push({ mesh: mark, id: s.id, charge: done ? 1 : 0, done, strokes: 0 });
     }
   }
 
@@ -263,7 +343,8 @@ export class GlyphMarks {
    * they stay, and every other stone falls back to cold. Returns the id of a
    * stone that finished waking this frame, so the caller can sound it.
    */
-  update(time: number, dt = 0, nearId: string | null = null): string | null {
+  update(time: number, dt = 0, nearId: string | null = null,
+    onStroke?: (n: number) => void): string | null {
     let justLit: string | null = null;
     for (const m of this.marks) {
       const was = m.charge;
@@ -273,11 +354,47 @@ export class GlyphMarks {
       if (m.charge !== was) {
         m.mesh.userData.setCharge?.(m.charge);
         if (m.charge >= 1 && was < 1) justLit = m.id;
+        // a chord note per whole stroke drawn (the wake, beat 3)
+        const ends = m.mesh.userData.strokeEnds as number[] | undefined;
+        if (ends && m.charge > was && m.charge < 1) {
+          const now = ends.filter(e => m.charge >= e - 1e-4).length;
+          if (now > m.strokes) { m.strokes = now; onStroke?.(now); }
+        }
+        if (m.charge <= 0) m.strokes = 0;
       }
       // only a stone that is fully awake breathes
       if (m.charge >= 1) {
         const dot = m.mesh.getObjectByName('glyph-light') as THREE.Mesh | null;
         if (dot) dot.scale.setScalar(1 + Math.sin(time * 2.1 + m.mesh.position.x) * 0.18);
+        const fin = m.mesh.getObjectByName('stone-finial') as THREE.Mesh | null;
+        if (fin) fin.scale.y = 1 + Math.sin(time * 3.3 + m.mesh.position.x) * 0.2;
+      }
+      // hungry light: sparks stream toward a waking mark and are drunk
+      const sparks = m.mesh.userData.sparks as THREE.Mesh[] | undefined;
+      const sparkMat = m.mesh.userData.sparkMat as THREE.MeshBasicMaterial | undefined;
+      if (sparks && sparkMat) {
+        const waking = m.charge > 0.02 && m.charge < 1 && m.id === nearId;
+        sparkMat.opacity = waking ? 0.75 : Math.max(0, sparkMat.opacity - dt * 3);
+        if (sparkMat.opacity > 0.01) {
+          for (let i = 0; i < sparks.length; i++) {
+            const a = time * 1.4 + i * 2.1;
+            const r = 1.25 * (1 - ((time * 0.5 + i * 0.37) % 1));
+            sparks[i].position.x = Math.cos(a) * r;
+            sparks[i].position.y = Math.sin(a) * r * 0.8;
+          }
+        }
+      }
+      // the famine's tell: the finished socket smokes, cold
+      const smoke = m.mesh.userData.smoke as THREE.Mesh[] | undefined;
+      if (smoke) {
+        const at = m.mesh.userData.smokeAt as [number, number];
+        for (let i = 0; i < smoke.length; i++) {
+          const cyc = (time * 0.35 + i / smoke.length) % 1;
+          smoke[i].position.set(at[0] + Math.sin(time + i * 2.4) * 0.05, at[1] + cyc * 0.55, smoke[i].position.z);
+          (smoke[i].material as THREE.MeshBasicMaterial).opacity =
+            m.charge >= 1 ? 0.3 * Math.sin(cyc * Math.PI) : 0;
+          smoke[i].scale.setScalar(0.6 + cyc * 0.9);
+        }
       }
     }
     return justLit;

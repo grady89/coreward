@@ -1054,3 +1054,31 @@ body.sm-open #survey {
   font-family: var(--font-display); font-size: 10px; letter-spacing: 0.26em;
   color: var(--ink-dim); margin-top: 10px;
 }
+
+/* THE FOLD (SPEC-FOLD.md) -- the translation's engraved lines, one per
+   pulse; any key completes the engraving at once */
+.vc-line {
+  opacity: 0;
+  animation: vc-engrave 0.85s steps(6, end) forwards;
+}
+@keyframes vc-engrave {
+  from { opacity: 0; clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vc-line { animation-duration: 0.2s; animation-delay: 0s !important; }
+}
+
+/* the 9/9 plate: the nine words as one composition, each in its world's hue */
+.codex-plate {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  max-width: 240px;
+  margin: 6px auto 14px;
+}
+.codex-plate .plate-cell { display: block; }
+.codex-plate .plate-mark { width: 100%; height: auto; display: block; opacity: 0.92; }
+
+/* the vault's title plate: the mark IS the headline, the name the caption */
+.vh-mark .vh-svg { width: 30px; height: 30px; display: block; margin: 0 auto 2px; opacity: 0.9; }

@@ -1965,17 +1965,28 @@ export function buildStud(seed: number, down = false): StudParts {
  * EVERYTHING here lives BEHIND the play plane (front faces ≤ z -0.3): the
  * body walks in front of the sanctum, never through it.
  */
-export function buildMasterDressing(hue: number): THREE.Group {
+export interface MasterDressing {
+  group: THREE.Group;
+  /** every run of poured light — the approach crescendo's handles */
+  glow: THREE.MeshBasicMaterial[];
+}
+
+export function buildMasterDressing(hue: number): MasterDressing {
   const g = new THREE.Group();
+  const glow: THREE.MeshBasicMaterial[] = [];
   const stone = stoneMat(0x77748a);
   const stoneDark = stoneMat(0x5e5b70);
   const bronze = bronzeMat(0xa8874a);
   const slate = new THREE.MeshStandardMaterial({ color: SLATE, roughness: 0.55, metalness: 0.25, flatShading: true });
   const oxide = new THREE.MeshStandardMaterial({ color: OXIDE, roughness: 0.6, metalness: 0.15, flatShading: true });
-  const lightMat = () => new THREE.MeshBasicMaterial({
-    color: hue, transparent: true, opacity: 0.55,
-    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-  });
+  const lightMat = (): THREE.MeshBasicMaterial => {
+    const m = new THREE.MeshBasicMaterial({
+      color: hue, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
+    glow.push(m);
+    return m;
+  };
 
   // the dais: three steps, each front edge carrying a hairline of the light
   for (let i = 0; i < 3; i++) {
@@ -2038,5 +2049,5 @@ export function buildMasterDressing(hue: number): THREE.Group {
   ring.rotation.x = Math.PI / 2.2;
   ring.position.set(0, -0.94, -0.35);
   g.add(ring);
-  return g;
+  return { group: g, glow };
 }

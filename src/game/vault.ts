@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FollowCam } from '../fx/camera';
 import { GlyphDef, buildGlyphMark, glyphSvg } from '../world/glyphs';
-import { VaultDef, GateDef, CurrentDef, ParsedVault, parseVault, chamberAt, PULSE } from '../world/vaults';
+import { VaultDef, GateDef, CurrentDef, ParsedVault, parseVault, chamberAt, PULSE, HALF } from '../world/vaults';
 import {
   Suit, SUIT_R, SUIT_H, buildSuit, poseSuit,
   FigurePose, poseFigure, figureLampAt, figureNearElbow,
@@ -339,6 +339,10 @@ export class VaultRun {
   private killMats: THREE.Material[] = [];
   /** each piston's working face, the seam that says which way it comes (P2) */
   private crusherFaceMats: THREE.Material[] = [];
+  /** the order the run FIRST lit each sconce — the translation replays it */
+  private litOrder: number[] = [];
+  /** the completion rite's relight sequence, seeded on master touch */
+  private riteOrder: number[] = [];
   private censerMeshes: {
     parts: CenserParts; chain: THREE.Group; light: THREE.PointLight;
     /** the crown's smoke, trailing the swing */
@@ -346,6 +350,8 @@ export class VaultRun {
   }[] = [];
   /** stones something hangs from: drawn full-mass, never as half slabs */
   private slabAnchors = new Set<number>();
+  /** the sanctum's poured light — driven by DISTANCE on the approach */
+  private sanctumGlow: THREE.MeshBasicMaterial[] = [];
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
   /** last frame's place, so the moth can turn into where it is going */
@@ -416,6 +422,7 @@ export class VaultRun {
     this.hud = document.createElement('div');
     this.hud.id = 'vault-hud';
     this.hud.innerHTML = `
+      <div class="vh-mark">${glyphSvg(glyph, 'vh-svg')}</div>
       <div class="vh-name">${glyph.name}</div>
       <div class="vh-spark">◆</div>
       <div class="vh-hint">SHIFT — spend the spark · stone and sconces relight it · walls catch you · F raises the lamp · Esc leaves</div>`;
@@ -1159,7 +1166,9 @@ export class VaultRun {
     this.masterGroup.add(glow);
     // and the chamber the guild built around the word: a stepped dais, two
     // pilasters, a lintel and an inlay ring in the floor (§VI atmosphere §6)
-    this.masterGroup.add(buildMasterDressing(this.rimHue));
+    const dressing = buildMasterDressing(this.rimHue);
+    this.masterGroup.add(dressing.group);
+    this.sanctumGlow = dressing.glow;
     this.masterGroup.position.set(this.p.master.x + 0.5, -(this.p.master.y + 0.5), 0);
     this.scene.add(this.masterGroup);
 
@@ -1810,6 +1819,7 @@ export class VaultRun {
       const d = Math.hypot(this.px - (s.x + 0.5), this.py + s.y + 0.5);
       if (!this.sconceLit[i] && d < SCONCE_LIGHT_R) {
         this.sconceLit[i] = true;
+        this.litOrder.push(i);
         this.checkpoint = { x: s.x + 0.5, y: -(s.y + 0.5) - 0.2 };
         if (!this.def.deadLight) this.spark = true;
         this.sconceChord(i);
@@ -1842,6 +1852,14 @@ export class VaultRun {
       this.phase = 'complete';
       this.phaseT = 0;
       this.vx = 0; this.vy = 0;
+      // THE TRANSLATION (SPEC-FOLD.md beat 8): the room's lights go out and
+      // relight in the order YOU first lit them — the run replayed as lights
+      // — then every light the run never needed joins the round.
+      this.riteOrder = [
+        ...this.litOrder,
+        ...this.sconceLit.map((_, i) => i).filter(i => !this.litOrder.includes(i)),
+      ];
+      this.sconceLit = this.sconceLit.map(() => false);
       this.audio.duck(0.08, 3);      // ducking moment 2 of 4 (atmosphere §5)
       return;
     }
@@ -2705,12 +2723,14 @@ export class VaultRun {
 
     if (this.phase === 'complete') {
       this.phaseT += dt;
-      const n = Math.floor(this.phaseT / 0.35);
-      for (let i = 0; i < Math.min(n, this.sconceLit.length); i++) {
+      // one light per half-pulse, in the run's own order
+      const n = Math.floor(this.phaseT / HALF);
+      for (let k = 0; k < Math.min(n, this.riteOrder.length); k++) {
+        const i = this.riteOrder[k];
         if (!this.sconceLit[i]) { this.sconceLit[i] = true; this.sconceChord(i); }
       }
       this.masterGroup.scale.setScalar(1 + Math.sin(this.phaseT * 3) * 0.04);
-      if (this.phaseT >= 2.4 && !this.completed) {
+      if (this.phaseT >= this.riteOrder.length * HALF + PULSE && !this.completed) {
         this.completed = true;
         this.audio.complete();
         this.showCard();
@@ -2737,6 +2757,16 @@ export class VaultRun {
       if (x < f.x0) x = f.x1;
       if (x > f.x1) x = f.x0;
       f.mesh.position.x = x;
+    }
+    // THE MASTER APPROACH (SPEC-FOLD.md beat 7): the last eight tiles are
+    // distance-driven — the sanctum's poured light swells as the body
+    // closes and recedes if it backs away. The finale's law, in miniature.
+    {
+      const m = this.p.master;
+      const d = Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5);
+      const near = Math.max(0, Math.min(1, (9 - d) / 7));
+      const swell = 0.55 * (0.55 + 0.85 * near * near);
+      for (const gm2 of this.sanctumGlow) gm2.opacity = swell;
     }
     for (let i = 0; i < this.figureGlows.length; i++) {
       const fg = this.figureGlows[i];
@@ -2808,7 +2838,9 @@ export class VaultRun {
     }
     for (const bm of this.bridgeMeshes) {
       const on = this.bridgeOn[bm.group];
-      const flick = warn && on ? (Math.sin(this.time * 55) > 0 ? 1 : 0.25) : 1;
+      // photosensitivity law (SPEC-FOLD.md §4): nothing strobes above 3 Hz.
+      // the warn is a two-pulse dim-swell now, not a flicker
+      const flick = warn && on ? 0.55 + 0.45 * Math.sin(this.time * (Math.PI / PULSE)) : 1;
       bm.mat.opacity = on ? 0.85 * flick : 0.05;
       bm.mesh.scale.y = on ? 1 : 0.35;
       // when the deck is gone the wiring in the stone still shows where it
@@ -3123,15 +3155,24 @@ export class VaultRun {
   private showCard(): void {
     this.card = document.createElement('div');
     this.card.id = 'vault-card';
+    // the fragment is ENGRAVED, not printed: one line per pulse, and any
+    // key finishes the engraving at once (SPEC-FOLD.md beat 8)
+    const lines = this.glyph.fragment.match(/[^.!?]+[.!?]+/g) ?? [this.glyph.fragment];
     this.card.innerHTML = `
       <div class="vc-glyph">${glyphSvg(this.glyph, 'vc-svg')}</div>
       <div class="vc-name">${this.glyph.name}</div>
-      <div class="vc-text">${this.glyph.fragment}</div>
+      <div class="vc-text">${lines.map((l, i) =>
+        `<span class="vc-line" style="animation-delay:${(i * PULSE).toFixed(2)}s">${l.trim()}</span>`).join(' ')}</div>
       <div class="vc-reforms">${this.reforms === 0
         ? 'no light spent'
         : `${this.reforms} ${this.reforms === 1 ? 'light' : 'lights'} spent`}</div>
       <div class="vc-hint">E — STEP BACK THROUGH THE STONE</div>`;
     this.hud.parentElement?.appendChild(this.card);
+    const skip = (): void => {
+      this.card?.querySelectorAll<HTMLElement>('.vc-line').forEach(el => { el.style.animationDelay = '0s'; });
+      removeEventListener('keydown', skip);
+    };
+    addEventListener('keydown', skip);
   }
 
   interact(): void {

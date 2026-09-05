@@ -617,6 +617,9 @@ export class Panels {
       }).join('')}
       ${st.glyphs >= GLYPHS_TO_TRANSLATE ? `
       <div class="lore-note">
+        <div class="codex-plate">${GLYPHS.map(g => `<span class="plate-cell" style="color:${
+          g.world === 'veil3' ? '#ff7a24' : g.world === 'cryos2' ? '#2effcc' : '#9d5cff'
+        }">${glyphSvg(g, 'plate-mark')}</span>`).join('')}</div>
         <h4>THE ASSEMBLED READING</h4>
         <p>We were not thieves. We were the last shift, and the light was going out, and we did the only thing anyone could think of: we put it somewhere it would keep. Under a world, where weather could not reach it. We are sorry for the dark we left you standing in. It was meant to be temporary. Everything is meant to be temporary. If you have read this far, then you can put it back — and we are sorry, again, for what that will cost you.</p>
       </div>` : ''}` : ''}

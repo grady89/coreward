@@ -31,6 +31,7 @@ import {
 import { Particles } from './fx/particles';
 import { FollowCam } from './fx/camera';
 import { Finale } from './fx/finale';
+import { buildFoldThroat, FoldThroat } from './fx/fold';
 import { Hud } from './ui/hud';
 import { Comms } from './ui/comms';
 import { SurveyMap } from './ui/map';
@@ -157,6 +158,19 @@ class Game {
   depots!: DepotField;
   /** ?vault gallery mode: all nine stones in one dev hall, saves disabled */
   private vaultGallery = false;
+  /**
+   * THE FOLD (SPEC-FOLD.md): the threshold sequence between the surface and
+   * a vault. While set, the pilot is latched still and the camera is the
+   * fold's. 'in' unfolds the stone and enters on completion; 'out' seals it
+   * behind you; 'abort' is an Esc mid-fold, run in reverse at double speed.
+   */
+  private fold: {
+    kind: 'in' | 'out' | 'abort';
+    id: string; t: number; dur: number;
+    sx: number; sy: number;
+    throat: FoldThroat;
+    cam0: { x: number; y: number; z: number };
+  } | null = null;
   /** which creature is staged and whether it still needs coaxing alive */
   private staging: { i: number; prime: number; staged: boolean; settle: number } | null = null;
   /** the second pair of hands — polled once a frame, never event-driven */
@@ -491,7 +505,72 @@ class Game {
     return null;
   }
 
+  /**
+   * THE FOLD — begin the threshold sequence at a stone. 'in' runs 2 pulses
+   * (1 if the stone is already translated, or under reduced motion) and
+   * hands off to `enterVault` on its last frame; 'out' runs 1.5 pulses,
+   * sealing the word behind a pilot who is already back on the surface.
+   */
+  private beginFold(kind: 'in' | 'out', id: string): void {
+    const stone = this.terrain.glyphStones.find(s => s.id === id);
+    const glyph = glyphById(id);
+    if (!stone || !glyph) {
+      if (kind === 'in') this.enterVault(id);   // no stone (dev rooms): old door
+      return;
+    }
+    const short = this.state.glyphsSet.has(id) || this.reducedMotion;
+    const throat = buildFoldThroat(glyph, ACTIVE.glyphHue);
+    const sx = stone.x + 0.5, sy = -(stone.y + 0.5);
+    throat.group.position.set(sx, sy, 0.55);
+    this.scene.add(throat.group);
+    const c = this.cam.camera.position;
+    this.fold = {
+      kind, id, t: 0,
+      dur: (kind === 'out' ? 1.5 : short ? 1 : 2) * PULSE,
+      sx, sy, throat,
+      cam0: kind === 'out'
+        ? { x: this.pilot.px, y: this.pilot.py + 1, z: 15 }
+        : { x: c.x, y: c.y, z: c.z },
+    };
+    this.hud.setPrompt(null);
+    this.audio.airlock();
+    this.audio.duckAmbience(0.4, this.fold.dur);
+  }
+
+  private tickFold(dt: number): void {
+    const f = this.fold;
+    if (!f) return;
+    f.t += dt * (f.kind === 'abort' ? -2 : 1);
+    const p = Math.max(0, Math.min(1, f.t / f.dur));
+    // stone settles: heavy ease-out, the guild's own curve
+    const k = 1 - Math.pow(1 - p, 3);
+    f.throat.update(f.kind === 'out' ? 1 - k : k);
+    if (!this.reducedMotion) {
+      // the only dolly in the game: drawn through the face, or set back down
+      const toward = f.kind === 'out' ? 1 - k : k;
+      const cx = f.cam0.x + (f.sx - f.cam0.x) * toward;
+      const cy = f.cam0.y + (f.sy + 0.4 - f.cam0.y) * toward;
+      const cz = f.cam0.z + (Math.max(8.5, f.cam0.z - 6.5) - f.cam0.z) * toward;
+      this.cam.snap(cx, cy, cz);
+    }
+    if (f.kind === 'in' && f.t >= f.dur) {
+      f.throat.dispose();
+      this.fold = null;
+      this.enterVault(f.id);            // the hard cut, on the downbeat
+    } else if (f.kind === 'abort' && f.t <= 0) {
+      f.throat.dispose();
+      this.fold = null;
+    } else if (f.kind === 'out' && f.t >= f.dur) {
+      f.throat.dispose();
+      this.fold = null;
+      this.cam.snap(this.pilot.px, this.pilot.py + 1, 15);
+    }
+  }
+
   private enterVault(id: string): void {
+    // entering ends any threshold still in motion — a stale fold would
+    // freeze while the vault owns the frame and eat the next Escape
+    if (this.fold) { this.fold.throat.dispose(); this.fold = null; }
     const def = vaultByGlyph(id);
     // a TEST_VAULTS room has no glyph of its own — it borrows the first
     // one's dressing (world hues, name plate); dev-only, never saved
@@ -553,7 +632,22 @@ class Game {
         this.state.firedEvents.add(beat[0]);
         this.comms.say([beat[1]]);
       }
+      // the conversion line (SPEC-FOLD.md beat 10): the next unfound word's
+      // world, named once, never marked. At 9/9 the codex is the invitation.
+      if (this.state.glyphs < 9) {
+        const key = `next-after-${id}`;
+        if (!this.state.firedEvents.has(key)) {
+          this.state.firedEvents.add(key);
+          const here = WORLD_GLYPHS[this.state.activeWorld] ?? [];
+          const left = here.filter(g => !this.state.glyphsSet.has(g)).length;
+          if (left > 0) {
+            this.comms.say([`${left === 1 ? 'One more word is' : left + ' more words are'} still buried out here somewhere.`]);
+          }
+        }
+      }
     }
+    // seal the word behind you — the fold, run in reverse
+    if (id) this.beginFold('out', id);
   }
 
   // ---------- THE QUARTERS ----------
@@ -1699,7 +1793,7 @@ class Game {
       // the wake is the door opening, and E before it is done knocks on stone
       const stone = this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1);
       if (stone) {
-        if (this.glyphMarks.chargeOf(stone.id) >= 1) this.enterVault(stone.id);
+        if (this.glyphMarks.chargeOf(stone.id) >= 1 && !this.fold) this.beginFold('in', stone.id);
         return;
       }
       // SITE 297: the readables are the whole errand
@@ -1814,6 +1908,11 @@ class Game {
       this.finale.skip();
       return;
     }
+    // Esc mid-fold: the stone changes its mind, in reverse, at double speed
+    if (this.fold && this.mode !== 'vault') {
+      if (this.fold.kind === 'in') this.fold.kind = 'abort';
+      return;
+    }
     if (this.mode === 'vault' && this.vault) {
       this.vault.abandon();
       return;
@@ -1904,7 +2003,17 @@ class Game {
 
     const waking = this.mode === 'eva' && !this.finale.isCommunion
       ? this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1) : null;
-    if (this.glyphMarks.update(this.time, dt, waking?.id ?? null)) this.audio.glyph();
+    if (this.glyphMarks.update(this.time, dt, waking?.id ?? null,
+      n => this.audio.sconceChord(n))) this.audio.glyph();
+    if (this.fold) {
+      this.tickFold(raw);
+      // the fold's last frame IS the cut: render the vault's first frame now
+      if (this.mode === 'vault' && this.vault) {
+        this.vault.frame(0, this.input(), this.lampOn);
+        this.vault.render(this.renderer);
+        return;
+      }
+    }
 
     if (this.mode === 'title') {
       this.cam.titlePose(this.time, this.reducedMotion ? 0 : this.mouseX, this.reducedMotion ? 0 : this.mouseY);
@@ -2854,7 +2963,9 @@ class Game {
           this.saveNow();
         }
       } else {
-        this.pilot.update(dt, this.input());
+        // mid-fold the body is latched: the stone is doing the moving
+        const still = { left: false, right: false, up: false, down: false };
+        this.pilot.update(dt, this.fold ? still : this.input());
       }
 
       // SITE 297 has no clock: there is nothing here to run out of but time
@@ -2880,8 +2991,8 @@ class Game {
 
       // contextual prompt
       const stone = this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1);
-      if (rite || this.salvaging || this.coreActKind) {
-        // handled above / silent while working
+      if (rite || this.salvaging || this.coreActKind || this.fold) {
+        // handled above / silent while working (and silent mid-fold)
       } else if (ACTIVE.husk) {
         this.huskPrompt();
       } else if (this.atCradle()) {
@@ -2918,7 +3029,7 @@ class Game {
     if (rite) {
       this.cam.finaleFollow(dt, this.pilot.px, this.pilot.py,
         this.ember.x, this.ember.y, fin.t, fin.touchBlend);
-    } else {
+    } else if (!this.fold || this.reducedMotion) {
       this.cam.follow(dt, this.pilot.px, this.pilot.py, this.pilot.vx, this.pilot.vy, true);
     }
     this.chunks.update(Math.max(0, Math.floor(-this.pilot.py)), this.time);
