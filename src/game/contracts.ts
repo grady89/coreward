@@ -66,10 +66,17 @@ export const POOL: Omit<Contract, 'id' | 'worldId'>[] = [
   },
 ];
 
-/** three offers, rotating daily, filtered by the player's record depth */
-export function offers(bestDepthM: number, worldId: string, dayIndex: number): Contract[] {
-  const eligible = POOL.filter(c => bestDepthM >= c.minBest);
-  const usable = eligible.length >= 3 ? eligible : POOL.slice(0, 3);
+/**
+ * Three offers, rotating daily. Gated two ways: minBest against the lifetime
+ * record (so the board never posts jobs the pod can't do), and depth/speed
+ * targets against THIS WORLD's depth — a contract you have already satisfied
+ * by standing here is not a job, it is a coupon.
+ */
+export function offers(bestDepthM: number, worldDepthM: number, worldId: string, dayIndex: number): Contract[] {
+  const fresh = (c: Omit<Contract, 'id' | 'worldId'>): boolean =>
+    (c.kind !== 'depth' && c.kind !== 'speed') || c.target > worldDepthM;
+  const eligible = POOL.filter(c => bestDepthM >= c.minBest && fresh(c));
+  const usable = eligible.length >= 3 ? eligible : POOL.filter(fresh).slice(0, 3);
   const out: Contract[] = [];
   const used = new Set<number>();
   for (let i = 0; i < 3; i++) {
@@ -128,7 +135,11 @@ export function accept(c: Contract, pod: {
 export interface Progress { have: number; need: number; label: string; failed: boolean; met: boolean; }
 
 export function evaluate(a: ActiveContract, s: {
-  bestDepthM: number; totalEarned: number; fuelSpent: number; contractOre: number; now: number;
+  bestDepthM: number;
+  /** depth reached on the CURRENT world — depth goals must be earned here,
+   *  not inherited from a 1000m record on a world already finished */
+  worldDepthM: number;
+  totalEarned: number; fuelSpent: number; contractOre: number; now: number;
 }): Progress {
   const c = a.c;
   const need = a.target ?? c.target;
@@ -143,7 +154,7 @@ export function evaluate(a: ActiveContract, s: {
   switch (c.kind) {
     case 'depth':
     case 'speed':
-      have = Math.round(s.bestDepthM); label = 'DEPTH'; break;
+      have = Math.round(s.worldDepthM); label = 'DEPTH'; break;
     case 'ore':
       have = s.contractOre; label = 'ORE'; break;
     default:

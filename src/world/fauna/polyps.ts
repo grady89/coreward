@@ -121,7 +121,9 @@ export class Polyps implements Creature {
         else if (this.terrain.solidAt(tx - 1, ty)) nx = 1;
         else nx = -1;
         p.alive = true;
-        p.x = tx + 0.5 - nx * 0.28; p.y = -(ty + 0.5) + ny * 0.28;
+        // seat the sac INTO its wall: minus-normal on both axes (a floor sac
+        // sits down against the rock, not floating at the top of its tile)
+        p.x = tx + 0.5 - nx * 0.28; p.y = -(ty + 0.5) - ny * 0.28;
         p.nx = nx; p.ny = ny;
         p.inflate = 0; p.phase = Math.random() * Math.PI * 2;
         p.size = 0.8 + Math.random() * 0.4;

@@ -49,7 +49,8 @@ await page.screenshot({ path: OUT + '/c-hud.png' });
 await page.evaluate(() => {
   const g = window.__game;
   const c = g.state.contract.c;
-  if (c.kind === 'depth' || c.kind === 'speed') g.state.bestDepthM = c.target + 10;
+  // depth goals now read THIS world's depth (worldBestRow, 2m per tile)
+  if (c.kind === 'depth' || c.kind === 'speed') g.state.worldBestRow = Math.ceil((c.target + 10) / 2);
   else if (c.kind === 'ore') g.state.contractOre = c.target;
   else g.state.totalEarned = g.state.contract.startEarned + c.target + 10;
   g.ctrl.px = 30.5; g.ctrl.py = 0.42;
@@ -112,7 +113,8 @@ const latch = await page.evaluate(async () => {
   g.state.fuelSpent = g.state.contract.startFuelSpent + 99999;
   await new Promise(r => setTimeout(r, 900));
   const ev = window.__evaluate(g.state.contract, {
-    bestDepthM: g.state.bestDepthM, totalEarned: g.state.totalEarned,
+    bestDepthM: g.state.bestDepthM, worldDepthM: g.state.worldBestRow * 2,
+    totalEarned: g.state.totalEarned,
     fuelSpent: g.state.fuelSpent, contractOre: g.state.contractOre, now: g.state.playTime,
   });
   return { met, stillMet: ev.met, failed: ev.failed };

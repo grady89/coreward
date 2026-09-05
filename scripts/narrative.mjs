@@ -32,7 +32,8 @@ const pushed = await page.evaluate(() => document.querySelector('#hud-contract')
 console.log('contract pushed:', pushed ? 'OK' : 'FAIL');
 
 // depth trigger — drain the queue rather than waiting out the typewriter
-await page.evaluate(() => { window.__game.state.bestDepthM = 140; });
+// (Dispatch now reads THIS world's depth: worldBestRow, 2m per tile)
+await page.evaluate(() => { window.__game.state.worldBestRow = 70; window.__game.state.bestDepthM = 140; });
 for (let i = 0; i < 8; i++) {
   await page.evaluate(() => window.__game.comms.clear());
   await page.waitForTimeout(400);

@@ -140,8 +140,9 @@ export class FollowCam {
   }
 
   /** world → screen px for HUD popups */
+  private projScratch = new THREE.Vector3();
   screenPos(x: number, y: number, out: { sx: number; sy: number }): void {
-    const v = new THREE.Vector3(x, y, 0).project(this.camera);
+    const v = this.projScratch.set(x, y, 0).project(this.camera);
     out.sx = (v.x * 0.5 + 0.5) * window.innerWidth;
     out.sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
   }

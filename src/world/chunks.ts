@@ -48,6 +48,7 @@ const tmpM = new THREE.Matrix4();
 const tmpP = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 const tmpS = new THREE.Vector3();
+const DIRTY_RING: readonly (readonly [number, number])[] = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
 
@@ -210,15 +211,14 @@ class Chunk {
 
   /** slow spin + glow pulse on every resource */
   animate(time: number): void {
+    // the chewed gem's transform belongs to chew() — resolve it once, not
+    // once per gem per frame (this loop runs hundreds of times a frame)
+    const chewed = this.chewLocal >= 0 ? this.gemIds.get(this.chewLocal) : undefined;
     for (let c = 0; c < this.gems.length; c++) {
       const list = this.gemAnim[c];
       if (list.length === 0) continue;
       for (const a of list) {
-        // skip the gem being chewed — chew() owns its transform
-        if (this.chewLocal >= 0) {
-          const g = this.gemIds.get(this.chewLocal);
-          if (g && g.c === c && g.i === a.id) continue;
-        }
+        if (chewed && chewed.c === c && chewed.i === a.id) continue;
         this.poseGem(c, a, time);
       }
       this.gems[c].instanceMatrix.needsUpdate = true;
@@ -268,7 +268,7 @@ export class ChunkField {
 
   markDirty(x: number, y: number): void {
     // neighbors too: edge-highlighting of adjacent tiles can cross chunk seams
-    for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    for (const [dx, dy] of DIRTY_RING) {
       const cx = Math.floor((x + dx) / CHUNK), cy = Math.floor((y + dy) / CHUNK);
       if (cx >= 0 && cx < CHUNKS_X && cy >= 0) this.dirty.add(this.key(cx, cy));
     }

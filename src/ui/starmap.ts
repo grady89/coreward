@@ -896,5 +896,18 @@ export class Starmap {
     document.body.style.cursor = '';
     document.body.classList.remove('sm-open');
     this.overlay.remove(); // the veil stays and removes itself
+    // the chart is rebuilt from scratch every open: planet canvas textures,
+    // star shells, streaks — free the GL side or each open leaks it all
+    const mats = new Set<THREE.Material>();
+    this.scene.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose?.();
+      const list = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+      for (const mat of list) mats.add(mat);
+    });
+    for (const mat of mats) {
+      (mat as THREE.MeshBasicMaterial).map?.dispose();
+      mat.dispose();
+    }
   }
 }

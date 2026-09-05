@@ -108,9 +108,18 @@ export class PodController {
 
     if (this.drilling) {
       this.still = 0;
-      this.stepDrilling(dt, time);
-      st.fuelSpent += Math.max(0, fuelBefore - st.fuel);
-      return;
+      // lava and depth heat do not care that the drill is busy — without
+      // this, holding the drill against a hard boulder was a free heat-proof
+      // stance for as long as the fuel lasted
+      this.hazards(dt);
+      if (this.held > 0) {
+        // something has you: the cut is dropped, the grip plays out below
+        this.abortDrill();
+      } else {
+        this.stepDrilling(dt, time);
+        st.fuelSpent += Math.max(0, fuelBefore - st.fuel);
+        return;
+      }
     }
 
     if (this.held > 0) {
@@ -359,7 +368,7 @@ export class PodController {
     if (dr.dir !== 'down') this.py += (targetY - this.py) * pull;
 
     if (st.fuel <= 0 && dr.progress < 1) {
-      this.drilling = null;
+      this.abortDrill();
       this.strandedCheck(time);
       return;
     }
@@ -592,12 +601,34 @@ export class PodController {
   /** rises while a fragment rides in the hold — the climb's soft clock */
   private carryHeat = 0;
 
+  /**
+   * Abandon a cut mid-way. The drill's pull toward the tile runs without
+   * collision, so a side-drill abort must back the pod out of the still-solid
+   * tile or it is left perched half inside the rock.
+   */
+  private abortDrill(): void {
+    const dr = this.drilling;
+    if (!dr) return;
+    this.drilling = null;
+    if (dr.dir === 'left') this.px = Math.max(this.px, dr.x + 1 + HW + EPS);
+    else if (dr.dir === 'right') this.px = Math.min(this.px, dr.x - HW - EPS);
+  }
+
+  /** true between the killing blow and the respawn — one death, one panel */
+  private dead = false;
+
   private applyDamage(amount: number, cause: string): void {
     if (amount <= 0) return;
     const st = this.state;
+    if (st.hull > 0) this.dead = false; // any respawn path restores hull
     st.hull = Math.max(0, st.hull - amount);
     this.ev.onDamage(amount, cause);
-    if (st.hull <= 0) this.ev.onDeath(cause);
+    if (st.hull <= 0 && !this.dead) {
+      // latch: a wyrm bite landing the same frame as the killing heat tick
+      // must not open a second death panel and charge the fee twice
+      this.dead = true;
+      this.ev.onDeath(cause);
+    }
   }
 
   private milestones(): void {

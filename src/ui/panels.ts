@@ -23,7 +23,7 @@ import {
   Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
 } from '../game/contracts';
 import { ENDING_PAGES, EndingKind, transmissionById } from '../game/narrative';
-import { EXTRACT_OFFER } from '../config';
+import { EXTRACT_OFFER, TILE_M } from '../config';
 import { GLYPHS, glyphSvg } from '../world/glyphs';
 import { FAUNA, faunaSeen } from '../game/bestiary';
 import { DISPATCH_VOICED, LAMPLIGHTERS_VOICED, dispatchVoiceUrl, lamplightersVoiceUrl } from '../audio/voice-manifest';
@@ -1162,7 +1162,9 @@ export class Panels {
     this.body().querySelector('#dp-r')?.addEventListener('click', () => {
       const afford = Math.min(missing, st.money / repairRate);
       if (afford < 1) { this.ctx.audio.denied(); return; }
-      st.money -= Math.ceil(afford * repairRate);
+      // no ceil: a money-limited repair spends exactly the balance — rounding
+      // up on a fractional balance drove the account below zero
+      st.money = Math.max(0, st.money - afford * repairRate);
       st.hull = Math.min(st.maxHull, st.hull + afford);
       this.ctx.audio.buy();
       this.ctx.saveNow();
@@ -1175,7 +1177,8 @@ export class Panels {
 
     if (st.contract) {
       const p = evaluate(st.contract, {
-        bestDepthM: st.bestDepthM, totalEarned: st.totalEarned,
+        bestDepthM: st.bestDepthM, worldDepthM: st.worldBestRow * TILE_M,
+        totalEarned: st.totalEarned,
         fuelSpent: st.fuelSpent, contractOre: st.contractOre, now: st.playTime,
       });
       const tl = timeLeft(st.contract, st.playTime);
@@ -1226,7 +1229,7 @@ export class Panels {
       return;
     }
 
-    const list = offers(st.bestDepthM, st.activeWorld, st.contractDay);
+    const list = offers(st.bestDepthM, st.worldBestRow * TILE_M, st.activeWorld, st.contractDay);
     this.body().innerHTML = `
       ${this.header('CONTRACT BOARD')}
       <div class="c-sub">${st.contractsDone} completed · one active at a time</div>

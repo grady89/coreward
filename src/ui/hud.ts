@@ -175,14 +175,28 @@ export class Hud {
     this.hazeEl.classList.toggle('cold', ACTIVE.hazard.cold);
   }
 
+  // last-written values: this runs every frame, and a textContent write
+  // (even with an identical string) replaces the text node — diff first.
+  // The cargo list is diffed against OUR last string: reading innerHTML
+  // back forces the browser to serialize the DOM sixty times a second.
+  private lastFuel = -1;
+  private lastHull = -1;
+  private lastMoney = '';
+  private lastDepth = -1;
+  private lastStratum = '';
+  private lastCargoHtml = '';
+  private lastCargoCount = '';
+
   update(st: GameState, depthM: number, row: number, heatFrac: number, dt: number): void {
     const fuelFrac = st.fuel / st.maxFuel;
     this.fuelFill.style.transform = `scaleX(${fuelFrac})`;
-    this.fuelVal.textContent = Math.ceil(st.fuel).toString();
+    const fuel = Math.ceil(st.fuel);
+    if (fuel !== this.lastFuel) { this.lastFuel = fuel; this.fuelVal.textContent = fuel.toString(); }
     this.fuelBar.classList.toggle('low', fuelFrac < LOW_FUEL_FRAC);
 
     this.hullFill.style.transform = `scaleX(${st.hull / st.maxHull})`;
-    this.hullVal.textContent = Math.ceil(st.hull).toString();
+    const hull = Math.ceil(st.hull);
+    if (hull !== this.lastHull) { this.lastHull = hull; this.hullVal.textContent = hull.toString(); }
 
     this.heatWrap.classList.toggle('on', heatFrac > 0.01);
     this.heatFill.style.transform = `scaleX(${Math.min(1, heatFrac)})`;
@@ -194,30 +208,35 @@ export class Hud {
       this.shownMoney += (target - this.shownMoney) * Math.min(1, dt * 8);
       if (Math.abs(this.shownMoney - target) < 1) this.shownMoney = target;
     } else this.shownMoney = target;
-    this.moneyEl.textContent = fmtMoney(this.shownMoney);
+    const money = fmtMoney(this.shownMoney);
+    if (money !== this.lastMoney) { this.lastMoney = money; this.moneyEl.textContent = money; }
 
-    this.depthEl.textContent = depthM + 'm';
-    this.stratumEl.textContent = ACTIVE.strata[stratumIndex(Math.max(0, row))];
+    if (depthM !== this.lastDepth) { this.lastDepth = depthM; this.depthEl.textContent = depthM + 'm'; }
+    const stratum = ACTIVE.strata[stratumIndex(Math.max(0, row))];
+    if (stratum !== this.lastStratum) { this.lastStratum = stratum; this.stratumEl.textContent = stratum; }
 
     // a fragment in the hold IS the hold
     if (st.carrying) {
-      this.cargoCount.textContent = '◆ FRAGMENT';
-      this.cargoCount.classList.add('full');
+      this.setCargoCount('◆ FRAGMENT', true);
       const name = worldById(st.carrying)?.coreName ?? 'THE FRAGMENT';
-      const row = `<div class="c-row"><b>${name}</b></div>`;
-      if (this.cargoList.innerHTML !== row) this.cargoList.innerHTML = row;
+      const rowHtml = `<div class="c-row"><b>${name}</b></div>`;
+      if (rowHtml !== this.lastCargoHtml) { this.lastCargoHtml = rowHtml; this.cargoList.innerHTML = rowHtml; }
       return;
     }
     const cap = st.cargoCap, n = st.cargoCount;
-    this.cargoCount.textContent = `${n} / ${cap}`;
-    this.cargoCount.classList.toggle('full', n >= cap);
+    this.setCargoCount(`${n} / ${cap}`, n >= cap);
     // itemized list, most valuable first
     const rows = [...st.cargo.entries()]
       .sort((a, b) => def(b[0]).value - def(a[0]).value)
       .slice(0, 6)
       .map(([t, c]) => `<div class="c-row"><img class="c-ico" src="${oreIcon(t)}" alt="" /><b>${def(t).name}</b> × ${c}</div>`)
       .join('');
-    if (this.cargoList.innerHTML !== rows) this.cargoList.innerHTML = rows;
+    if (rows !== this.lastCargoHtml) { this.lastCargoHtml = rows; this.cargoList.innerHTML = rows; }
+  }
+
+  private setCargoCount(text: string, full: boolean): void {
+    if (text !== this.lastCargoCount) { this.lastCargoCount = text; this.cargoCount.textContent = text; }
+    this.cargoCount.classList.toggle('full', full);
   }
 
   /**
@@ -244,7 +263,12 @@ export class Hud {
     }
   }
 
+  private lastPrompt: string | null = null;
   setPrompt(html: string | null): void {
+    // callers rebuild the prompt template every frame while docked or near a
+    // wreck — parse the HTML only when the string actually changes
+    if (html === this.lastPrompt) return;
+    this.lastPrompt = html;
     if (html) {
       this.promptEl.innerHTML = glyphs(html);
       this.promptEl.classList.add('visible');

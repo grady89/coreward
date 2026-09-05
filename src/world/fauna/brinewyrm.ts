@@ -196,6 +196,8 @@ export class Brinewyrm implements Creature {
     if (this.alive && this.phase === 'breach' && Math.hypot(this.x - x, this.y - y) < 1) { this.latch = 0; this.phase = 'fall'; this.phaseT = 0; }
   }
 
+  private candBuf: [number, number][] = [[0, 0], [0, 0], [0, 0], [0, 0]];
+
   /** cruise inside the pool: pick a brine tile to swim to, swim there */
   private cruise(dt: number): void {
     this.wanderT -= dt;
@@ -211,7 +213,12 @@ export class Brinewyrm implements Creature {
     const dx = this.wanderX - this.x, dy = this.wanderY - this.y;
     const d = Math.hypot(dx, dy) || 1;
     const sp = 2.2;
-    const cand: [number, number][] = [[dx / d, dy / d], [Math.sign(dx), 0], [0, Math.sign(dy)], [this.dirX, this.dirY]];
+    // filled in place: cruise steering runs every frame the wyrm lives
+    const cand = this.candBuf;
+    cand[0][0] = dx / d; cand[0][1] = dy / d;
+    cand[1][0] = Math.sign(dx); cand[1][1] = 0;
+    cand[2][0] = 0; cand[2][1] = Math.sign(dy);
+    cand[3][0] = this.dirX; cand[3][1] = this.dirY;
     for (const [cx, cy] of cand) {
       if (cx === 0 && cy === 0) continue;
       const len = Math.hypot(cx, cy) || 1;

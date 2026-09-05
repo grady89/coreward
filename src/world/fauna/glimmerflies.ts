@@ -38,6 +38,7 @@ interface Swarm {
   darkFor: number;
   life: number;
   lash: number;       // the collapse-and-burst on first alert
+  woke: boolean;      // the alert toast/stinger fires once per swarm, not per re-notice
 }
 
 export class Glimmerflies implements Creature {
@@ -66,7 +67,7 @@ export class Glimmerflies implements Creature {
     this.glow.visible = false;
     scene.add(this.glow);
     for (let i = 0; i < MAX_SWARMS; i++) {
-      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0 });
+      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, woke: false });
     }
   }
 
@@ -93,7 +94,7 @@ export class Glimmerflies implements Creature {
       const s = this.swarms[slot];
       s.alive = true;
       s.ax = x + 0.5; s.ay = -(y + 0.5);
-      s.alerted = false; s.darkFor = 0; s.life = 0; s.lash = 0;
+      s.alerted = false; s.darkFor = 0; s.life = 0; s.lash = 0; s.woke = false;
       const n = SWARM_MIN + Math.floor(Math.random() * (SWARM_MAX - SWARM_MIN + 1));
       const want = level === 'reduced' ? Math.ceil(n / 2) : n;
       for (let i = 0; i < want && this.flies.length < MAX_FLIES; i++) {
@@ -176,7 +177,11 @@ export class Glimmerflies implements Creature {
       const dist = Math.hypot(podX - s.ax, podY - s.ay);
       const flareNear = flare ? Math.hypot(flare.x - s.ax, flare.y - s.ay) < NOTICE_RANGE * 1.6 : false;
       if ((lampOn && dist < NOTICE_RANGE) || flareNear) {
-        if (!s.alerted) { s.alerted = true; s.lash = 0.9; ctx.onAlert(); ctx.onEvent('swarm-wake', s.ax, s.ay); }
+        if (!s.alerted) {
+          s.alerted = true; s.lash = 0.9;
+          // toast + stinger once per swarm — lamp-flicking must not machine-gun it
+          if (!s.woke) { s.woke = true; ctx.onAlert(); ctx.onEvent('swarm-wake', s.ax, s.ay); }
+        }
         s.darkFor = 0;
       } else if (s.alerted) {
         s.darkFor += dt;

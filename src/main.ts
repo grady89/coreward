@@ -62,6 +62,25 @@ type Action =
   | 'shaftlight' | 'depot' | 'lamp' | 'map' | 'recall' | 'warpsell' | 'mute'
   | 'zoomin' | 'zoomout';
 
+/** free every GL resource a retired scene holds; disposing a shared material
+ *  or texture is safe — three.js re-uploads it the next time it is drawn */
+function disposeSceneDeep(scene: THREE.Scene): void {
+  const mats = new Set<THREE.Material>();
+  scene.traverse(o => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const list = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+    for (const mat of list) mats.add(mat);
+  });
+  for (const mat of mats) {
+    const anyMat = mat as unknown as Record<string, { dispose?: () => void } | undefined>;
+    for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'aoMap']) {
+      anyMat[k]?.dispose?.();
+    }
+    mat.dispose();
+  }
+}
+
 class Game {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
@@ -160,7 +179,8 @@ class Game {
 
   constructor() {
     const canvas = document.getElementById('game') as HTMLCanvasElement;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    // high-performance: a dual-GPU laptop must not hand us the iGPU
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -226,6 +246,8 @@ class Game {
 
     this.bindInput();
     addEventListener('resize', () => {
+      // the window may have moved to a monitor with a different pixel density
+      this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
       this.renderer.setSize(innerWidth, innerHeight);
       this.cam.camera.aspect = innerWidth / innerHeight;
       this.cam.camera.updateProjectionMatrix();
@@ -643,6 +665,11 @@ class Game {
     setActiveWorld(this.state.activeWorld, this.state.extracted.has(this.state.activeWorld));
     this.faunaDead = !!ACTIVE.husk || this.state.extracted.has(this.state.activeWorld);
     this.hud.applyWorld();
+    // the GL side of the old world does not follow the JS side to the grave:
+    // three.js frees buffers and textures only on an explicit dispose, so
+    // without this every transit leaks a full world of VRAM. Shared module
+    // materials re-upload once on the next build — safe, and bounded.
+    if (this.scene) disposeSceneDeep(this.scene);
     this.scene = new THREE.Scene();
     const ws = this.state.worlds[this.state.activeWorld];
     this.looted = new Set(ws?.looted ?? []);
@@ -888,6 +915,13 @@ class Game {
     this.hud.setConsumables(this.state.flares, this.state.charges);
     this.hud.setLamp(this.lampOn);
     this.mode = 'play';
+    // the save was closed standing at an ending's fork: put the choice back
+    const pending = this.state.pendingEnding as EndingKind | null;
+    if (pending) {
+      this.pendingEnding = pending;
+      this.endingSnapshot = this.state.endingSnapshot;
+      this.panels.open('finale', { ending: pending });
+    }
   }
 
   private respawn(frac: number): void {
@@ -1739,7 +1773,11 @@ class Game {
     }
     if (this.mode !== 'play' && this.mode !== 'eva') return;
     if (this.panels.isOpen) {
-      if (this.panels.current !== 'death' && this.panels.current !== 'rescue' && this.panels.current !== 'ending') {
+      // fate panels never close on Esc — 'finale' guards the one-shot
+      // epilogue choice (CONTINUE/rewind); dismissing it would strand the
+      // player past the fork with no way back to the panel
+      if (this.panels.current !== 'death' && this.panels.current !== 'rescue'
+        && this.panels.current !== 'ending' && this.panels.current !== 'finale') {
         this.audio.click();
         this.panels.close();
       }
@@ -1873,8 +1911,39 @@ class Game {
     this.ember.update(this.time, camRow);
     this.finale.frame(dt, this.time, camRow);
     if (this.staging) this.tickSandbox(dt);
+    this.cullLights();
     this.renderer.render(this.scene, this.cam.camera);
   }
+
+  private lightCullAt = -9;
+
+  /**
+   * Forward rendering folds EVERY visible light into every lit material's
+   * fragment loop, distance or no distance — a dock lamp five hundred tiles
+   * overhead still costs full-screen shading. Cull any point/spot light
+   * whose falloff radius cannot reach the view. Owners keep authority over
+   * turning lights off; we only turn back on what we ourselves culled.
+   */
+  private cullLights(): void {
+    if (this.time - this.lightCullAt < 0.12) return;
+    this.lightCullAt = this.time;
+    const cx = this.cam.camera.position.x, cy = this.cam.camera.position.y;
+    this.scene.traverse(o => {
+      const l = o as THREE.PointLight;
+      if (!(l.isPointLight || (l as unknown as THREE.SpotLight).isSpotLight)) return;
+      if (!l.distance) return; // unbounded lights are someone's deliberate sun
+      l.getWorldPosition(this.lightPos);
+      const reach = l.distance + 24; // pad: half a zoomed-out view, generously
+      const dx = this.lightPos.x - cx, dy = this.lightPos.y - cy;
+      if (dx * dx + dy * dy > reach * reach) {
+        if (l.visible) { l.visible = false; l.userData.culled = true; }
+      } else if (l.userData.culled) {
+        l.visible = true;
+        l.userData.culled = false;
+      }
+    });
+  }
+  private lightPos = new THREE.Vector3();
 
   private playFrame(dt: number): void {
     const paused = this.panels.isOpen;
@@ -2101,14 +2170,24 @@ class Game {
     });
 
     this.hud.update(st, this.ctrl.depthM, this.ctrl.row, this.ctrl.heatFrac, Math.max(dt, 0.001));
-    this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time,
-      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
-      this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : [],
-      this.state.spill?.world === this.state.activeWorld ? this.state.spill : null);
+    if (this.map.visible) {
+      this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time,
+        this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
+        this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : [],
+        this.state.spill?.world === this.state.activeWorld ? this.state.spill : null);
+    }
 
     if (!paused && dt > 0) st.playTime += dt;
-    this.updateContractHud();
+    // the contract strip needs a few updates a second, not sixty — but a
+    // change of contract (accepted, claimed, abandoned) shows immediately
+    if (st.contract !== this.contractShown || this.time - this.contractHudAt >= 0.25) {
+      this.contractShown = st.contract;
+      this.contractHudAt = this.time;
+      this.updateContractHud();
+    }
   }
+  private contractHudAt = -9;
+  private contractShown: GameState['contract'] | undefined;
 
   /** evaluate narrative triggers and hand the winner to Dispatch */
   private pumpNarrative(dt: number): void {
@@ -2127,7 +2206,9 @@ class Game {
     }
     const stats: WorldStats = {
       world: st.activeWorld,
-      depthM: st.bestDepthM,
+      // Dispatch narrates THIS dig, not the résumé: her 200m line must not
+      // fire at the landing pad because some other world went to 1000m
+      depthM: st.worldBestRow * TILE_M,
       totalEarned: st.totalEarned,
       wrecksSalvaged: st.wrecksSalvaged,
       contractsDone: st.contractsDone,
@@ -2149,8 +2230,10 @@ class Game {
       if (e.id === 'extraction-order') st.extractOrderHeard = true;
       this.state.persist();
     }
-    this.flagDied = false;
-    this.flagStranded = false;
+    // a flag survives until ITS line plays — another event winning the same
+    // pump must not swallow her one first-death transmission forever
+    if (e?.id === 'first-death') this.flagDied = false;
+    if (e?.id === 'first-stranded') this.flagStranded = false;
   }
 
   private updateContractHud(): void {
@@ -2160,7 +2243,8 @@ class Game {
       return;
     }
     const p = evaluate(st.contract, {
-      bestDepthM: st.bestDepthM, totalEarned: st.totalEarned,
+      bestDepthM: st.bestDepthM, worldDepthM: st.worldBestRow * TILE_M,
+      totalEarned: st.totalEarned,
       fuelSpent: st.fuelSpent, contractOre: st.contractOre, now: st.playTime,
     });
     // latch the moment the job is done, so nothing afterwards can undo it
@@ -2356,7 +2440,9 @@ class Game {
         this.faunaSfx(id, 0.3, () => this.audio.wardenStep(vol));
         break;
       case 'warden-wake':
-        this.audio.wardenWake();
+        // re-engages fire the event too — lamp-flicking near a Warden must
+        // not machine-gun the stinger
+        this.faunaSfx(id, 4, () => this.audio.wardenWake());
         break;
       case 'warden-flash':
         this.faunaSfx(id, 0.5, () => this.audio.wardenFlash());
@@ -2544,7 +2630,11 @@ class Game {
   private triggerEnding(kind: EndingKind): void {
     this.pendingEnding = kind;
     if (!this.endingSnapshot) this.snapshotFork();
-    GameState.markEnding(kind);
+    // the fork rides the save: a reload here must re-offer the choice, not
+    // resume quietly into the post-ending world with the rewind gone
+    this.state.pendingEnding = kind;
+    this.state.endingSnapshot = this.endingSnapshot;
+    this.state.markEnding(kind);
     this.hud.hide();
     this.hud.setPrompt(null);
     this.comms.clear();
@@ -2576,6 +2666,8 @@ class Game {
     }
     this.pendingEnding = null;
     this.endingSnapshot = null;
+    st.pendingEnding = null;
+    st.endingSnapshot = null;
     this.setupWorld();
     this.ctrl.respawnAtSurface();
     this.cam.snap(this.ctrl.px, 2, 15.5);

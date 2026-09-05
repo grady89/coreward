@@ -133,6 +133,16 @@ export class GameState {
   huskRead = new Set<number>();
   /** Dispatch has relayed Cindral Extraction Order 9-1-1 */
   extractOrderHeard = false;
+  /**
+   * An ending page was reached but its epilogue choice (continue/rewind) has
+   * not been made. Persisted so a reload at the fork re-offers the choice
+   * instead of quietly resuming into the post-ending world.
+   */
+  pendingEnding: string | null = null;
+  endingSnapshot: {
+    money: number; carrying: string | null;
+    extracted: string[]; delivered: string[]; reseated: string[]; offered: string[];
+  } | null = null;
   /** native material mined, per world */
   native: Record<string, number> = {};
   /** acclimation tiers fitted, per world */
@@ -339,6 +349,8 @@ export class GameState {
     this.huskVisited = false;
     this.huskRead.clear();
     this.extractOrderHeard = false;
+    this.pendingEnding = null;
+    this.endingSnapshot = null;
     this.activeWorld = 'veil3';
     this.worlds = {};
   }
@@ -349,7 +361,9 @@ export class GameState {
     try { return new Set(JSON.parse(localStorage.getItem(GameState.ENDINGS_KEY) ?? '[]')); }
     catch { return new Set(); }
   }
-  static markEnding(kind: string): void {
+  /** instance, not static: a dev/sandbox session must not stamp real emblems */
+  markEnding(kind: string): void {
+    if (this.ephemeral) return;
     try {
       const s = GameState.endingsSeen();
       s.add(kind);
@@ -435,6 +449,8 @@ export class GameState {
         huskVisited: this.huskVisited,
         huskRead: [...this.huskRead],
         extractOrderHeard: this.extractOrderHeard,
+        pendingEnding: this.pendingEnding,
+        endingSnapshot: this.endingSnapshot,
         activeWorld: this.activeWorld,
         worlds: this.worlds,
       }));
@@ -501,6 +517,8 @@ export class GameState {
         this.huskVisited = !!d.huskVisited;
         this.huskRead = new Set(d.huskRead ?? []);
         this.extractOrderHeard = !!d.extractOrderHeard;
+        this.pendingEnding = d.pendingEnding ?? null;
+        this.endingSnapshot = d.endingSnapshot ?? null;
         this.activeWorld = d.activeWorld ?? 'veil3';
         this.worlds = d.worlds ?? {};
         return true;

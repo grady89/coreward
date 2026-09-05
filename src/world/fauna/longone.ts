@@ -183,15 +183,20 @@ export class LongOne implements Creature {
   }
 
   /** steer toward a point through passages wide enough for its bulk */
+  private candBuf: [number, number][] = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]];
   private steer(tx: number, ty: number, speed: number, dt: number): boolean {
     const dx = tx - this.x, dy = ty - this.y;
     const d = Math.hypot(dx, dy) || 1;
     const wx = dx / d, wy = dy / d;
     const step = speed * dt;
-    const cand: [number, number][] = [
-      [wx, wy], [Math.sign(wx), 0], [0, Math.sign(wy)], [this.dirX, this.dirY],
-      [-Math.sign(wy) || 1, 0], [0, -Math.sign(wx) || 1],
-    ];
+    // filled in place: this runs every frame a hunter is alive
+    const cand = this.candBuf;
+    cand[0][0] = wx; cand[0][1] = wy;
+    cand[1][0] = Math.sign(wx); cand[1][1] = 0;
+    cand[2][0] = 0; cand[2][1] = Math.sign(wy);
+    cand[3][0] = this.dirX; cand[3][1] = this.dirY;
+    cand[4][0] = -Math.sign(wy) || 1; cand[4][1] = 0;
+    cand[5][0] = 0; cand[5][1] = -Math.sign(wx) || 1;
     for (const [cx, cy] of cand) {
       if (cx === 0 && cy === 0) continue;
       const len = Math.hypot(cx, cy) || 1;
@@ -231,7 +236,9 @@ export class LongOne implements Creature {
     }
 
     this.life += dt;
-    this.phaseT += dt;
+    // a lanced worm's phase clock stops with it — otherwise a stun during
+    // 'emerging' skips the lerp and the head teleports out of the wall
+    if (this.stunT <= 0) this.phaseT += dt;
     const dx = podX - this.x, dy = podY - this.y;
     const dist = Math.hypot(dx, dy);
     const speedMul = level === 'reduced' ? 0.75 : 1;

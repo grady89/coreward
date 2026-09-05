@@ -36,6 +36,8 @@ export class Riptide implements Creature {
   private eyeCooldown = 12;
   private eyeOpen = 0;
   private entered = false;
+  /** alert toast fires once per riptide, not once per re-entry of its field */
+  private woke = false;
   private spin = 0;
 
   private motes: THREE.Points;
@@ -125,7 +127,7 @@ export class Riptide implements Creature {
       this.x = x + 0.5; this.y = -(y + 0.5);
       this.tx = this.x; this.ty = this.y;
       this.life = 0; this.retarget = 0; this.eyeCooldown = 9 + Math.random() * 6; this.eyeT = 0; this.eyeOpen = 0;
-      this.entered = false; this.grip = 0;
+      this.entered = false; this.woke = false; this.grip = 0;
       this.seed();
       this.motes.visible = true; this.shadow.visible = true;
       return true;
@@ -211,8 +213,7 @@ export class Riptide implements Creature {
     }
     if (!this.entered && near > 0.15 && room > 0.3) {
       this.entered = true;
-      ctx.onAlert();
-      ctx.onEvent('riptide-enter', this.x, this.y);
+      if (!this.woke) { this.woke = true; ctx.onAlert(); ctx.onEvent('riptide-enter', this.x, this.y); }
     }
     if (this.entered && near <= 0) this.entered = false;
     // flares tumble in too — a lit thing spiralling into the dark is the tell
@@ -266,6 +267,24 @@ export class Riptide implements Creature {
     const showMotes = clamp01(1.4 - dist / (RADIUS * 2.2));
     this.moteMat.opacity = lerp(this.moteMat.opacity, 0.55 * showMotes + strength * 0.4, Math.min(1, dt * 2));
     this.moteMat.color.setHex(ACTIVE.gemTint);
+    // 1400 motes × trig + a terrain probe each, plus a full buffer upload —
+    // not worth a frame's budget when the field has faded out of sight
+    if (showMotes <= 0 && this.moteMat.opacity < 0.02) {
+      this.motes.visible = false;
+    } else {
+      this.motes.visible = true;
+      this.animateMotes(dt, strength);
+    }
+
+    // ---- the shadow behind the rock ----
+    this.shadow.position.set(this.x, this.y + Math.sin(time * 0.3) * 0.6, -0.58);
+    this.shadow.rotation.z = Math.sin(time * 0.17) * 0.25;
+    const breathe = 1 + Math.sin(time * 0.5) * 0.06;
+    this.shadow.scale.set(11 * breathe, 2.6 / breathe, 0.6);
+    this.shadowMat.opacity = lerp(this.shadowMat.opacity, clamp01(1.3 - dist / 22) * 0.92, Math.min(1, dt * 1.5));
+  }
+
+  private animateMotes(dt: number, strength: number): void {
     for (let i = 0; i < MOTES; i++) {
       let r = this.moteSeed[i * 3];
       const a0 = this.moteSeed[i * 3 + 1];
@@ -284,12 +303,5 @@ export class Riptide implements Creature {
       this.motePos[i * 3 + 2] = 0.2 + depth * 0.5;
     }
     (this.motes.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-
-    // ---- the shadow behind the rock ----
-    this.shadow.position.set(this.x, this.y + Math.sin(time * 0.3) * 0.6, -0.58);
-    this.shadow.rotation.z = Math.sin(time * 0.17) * 0.25;
-    const breathe = 1 + Math.sin(time * 0.5) * 0.06;
-    this.shadow.scale.set(11 * breathe, 2.6 / breathe, 0.6);
-    this.shadowMat.opacity = lerp(this.shadowMat.opacity, clamp01(1.3 - dist / 22) * 0.92, Math.min(1, dt * 1.5));
   }
 }

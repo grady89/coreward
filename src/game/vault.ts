@@ -2937,7 +2937,14 @@ export class VaultRun {
       const t = this.trail[i];
       t.t -= dt;
       (t.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, t.t * 1.6);
-      if (t.t <= 0) { this.scene.remove(t.mesh); this.trail.splice(i, 1); }
+      if (t.t <= 0) {
+        // each ghost owns a fresh geometry + material; out of the scene by
+        // dispose() time, so they must be freed here or they pile up in VRAM
+        this.scene.remove(t.mesh);
+        t.mesh.geometry.dispose();
+        (t.mesh.material as THREE.Material).dispose();
+        this.trail.splice(i, 1);
+      }
     }
     // re-form grow-in, cosmetic only — input already works
     if (this.reformT > 0) {
@@ -3050,9 +3057,18 @@ export class VaultRun {
     this.hud.remove();
     this.card?.remove();
     this.voice?.remove();
+    const mats = new Set<THREE.Material>();
     this.scene.traverse(o => {
       const m = o as THREE.Mesh;
       if (m.geometry) m.geometry.dispose?.();
+      const list = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+      for (const mat of list) mats.add(mat);
     });
+    for (const mat of mats) mat.dispose();
+    // ghosts still fading when the run ends live outside the scene traverse
+    for (const t of this.trail) {
+      t.mesh.geometry.dispose();
+      (t.mesh.material as THREE.Material).dispose();
+    }
   }
 }

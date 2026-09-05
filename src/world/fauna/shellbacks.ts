@@ -95,6 +95,7 @@ export class Shellbacks implements Creature {
   }
 
   reset(): void {
+    this.pendingKill = 0;
     for (const b of this.backs) b.alive = false;
     this.plates.count = 0; this.legs.count = 0; this.feelers.count = 0;
     for (const l of this.lights) l.visible = false;
@@ -131,10 +132,11 @@ export class Shellbacks implements Creature {
       this.particles.dustBurst(b.x, b.y, 0xe8dff2, { count: 30, speed: 4, up: 2.5, life: 1, gravity: 8, spread: 0.9 });
       this.particles.sparkBurst(b.x, b.y, 0xd8c8ff, { count: 12, speed: 2.5, up: 2, life: 0.8, gravity: 5, spread: 0.6 });
       this.die(b);
-      this.pendingKill = true;
+      this.pendingKill++;
     }
   }
-  private pendingKill = false;
+  /** a counter, not a flag — one blast can take both shellbacks */
+  private pendingKill = 0;
 
   lance(x: number, y: number, dir: number, range: number): void {
     for (const b of this.backs) {
@@ -226,8 +228,8 @@ export class Shellbacks implements Creature {
 
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, time } = ctx;
-    if (this.pendingKill) {
-      this.pendingKill = false;
+    while (this.pendingKill > 0) {
+      this.pendingKill--;
       ctx.native(2);
       ctx.onEvent('shellback-killed', podX, podY);
     }

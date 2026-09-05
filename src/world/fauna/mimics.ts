@@ -114,8 +114,11 @@ export class Mimics implements Creature {
   }
 
   private spawn(x: number, y: number, ctx: ThreatCtx): void {
-    let c = this.crabs.find(c => !c.alive);
-    if (!c) { c = this.crabs[0]; }
+    // prefer a truly free slot over one still crumbling; with all three
+    // loose, the stone is just a stone — evicting a live crab would either
+    // vanish its stolen ore or double-charge the hold for one hatch
+    const c = this.crabs.find(c => !c.alive && c.deadT <= 0) ?? this.crabs.find(c => !c.alive);
+    if (!c) return;
     c.alive = true;
     c.x = x + 0.5; c.y = -(y + 0.5);
     c.vx = 0; c.vy = 0;
