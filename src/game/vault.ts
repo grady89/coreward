@@ -1060,13 +1060,17 @@ export class VaultRun {
 
     // master stone
     this.masterGroup = new THREE.Group();
+    // The whole sanctum lives BEHIND the play plane: the body walks in
+    // front of the stone, never into it. The slab's front face sits at
+    // z -0.35 and the dressing recesses further still.
     const slab = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.8, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x2a2738, roughness: 0.4, metalness: 0.3 }));
+    slab.position.z = -0.55;
     this.masterGroup.add(slab);
     // the mark burns the world's own vivid note, the same hue the stone
     // outside was wearing when you stepped through it
     const mark = buildGlyphMark(this.glyph, 1.1, this.rimHue, true);
-    mark.position.z = 0.25;
+    mark.position.z = -0.33;
     this.masterGroup.add(mark);
     // the chamber frame sits closer than the old following camera did, so the
     // stone's own glow is pulled back off the mark to stop it blowing out

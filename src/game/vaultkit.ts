@@ -190,19 +190,23 @@ export interface SconceParts {
 }
 
 /**
- * A wall sconce, from the light-family sheet: a carved backplate on the
- * masonry, a bracket arm reaching out of it, and a wide shallow bronze cup
- * on a turned baluster stem that drops to a finial. The flame stands ON the
- * cup, never in it — a wick sunk in its own housing is a light nobody can
- * see is lit, which is the one thing a checkpoint may never be.
+ * A guild lamp, to the lamppost sheet (reference-art/architecture/lamppost):
+ * a CAGED LANTERN — a drip pan, four bronze ribs around a glass drum with
+ * two cage rings, an enamelled oxide crown and a finial — standing on real
+ * architecture. On a wall that is the carved backplate and bracket arm; hung,
+ * the chain and collar; on a floor, the reference's own stepped stone plinth
+ * and turned bronze column. The flame burns INSIDE the cage but is READ
+ * through it: the ribs are set off the viewing axis and the glass is a
+ * breath, because a light nobody can see is lit is the one thing a
+ * checkpoint may never be.
  *
- * `dead` is the famine's cup (§III `deadLight`): the same fitting with the
- * bronze bowl replaced by cracked stone, its lip broken through, wax run
- * down the outside and long cold. What burns in it is blue-white and it
+ * `dead` is the famine's lantern (§III `deadLight`): the same fitting gone
+ * to ash — cracked stone pan, a rib torn away, the glass long shattered,
+ * wax run down the outside and cold. What burns in it is blue-white and it
  * gives nothing back.
  *
- * The act does the chronology: Act I keeps its carved crown and its finial,
- * Act II has had the ornament taken off it, Act III is mounted crooked.
+ * The act does the chronology: Act I keeps its crown and finial, Act II has
+ * had the ornament taken off it, Act III is mounted crooked.
  */
 export function buildSconce(act: Act, mount: SconceMount, dead: boolean): SconceParts {
   const g = new THREE.Group();
@@ -249,88 +253,152 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
     const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.09, 8), dark);
     boss.position.y = mount.reach;
     hardware.push(boss);
-    const drop = Math.max(0.1, mount.reach - 0.28);
+    // the drop meets the lantern's CROWN, never passes through its cage
+    const drop = Math.max(0.1, mount.reach - 0.64);
     if (drop > 1.1) {
       const chain = buildChain(drop);
       chain.position.y = mount.reach - 0.06;
       hardware.push(chain);
     } else {
       const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, drop, 6), bronze);
-      rod.position.y = drop / 2 + 0.28;
+      rod.position.y = drop / 2 + 0.64;
       hardware.push(rod);
     }
     const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.07, 8), bronze);
-    collar.position.y = 0.3;
+    collar.position.y = 0.66;
     hardware.push(collar);
   } else {
     mountZ = -0.45;
-    // standing: a floor pedestal, the same masonry-and-bronze as everything
-    // else the guild bolted down
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.09, 10), stoneMat(0x6f6b78));
-    base.position.y = -mount.reach;
-    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, Math.max(0.1, mount.reach - 0.14), 8), stoneMat(0x77737f));
-    stand.position.y = -(mount.reach - 0.14) / 2 - 0.05;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8), bronze);
-    cap.position.y = -0.08;
-    hardware.push(base, stand, cap);
+    // standing: the lamppost sheet's pedestal — a stepped stone plinth with
+    // a moulded cap, and a turned bronze column of stacked collars rising
+    // off it. The stone does the standing; the bronze does the reaching.
+    const rise = Math.max(0.5, mount.reach);
+    const stone = stoneMat(0x6f6b78);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.07, 4), stone);
+    foot.rotation.y = Math.PI / 4;
+    foot.position.y = -rise + 0.035;
+    const shaftH = rise * 0.52;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, shaftH, 4), stoneMat(0x77737f));
+    shaft.rotation.y = Math.PI / 4;
+    shaft.position.y = -rise + 0.07 + shaftH / 2;
+    const capY = -rise + 0.07 + shaftH;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.055, 4), stone);
+    cap.rotation.y = Math.PI / 4;
+    cap.position.y = capY + 0.028;
+    hardware.push(foot, shaft, cap);
+    // the turned column: collar, neck, collar, knop — the guild's lathe work
+    const colH = Math.max(0.08, -0.02 - (capY + 0.055));
+    const collarA = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.05, 8), bronze);
+    collarA.position.y = capY + 0.08;
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, colH, 8), bronze);
+    neck.position.y = capY + 0.1 + colH / 2;
+    const collarB = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.045, 0.045, 8), bronze);
+    collarB.position.y = -0.04;
+    hardware.push(collarA, neck, collarB);
+    if (act === 'maintained') {
+      // a service valve on the neck: the machine is plumbed, not decorative
+      const valve = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.05, 6), dark);
+      valve.rotation.z = Math.PI / 2;
+      valve.position.set(0.05, capY + 0.14, 0);
+      hardware.push(valve);
+    }
   }
 
   const cx = onWall ? facing * SCONCE_REACH : 0;
 
-  // the cup. Bronze in a working room; in the famine, cracked stone.
+  // THE LANTERN HEAD, to the lamppost sheet. The drip pan first — bronze in
+  // a working room; in the famine, cracked stone with the wax still on it.
+  const panY = 0.13;
   if (dead) {
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.085, 0.13, 10),
+    const pan = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.09, 0.09, 10),
       new THREE.MeshStandardMaterial({ color: 0x8d8a86, roughness: 0.98, metalness: 0, flatShading: true }));
-    bowl.position.set(cx, 0.18, 0);
-    g.add(bowl);
-    // the lip broken through: two arcs with the bite missing between them
-    const lipMat = new THREE.MeshStandardMaterial({ color: 0x7f7d7a, roughness: 0.98, metalness: 0 });
-    for (const [start, len] of [[0.35, 2.2], [2.9, 2.6]] as [number, number][]) {
-      const arc = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.017, 5, 12, len), lipMat);
-      arc.rotation.x = Math.PI / 2;
-      arc.rotation.z = start;
-      arc.position.set(cx, 0.245, 0);
-      g.add(arc);
-    }
-    // the hairline through the cup, and the second bite lower down
+    pan.position.set(cx, panY, 0);
+    g.add(pan);
+    // the hairline through the pan, and the bite lower down
     const crackMat = new THREE.MeshBasicMaterial({ color: 0x100e16 });
-    for (const [ox, oy, w, rot] of [[0, 0.19, 0.2, 0.6], [-0.05, 0.11, 0.11, -0.85]]) {
-      const cr = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.022), crackMat);
+    for (const [ox, oy, w, rot] of [[0, panY + 0.01, 0.18, 0.6], [-0.05, panY - 0.05, 0.1, -0.85]]) {
+      const cr = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.02), crackMat);
       cr.rotation.z = rot;
       cr.position.set(cx + ox, oy, 0.09);
       g.add(cr);
     }
     // wax that ran down the outside a long time ago and set
     const waxMat = new THREE.MeshStandardMaterial({ color: 0xb6b3ad, roughness: 1, metalness: 0 });
-    for (const [ox, len] of [[-0.09, 0.14], [0.02, 0.09], [0.1, 0.12]]) {
+    for (const [ox, len] of [[-0.09, 0.13], [0.02, 0.08], [0.1, 0.11]]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.009, len, 5), waxMat);
-      w.position.set(cx + ox, 0.2 - len / 2, 0.07);
+      w.position.set(cx + ox, panY - len / 2, 0.07);
       g.add(w);
     }
   } else {
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.075, 0.12, 12), bronze);
-    bowl.position.set(cx, 0.18, 0);
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.02, 6, 16), bronze);
+    const pan = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.08, 0.08, 12), bronze);
+    pan.position.set(cx, panY, 0);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.016, 6, 16), bronze);
     lip.rotation.x = Math.PI / 2;
-    lip.position.set(cx, 0.24, 0);
-    g.add(bowl, lip);
+    lip.position.set(cx, panY + 0.045, 0);
+    g.add(pan, lip);
   }
 
-  // the turned baluster under the cup: stem, knop, and — in a room still
-  // being maintained — the waist and finial drop hung off the bottom
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.1, 6), bronze);
-  stem.position.set(cx, 0.06, 0);
-  const knop = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), bronze);
-  knop.scale.y = 0.72;
-  knop.position.set(cx, 0, 0);
-  g.add(stem, knop);
-  if (act !== 'stripped' && mount.kind !== 'floor') {
-    const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.034, 0.09, 6), bronze);
-    waist.position.set(cx, -0.07, 0);
-    const drop = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.13, 8), bronze);
-    drop.rotation.z = Math.PI;
-    drop.position.set(cx, -0.18, 0);
-    g.add(waist, drop);
+  // The cage: four ribs around the glass, set 45° off the viewing axis so
+  // the flame is read BETWEEN them, and two rings holding the drum. The
+  // famine's cage has a rib torn away and its glass is long gone.
+  const ribR = 0.145, ribH = 0.34, ribY0 = panY + 0.05;
+  const ribs = dead ? [0.25, 2.36, 3.93] : [0.785, 2.36, 3.93, 5.5];
+  for (const a of ribs) {
+    const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, ribH, 5), bronze);
+    rib.position.set(cx + Math.cos(a) * ribR, ribY0 + ribH / 2, Math.sin(a) * ribR * 0.5);
+    g.add(rib);
+  }
+  for (const ry of dead ? [ribY0 + 0.24] : [ribY0 + 0.1, ribY0 + 0.24]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(ribR, 0.011, 5, 14, dead ? 4.6 : Math.PI * 2), bronze);
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.z = 0.5;
+    ring.position.set(cx, ry, 0);
+    g.add(ring);
+  }
+  if (!dead) {
+    // the glass drum: a breath, not a wall — the flame must carry through
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.115, ribH - 0.04, 12, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xcfe0e8, transparent: true, opacity: 0.09,
+        depthWrite: false, side: THREE.DoubleSide,
+      }));
+    glass.position.set(cx, ribY0 + ribH / 2, 0);
+    g.add(glass);
+  }
+  // the crown: an enamelled oxide roof with a smoke eye, and — where the
+  // rooms are still kept — the finial bead the guild polished
+  const crownY = ribY0 + ribH;
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.175, 0.085, 8),
+    new THREE.MeshStandardMaterial({
+      color: dead ? 0x6a4a40 : OXIDE, roughness: 0.6, metalness: 0.15, flatShading: true,
+    }));
+  roof.position.set(cx, crownY + 0.04, 0);
+  const collarTop = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 8), dark);
+  collarTop.position.set(cx, crownY + 0.1, 0);
+  g.add(roof, collarTop);
+  if (act === 'maintained' && !dead) {
+    const finial = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), bronze);
+    finial.position.set(cx, crownY + 0.15, 0);
+    g.add(finial);
+  }
+
+  // the turned baluster under the pan — bracket and hung work only; a
+  // standing lamp's own column already reaches the pan
+  if (mount.kind !== 'floor') {
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.1, 6), bronze);
+    stem.position.set(cx, 0.04, 0);
+    const knop = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), bronze);
+    knop.scale.y = 0.72;
+    knop.position.set(cx, -0.02, 0);
+    g.add(stem, knop);
+    if (act !== 'stripped') {
+      const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.034, 0.09, 6), bronze);
+      waist.position.set(cx, -0.09, 0);
+      const drop = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.13, 8), bronze);
+      drop.rotation.z = Math.PI;
+      drop.position.set(cx, -0.2, 0);
+      g.add(waist, drop);
+    }
   }
 
   // the flame. A teardrop, not a bead: a cone tapering up off the wick with a
@@ -363,7 +431,7 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
           map: smokePuff(), color: 0xbfd4ff, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
         }));
-      s.position.set(cx, 0.4, 0.02);
+      s.position.set(cx, 0.62, 0.02);
       g.add(s);
       smoke.push(s);
     }
@@ -1939,43 +2007,90 @@ export function buildStud(seed: number, open: boolean[]): StudParts {
 // ---------------------------------------------------------------------------
 
 /**
- * What the guild built around the word: a stepped dais, two pilasters with
- * capitals, a lintel over them and an inlaid ring in the floor. The stone
- * itself is untouched — this is the architecture that says a room was made
- * FOR it, which is the difference between a payoff and a pickup.
+ * What the guild built around the word, to the sealed-vault sheet
+ * (reference-art/architecture): a recessed SANCTUM. A stepped dais whose
+ * step edges carry the poured light, two banded columns with slate and
+ * oxide enamel collars, a concentric arch over the stone with the world's
+ * own note run around its intrados, and the keystone roundel — the eye —
+ * at the crown. The stone itself is untouched: this is the architecture
+ * that says a room was made FOR it, which is the difference between a
+ * payoff and a pickup.
+ *
+ * EVERYTHING here lives BEHIND the play plane (front faces ≤ z -0.3): the
+ * body walks in front of the sanctum, never through it.
  */
 export function buildMasterDressing(hue: number): THREE.Group {
   const g = new THREE.Group();
   const stone = stoneMat(0x77748a);
+  const stoneDark = stoneMat(0x5e5b70);
   const bronze = bronzeMat(0xa8874a);
+  const slate = new THREE.MeshStandardMaterial({ color: SLATE, roughness: 0.55, metalness: 0.25, flatShading: true });
+  const oxide = new THREE.MeshStandardMaterial({ color: OXIDE, roughness: 0.6, metalness: 0.15, flatShading: true });
+  const lightMat = () => new THREE.MeshBasicMaterial({
+    color: hue, transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
 
+  // the dais: three steps, each front edge carrying a hairline of the light
   for (let i = 0; i < 3; i++) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(2.6 - i * 0.5, 0.16, 1.1 - i * 0.2), stone);
-    step.position.set(0, -1.12 + i * 0.16, -0.1);
+    const w = 2.8 - i * 0.55;
+    const step = new THREE.Mesh(new THREE.BoxGeometry(w, 0.15, 0.5), i ? stone : stoneDark);
+    step.position.set(0, -1.12 + i * 0.15, -0.6);
     g.add(step);
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(w - 0.08, 0.022, 0.02), lightMat());
+    rim.position.set(0, -1.05 + i * 0.15, -0.34);
+    g.add(rim);
   }
+
+  // the banded columns: square shafts with enamel collars, foot and capital
   for (const k of [-1, 1]) {
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 2.1, 10), stone);
-    shaft.position.set(k * 1.05, 0.1, -0.15);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.14, 0.44), stone);
-    cap.position.set(k * 1.05, 1.22, -0.15);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.44), stone);
-    foot.position.set(k * 1.05, -0.98, -0.15);
-    g.add(shaft, cap, foot);
+    const x = k * 1.18;
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.42), stoneDark);
+    foot.position.set(x, -0.95, -0.55);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 2.0, 4), stone);
+    shaft.rotation.y = Math.PI / 4;
+    shaft.position.set(x, 0.08, -0.55);
+    const bandA = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.36), slate);
+    bandA.position.set(x, -0.42, -0.55);
+    const bandB = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.34), oxide);
+    bandB.position.set(x, 0.52, -0.55);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.13, 0.42), stoneDark);
+    cap.position.set(x, 1.14, -0.55);
+    g.add(foot, shaft, bandA, bandB, cap);
   }
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.3, 0.5), stone);
-  lintel.position.set(0, 1.43, -0.15);
-  const band = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.05, 0.06), bronze);
-  band.position.set(0, 1.27, 0.12);
-  g.add(lintel, band);
+
+  // the arch: two stone rings and, between them, the note poured around the
+  // intrados — the reference's ribbon of light framing the door
+  const archY = 1.02;
+  for (const [r, tube, mat] of [[1.14, 0.085, slate], [0.86, 0.055, stone]] as const) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 20, Math.PI), mat);
+    ring.position.set(0, archY, -0.55);
+    g.add(ring);
+  }
+  const poured = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.028, 5, 24, Math.PI), lightMat());
+  poured.position.set(0, archY, -0.5);
+  g.add(poured);
+  // the columns of light falling from the arch's spring points
+  for (const k of [-1, 1]) {
+    const fall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.0, 0.02), lightMat());
+    fall.position.set(k * 1.0, archY - 1.0, -0.5);
+    g.add(fall);
+  }
+
+  // the keystone roundel: the eye at the crown, ringed in bronze
+  const eyeRing = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.05, 6, 14), bronze);
+  eyeRing.position.set(0, archY + 1.12, -0.52);
+  const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.06, 12), oxide);
+  eye.rotation.x = Math.PI / 2;
+  eye.position.set(0, archY + 1.12, -0.53);
+  const eyeGlow = new THREE.Mesh(new THREE.CircleGeometry(0.09, 12), lightMat());
+  eyeGlow.position.set(0, archY + 1.12, -0.49);
+  g.add(eyeRing, eye, eyeGlow);
+
   // the inlay: the world's own note, run into the floor of the alcove
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.025, 5, 28),
-    new THREE.MeshBasicMaterial({
-      color: hue, transparent: true, opacity: 0.5,
-      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-    }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.025, 5, 28), lightMat());
   ring.rotation.x = Math.PI / 2.2;
-  ring.position.set(0, -0.94, 0.15);
+  ring.position.set(0, -0.94, -0.35);
   g.add(ring);
   return g;
 }
