@@ -1205,7 +1205,9 @@ await stage('meta', ['abandon', 'gallery', 'grandfather + gate'], async () => {
     const at = g.terrain.glyphStones.find(s => Math.abs(g.pilot.px - (s.x + 0.5)) < 1.1);
     await until(() => g.glyphMarks.chargeOf(at.id) >= 1, 200);
     key('KeyE'); key('KeyE', false);
-    const inVault = await until(() => g.mode === 'vault', 20);
+    // E now runs THE FOLD — three and a half pulses of the mine breaking
+    // apart before the cut — so the door is given the time it takes
+    const inVault = await until(() => g.mode === 'vault', 45);
     const id = g.vault?.glyphId;
     key('Escape'); key('Escape', false);
     await until(() => g.mode !== 'vault', 20);

@@ -374,8 +374,13 @@ export class VaultRun {
     rx: Float32Array; rz: Float32Array;
     delayIn: Float32Array; delayOut: Float32Array;
   }[] = [];
-  private arriveT = 0;
+  // the assembly waits a breath while the veil lifts, so the sequence
+  // reads: black -> the door and its ember -> the bricks fly -> the room
+  private arriveT = -0.4;
   private arriveDone = false;
+  /** the arrival veil: the vault is born dark and lifts out of the cut */
+  private veilT = 0;
+  private veilMat: THREE.MeshBasicMaterial | null = null;
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
   /** last frame's place, so the moth can turn into where it is going */
@@ -445,6 +450,9 @@ export class VaultRun {
 
     this.hud = document.createElement('div');
     this.hud.id = 'vault-hud';
+    // born dark with the veil; the lift brings it up
+    this.hud.style.opacity = '0';
+    this.hud.style.transition = 'opacity 0.6s';
     this.hud.innerHTML = `
       <div class="vh-mark">${glyphSvg(glyph, 'vh-svg')}</div>
       <div class="vh-name">${glyph.name}</div>
@@ -1206,6 +1214,17 @@ export class VaultRun {
     // from the other side. It arrives OPEN and closes to a dim standing
     // doorframe behind you over the first two pulses — then waits, and
     // brightens as the body comes back near: the way out, promised.
+    // the veil: a black held in front of the lens at frame one, lifting
+    // over a pulse — the far side of the fold's own darkness
+    this.veilMat = new THREE.MeshBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 1, depthTest: false, depthWrite: false,
+    });
+    const veil = new THREE.Mesh(new THREE.PlaneGeometry(120, 70), this.veilMat);
+    veil.renderOrder = 200;
+    veil.position.z = -3;
+    this.cam.camera.add(veil);
+    this.scene.add(this.cam.camera);
+
     this.door = buildFoldThroat(this.glyph, this.rimHue, true);
     this.door.group.position.set(this.p.entry.x + 0.5, -(this.p.entry.y + 0.5), -0.42);
     this.door.update(1);
@@ -2795,6 +2814,13 @@ export class VaultRun {
       if (x > f.x1) x = f.x0;
       f.mesh.position.x = x;
     }
+    // the veil lifts; the HUD follows it up
+    if (this.veilMat && this.veilMat.opacity > 0) {
+      this.veilT += dt;
+      this.veilMat.opacity = Math.max(0, 1 - this.veilT / (PULSE * 1.1));
+      if (this.veilT > PULSE * 0.7) this.hud.style.opacity = '1';
+    }
+
     // THE ASSEMBLY, arriving: the courses fly in and lock, outward from
     // the entry, while the body already has the first slab underfoot
     if (!this.arriveDone) {

@@ -182,7 +182,9 @@ export function buildFoldThroat(g: GlyphDef, hue: number, interior = false): Fol
 
   const update = (k: number, time = 0): void => {
     const kk = Math.max(0, Math.min(1, k));
-    if (irisMat) irisMat.opacity = settle(kk * 1.6) * 0.9;
+    // fully black by the end: the cut lands inside darkness and the
+    // vault's own veil lifts out of the same black — no seam, no jar
+    if (irisMat) irisMat.opacity = settle(kk * 1.6) * 0.9 + Math.max(0, (kk - 0.82) / 0.18) * 0.1;
     if (haloMat) haloMat.opacity = settle(kk * 1.6) * 0.5;
     backMat.opacity = Math.min(1, kk * 4) * 0.97;
     // the flare: born in the first sixth, gone by the third
