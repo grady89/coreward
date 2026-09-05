@@ -8,11 +8,14 @@ export interface RigFinish {
   hull: number; accent: number; steel: number;
   /** camo finishes paint the hull with a canvas patch texture */
   camo?: [string, string, string];
+  /** the Diamondplate treatment: quilted brilliant-cut plate, glints and all */
+  facet?: boolean;
 }
 
 export interface SuitFinish {
   id: string; name: string; cost: number;
   suit: number; accent: number;
+  facet?: boolean;
 }
 
 export interface FlameStyle { id: string; name: string; cost: number; inner: number; outer: number; }
@@ -39,6 +42,8 @@ export const RIG_FINISHES: RigFinish[] = [
     hull: 0xd8b45a, accent: 0x8a4a1c, steel: 0x6a5a3a },
   { id: 'prism', name: 'Prismhull', desc: 'Diamond-dust lacquer. Catches every lamp in the stratum.', cost: 900,
     hull: 0xdfeef2, accent: 0x7ae8ff, steel: 0x8a98a8 },
+  { id: 'diamond', name: 'Diamondplate', desc: 'Quilted brilliant-cut plate over lease steel. Utterly indefensible. The assayer will stop talking to you.', cost: 3000,
+    hull: 0xe8f1fa, accent: 0x9fc6ea, steel: 0x8a98a8, facet: true },
 ];
 
 export const STOCK_SUIT: SuitFinish = { id: '', name: 'Yard Cream', cost: 0, suit: 0xd8c9a4, accent: 0xff9a3c };
@@ -46,6 +51,7 @@ export const SUIT_FINISHES: SuitFinish[] = [
   { id: 'slate', name: 'Slatebed', cost: 150, suit: 0x6a7684, accent: 0x3ce6c8 },
   { id: 'emberline', name: 'Emberline', cost: 150, suit: 0x46403a, accent: 0xff4d29 },
   { id: 'bone', name: 'Bonelight', cost: 150, suit: 0xe8e2d5, accent: 0x8a6cff },
+  { id: 'diamond', name: 'Diamondplate', cost: 2200, suit: 0xe8f1fa, accent: 0x9fc6ea, facet: true },
 ];
 
 export const STOCK_FLAME: FlameStyle = { id: '', name: 'Coolant Blue', cost: 0, inner: 0x6ad8ff, outer: 0x9adfff };

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { facetTexture } from './pod';
 
 // The pilot's suit — one mesh, built once, worn everywhere the character walks
 // on foot: the EVA (src/player/pilot.ts) and a vault run (src/game/vault.ts).
@@ -24,8 +25,17 @@ const HELMET_Y = 0.148;
  * purpose: EVA, vault runner and quarters walker are all the same driller
  * in the same suit, so one coat covers them all.
  */
-export function applySuitFinish(f: { suit: number; accent: number }): void {
-  SUIT.color.setHex(f.suit);
+let suitFacetTex: THREE.CanvasTexture | null = null;
+export function applySuitFinish(f: { suit: number; accent: number; facet?: boolean }): void {
+  if (f.facet && !suitFacetTex) {
+    suitFacetTex = facetTexture();
+    suitFacetTex.repeat.set(4, 4);   // the quilt reads small on a small body
+  }
+  SUIT.map = f.facet ? suitFacetTex : null;
+  SUIT.color.setHex(f.facet ? 0xffffff : f.suit);
+  SUIT.metalness = f.facet ? 0.8 : 0.15;
+  SUIT.roughness = f.facet ? 0.25 : 0.6;
+  SUIT.needsUpdate = true;
   SUIT_ACCENT.color.setHex(f.accent);
 }
 

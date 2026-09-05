@@ -13,6 +13,78 @@ const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5,
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 const GLASS = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.1, metalness: 0.6, emissive: 0x0d3a40, emissiveIntensity: 0.5 });
 
+/**
+ * The Diamondplate quilt (reference-art/cosmetics): rotated-square cells,
+ * each cut into four lit facets around a point, thin dark seams between —
+ * with a scatter of hot sparkle dots because subtlety was never the point.
+ */
+export function facetTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const N = 4, S = 128 / N;
+  g.fillStyle = '#5a7391';
+  g.fillRect(0, 0, 128, 128);
+  const cellAt = (cx: number, cy: number): void => {
+    const faces: [string, [number, number][]][] = [
+      ['#eef6fd', [[0, -S / 2], [S / 2, 0], [-S / 2, 0]]],           // top
+      ['#b8cfe4', [[-S / 2, 0], [0, -S / 2], [0, 0]]],               // left fill
+      ['#8fa9c2', [[S / 2, 0], [0, S / 2], [-S / 2, 0]]],            // bottom
+    ];
+    for (const [tone, tri] of faces) {
+      g.fillStyle = tone;
+      g.beginPath();
+      g.moveTo(cx + tri[0][0], cy + tri[0][1]);
+      for (const [dx, dy] of tri.slice(1)) g.lineTo(cx + dx, cy + dy);
+      g.closePath();
+      g.fill();
+    }
+    g.strokeStyle = '#1c242e';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(cx, cy - S / 2); g.lineTo(cx + S / 2, cy); g.lineTo(cx, cy + S / 2);
+    g.lineTo(cx - S / 2, cy); g.closePath();
+    g.stroke();
+  };
+  for (let y = 0; y <= N; y++) {
+    for (let x = 0; x <= N; x++) {
+      cellAt(x * S, y * S);
+      cellAt(x * S + S / 2, y * S + S / 2);
+    }
+  }
+  let seed = 13;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#ffffff';
+  for (let i = 0; i < 10; i++) {
+    const x = rnd() * 128, y = rnd() * 128, r = 1 + rnd() * 1.6;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  return tex;
+}
+
+/** a four-point glint star for the Diamondplate's twinkle */
+function glintTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = (x0: number, y0: number, x1: number, y1: number) => {
+    const gr = g.createLinearGradient(x0, y0, x1, y1);
+    gr.addColorStop(0, 'rgba(255,255,255,0)');
+    gr.addColorStop(0.5, 'rgba(255,255,255,0.95)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    return gr;
+  };
+  g.fillStyle = grad(0, 32, 64, 32); g.fillRect(0, 29, 64, 6);
+  g.fillStyle = grad(32, 0, 32, 64); g.fillRect(29, 0, 6, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /** dazzle patches in the finish's three tones, blobbed like strata contours */
 function camoTexture(tones: [string, string, string]): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -45,11 +117,15 @@ export class Pod {
   private headlamp: THREE.SpotLight;
   private glow: THREE.PointLight;
   private drillSpin = 0;
+  private facetOn = false;
   // per-pod clones so a finish never bleeds onto another pod in a review scene
   private hullMat = HULL.clone();
   private accentMat = ACCENT.clone();
   private steelMat = STEEL.clone();
   private camoTex: THREE.CanvasTexture | null = null;
+  private facetTex: THREE.CanvasTexture | null = null;
+  /** the Diamondplate's twinkle: star sprites riding the hull */
+  private glints: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; ph: number; sp: number }[] = [];
 
   constructor(scene: THREE.Scene) {
     const HULL = this.hullMat, ACCENT = this.accentMat, STEEL = this.steelMat;
@@ -146,8 +222,30 @@ export class Pod {
   applyFinish(rig: RigFinish, flame: FlameStyle, lamp: LampTint): void {
     this.camoTex?.dispose();
     this.camoTex = rig.camo ? camoTexture(rig.camo) : null;
-    this.hullMat.map = this.camoTex;
-    this.hullMat.color.setHex(rig.camo ? 0xffffff : rig.hull);
+    if (rig.facet && !this.facetTex) this.facetTex = facetTexture();
+    this.hullMat.map = rig.facet ? this.facetTex : this.camoTex;
+    this.hullMat.color.setHex(rig.camo || rig.facet ? 0xffffff : rig.hull);
+    // the quilt is chrome; everything else is painted steel
+    this.hullMat.metalness = rig.facet ? 0.85 : 0.25;
+    this.hullMat.roughness = rig.facet ? 0.22 : 0.55;
+    if (!this.glints.length) {
+      const gtex = glintTexture();
+      for (const [ox, oy, sc] of [
+        [-0.24, 0.28, 0.2], [0.3, 0.1, 0.26], [-0.1, -0.14, 0.17],
+        [0.12, 0.34, 0.15], [-0.34, 0.02, 0.14],
+      ] as const) {
+        const mat = new THREE.MeshBasicMaterial({
+          map: gtex, color: 0xffffff, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+        });
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(sc, sc), mat);
+        m.position.set(ox, oy + 0.13, 0.46);
+        this.group.add(m);
+        this.glints.push({ mesh: m, mat, ph: ox * 9 + oy * 7, sp: 1.6 + Math.abs(ox) * 3 });
+      }
+    }
+    this.facetOn = !!rig.facet;
+    for (const gl of this.glints) gl.mat.opacity = 0;
     this.hullMat.needsUpdate = true;
     this.accentMat.color.setHex(rig.accent);
     this.steelMat.color.setHex(rig.steel);
@@ -184,6 +282,15 @@ export class Pod {
     for (const fl of [this.flameL, this.flameR]) {
       fl.visible = f > 0.02;
       fl.scale.set(1, (0.4 + f * 1.1) * flick, 1);
+    }
+
+    // the Diamondplate's twinkle: each star breathes on its own clock
+    if (this.facetOn) {
+      for (const gl of this.glints) {
+        const tw = Math.max(0, Math.sin(time * gl.sp + gl.ph));
+        gl.mat.opacity = Math.pow(tw, 10) * 0.9;
+        gl.mesh.rotation.z = time * 0.4 + gl.ph;
+      }
     }
 
     // lamp brightness ramps with darkness, dips again near the glowing core

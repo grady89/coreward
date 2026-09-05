@@ -8,12 +8,13 @@ import {
   GLYPHS_TO_TRANSLATE, FORGE,
   RIME_FREEZE_BASE, RIME_FREEZE_PER_TIER, RIME_KEEP_CLEAR,
   SPILL_TTL, SPILL_WARN, SPILL_PICKUP_R, POD_W, POD_H,
+  PAD_X0, PAD_X1,
 } from './config';
 import { T, def, oreValue, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
 import { Terrain } from './world/terrain';
 import { ChunkField, lavaMat } from './world/chunks';
-import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock } from './world/backdrop';
+import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock, DOCKS } from './world/backdrop';
 import { WreckField } from './world/wrecks';
 import { ThreatField, FaunaEvent } from './world/entities';
 import { wide } from './world/fauna/types';
@@ -158,6 +159,13 @@ class Game {
   depots!: DepotField;
   /** ?vault gallery mode: all nine stones in one dev hall, saves disabled */
   private vaultGallery = false;
+  /**
+   * The rig steps UP onto a deck: the dock aprons and the landing plate
+   * reach forward of the play plane, and a pod parked at ground height
+   * disappears behind their front lip. Parked over one, the visual lifts
+   * a fifth of a tile — the ship stands ON the deck, eased both ways.
+   */
+  private podLift = 0;
   /**
    * THE FOLD (SPEC-FOLD.md): the threshold sequence between the surface and
    * a vault. While set, the pilot is latched still and the camera is the
@@ -2224,7 +2232,15 @@ class Game {
       }
     }
 
-    this.pod.setPos(this.ctrl.px, this.ctrl.py);
+    {
+      const px = this.ctrl.px;
+      const onPad = this.ctrl.py < 2.2 && (
+        (px > PAD_X0 - 0.3 && px < PAD_X1 + 1.3) ||
+        DOCKS.some(d => px > d.x0 - 0.3 && px < d.x1 + 0.3));
+      this.podLift += ((onPad ? 0.2 : 0) - this.podLift) * Math.min(1, dt * 7);
+      if (this.podLift < 0.005) this.podLift = 0;
+    }
+    this.pod.setPos(this.ctrl.px, this.ctrl.py + this.podLift);
     this.pod.update(dt, {
       vx: this.ctrl.vx,
       thrust: this.ctrl.thrust,
