@@ -21,7 +21,7 @@ await page.waitForTimeout(1500);
 
 // wake and enter: catch the throat unfolding
 await page.evaluate(() => { window.__game.beginFold('in', 'wick'); });
-await page.waitForTimeout(600);
+await page.waitForTimeout(300);
 await page.screenshot({ path: 'design-review/fold-in-mid.png' });
 await page.waitForTimeout(500);
 await page.screenshot({ path: 'design-review/fold-in-late.png' });

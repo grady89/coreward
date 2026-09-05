@@ -168,6 +168,8 @@ class Game {
     kind: 'in' | 'out' | 'abort';
     id: string; t: number; dur: number;
     sx: number; sy: number;
+    /** the throat's current openness — the brick-shatter rides the same k */
+    k: number;
     throat: FoldThroat;
     cam0: { x: number; y: number; z: number };
   } | null = null;
@@ -525,7 +527,7 @@ class Game {
     this.scene.add(throat.group);
     const c = this.cam.camera.position;
     this.fold = {
-      kind, id, t: 0,
+      kind, id, t: 0, k: kind === 'out' ? 1 : 0,
       dur: (kind === 'out' ? 1.5 : short ? 1 : 2) * PULSE,
       sx, sy, throat,
       cam0: kind === 'out'
@@ -544,7 +546,8 @@ class Game {
     const p = Math.max(0, Math.min(1, f.t / f.dur));
     // stone settles: heavy ease-out, the guild's own curve
     const k = 1 - Math.pow(1 - p, 3);
-    f.throat.update(f.kind === 'out' ? 1 - k : k, this.time);
+    f.k = f.kind === 'out' ? 1 - k : k;
+    f.throat.update(f.k, this.time);
     if (!this.reducedMotion) {
       // the only dolly in the game: drawn through the face, or set back down
       const toward = f.kind === 'out' ? 1 - k : k;
@@ -556,13 +559,16 @@ class Game {
     if (f.kind === 'in' && f.t >= f.dur) {
       f.throat.dispose();
       this.fold = null;
+      this.chunks.foldRestore();
       this.enterVault(f.id);            // the hard cut, on the downbeat
     } else if (f.kind === 'abort' && f.t <= 0) {
       f.throat.dispose();
       this.fold = null;
+      this.chunks.foldRestore();
     } else if (f.kind === 'out' && f.t >= f.dur) {
       f.throat.dispose();
       this.fold = null;
+      this.chunks.foldRestore();
       this.cam.snap(this.pilot.px, this.pilot.py + 1, 15);
     } else if (f.t > f.dur * 2 + 1) {
       // the safety line: whatever stranded it, no fold outlives twice its
@@ -662,7 +668,11 @@ class Game {
   /** dispose any threshold still in motion — a fold may not outlive the
    *  moment the game changes rooms around it */
   private clearFold(): void {
-    if (this.fold) { this.fold.throat.dispose(); this.fold = null; }
+    if (this.fold) {
+      this.fold.throat.dispose();
+      this.fold = null;
+      this.chunks.foldRestore();
+    }
   }
 
   private enterInterior(): void {
@@ -3049,6 +3059,9 @@ class Game {
       this.cam.follow(dt, this.pilot.px, this.pilot.py, this.pilot.vx, this.pilot.vy, true);
     }
     this.chunks.update(Math.max(0, Math.floor(-this.pilot.py)), this.time);
+    // THE MINE BREAKS APART: the real bricks fly, after the chunk pass so
+    // nothing reposes them back this frame
+    if (this.fold) this.chunks.foldShatter(this.fold.sx, this.fold.sy, 9, this.fold.k);
     this.atmosphere.update(Math.floor(-this.pilot.py));
 
     this.audio.update(dt, {

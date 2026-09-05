@@ -225,6 +225,49 @@ class Chunk {
     }
   }
 
+  /**
+   * THE FOLD (SPEC-FOLD.md): the ACTUAL bricks of the mine break loose.
+   * Every rock instance within `r` of the stone is thrown toward the
+   * camera on a wave running outward — tumbling, shedding formation —
+   * and its ore flies with it. k 0..1 drives the whole shatter; the
+   * field restores by marking the chunk dirty (the same trick clearChew
+   * uses), so the rebuild puts every brick home to the millimetre.
+   */
+  foldShatter(fx: number, fy: number, r: number, k: number): boolean {
+    let touched = false;
+    const x0 = this.cx * CHUNK, y0 = this.cy * CHUNK;
+    for (const [local, rid] of this.rockIds) {
+      const lx = local % CHUNK, ly = (local / CHUNK) | 0;
+      const x = x0 + lx, y = y0 + ly;
+      const wx = x + 0.5, wy = -(y + 0.5);
+      const d = Math.hypot(wx - fx, wy - fy);
+      if (d > r) continue;
+      // the wave runs OUTWARD from the stone: near bricks let go first
+      const f = Math.max(0, Math.min(1, k * (1 + r * 0.09) - d * 0.09));
+      if (f <= 0) continue;
+      touched = true;
+      const e = 1 - Math.pow(1 - f, 3);
+      const h1 = cellHash(x, y, 31), h2 = cellHash(x, y, 37), h3 = cellHash(x, y, 41);
+      const ux = d > 0.01 ? (wx - fx) / d : 0, uy = d > 0.01 ? (wy - fy) / d : 0;
+      tmpP.set(
+        wx + ux * e * (1.5 + h1 * 2.5),
+        wy + uy * e * (1.2 + h2 * 2) - e * e * 2.5,
+        e * (6 + h3 * 13));                    // out of the screen, past the glass
+      tmpE.set((h1 - 0.5) * 2.6 * e, (h2 - 0.5) * 2.6 * e, (h3 - 0.5) * 2.6 * e);
+      tmpQ.setFromEuler(tmpE);
+      tmpS.setScalar(1 - e * 0.12);
+      tmpM.compose(tmpP, tmpQ, tmpS);
+      this.rock.setMatrixAt(rid, tmpM);
+      const gid = this.gemIds.get(local);
+      if (gid) this.gems[gid.c].setMatrixAt(gid.i, tmpM);
+    }
+    if (touched) {
+      this.rock.instanceMatrix.needsUpdate = true;
+      for (const m of this.gems) m.instanceMatrix.needsUpdate = true;
+    }
+    return touched;
+  }
+
   /** shrink + jitter the tile being drilled */
   chew(x: number, y: number, progress: number, time: number): void {
     const local = (y - this.cy * CHUNK) * CHUNK + (x - this.cx * CHUNK);
@@ -314,6 +357,21 @@ export class ChunkField {
   chew(x: number, y: number, progress: number, time: number): void {
     const ch = this.live.get(this.key(Math.floor(x / CHUNK), Math.floor(y / CHUNK)));
     ch?.chew(x, y, progress, time);
+  }
+
+  private foldTouched = new Set<number>();
+
+  /** drive the fold's brick-shatter across every live chunk */
+  foldShatter(fx: number, fy: number, r: number, k: number): void {
+    for (const [key, ch] of this.live) {
+      if (ch.foldShatter(fx, fy, r, k)) this.foldTouched.add(key);
+    }
+  }
+
+  /** every displaced brick goes home: the touched chunks simply rebuild */
+  foldRestore(): void {
+    for (const k of this.foldTouched) this.dirty.add(k);
+    this.foldTouched.clear();
   }
 
   /** restore any half-chewed tile after a canceled drill (fuel ran out) */
