@@ -482,10 +482,10 @@ export function buildFuelDepot(): THREE.Group {
   const g = new THREE.Group();
 
   // poured concrete pad with a kerb — the farm stands on its own slab
-  g.add(box(5.6, 0.16, 2.9, CONCRETE, 0, 0.08, -1.85));
-  g.add(box(5.6, 0.07, 0.07, HULL_DK, 0, 0.19, -0.43));
-  g.add(box(0.06, 0.07, 2.9, HULL_DK, -2.77, 0.19, -1.85));
-  g.add(box(0.06, 0.07, 2.9, HULL_DK, 2.77, 0.19, -1.85));
+  g.add(box(5.6, 0.16, 2.9, CONCRETE, 0, 0.08, -2.33));
+  g.add(box(5.6, 0.07, 0.07, HULL_DK, 0, 0.19, -0.915));
+  g.add(box(0.06, 0.07, 2.9, HULL_DK, -2.77, 0.19, -2.33));
+  g.add(box(0.06, 0.07, 2.9, HULL_DK, 2.77, 0.19, -2.33));
 
   interface TankSpec { x: number; z: number; r: number; body: number; stripe: number | null; }
   const tanks: TankSpec[] = [
@@ -580,7 +580,7 @@ export function buildFuelDepot(): THREE.Group {
   g.add(ladder(2.1, -2.05, 0.44, -1.7));
 
   // pump kiosk: slate box, orange lintel, one lit slot, drums stacked beside
-  g.add(box(0.78, 0.9, 0.66, HULL_DK, -2.32, 0.61, -0.95));
+  g.add(box(0.78, 0.9, 0.66, HULL_DK, -2.32, 0.61, -1.21));
   g.add(box(0.86, 0.08, 0.74, GUNMETAL, -2.32, 1.09, -0.95));
   g.add(box(0.8, 0.05, 0.05, CONDUIT, -2.32, 1.03, -0.6));
   g.add(roundWindow(0.48, 0.34, -2.32, 0.76, -0.61, false));
@@ -602,9 +602,9 @@ export function buildTradePost(): THREE.Group {
   const g = new THREE.Group();
 
   // pad and stepped base course — the building sits in layers, not on a box
-  g.add(box(5.6, 0.16, 2.9, CONCRETE, 0, 0.08, -1.85));
-  g.add(box(5.0, 0.36, 2.2, HULL_DK, 0, 0.34, -1.9));
-  g.add(box(5.06, 0.05, 2.26, GUNMETAL, 0, 0.54, -1.9));
+  g.add(box(5.6, 0.16, 2.9, CONCRETE, 0, 0.08, -2.33));
+  g.add(box(5.0, 0.36, 2.2, HULL_DK, 0, 0.34, -1.98));
+  g.add(box(5.06, 0.05, 2.26, GUNMETAL, 0, 0.54, -2.01));
 
   // the main slab, with a bullnose rolled along its top edges
   g.add(box(4.3, 1.02, 1.95, HULL, 0, 1.07, -1.95));
@@ -674,8 +674,8 @@ export function buildTradePost(): THREE.Group {
   g.add(doorway(0.58, 1.05, 1.85, 0.16, -0.75, GUNMETAL));
   g.add(box(0.66, 0.05, 0.05, WARM_BRIGHT, 1.85, 1.35, -0.75));
   g.add(box(0.76, 0.05, 0.14, DARKPIPE, 1.85, 1.39, -0.78));
-  g.add(box(0.74, 0.05, 0.24, GUNMETAL, 1.85, 0.13, -0.62));
-  g.add(box(0.74, 0.05, 0.24, GUNMETAL, 1.85, 0.07, -0.48));
+  g.add(box(0.74, 0.05, 0.24, GUNMETAL, 1.85, 0.13, -1.0));
+  g.add(box(0.74, 0.05, 0.24, GUNMETAL, 1.85, 0.07, -1.0));
 
   // freight on the deck, in the muted crate greys of the reference plate
   const crate = (w: number, h: number, mat: THREE.Material, x: number, y: number, z: number): void => {
@@ -687,8 +687,8 @@ export function buildTradePost(): THREE.Group {
   crate(0.62, 0.5, HULL_DK, -1.6, 0.16, -0.8);
   crate(0.5, 0.42, SLATE_DK, -1.0, 0.16, -0.7);
   crate(0.46, 0.36, HULL_DK, -1.55, 0.66, -0.82);
-  g.add(cyl(0.17, 0.4, RUST, 0.95, 0.36, -0.7, 12));
-  g.add(cyl(0.17, 0.4, HULL_DK, 1.28, 0.36, -0.62, 12));
+  g.add(cyl(0.17, 0.4, RUST, 0.95, 0.36, -1.05, 12));
+  g.add(cyl(0.17, 0.4, HULL_DK, 1.28, 0.36, -1.05, 12));
 
   g.add(gantrySign('TRADE', '#ff9a3c', 0, 4.4, -0.55, 2.4));
   return g;
@@ -701,7 +701,7 @@ export function buildTradePost(): THREE.Group {
 export function buildGarage(): THREE.Group {
   const g = new THREE.Group();
 
-  g.add(box(5.8, 0.1, 3.1, PLINTH, 0, 0.05, -1.95));
+  g.add(box(5.8, 0.1, 3.1, PLINTH, 0, 0.05, -2.43));
 
   // the vault: half-pipe shell laid along z (thetaStart -90° puts the curve
   // over +Z pre-rotation, so tipping -90° about x rolls it up over +Y)
@@ -751,7 +751,7 @@ export function buildGarage(): THREE.Group {
   g.add(decal('510', '#c9d4d9', 0.5, 0.98, 1.35, -0.72));
 
   // office annex, flat-roofed, one warm window
-  g.add(box(1.35, 1.05, 1.25, SLATE_DK, -2.35, 0.62, -1.45));
+  g.add(box(1.35, 1.05, 1.25, SLATE_DK, -2.35, 0.62, -1.505));
   g.add(box(1.55, 0.07, 1.45, GUNMETAL, -2.35, 1.18, -1.45));
   g.add(roundWindow(0.62, 0.44, -2.35, 0.72, -0.81));
   g.add(cyl(0.04, 0.5, DARKPIPE, -2.85, 1.44, -1.7, 8));
@@ -794,9 +794,9 @@ export function buildGarage(): THREE.Group {
   g.add(glowDot(RED_GLOW, DX, DH + 0.32, DZ, 0.05));
 
   // yard props: drums, a toolbox crate, a spare wheel against the shell
-  g.add(cyl(0.16, 0.36, RED_PAINT, 1.32, 0.28, -0.72, 12));
-  g.add(cyl(0.16, 0.42, ORANGE_DK, 1.6, 0.31, -0.85, 12));
-  g.add(box(0.5, 0.34, 0.4, ORANGE, -1.7, 0.27, -0.8));
+  g.add(cyl(0.16, 0.36, RED_PAINT, 1.32, 0.28, -1.04, 12));
+  g.add(cyl(0.16, 0.42, ORANGE_DK, 1.6, 0.31, -1.04, 12));
+  g.add(box(0.5, 0.34, 0.4, ORANGE, -1.7, 0.27, -1.08));
   const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.08, 8, 18), DARKPIPE);
   wheel.position.set(0.98, 0.3, -0.68);
   g.add(wheel);
@@ -817,7 +817,7 @@ export function buildAssay(): THREE.Group {
 
   // base platform with railing and steps — reaching left past the greenhouse
   // to the sign posts, so the whole yard stands on one pad
-  g.add(box(5.6, 0.14, 2.7, PLINTH, -0.4, 0.07, -1.7));
+  g.add(box(5.6, 0.14, 2.7, PLINTH, -0.4, 0.07, -2.23));
   g.add(straightRail(1.3, -1.75, 0.14, -0.5));
   g.add(box(0.8, 0.05, 0.26, GUNMETAL, TX, 0.1, -0.42));
 
@@ -943,10 +943,10 @@ export function buildQuarters(): THREE.Group {
   const FERN = new THREE.MeshStandardMaterial({ color: 0x6e9668, roughness: 0.8 });
 
   // deck slab with a steel kerb and thin front steps
-  g.add(box(5.2, 0.16, 2.7, PLINTH, 0, 0.08, -1.8));
-  g.add(box(5.2, 0.06, 0.06, GUNMETAL, 0, 0.19, -0.48));
-  g.add(box(0.9, 0.05, 0.26, GUNMETAL, -0.85, 0.12, -0.62));
-  g.add(box(0.9, 0.05, 0.26, GUNMETAL, -0.85, 0.055, -0.46));
+  g.add(box(5.2, 0.16, 2.7, PLINTH, 0, 0.08, -2.23));
+  g.add(box(5.2, 0.06, 0.06, GUNMETAL, 0, 0.19, -0.91));
+  g.add(box(0.9, 0.05, 0.26, GUNMETAL, -0.85, 0.12, -1.01));
+  g.add(box(0.9, 0.05, 0.26, GUNMETAL, -0.85, 0.055, -1.01));
 
   // the hab block: flat slate walls under a squared cornice, with steel
   // corner posts so every edge stays hard
@@ -975,7 +975,7 @@ export function buildQuarters(): THREE.Group {
   g.add(doorway(0.6, 0.98, -0.85, 0.36, -0.87, GUNMETAL));
   g.add(box(0.72, 0.05, 0.05, WARM_BRIGHT, -0.85, 1.42, -0.87));
   g.add(box(0.82, 0.05, 0.14, DARKPIPE, -0.85, 1.46, -0.9));
-  g.add(box(0.8, 0.06, 0.3, GUNMETAL, -0.85, 0.33, -0.78));
+  g.add(box(0.8, 0.06, 0.3, GUNMETAL, -0.85, 0.33, -1.03));
 
   // the galley window: the one place you can see somebody lives here
   g.add(stripWindow(1.62, 0.66, 0.72, 0.94, -0.87, 4));
@@ -986,7 +986,7 @@ export function buildQuarters(): THREE.Group {
   // orange conduit stapled across the facade — the reference's loudest line
   g.add(conduitStaple(1.62, 1.52, 0.24, 0.04, 0.05, -0.8));
   g.add(conduitStaple(1.5, 1.42, 0.24, 0.027, 0.05, -0.75));
-  g.add(box(0.16, 0.22, 0.14, GUNMETAL, -1.67, 0.62, -0.74));
+  g.add(box(0.16, 0.22, 0.14, GUNMETAL, -1.67, 0.62, -0.95));
   g.add(glowDot(TEAL_GLOW, -1.67, 0.76, -0.66, 0.035));
 
   // roof machine house: a squared plant box with a louvred vent glowing
@@ -1025,8 +1025,8 @@ export function buildQuarters(): THREE.Group {
   g.add(box(0.18, 0.22, 0.012, RUST, 2.24, 1.36, -0.73));
 
   // planter crate with a fern grown from greenhouse stock
-  g.add(box(0.44, 0.26, 0.34, TEAL_PAINT, 1.15, 0.29, -0.68));
-  g.add(box(0.48, 0.04, 0.38, DARKPIPE, 1.15, 0.44, -0.68));
+  g.add(box(0.44, 0.26, 0.34, TEAL_PAINT, 1.15, 0.29, -1.05));
+  g.add(box(0.48, 0.04, 0.38, DARKPIPE, 1.15, 0.44, -1.07));
   for (const [fx, fh] of [[1.07, 0.34], [1.15, 0.44], [1.23, 0.3]] as const) {
     const frond = new THREE.Mesh(new THREE.ConeGeometry(0.07, fh, 6), FERN);
     frond.position.set(fx, 0.42 + fh / 2, -0.68);
@@ -1034,7 +1034,7 @@ export function buildQuarters(): THREE.Group {
   }
 
   // a squat reserve tank strapped at the west end, and a spare drum
-  g.add(cyl(0.3, 0.68, HULL_DK, -1.82, 0.5, -0.7, 16));
+  g.add(cyl(0.3, 0.68, HULL_DK, -1.82, 0.5, -1.18, 16));
   g.add(dome(0.3, HULL_LT, -1.82, 0.84, -0.7, 0.6));
   g.add(stripeBand(0.31, 0.05, ORANGE_DK, -1.82, 0.6, -0.7));
   g.add(decal('01', '#c4571f', 0.34, 1.38, 1.3, -0.93));
