@@ -66,6 +66,15 @@ export const LAVA_DMG = 24;         // dmg/sec touching lava
 export const GAS_DMG = 16;          // per pocket burst
 
 // death / rescue
+/**
+ * The spill: a crashed hold does not evaporate. The crew tows the wreck and
+ * leaves a claim beacon over the ore, running on five minutes of battery.
+ * Long enough for a real recovery run from the surface at any depth you had
+ * the fuel to reach — short enough that the run is the gamble, not a chore.
+ */
+export const SPILL_TTL = 300;       // seconds of beacon battery
+export const SPILL_WARN = 60;       // the clock goes red under this
+export const SPILL_PICKUP_R = 1.25; // tiles — fly into the pile to reclaim it
 export const DEATH_FEE_FRAC = 0.12;
 export const RESCUE_FEE_FRAC = 0.15;
 export const RESCUE_MIN_MONEY = 30; // below this, rescue is free

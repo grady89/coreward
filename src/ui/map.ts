@@ -74,6 +74,7 @@ export class SurveyMap {
     revealRow: number, deepArray: boolean,
     arrestors: { x: number; y: number }[] = [],
     wrecks: { x: number; y: number }[] = [],
+    spill: { x: number; y: number } | null = null,
   ): void {
     if (!this.visible || time - this.lastDraw < 0.35) return;
     this.lastDraw = time;
@@ -139,6 +140,24 @@ export class SurveyMap {
       g.fillRect(Math.round(w.x) - 1, wy - 1, 3, 3);
       g.fillStyle = '#ffd9a0';
       g.fillRect(Math.round(w.x), wy, 1, 1);
+    }
+
+    // your own spilled hold: always drawn, no scanner gear required, and it
+    // ignores the survey frontier — the beacon is what is transmitting, not
+    // the rock. A ring so it never reads as one more wreck.
+    if (spill) {
+      const sy = Math.round(-spill.y) - y0;
+      const sx = Math.round(spill.x);
+      if (sy >= 0 && sy < rows) {
+        const blink = Math.sin(time * 4) > -0.3;
+        g.fillStyle = blink ? '#ff9a3c' : '#7a4a18';
+        g.fillRect(sx - 2, sy - 2, 5, 1);
+        g.fillRect(sx - 2, sy + 2, 5, 1);
+        g.fillRect(sx - 2, sy - 1, 1, 3);
+        g.fillRect(sx + 2, sy - 1, 1, 3);
+        g.fillStyle = '#ffe6c0';
+        g.fillRect(sx, sy, 1, 1);
+      }
     }
 
     // deployed arrestors: your own infrastructure, marked

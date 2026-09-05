@@ -42,6 +42,7 @@ node scripts/verify.mjs  out/  # boot → intro → drill → fly → fps probe
 node scripts/depths.mjs  out/  # visual tour of all five strata + the core
 node scripts/shops.mjs   out/  # sell → garage → pause → save/continue round-trip
 node scripts/hazards.mjs out/  # side drill, fall damage, gas, death, rescue
+node scripts/spill.mjs   out/  # the spill: claim filed, recovered, expired, replaced
 node scripts/progression.mjs out/  # wrecks, EVA salvage, core walk ending, forge, dash, world travel
 node scripts/features.mjs out/     # per-stack selling, survey scanner + map, wreck settling, EVA recall
 node scripts/contracts.mjs out/    # contract accept/claim/abandon + settings panel & persistence
@@ -139,6 +140,14 @@ Dig → fill your hold → fly back up (fuel is the clock) → **TRADE** to sell
 **FUEL** to refill → **GARAGE** for drill / thrusters / tank / cargo / hull /
 radiators → deeper. Gas pockets, magma, fall damage and core heat push back.
 Radiators gate Emberreach (600m+). The run auto-saves to localStorage.
+
+Crashing no longer eats the hold outright. The ore **spills** where the pod
+burst and the crew files a claim over it: a beacon on five minutes of battery,
+marked on the survey map and clocked in the corner of the HUD. Fly back down
+and into the pile and it goes straight back in the hold — as much of it as
+still fits. Let the battery die and it is written off, and a second crash with
+ore aboard writes off whatever the last one left. The salvage fee is still
+charged either way.
 
 ## Structure
 

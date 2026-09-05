@@ -7,8 +7,9 @@ import {
   EXTRACT_OFFER, EXTRACT_HOLD, LANCE_SHOT_COST, LANCE_RANGE,
   GLYPHS_TO_TRANSLATE, FORGE,
   RIME_FREEZE_BASE, RIME_FREEZE_PER_TIER, RIME_KEEP_CLEAR,
+  SPILL_TTL, SPILL_WARN, SPILL_PICKUP_R,
 } from './config';
-import { T, def, rockColor, TILE_DEFS } from './world/tiles';
+import { T, def, oreValue, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
 import { Terrain } from './world/terrain';
 import { ChunkField, lavaMat } from './world/chunks';
@@ -17,6 +18,7 @@ import { WreckField } from './world/wrecks';
 import { ThreatField, FaunaEvent } from './world/entities';
 import { wide } from './world/fauna/types';
 import { ArrestorField } from './world/arrestors';
+import { SpillSite } from './world/spill';
 import { Pod } from './player/pod';
 import { PodController, Input } from './player/controller';
 import { Pilot } from './player/pilot';
@@ -76,6 +78,7 @@ class Game {
   wrecks!: WreckField;
   threats!: ThreatField;
   arrestors!: ArrestorField;
+  spill!: SpillSite;
   glyphMarks!: GlyphMarks;
   particles!: Particles;
   lampOn = true;
@@ -99,6 +102,10 @@ class Game {
   private dreadAcc = 0;
   private faunaSfxAt = new Map<string, number>();
   private looted = new Set<number>();
+  /** the one-minute warning only fires once per claim */
+  private spillWarned = false;
+  /** throttle for the "hold is full" nag while sitting on a spill */
+  private spillNagAt = -9;
   private salvaging: { idx: number; t: number } | null = null;
   private keys = new Set<string>();
   private time = 0;
@@ -656,6 +663,8 @@ class Game {
     this.wrecks = new WreckField(this.scene, this.terrain, this.looted);
     this.ctrl.looted = this.looted;
     this.arrestors.load(ws?.arrestors ?? []);
+    const claim = this.state.spill;
+    if (claim && claim.world === this.state.activeWorld) this.spill.show(claim); else this.spill.hide();
     this.shaftlightField.load(ws?.shaftlights ?? []);
     this.depots.load(ws?.depots ?? []);
     this.charges.length = 0;
@@ -691,6 +700,7 @@ class Game {
     this.threats = new ThreatField(this.scene, this.terrain, this.particles);
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
     this.arrestors = new ArrestorField(this.scene);
+    this.spill = new SpillSite(this.scene);
     this.shaftlightField = new ShaftlightField(this.scene);
     this.depots = new DepotField(this.scene);
     this.ctrl = new PodController(this.terrain, this.state, this.events());
@@ -735,7 +745,7 @@ class Game {
         this.cam.addShake(0.55);
         this.pad.rumble(1, 1, 520);
         this.flagDied = true;
-        this.panels.open('death', { cause });
+        this.panels.open('death', { cause, spilled: this.fileSpill() });
       },
       onStranded: () => {
         this.flagStranded = true;
@@ -873,6 +883,109 @@ class Game {
     this.state.hull = this.state.maxHull * frac;
     this.state.fuel = this.state.maxFuel * frac;
     this.cam.snap(this.ctrl.px, 2, 15.5);
+    const claim = this.state.spill;
+    if (claim) {
+      const m = Math.round(-claim.y * TILE_M);
+      this.hud.toast(`YOUR HOLD IS STILL DOWN THERE — ${m}m`, 'stratum');
+      this.audio.stratum();
+    }
+    this.saveNow();
+  }
+
+  // ---------- the spill ----------
+  /**
+   * File a claim over the hold at the crash site. One at a time — a crash
+   * with ore aboard writes off whatever the last one left, and a crash with
+   * an empty hold files nothing and disturbs nothing. Returns what was
+   * spilled so the death panel can name it, or null if there was nothing.
+   */
+  private fileSpill(): { value: number; count: number } | null {
+    const st = this.state;
+    const count = st.cargoCount;
+    if (count === 0) return null;
+    const value = st.cargoValue;
+    st.spill = {
+      world: st.activeWorld,
+      x: this.ctrl.px,
+      y: this.ctrl.py,
+      ttl: SPILL_TTL,
+      cargo: [...st.cargo.entries()],
+    };
+    st.cargo.clear();
+    this.spillWarned = false;
+    this.spill.show(st.spill);
+    return { value, count };
+  }
+
+  /**
+   * Burn the beacon battery. It runs wherever the driller is — the clock is
+   * the crew's paperwork, not the pod's — but the pile itself only exists on
+   * the world it fell on.
+   */
+  private tickSpill(dt: number): void {
+    const st = this.state;
+    const c = st.spill;
+    if (!c) { this.hud.setSpill(null); return; }
+
+    c.ttl -= dt;
+    if (c.ttl <= 0) {
+      st.spill = null;
+      this.spill.hide();
+      this.hud.setSpill(null);
+      this.hud.toast('CLAIM EXPIRED — THE SPILL IS WRITTEN OFF');
+      this.audio.denied();
+      this.saveNow();
+      return;
+    }
+    if (!this.spillWarned && c.ttl <= SPILL_WARN) {
+      this.spillWarned = true;
+      this.hud.toast('CLAIM BEACON FAILING — ONE MINUTE');
+      this.audio.toast();
+    }
+
+    const here = c.world === this.state.activeWorld;
+    if (here) {
+      this.spill.settle((x, y) => this.terrain.solidAt(x, y), this.terrain.h);
+      this.spill.update(this.time, dt);
+      if (this.mode === 'play') this.recoverSpill(c);
+      if (!st.spill) return; // reclaimed on this frame; the clock is already down
+    }
+    // depth, not range: it reads against the depth gauge, so the number tells
+    // you when to start looking. The survey map handles the last few tiles.
+    this.hud.setSpill(c.ttl,
+      here ? Math.round(-c.y * TILE_M) + 'm' : (worldById(c.world)?.name ?? 'ELSEWHERE'));
+  }
+
+  /** fly into the pile and it goes back in the hold, as much as fits */
+  private recoverSpill(c: { x: number; y: number; cargo: [number, number][] }): void {
+    if (Math.abs(this.ctrl.px - c.x) > SPILL_PICKUP_R) return;
+    if (Math.abs(this.ctrl.py - c.y) > SPILL_PICKUP_R) return;
+    const st = this.state;
+    let took = 0, value = 0;
+    for (const stack of c.cargo) {
+      while (stack[1] > 0 && st.addCargo(stack[0])) { stack[1]--; took++; value += oreValue(stack[0]); }
+      if (stack[1] > 0) break; // the hold filled — the rest stays on the floor
+    }
+    if (took === 0) {
+      if (this.time - this.spillNagAt > 3) {
+        this.spillNagAt = this.time;
+        this.hud.toast('CARGO FULL — THE SPILL STAYS PUT');
+        this.audio.cargoFull();
+      }
+      return;
+    }
+    c.cargo = c.cargo.filter(stack => stack[1] > 0);
+    this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+    this.hud.popup('+' + fmtMoney(value), '#ff9a3c', this.screen.sx, this.screen.sy);
+    this.audio.salvage();
+    if (c.cargo.length === 0) {
+      st.spill = null;
+      this.spill.hide();
+      this.hud.setSpill(null);
+      this.hud.toast('HOLD RECOVERED — CLAIM CLOSED', 'stratum');
+    } else {
+      this.spill.show(st.spill!);
+    }
     this.saveNow();
   }
 
@@ -1698,6 +1811,13 @@ class Game {
       this.playFrame(dt);
     }
 
+    // The claim burns on foot as well as in the seat — but not inside a
+    // stone, an interior or the chart, which never reach this line. It runs
+    // on raw time, not the simulation's capped step: the panel promises five
+    // real minutes, and a slow frame must not quietly hand out six. Capped
+    // loosely so an alt-tab does not void a claim in one frame.
+    if (this.mode === 'play' || this.mode === 'eva') this.tickSpill(Math.min(0.25, raw));
+
     // the unmaking and the ending pages run outside EVA, so they are driven
     // here — and they own the screen until the player says otherwise
     if (this.finale.phase === 'unmake' || this.finale.phase === 'page') {
@@ -1951,7 +2071,8 @@ class Game {
     this.hud.update(st, this.ctrl.depthM, this.ctrl.row, this.ctrl.heatFrac, Math.max(dt, 0.001));
     this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time,
       this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
-      this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : []);
+      this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : [],
+      this.state.spill?.world === this.state.activeWorld ? this.state.spill : null);
 
     if (!paused && dt > 0) st.playTime += dt;
     this.updateContractHud();

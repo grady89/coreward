@@ -415,6 +415,23 @@ input[type="range"]:focus-visible { box-shadow: 0 0 0 2px rgba(255, 154, 60, 0.5
   background: var(--ink-dim); box-shadow: 0 0 6px rgba(232,226,213,0.3);
 }
 
+/* the claim clock over a spilled hold — sits under the gauges it belongs with */
+#spill-claim {
+  display: none; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 6px 10px; border-radius: 8px;
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(6px);
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.22em;
+  color: var(--amber);
+}
+#spill-claim.on { display: flex; }
+#spill-claim .sc-time {
+  color: var(--ink); letter-spacing: 0.12em; font-variant-numeric: tabular-nums;
+}
+#spill-claim.failing {
+  color: var(--magma); border-color: rgba(255, 77, 41, 0.42);
+  animation: bar-pulse 1s infinite;
+}
+
 #fps {
   position: absolute; top: 18px; left: 50%; transform: translateX(-50%) translateY(48px);
   font-size: 10px; letter-spacing: 0.16em; color: var(--ink-dim);

@@ -2,7 +2,7 @@ import { GameState } from '../game/state';
 import { AudioEngine } from '../audio/audio';
 import {
   FUEL_PRICE, REPAIR_PRICE, TRACKS, GAME_NAME, FORGE, WRECK_LOGS,
-  DEATH_FEE_FRAC, RESCUE_FEE_FRAC, RESCUE_MIN_MONEY, fmtMoney, SCANNER_PRICE,
+  DEATH_FEE_FRAC, RESCUE_FEE_FRAC, RESCUE_MIN_MONEY, SPILL_TTL, fmtMoney, SCANNER_PRICE,
   DEEP_ARRAY_PRICE, BEACON_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE,
   MAX_FLARES_HELD, MAX_CHARGES_HELD,
   GLYPHS_TO_TRANSLATE, ARRESTOR_PRICE, MAX_ARRESTORS,
@@ -89,6 +89,7 @@ export class Panels {
   private deathCause = '';
   private deathFee = 0;
   private lostCargo = 0;
+  private spilled: { value: number; count: number } | null = null;
   private endingKind: EndingKind = 'extract';
 
   constructor(private ui: HTMLElement, private ctx: PanelCtx) {}
@@ -101,10 +102,10 @@ export class Panels {
     this.current = null;
   }
 
-  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind }): void {
+  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind; spilled?: { value: number; count: number } | null }): void {
     this.close();
     this.current = kind;
-    if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause);
+    if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause, opts.spilled ?? null);
     if (kind === 'finale' && opts?.ending) this.endingKind = opts.ending;
     this.scrim = document.createElement('div');
     this.scrim.className = 'panel-scrim';
@@ -714,23 +715,32 @@ export class Panels {
   }
 
   // ---------- DEATH ----------
-  private prepareDeath(cause: string): void {
+  private prepareDeath(cause: string, spilled: { value: number; count: number } | null): void {
     const st = this.ctx.state;
     this.deathCause = cause;
     this.deathFee = Math.round(st.money * DEATH_FEE_FRAC);
+    this.spilled = spilled;
+    // anything the crash did not scatter is simply gone (a spill already
+    // emptied the hold, so this reads 0 whenever a claim was filed)
     this.lostCargo = st.cargoValue;
     st.money -= this.deathFee;
     st.cargo.clear();
   }
 
   private renderDeath(): void {
+    const sp = this.spilled;
+    const claim = Math.floor(SPILL_TTL / 60) + ':' + String(SPILL_TTL % 60).padStart(2, '0');
+    const cargoLine = sp
+      ? `Hold spilled at the crash site: <b style="color:var(--amber)">${fmt(sp.value)}</b> in ${sp.count} unit${sp.count === 1 ? '' : 's'}<br/>
+         The crew filed a claim. The beacon runs <b style="color:var(--amber)">${claim}</b> — reach it and the ore is still yours.`
+      : `Cargo lost: <b style="color:var(--magma)">${fmt(this.lostCargo)}</b><br/>
+         A recovery crew hauled the wreck back to the rig.`;
     this.body().innerHTML = `
       <div class="screen-title bad">POD DESTROYED</div>
       <div class="screen-sub">
         Lost to ${this.deathCause}.<br/>
-        Cargo lost: <b style="color:var(--magma)">${fmt(this.lostCargo)}</b> ·
         Salvage fee: <b style="color:var(--magma)">${fmt(this.deathFee)}</b><br/>
-        A recovery crew hauled the wreck back to the rig.
+        ${cargoLine}
       </div>
       <button class="btn primary wide" id="respawn">BACK TO THE SURFACE</button>
     `;

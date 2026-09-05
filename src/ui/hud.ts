@@ -1,5 +1,5 @@
 import { GameState } from '../game/state';
-import { stratumIndex, LOW_FUEL_FRAC, EVA_O2, fmtMoney, CUR_NAME } from '../config';
+import { stratumIndex, LOW_FUEL_FRAC, EVA_O2, fmtMoney, CUR_NAME, SPILL_WARN } from '../config';
 import { def } from '../world/tiles';
 import { ACTIVE, worldById } from '../world/worlds';
 import { oreIcon } from './icons';
@@ -21,6 +21,8 @@ export class Hud {
   private o2Val!: HTMLElement;
   private o2Bar!: HTMLElement;
   private heatLabel!: HTMLElement;
+  private spillEl!: HTMLElement;
+  private spillTime!: HTMLElement;
   private contractEl!: HTMLElement;
   private ctName!: HTMLElement;
   private ctReward!: HTMLElement;
@@ -60,6 +62,7 @@ export class Hud {
           <div class="bar" id="bar-hull"><div class="bar-fill hull"></div><span class="bar-label">HULL</span><span class="bar-value"></span></div>
           <div id="bar-heat-wrap"><div class="bar" id="bar-heat"><div class="bar-fill heat"></div><span class="bar-label" id="heat-label">HEAT</span><span class="bar-value"></span></div></div>
           <div id="bar-o2-wrap"><div class="bar" id="bar-o2"><div class="bar-fill o2"></div><span class="bar-label">OXYGEN</span><span class="bar-value"></span></div></div>
+          <div id="spill-claim"><span>◈ SPILL CLAIM</span><span class="sc-time"></span></div>
         </div>
         <div id="hud-depth-wrap" class="hud-corner">
           <div id="hud-depth">0m</div>
@@ -100,6 +103,8 @@ export class Hud {
     this.o2Val = $('#bar-o2 .bar-value');
     this.o2Bar = $('#bar-o2');
     this.heatLabel = $('#heat-label');
+    this.spillEl = $('#spill-claim');
+    this.spillTime = $('#spill-claim .sc-time');
     this.moneyEl = $('#hud-money');
     this.depthEl = $('#hud-depth');
     this.stratumEl = $('#hud-stratum');
@@ -213,6 +218,20 @@ export class Hud {
       .map(([t, c]) => `<div class="c-row"><img class="c-ico" src="${oreIcon(t)}" alt="" /><b>${def(t).name}</b> × ${c}</div>`)
       .join('');
     if (this.cargoList.innerHTML !== rows) this.cargoList.innerHTML = rows;
+  }
+
+  /**
+   * The claim clock for a spilled hold (null hides it). `where` is whatever
+   * helps you get back to it — range while you are on that world, a name
+   * while you are not.
+   */
+  setSpill(sec: number | null, where = ''): void {
+    this.spillEl.classList.toggle('on', sec !== null);
+    if (sec === null) return;
+    const s = Math.max(0, Math.ceil(sec));
+    const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    this.spillTime.textContent = where ? `${clock} · ${where}` : clock;
+    this.spillEl.classList.toggle('failing', sec <= SPILL_WARN);
   }
 
   /** show/update the oxygen bar during EVA (null hides it) */

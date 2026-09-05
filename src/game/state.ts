@@ -4,6 +4,7 @@ import { worldById } from '../world/worlds';
 import { oreValue, T } from '../world/tiles';
 import { GLYPH_ORDER } from '../world/glyphs';
 import { Terrain } from '../world/terrain';
+import type { SpillClaim } from '../world/spill';
 
 // v2 save: one pod, many worlds. Money/upgrades/cargo/fuel/hull travel with
 // you; terrain diffs, position and wreck loot are per-world.
@@ -51,6 +52,14 @@ export class GameState {
    * park embershards (or anything else) you don't want touched by accident.
    */
   stored = new Map<number, number>();
+  /**
+   * The open spill claim, or null. Exactly one at a time: a second crash with
+   * ore aboard writes off whatever the last one left. It rides on the pod's
+   * side of the save, not the world's, because the loss is the driller's —
+   * but it only shows on the world it fell on, and the battery burns wherever
+   * you happen to be standing.
+   */
+  spill: SpillClaim | null = null;
   bestDepthM = 0;
   totalEarned = 0;
   blocksDug = 0;
@@ -291,6 +300,7 @@ export class GameState {
     this.hull = trackValue('hull', 0);
     this.cargo.clear();
     this.stored.clear();
+    this.spill = null;
     this.bestDepthM = 0;
     this.totalEarned = 0;
     this.blocksDug = 0;
@@ -386,6 +396,7 @@ export class GameState {
         upgrades: this.upgrades,
         cargo: [...this.cargo.entries()],
         stored: [...this.stored.entries()],
+        spill: this.spill,
         bestDepthM: this.bestDepthM,
         totalEarned: this.totalEarned,
         blocksDug: this.blocksDug,
@@ -446,6 +457,7 @@ export class GameState {
         this.cargo = new Map(d.cargo);
         this.cargo.delete(9); // legacy veinlight in cargo — it is fuel now
         this.stored = new Map(d.stored ?? []);
+        this.spill = d.spill ?? null;
         this.bestDepthM = d.bestDepthM; this.totalEarned = d.totalEarned;
         this.blocksDug = d.blocksDug;
         this.milestones = new Set(d.milestones);
