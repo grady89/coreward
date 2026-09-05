@@ -2771,7 +2771,7 @@ export class VaultRun {
     } else if (this.phase === 'leave') {
       this.leaveT += dt;
       this.driveAssembly(this.leaveT, -1);
-      if (this.leaveT >= PULSE * 1.5) this.closed = true;
+      if (this.leaveT >= PULSE * 2.4) this.closed = true;
     } else {
       this.invuln = Math.max(0, this.invuln - dt);
       this.step(dt, input);
@@ -3269,14 +3269,14 @@ export class VaultRun {
       a.rx[i] = rnd(i, 4) * 1.1;
       a.rz[i] = rnd(i, 5) * 1.1;
       // the room builds OUTWARD from the tile you stand on
-      a.delayIn[i] = Math.hypot(tiles[i].px - (e.x + 0.5), tiles[i].py + e.y + 0.5) * 0.042;
+      a.delayIn[i] = Math.hypot(tiles[i].px - (e.x + 0.5), tiles[i].py + e.y + 0.5) * 0.06;
     }
     this.assembly.push(a);
   }
 
   /** drive every flying course; t counts up, dir +1 arrives, -1 lets go */
   private driveAssembly(t: number, dir: 1 | -1): boolean {
-    const AD = 0.55;
+    const AD = 0.8;
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const eu = new THREE.Euler();
@@ -3320,7 +3320,7 @@ export class VaultRun {
     for (const a of this.assembly) {
       for (let i = 0; i < a.n; i++) {
         const d = Math.hypot(a.px[i] - this.px, a.py[i] - this.py);
-        a.delayOut[i] = (1 - d / maxD) * 0.7;    // the far side lets go first
+        a.delayOut[i] = (1 - d / maxD) * 1.1;    // the far side lets go first
       }
     }
     this.audio.duck(0.2, 1.5);

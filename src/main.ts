@@ -528,7 +528,8 @@ class Game {
     const c = this.cam.camera.position;
     this.fold = {
       kind, id, t: 0, k: kind === 'out' ? 1 : 0,
-      dur: (kind === 'out' ? 1.5 : short ? 1 : 2) * PULSE,
+      // slow enough to WATCH: the shatter and the seal are the show
+      dur: (kind === 'out' ? 2.5 : short ? 1.75 : 3.5) * PULSE,
       sx, sy, throat,
       cam0: kind === 'out'
         ? { x: this.pilot.px, y: this.pilot.py + 1, z: 15 }
