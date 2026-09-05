@@ -533,7 +533,8 @@ await stage('shift', ['spinning beams'], async () => {
     return { varies, censers, downdrafts,
       min: +Math.min(...lens).toFixed(1), max: +Math.max(...lens).toFixed(1) };
   });
-  ok('spinning beams', shift, shift.varies && shift.censers === 2 && shift.downdrafts === 3);
+  // three ridden lanterns: adjacent pairs anti-phased so their apexes meet
+  ok('spinning beams', shift, shift.varies && shift.censers === 3 && shift.downdrafts === 3);
   await page.screenshot({ path: OUT + '/v-shift.png' });
 });
 

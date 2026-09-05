@@ -80,8 +80,9 @@ put(6, F[0] - 1, 'S')
 
 # --- storey 2: no floor at all ----------------------------------------------
 run(7, 12, F[1])                            # the far shelf, end of the ride
-put(18, F[1] - 5, '#')                      # censer mounts...
-put(28, F[1] - 5, '#')                      # ...pivots hang one course below
+put(16, F[1] - 5, '#')                      # censer mounts...
+put(23, F[1] - 5, '#')                      # ...pivots hang one course below
+put(30, F[1] - 5, '#')
 block(34, 38, F[1] - 1, F[1])               # the safe block off the first shaft
 run(39, 43, F[1])                           # the spiked shelf under the wind:
 run(39, 43, F[1] - 1, 'X')                  # land here and the storey repeats
@@ -131,10 +132,15 @@ BEAMS = [
     (29.5, 7.2, 4, 0.5, True),
     (25.5, 53.3, 4, 0.25, False),
 ]
-# the ridden lanterns: (x, pivot-row, len, arc, period-in-pulses, phase)
+# The ridden lanterns: (x, pivot-row, len, arc, period-in-pulses, phase).
+# THREE, seven columns apart — each bob reaches len*sin(arc) = 2.86 aside,
+# so facing apexes stop 1.3 tiles from each other — and adjacent lanterns
+# swing in ANTI-phase: both bobs arrive at their shared top together,
+# momentarily still, and the crossing is a step, not a prayer.
 CENSERS = [
-    (18, F[1] - 4, 3.4, 1.0, 3, 0.0),
-    (28, F[1] - 4, 3.4, 1.0, 3, 0.25),
+    (16, F[1] - 4, 3.4, 1.0, 3, 0.0),
+    (23, F[1] - 4, 3.4, 1.0, 3, 0.5),
+    (30, F[1] - 4, 3.4, 1.0, 3, 0.0),
 ]
 SINK = -40
 
