@@ -1,4 +1,4 @@
-"""THE FAMINE — built to the drawing. 56 x 56.
+"""THE FAMINE — built to the drawing. 56 x 58.
 
     start ---> hall A ---> [wind] ---> hall B <--- [wind] ---> hall C ---> finish
                              up                     up
@@ -30,14 +30,16 @@ tiles, so a run of four is 0.92x and a run of five is past what legs can do.
 """
 import io
 
-W, HGT = 56, 56
+W, HGT = 56, 58
 MAXJ = 5.45
 PULSE = 0.85
 
 g = [['#'] * W for _ in range(HGT)]          # solid, and the halls are cut out
 
-# hall floor rows, bottom to top, and the six courses of air over each
-HALL = [42, 30, 18]
+# Hall floor rows, bottom to top, and the six courses of air over each. They
+# sit SIXTEEN apart, not twelve, because every hall needs eight courses of open
+# space under it for its fall before the kill plane -- see FALL below.
+HALL = [46, 30, 14]
 AIR = 6
 LEFT, RIGHT = 2, W - 3
 
@@ -78,6 +80,8 @@ for f, (a, b) in zip(HALL, HALL_X):
     carve(a, b, f - AIR, f - 1)
 
 # --- the channels: cut through the rock between the halls ------------------
+CH1_ROWS = (HALL[1] - 1, HALL[0] - 1)
+CH2_ROWS = (HALL[2] - 1, HALL[1] - 1)
 carve(CH1[0], CH1[1], HALL[1] - 1, HALL[0] - 1)      # A -> B, right end
 carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C
 
@@ -96,23 +100,18 @@ carve(CH2[0], CH2[1], HALL[2] - 1, HALL[1] - 1)      # B -> C
 # flat run crossed by one horizontal rail AND two vertical ones over the top
 # of it, four jumps onto one-tile landings, and the lift out.
 # ===========================================================================
-# A pit's bottom is a VOID (`_`) -- unlight that is never drawn. The first pass
-# floored them with visible unlight, which lights the hole and turns a fall
-# into a landing on something; THE WICK's pits are open sky and read as an
-# absence, and these read the same way.
+# THE FALL, done the way THE WICK does it.
 #
-# HOW DEEP IS WHATEVER ROCK THERE IS. A fixed depth put hall B's pit floors
-# eleven courses down, which is through the five courses of rock under it and
-# out into HALL A'S AIR -- lethal tiles hanging in the middle of the hall
-# below, and the pit itself a hole between two storeys. The bottom hall gets
-# the whole basement; the others get the band under them, less the course that
-# is the next hall's ceiling.
-def pit_depth(h):
-    below = HALL[h - 1] - AIR - 1 if h > 0 else HGT - 2
-    return below - HALL[h] - 1
-
-
-PIT_DEPTH = [pit_depth(h) for h in range(3)]
+# Every platform in a hall is ONE COURSE THICK and floats. Under all of them is
+# eight courses of open air and then a plane of `_` -- unlight that kills on
+# touch and is never drawn. Miss a jump and you fall out of the level.
+#
+# The first pass got this wrong twice. It carved each pit as a deep shaft and
+# floored it with drawn unlight, which lights the hole; and it left the ground
+# between the pits as columns of rock running to the basement, so a missed
+# landing put you against a wall you could simply kick your way back up. A
+# pillar with a face on it is a rescue. A floating stone is not.
+FALL = 8
 
 SOLID = [
     [(2, 13), (19, 34), (37, 37), (40, 40), (43, 43), (46, 46), (CH1[0], CH1[1])],
@@ -121,36 +120,62 @@ SOLID = [
     # and TWO in the last one, both to be threaded in a single jump -- landing
     # in the second lift.
     [(CH2[0], CH2[1]), (28, 31), (36, 39), (44, 49)],
-    [(CH2[0], RIGHT)],
+    [(CH2[0], RIGHT)],          # hall C is a placeholder until its brief
 ]
 PIT = [
     [(14, 18), (35, 36), (38, 39), (41, 42), (44, 45), (47, 49)],
     [(23, 27), (32, 35), (40, 43)],
     [],
 ]
-STUDS = [[], [], [(30, 4), (46, 3)]]
-LEDGES = [[], [], [(40, 4)]]
+STUDS = [[], [], []]
+LEDGES = [[], [], []]
 LASER = [
     # the long flat run, all three lights over the same stretch of floor
     [('h', 20, 33, 3, 0.0), ('v', 24, 2, 0.25), ('v', 30, 2, 0.75)],
-    # one in each gap, and two in the last: 1.10x is the whole width of the
-    # legs' reach, so threading both is one jump with no room to hesitate
-    [('v', 41, 3, 0.0), ('v', 33, 3, 0.5), ('v', 24, 2, 0.25), ('v', 26, 2, 0.75)],
+    # A rail stands at the EDGE OF A LANDING, not out over the hole. Hung mid
+    # pit it seats down the length of the fall and the bolt spends most of its
+    # round far below the jump, so you wait it out instead of threading it --
+    # the wall of light stops being a wall. On a lip it stands on stone, spans
+    # exactly the hall, and is in the way for the whole of its round.
+    #
+    # Read right to left, so a landing's near edge is its RIGHT one. The last
+    # gap gets both of its lips lit: you leave through one and arrive through
+    # the other, in a single jump.
+    [('v', 39, 3, 0.0), ('v', 31, 3, 0.5), ('v', 28, 2, 0.25), ('v', 22, 2, 0.75)],
     [('v', 19, 2, 0.0), ('v', 36, 2, 0.5), ('v', 45, 2, 0.25)],
 ]
 LEDGE_RISE = 2
+
+for h in range(1, 3):
+    ceiling = HALL[h - 1] - AIR - 1
+    assert HALL[h] + FALL < ceiling, (
+        "hall %d kill plane at %d is inside hall %d, whose ceiling is %d"
+        % (h, HALL[h] + FALL, h - 1, ceiling))
 
 # a hall's floor exists only where the table says it does
 for h, f in enumerate(HALL):
     for x in range(HALL_X[h][0], HALL_X[h][1] + 1):
         if not any(a <= x <= b for a, b in SOLID[h]):
             g[f][x] = '.'
+    # Hollow the whole hall out beneath its floor, then lay the kill plane --
+    # but NOT across a lift shaft. The shafts run through these bands, and a
+    # plane drawn straight over them puts unlight inside the wind: you get in
+    # at the bottom, are carried up, and are killed on the way by a floor that
+    # is not there for anyone standing on it.
+    carve(HALL_X[h][0], HALL_X[h][1], f + 1, f + FALL - 1)
+    for x in range(HALL_X[h][0], HALL_X[h][1] + 1):
+        # Inside a shaft the plane is OPEN, not merely un-lethal -- leaving the
+        # base rock there hangs a ledge across the wind for the body to land
+        # on. Tested as a RECTANGLE and not a column: a shaft only runs between
+        # two particular halls, and skipping by column alone punched holes in
+        # kill planes the shaft never passes through, leaving standable ledges
+        # in the basement.
+        y = f + FALL
+        inShaft = any(c0 <= x <= c1 and r0 <= y <= r1
+                      for (c0, c1), (r0, r1) in ((CH1, CH1_ROWS), (CH2, CH2_ROWS)))
+        put(x, y, '.' if inShaft else '_')
     for x0, x1 in PIT[h]:
-        d = PIT_DEPTH[h]
-        assert d >= 3, 'hall %d has only %d courses of rock for a pit' % (h, d)
-        carve(x0, x1, f, f + d - 1)
-        for x in range(x0, x1 + 1):
-            put(x, f + d, '_')                  # unlight you never see
+        carve(x0, x1, f, f)                     # and the floor is simply absent
     for x0, n in STUDS[h]:
         studs(f, x0, n)
     for x0, n in LEDGES[h]:

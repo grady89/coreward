@@ -91,7 +91,13 @@ function loadRooms() {
  */
 function platforms(w) {
   const solid = (x, y) => !AIR.has(w.at(x, y));
-  const land = (x, y) => solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2);
+  // A surface is only landable if the body can actually OCCUPY the two courses
+  // above it. The rock beneath a kill plane has clear air over it and reads as
+  // a shelf, so the search found platforms nobody can reach without dying on
+  // the way -- and then reported them as places the stone is unreachable from.
+  const fang = (x, y) => { const c = w.at(x, y); return c === 'X' || c === '_'; };
+  const land = (x, y) => solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2)
+    && !fang(x, y - 1) && !fang(x, y - 2);
   const dryAt = (x, y) => w.at(x, y) === '=';
   const out = [];
   for (let y = 1; y < w.h; y++) {
@@ -151,7 +157,7 @@ for (const at of noSpark ? [] : [2, 6, 10, 16, 24]) {
  * these the harness cannot verify one of the game's four verbs, and a shaft
  * climbed by wall-jumps reads to it as an unreachable room.
  */
-function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jumpDelay = 0, brake = 0 }) {
+function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jumpDelay = 0, brake = 0, ride = 0 }) {
   const s = spawn(w, launchX, from.y - 1);
   s.py = -(from.y) + C.HH + 0.001;      // standing on the surface
   s.grounded = true; s.spark = true;
@@ -172,7 +178,12 @@ function attempt(w, from, to, { launchX, dir, runUp, hold, dash, kicks = [], jum
     // stick for the entire flight, which is all this used to search, measures
     // a player who has decided not to aim: it put a one-tile landing at two
     // frames and called the level unfair when the level was fine.
-    const inp = (brake > 0 && f >= brake && !k)
+    // RIDE: hold nothing at all and let the wind do the work. Every tape
+    // steered at the target from the first frame, which inside an updraft
+    // column walks the body straight out of the wind -- so a lift could never
+    // be ridden further than the few tiles it gives you on the way past, and
+    // a room whose route goes up one read as having no way up.
+    const inp = ((ride > 0 && f < ride) || (brake > 0 && f >= brake)) && !k
       ? { ...H, jump: f < hold }
       : { ...hold1(steer), jump: f < hold };
     if (k) { inp.press = true; }
@@ -195,6 +206,37 @@ function solve(w, from, to, dashes = DASHES) {
     ? [from.x1, Math.max(from.x0, from.x1 - 3), from.x0]
     : [from.x0, Math.min(from.x1, from.x0 + 3), from.x1];
   const rise = from.y - to.y;
+
+  // A LIFT IS ITS OWN TRAVERSAL, and it gets its own small tape space.
+  //
+  // Riding a wind column is not a jump: you get in, hold nothing so the wind
+  // keeps you, and steer out at the top. Kicks and spark angles have no part
+  // in it, and sweeping them against every ride length multiplies a bounded
+  // search into an unbounded one -- the general space is launches x runups x
+  // holds x kicks x dashes, and folding rides into that took the harness from
+  // seconds to past ten minutes on one room.
+  if (rise >= 6 && liftBetween(w, from, to) > 0) {
+    for (const ride of [40, 70, 100, 130, 160, 200, 260]) {
+      for (const launchX of launches) {
+        for (const hold of [999, 16, 3]) {
+          for (const dash of [null, dashes[1] ?? null]) {
+            const opt = { launchX, dir, runUp: 0, hold, dash, kicks: [], ride };
+            const r = attempt(w, from, to, opt);
+            if (r) return { ...opt, frames: r.frames };
+          }
+        }
+      }
+    }
+    return null;
+  }
+  const rides = [0];
+  // The air brake is only worth sweeping onto a SMALL target -- it is the
+  // technique for not overshooting a tile, and on a wide shelf it just
+  // multiplies the search by five for no new tape. Same for the fine end of
+  // the hold ladder: a shelf does not need frame-level control to land on.
+  const narrow = to.x1 - to.x0 <= 2;
+  const brakes = narrow ? BRAKES : [0];
+  const holds = narrow ? HOLDS : HOLDS.filter(h => h >= 6);
   // wall-jump tapes are only worth searching when the target is ABOVE — that
   // is what a kick buys, and it keeps the search from exploding on flat ground
   const kickSets = [[]];
@@ -216,12 +258,14 @@ function solve(w, from, to, dashes = DASHES) {
   for (const dash of dashes) {
     for (const launchX of launches) {
       for (const runUp of RUNUPS) {
-        for (const hold of HOLDS) {
+        for (const hold of holds) {
           for (const kicks of kickSets) {
-            for (const brake of BRAKES) {
-              const opt = { launchX, dir, runUp, hold, dash, kicks, brake };
-              const r = attempt(w, from, to, opt);
-              if (r) return { ...opt, frames: r.frames };
+            for (const brake of brakes) {
+              for (const ride of rides) {
+                const opt = { launchX, dir, runUp, hold, dash, kicks, brake, ride };
+                const r = attempt(w, from, to, opt);
+                if (r) return { ...opt, frames: r.frames };
+              }
             }
           }
         }
@@ -270,6 +314,24 @@ function missCost(w, from, to, opt, route, i, lastLit) {
 
 /** how many frames the jump press may slide and still land it */
 function margin(w, from, to, opt) {
+  // A LIFT IS TIMED AT THE TOP, NOT THE BOTTOM. Sliding the jump press on a
+  // wind ride measures nothing: you get into the column and the wind does the
+  // work, and the only choice that matters is WHEN YOU STEER OUT. Measured the
+  // other way every lift in the game reported two frames and looked like the
+  // tightest input in the room, which is the metric being wrong rather than
+  // the level.
+  if (opt.ride > 0) {
+    let early = 0, late = 0;
+    for (let k = 1; k <= 40; k++) {
+      if (!attempt(w, from, to, { ...opt, ride: opt.ride + k })) break;
+      late = k;
+    }
+    for (let k = 1; k <= 40 && opt.ride - k > 0; k++) {
+      if (!attempt(w, from, to, { ...opt, ride: opt.ride - k })) break;
+      early = k;
+    }
+    return early + late + 1;
+  }
   let early = 0, late = 0;
   for (let k = 1; k <= 20; k++) {
     if (!attempt(w, from, to, { ...opt, jumpDelay: k })) break;
