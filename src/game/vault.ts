@@ -13,7 +13,7 @@ import {
   buildRailPost, buildRailMast, buildBolt, BoltParts, buildSnuffer, MothParts,
   buildCenser, CenserParts, buildChain,
   buildCrusher, buildRime, RimeParts,
-  buildPier, buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts,
+  buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts, smokePuff,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
   buildMote, buildStud, buildPursuit, PursuitParts, buildMasterDressing,
 } from './vaultkit';
@@ -328,7 +328,6 @@ export class VaultRun {
   private doorRunes: DoorRuneParts[] = [];
   private bridgeMeshes: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; group: 0 | 1; parts: DeckParts }[] = [];
   /** a bridge run's piers, which never go out — the phase read from a distance */
-  private pierMats: THREE.MeshBasicMaterial[] = [];
   private rimeMeshes: THREE.Object3D[] = [];
   /** each shelf's crack web, drawn on as it gives */
   private rimeParts: RimeParts[] = [];
@@ -342,6 +341,8 @@ export class VaultRun {
   private crusherFaceMats: THREE.Material[] = [];
   private censerMeshes: {
     parts: CenserParts; chain: THREE.Group; light: THREE.PointLight;
+    /** the crown's smoke, trailing the swing */
+    puffs: THREE.Mesh[];
   }[] = [];
   /** stones something hangs from: drawn full-mass, never as half slabs */
   private slabAnchors = new Set<number>();
@@ -782,18 +783,9 @@ export class VaultRun {
       this.scene.add(parts.group);
       this.bridgeMeshes.push({ mesh: parts.deck, mat: parts.deckMat, group: b.group, parts });
     }
-    // a pier stands at each end of every contiguous run, on the stone beside it
-    for (const b of this.p.bridges) {
-      for (const dir of [-1, 1]) {
-        const nx = b.x + dir;
-        const runs = this.p.bridges.some(o => o.x === nx && o.y === b.y && o.group === b.group);
-        if (runs) continue;
-        const pier = buildPier();
-        pier.group.position.set(nx + 0.5, -(b.y + 0.5) + 0.42, 0);
-        this.scene.add(pier.group);
-        this.pierMats.push(pier.lampMat);
-      }
-    }
+    // (the piers that used to stand at every run's ends are retired — the
+    // playtest read them as clutter; the deck and its wiring trace carry
+    // the phase on their own)
 
     // rime — young ice over old work: a crust with a frost fringe and drips,
     // and a crack web that only appears once it is carrying you
@@ -962,8 +954,9 @@ export class VaultRun {
     }
 
     // censers — a lantern on a chain, still swinging after all this time.
-    // The lantern IS its own telegraph: the playtest retired the arc trace,
-    // apex pads and crown smoke — just the lamp, swinging.
+    // The lantern is its own telegraph (the playtest retired the arc trace
+    // and apex pads), but the crown keeps its SMOKE: travel with a
+    // direction, off a thing that burns.
     for (const c of this.def.censers ?? []) {
       const chain = buildChain(c.len);
       chain.position.set(c.x, -c.y, 0.2);
@@ -971,8 +964,18 @@ export class VaultRun {
       const light = new THREE.PointLight(0xffd9a0, 2.2, 7, 1.7);
       light.position.y = CENSER_TOP - 0.4;
       parts.bob.add(light);
+      const puffs: THREE.Mesh[] = [];
+      for (let i = 0; i < 5; i++) {
+        const s = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.36),
+          new THREE.MeshBasicMaterial({
+            map: smokePuff(), color: 0xdcc6a0, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+          }));
+        this.scene.add(s);
+        puffs.push(s);
+      }
       this.scene.add(chain, parts.bob);
-      this.censerMeshes.push({ parts, chain, light });
+      this.censerMeshes.push({ parts, chain, light, puffs });
     }
 
     // braziers — hanging ember baskets: bronze holds, light works. The
@@ -2816,10 +2819,6 @@ export class VaultRun {
       // will come back -- a hairline, so the gap is never a mystery
       bm.parts.traceMat.opacity = on ? 0.16 : 0.55 + Math.sin(this.time * 2.4) * 0.1;
     }
-    // the piers never go out: they are the fixed ends the phase reads between
-    for (let i = 0; i < this.pierMats.length; i++) {
-      this.pierMats[i].opacity = 0.8 + Math.sin(this.time * 4 + i) * 0.08;
-    }
     for (let i = 0; i < this.shuttleMeshes.length; i++) {
       const pos = this.shuttlePos(i);
       this.shuttleMeshes[i].bolt.position.set(pos.x, pos.y, 0.15);
@@ -2887,6 +2886,17 @@ export class VaultRun {
       cm.light.intensity = 2 + Math.sin(this.time * 8 + i) * 0.4;
       cm.parts.flame.scale.set(0.8, 1.5 + Math.sin(this.time * 11 + i) * 0.2, 0.8);
 
+      // the smoke off the crown, so travel has a direction at a glance
+      for (let k = 0; k < cm.puffs.length; k++) {
+        const lag = (k + 1) * 0.075;
+        const a = c.arc * Math.sin(Math.PI * 2 * ((this.time - lag) / (c.period / hazardMul) + c.phase));
+        const puff = cm.puffs[k];
+        puff.position.set(
+          c.x + Math.sin(a) * c.len,
+          -c.y - Math.cos(a) * c.len + CENSER_TOP + 0.1 + k * 0.06, 0.07);
+        puff.scale.setScalar(0.6 + k * 0.2);
+        (puff.material as THREE.MeshBasicMaterial).opacity = 0.26 * (1 - k / cm.puffs.length);
+      }
       // the deck lights up as it comes to rest -- the crown says "floor"
       // loudest exactly when it is standing still enough to be landed on
       const u = Math.sin(Math.PI * 2 * (this.time / (c.period / hazardMul) + c.phase));
