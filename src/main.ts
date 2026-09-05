@@ -564,6 +564,11 @@ class Game {
       f.throat.dispose();
       this.fold = null;
       this.cam.snap(this.pilot.px, this.pilot.py + 1, 15);
+    } else if (f.t > f.dur * 2 + 1) {
+      // the safety line: whatever stranded it, no fold outlives twice its
+      // own duration — the world may never keep a phantom doorway
+      f.throat.dispose();
+      this.fold = null;
     }
   }
 
@@ -653,7 +658,15 @@ class Game {
   // ---------- THE QUARTERS ----------
 
   /** dock at home, walk in — the VaultRun takeover checklist, verbatim */
+
+  /** dispose any threshold still in motion — a fold may not outlive the
+   *  moment the game changes rooms around it */
+  private clearFold(): void {
+    if (this.fold) { this.fold.throat.dispose(); this.fold = null; }
+  }
+
   private enterInterior(): void {
+    this.clearFold();
     if (this.interior) { this.interior.dispose(); this.interior = null; }
     this.audio.airlock();
     this.hud.hide();
@@ -1212,6 +1225,7 @@ class Game {
   }
 
   private travel(id: string): void {
+    this.clearFold();
     this.saveNow();
     this.state.activeWorld = id;
     this.state.persist();
@@ -1228,6 +1242,7 @@ class Game {
   }
 
   private quitToTitle(): void {
+    this.clearFold();
     this.saveNow();
     this.panels.close();
     this.map.close();
@@ -1287,6 +1302,7 @@ class Game {
   }
 
   private exitEva(): void {
+    this.clearFold();
     this.audio.airlock();
     this.pilot.hide();
     this.hud.setEva(null);

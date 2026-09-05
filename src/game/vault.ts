@@ -208,7 +208,7 @@ export interface VaultAudio {
 
 interface Input { left: boolean; right: boolean; up: boolean; down: boolean; }
 
-type Phase = 'run' | 'complete';
+type Phase = 'run' | 'complete' | 'leave';
 
 export class VaultRun {
   completed = false;
@@ -356,6 +356,9 @@ export class VaultRun {
   /** the interior threshold at the entry — open on arrival, then a door */
   private door!: FoldThroat;
   private doorT = 0;
+  /** THE LEAVE (SPEC-FOLD.md beat 9): one pulse of being taken back */
+  private leaveT = 0;
+  private leaveVia: 'door' | 'master' = 'door';
   /** a snuffer's whole moth, indexed like shuttles; null for a plain bolt */
   private snufferParts: (MothParts | null)[] = [];
   /** last frame's place, so the moth can turn into where it is going */
@@ -2742,6 +2745,9 @@ export class VaultRun {
         this.audio.complete();
         this.showCard();
       }
+    } else if (this.phase === 'leave') {
+      this.leaveT += dt;
+      if (this.leaveT >= PULSE) this.closed = true;
     } else {
       this.invuln = Math.max(0, this.invuln - dt);
       this.step(dt, input);
@@ -2765,13 +2771,18 @@ export class VaultRun {
       if (x > f.x1) x = f.x0;
       f.mesh.position.x = x;
     }
-    // the arrival closes behind you; the door brightens as you return
+    // the arrival closes behind you; the door brightens as you return —
+    // and when you LEAVE by it, it opens all the way and takes you
     this.doorT = Math.min(1, this.doorT + dt / (2 * PULSE));
     {
       const e = this.p.entry;
       const dnear = Math.max(0, 1 - Math.hypot(this.px - (e.x + 0.5), this.py + e.y + 0.5) / 3);
       const rest = 0.16 + dnear * 0.3;
-      this.door.update((1 - this.doorT) * (1 - rest) + rest, this.time);
+      let k = (1 - this.doorT) * (1 - rest) + rest;
+      if (this.phase === 'leave' && this.leaveVia === 'door') {
+        k = k + (1 - k) * Math.min(1, this.leaveT / PULSE);
+      }
+      this.door.update(k, this.time);
     }
 
     // THE MASTER APPROACH (SPEC-FOLD.md beat 7): the last eight tiles are
@@ -2781,7 +2792,12 @@ export class VaultRun {
       const m = this.p.master;
       const d = Math.hypot(this.px - (m.x + 0.5), this.py + m.y + 0.5);
       const near = Math.max(0, Math.min(1, (9 - d) / 7));
-      const swell = 0.55 * (0.55 + 0.85 * near * near);
+      let swell = 0.55 * (0.55 + 0.85 * near * near);
+      if (this.phase === 'leave' && this.leaveVia === 'master') {
+        // stepping OUT through the stone: the sanctum floods to take you
+        swell = 0.55 * (1.4 + 2.2 * Math.min(1, this.leaveT / PULSE));
+        this.masterGroup.scale.setScalar(1 + Math.min(1, this.leaveT / PULSE) * 0.12);
+      }
       for (const gm2 of this.sanctumGlow) gm2.opacity = swell;
     }
     for (let i = 0; i < this.figureGlows.length; i++) {
@@ -3192,9 +3208,20 @@ export class VaultRun {
   }
 
   interact(): void {
-    if (this.completed) { this.closed = true; return; }
+    if (this.phase === 'leave') return;
+    // leaving is a beat, not a blink: the door (or the stone) opens and
+    // takes you, one pulse, then the cut — the surface fold-out answers it
+    if (this.completed) { this.beginLeave('master'); return; }
     const e = this.p.entry;
-    if (Math.hypot(this.px - (e.x + 0.5), this.py + e.y + 0.5) < 1.1) this.closed = true;
+    if (Math.hypot(this.px - (e.x + 0.5), this.py + e.y + 0.5) < 1.1) this.beginLeave('door');
+  }
+
+  private beginLeave(via: 'door' | 'master'): void {
+    this.phase = 'leave';
+    this.leaveVia = via;
+    this.leaveT = 0;
+    this.vx = 0; this.vy = 0;
+    this.audio.duck(0.2, 1);
   }
 
   abandon(): void { this.closed = true; }
