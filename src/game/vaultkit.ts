@@ -243,11 +243,10 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
     arm.position.set(facing * SCONCE_REACH * 0.5, 0.02, 0.02);
     g.add(arm);
   } else if (mount.kind === 'ceiling') {
-    // the hardware sits BEHIND the play plane. The body runs at z 0.1 and a
-    // stand or a chain crossing a whole tile in front of it turns the fitting
-    // into a post through the player's chest — the light has to reach the
-    // room, the mast does not.
-    mountZ = -0.45;
+    // A hung or standing lamp is ONE object: the whole fitting — chain,
+    // post, cage and flame — is placed behind the play plane by the caller,
+    // so the body walks in front of the lamp and the lamp never comes
+    // apart across depth (the floating-head bug of the first pass).
     // hung: a plate in the vault above, and a rod down to the cup — or, past
     // about a tile, a CHAIN, because a long rigid stalk reads as a mast
     const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.09, 8), dark);
@@ -268,10 +267,11 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
     collar.position.y = 0.66;
     hardware.push(collar);
   } else {
-    mountZ = -0.45;
     // standing: the lamppost sheet's pedestal — a stepped stone plinth with
     // a moulded cap, and a turned bronze column of stacked collars rising
     // off it. The stone does the standing; the bronze does the reaching.
+    // Post and cage share one depth: a light on a post, never a light
+    // floating beside one.
     const rise = Math.max(0.5, mount.reach);
     const stone = stoneMat(0x6f6b78);
     const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.07, 4), stone);

@@ -556,12 +556,27 @@ export class VaultRun {
     const inst = new THREE.InstancedMesh(box, mat, count);
     const m4 = new THREE.Matrix4();
     const col = new THREE.Color();
+    // A ONE-COURSE floor — no stone above it, none below — is drawn as a
+    // HALF-THICK slab hung from the top of its tile (the masonry sheet:
+    // the guild's platforms are dressed slabs, not blocks). The walking
+    // surface does not move; only the bulk under it goes. Anything two
+    // courses or thicker keeps its full mass, so towers and pillars still
+    // read heavy next to the slabs they carry.
+    const oneCourse = (x: number, y: number): boolean =>
+      !!p.solid[y * p.w + x]
+      && !(y > 0 && p.solid[(y - 1) * p.w + x])
+      && !(y < p.h - 1 && p.solid[(y + 1) * p.w + x]);
     let k = 0;
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         const i = y * p.w + x;
         if (!p.solid[i]) continue;
-        m4.makeTranslation(x + 0.5, -(y + 0.5), 0);
+        if (oneCourse(x, y)) {
+          m4.makeScale(1, 0.5, 1);
+          m4.setPosition(x + 0.5, -(y + 0.5) + 0.25, 0);
+        } else {
+          m4.makeTranslation(x + 0.5, -(y + 0.5), 0);
+        }
         inst.setMatrixAt(k, m4);
         // Band 1 is the lamp core, where the standard material still does
         // its work. Band 2 is the silhouette ring: stone near the dark is
@@ -569,8 +584,11 @@ export class VaultRun {
         // masonry is exactly what muddies a silhouette. Band 3 is true
         // black, and the fog planes give that black its parallax.
         // drank stone is the same masonry with the warmth pulled out of it:
-        // colder, flatter, a shade darker — matte where live stone is not
-        col.setHex(p.dry[i] ? 0x6c7386 : 0x8f89a4)
+        // colder, flatter, a shade darker — matte where live stone is not.
+        // Live stone is WARM grey-basalt (the masonry sheet): blue-cool
+        // rock under the sodium key mudded to olive, and the drank stone's
+        // coldness only reads against warmth it can lack.
+        col.setHex(p.dry[i] ? 0x6c7386 : 0x9a8a78)
           .multiplyScalar(band(i) * (p.dry[i] ? 0.8 : 1));
         inst.setColorAt(k, col);
         k++;
@@ -578,6 +596,29 @@ export class VaultRun {
     }
     inst.instanceMatrix.needsUpdate = true;
     this.scene.add(inst);
+
+    // the bronze cramps off the masonry sheet: a strap wrapped around each
+    // end of every slab run, the fittings the guild bolted its floors with
+    const crampEnds: { x: number; y: number }[] = [];
+    for (let y = 0; y < p.h; y++) {
+      for (let x = 0; x < p.w; x++) {
+        if (!oneCourse(x, y)) continue;
+        if (x === 0 || !oneCourse(x - 1, y)) crampEnds.push({ x: x + 0.14, y });
+        if (x === p.w - 1 || !oneCourse(x + 1, y)) crampEnds.push({ x: x + 0.86, y });
+      }
+    }
+    if (crampEnds.length) {
+      const strap = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(0.09, 0.56, 1.04),
+        new THREE.MeshStandardMaterial({ color: 0xa8874a, roughness: 0.42, metalness: 0.6, flatShading: true }),
+        crampEnds.length);
+      for (let c = 0; c < crampEnds.length; c++) {
+        m4.makeTranslation(crampEnds[c].x, -(crampEnds[c].y + 0.5) + 0.25, 0);
+        strap.setMatrixAt(c, m4);
+      }
+      strap.instanceMatrix.needsUpdate = true;
+      this.scene.add(strap);
+    }
 
     // DRANK STONE (`=`). Colour alone said "a bit darker"; what it has to
     // say is "the warmth was taken out of this, unevenly, a long time ago".
@@ -648,7 +689,10 @@ export class VaultRun {
       const lift = this.act === 'hurried' && mount.kind !== 'floor' ? 0.12 : 0;
       const ox = mount.kind === 'wall' ? -mount.facing * 0.34 : 0;
       const gx = sc.x + 0.5 + ox, gy = -(sc.y + 0.5) - 0.2 + lift;
-      parts.group.position.set(gx, gy, 0.3);
+      // a wall bracket reaches into the room; a standing or hung lamp is a
+      // whole fixture BEHIND the play plane, walked in front of like the
+      // sanctum — never a floating head with its post sunk in another depth
+      parts.group.position.set(gx, gy, mount.kind === 'wall' ? 0.3 : -0.35);
       const light = new THREE.PointLight(dead ? 0x9db8ff : 0xffd9a0, 0, 7, 1.7);
       light.position.set(gx + parts.cupX, gy + SCONCE_FLAME_Y, 0.35);
       this.scene.add(parts.group, light);
@@ -1204,16 +1248,25 @@ export class VaultRun {
     // contiguous exposed edges, merged into runs per orientation. A run also
     // breaks where the stone changes from live to drank, so the two never
     // share a seam and the boundary between them is a visible joint.
-    type Run = { dir: 0 | 1 | 2 | 3; x: number; y: number; len: number; dry: boolean };
+    // a HALF run edges a one-course slab: its bottom seam rides the slab's
+    // half-height underside and its side seams stop where the stone does
+    const oneCourse = (x: number, y: number): boolean =>
+      !!p.solid[y * p.w + x]
+      && !(y > 0 && p.solid[(y - 1) * p.w + x])
+      && !(y < p.h - 1 && p.solid[(y + 1) * p.w + x]);
+    type Run = { dir: 0 | 1 | 2 | 3; x: number; y: number; len: number; dry: boolean; half: boolean };
     const runs: Run[] = [];
     for (let y = 0; y < p.h; y++) for (const dir of [0, 1] as const) {
-      let st = -1, sd = false;
+      let st = -1, sd = false, sh = false;
       for (let x = 0; x <= p.w; x++) {
         const ok = x < p.w && !!p.solid[y * p.w + x] && open(x, y + (dir === 0 ? -1 : 1));
         const dry = ok && !!p.dry[y * p.w + x];
-        if (ok && st < 0) { st = x; sd = dry; }
-        else if (ok && dry !== sd) { runs.push({ dir, x: st, y, len: x - st, dry: sd }); st = x; sd = dry; }
-        if (!ok && st >= 0) { runs.push({ dir, x: st, y, len: x - st, dry: sd }); st = -1; }
+        const hf = ok && oneCourse(x, y);
+        if (ok && st < 0) { st = x; sd = dry; sh = hf; }
+        else if (ok && (dry !== sd || hf !== sh)) {
+          runs.push({ dir, x: st, y, len: x - st, dry: sd, half: sh }); st = x; sd = dry; sh = hf;
+        }
+        if (!ok && st >= 0) { runs.push({ dir, x: st, y, len: x - st, dry: sd, half: sh }); st = -1; }
       }
     }
     for (let x = 0; x < p.w; x++) for (const dir of [2, 3] as const) {
@@ -1222,8 +1275,13 @@ export class VaultRun {
         const ok = y < p.h && !!p.solid[y * p.w + x] && open(x + (dir === 2 ? -1 : 1), y);
         const dry = ok && !!p.dry[y * p.w + x];
         if (ok && st < 0) { st = y; sd = dry; }
-        else if (ok && dry !== sd) { runs.push({ dir, x, y: st, len: y - st, dry: sd }); st = y; sd = dry; }
-        if (!ok && st >= 0) { runs.push({ dir, x, y: st, len: y - st, dry: sd }); st = -1; }
+        else if (ok && dry !== sd) { runs.push({ dir, x, y: st, len: y - st, dry: sd, half: false }); st = y; sd = dry; }
+        if (!ok && st >= 0) {
+          // a one-course tile's side run is always alone (nothing stacks on
+          // it), so length one starting on a slab means the half face
+          runs.push({ dir, x, y: st, len: y - st, dry: sd, half: y - st === 1 && oneCourse(x, st) });
+          st = -1;
+        }
       }
     }
 
@@ -1324,7 +1382,9 @@ export class VaultRun {
       hue = r.dry ? dryRim : warmRim;
       // walk the run in mason's segments with joints between them
       let t = 0.04;
-      const L = r.len - 0.04;
+      // a half face is half as long a wall as its tile suggests
+      const L = (r.half && r.dir >= 2 ? 0.5 : r.len) - 0.04;
+      const bot = r.half ? 0.5 : 1;    // where the underside actually is
       while (t < L) {
         const segLen = Math.min(L - t, dress.segMin + rng() * dress.segVar);
         const gap = dress.gapMin + rng() * dress.gapVar;
@@ -1334,7 +1394,7 @@ export class VaultRun {
           const ka = (0.45 + rng() * 0.55) * (r.dry ? 0.38 : 1);
           const kb = ka * (0.45 + rng() * 0.55);   // uneven along its own length
           if (r.dir === 0) seam(r.x + t, -r.y, r.x + t + segLen, -r.y, 0, 1, ka, kb);
-          else if (r.dir === 1) seam(r.x + t, -(r.y + 1), r.x + t + segLen, -(r.y + 1), 0, -1, ka, kb);
+          else if (r.dir === 1) seam(r.x + t, -(r.y + bot), r.x + t + segLen, -(r.y + bot), 0, -1, ka, kb);
           else if (r.dir === 2) seam(r.x, -(r.y + t), r.x, -(r.y + t + segLen), -1, 0, ka, kb);
           else seam(r.x + 1, -(r.y + t), r.x + 1, -(r.y + t + segLen), 1, 0, ka, kb);
         }
@@ -1345,12 +1405,13 @@ export class VaultRun {
     for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
       if (!p.solid[y * p.w + x]) continue;
       const drank = !!p.dry[y * p.w + x];
+      const yBot = oneCourse(x, y) ? y + 0.5 : y + 1;  // the slab's real underside
       hue = drank ? dryRim : warmRim;
       const corners: [boolean, number, number][] = [
         [open(x, y - 1) && open(x - 1, y) && open(x - 1, y - 1), x, -y],
         [open(x, y - 1) && open(x + 1, y) && open(x + 1, y - 1), x + 1, -y],
-        [open(x, y + 1) && open(x - 1, y) && open(x - 1, y + 1), x, -(y + 1)],
-        [open(x, y + 1) && open(x + 1, y) && open(x + 1, y + 1), x + 1, -(y + 1)],
+        [open(x, y + 1) && open(x - 1, y) && open(x - 1, y + 1), x, -yBot],
+        [open(x, y + 1) && open(x + 1, y) && open(x + 1, y + 1), x + 1, -yBot],
       ];
       for (const [ok, cx, cy] of corners) {
         if (ok && rng() < (drank ? 0.15 : 0.45)) {
