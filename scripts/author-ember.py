@@ -1,186 +1,156 @@
-"""THE EMBER — V4 authoring. A 44 x 56 shaft: the deepest room in the game.
+"""THE EMBER — commitment, in open sky. 40 x 62.
 
-Walls 0-9 and 34-43; the shaft itself is x 10..33, twenty-four columns wide.
-One camera cut at col 21, with the entry sconce standing on it.
+The deepest drop in the game, rebuilt as a floating descent. The top is
+rime alone — crumble-and-regrow taught as a cadence over the void. Then the
+one-way gate, which is architecture saying what committing means. Then the
+trigger band, and the wave: the dark pouring DOWN the descent behind you
+while shelves crumble, a lantern swings, a piston cycles, and the moth
+hunts the light you are carrying. Two braziers are the only refills; one
+pocket sconce is the only breath.
+
+The bottom punishes the solver who simply falls: the landing is offset
+LEFT, and everything under the drop line is a spiked shelf. You descend the
+route or you land on the fangs.
+
+Open sky (openEdges): no planes at all — the room IS the fall, the sides
+are the void, and the floor of the world is the landing or the spikes.
 """
-import io, re
+import io
 
-W, L, R = 44, 10, 33          # width, and the shaft's inclusive bounds
-IW = R - L + 1                # 24 interior columns
+W, HGT = 40, 62
+PULSE = 0.85
 
-
-def row(interior=''):
-    """Build a full row from its interior, padding with shaft wall."""
-    s = interior.ljust(IW, '.')
-    assert len(s) == IW, (len(s), s)
-    return '#' * L + s + '#' * (W - R - 1)
+g = [['.'] * W for _ in range(HGT)]
+LEFT, RIGHT = 2, W - 3
 
 
-def solid():
-    return '#' * W
+def put(x, y, ch):
+    g[y][x] = ch
 
 
-def put(base, **marks):
-    """Place chars at absolute columns on an interior string."""
-    a = list(base.ljust(IW, '.'))
-    for ch, cols in marks.items():
-        for c in (cols if isinstance(cols, (list, tuple)) else [cols]):
-            a[c - L] = ch[0] if len(ch) > 1 else ch
-    return ''.join(a)
+def run(x0, x1, y, ch='#'):
+    for x in range(x0, x1 + 1):
+        put(x, y, ch)
 
 
-def floorRow(gaps):
-    """A full-width stone course with holes at the given absolute columns."""
-    a = ['#'] * IW
-    for c in gaps:
-        a[c - L] = '.'
-    return ''.join(a)
+def block(x0, x1, y0, y1):
+    for y in range(y0, y1 + 1):
+        run(x0, x1, y)
 
 
-rows = []
-A = rows.append
+# --- entry, and the rime cadence: the shelf comes back, lean on it ---------
+run(4, 12, 6)
+put(6, 5, '@')
+put(9, 5, 'S')
+run(15, 19, 9, 'R')
+run(23, 27, 11)
+put(23, 10, 'X')                    # the first fang, met where it is cheap
+run(16, 20, 13, 'R')
+run(8, 12, 15, 'R')
 
-# ---- the cap ----------------------------------------------------------------
-A(solid()); A(solid())
+# --- the gate shelf: the last stone before the room commits ----------------
+run(16, 21, 17)
+put(18, 16, 'S')
 
-# ---- 2-6 · the entry shelf. Wide, safe, and it says which way is down. ------
-A(row())
-A(row(put('', o=[15, 28])))
-A(row(put('', **{'@': 12, 'S': 21})))
-A(row(put('', o=[19, 24])))
-A(row(floorRow([18, 19, 20, 21, 22])))
+# --- the descent: everything at once, with the wave behind it. Every hop
+# --- drops two to five courses and crosses at most six tiles ---------------
+run(6, 10, 22)
+put(10, 21, 'X')
+run(13, 17, 25, 'R')
+put(16, 20, '#')                    # the lantern's mount stone, over the ice
+run(23, 28, 28)
+# the piston's housing, hung over the gap, biting east across the arrival
+block(18, 19, 25, 26)
+run(33, 37, 31, 'R')
+run(25, 30, 34)
+put(25, 33, 'X')
+put(21, 31, '#')                    # a breath of ember, hung mid-fall...
+put(21, 32, '*')                    # ...from its own stone
+run(14, 19, 37, 'R')
+run(6, 11, 40)
+put(11, 39, 'X')
+run(16, 21, 43)                     # the pocket: the one breath down here
+put(18, 42, 'S')
+put(12, 43, '#')                    # the second breath, west of the pocket
+put(12, 44, '*')
+run(25, 30, 46, 'R')
+run(33, 37, 49)
+run(26, 31, 52, 'R')
+run(17, 22, 55)                     # the last stone, set right over the fangs
 
-# ---- 7-18 · rime rhythm. No wave yet: the shelves are the whole lesson, and
-#      they regrow, so the descent is a cadence rather than a staircase. -----
-A(row(put('', R=[11, 12, 13], o=20)))
-A(row(put('', **{'=': [28, 29, 30]})))
-A(row(put('', R=[16, 17, 18], o=27)))
-A(row(put('', R=[25, 26, 27])))
-A(row(put('', o=13, R=[10, 11])))
-A(row(put('', R=[20, 21, 22], o=31)))
-A(row(put('', **{'=': [31, 32, 33]})))
-A(row(put('', R=[14, 15, 16], o=24)))
-A(row(put('', R=[26, 27, 28])))
-A(row(put('', R=[11, 12], o=18)))
-A(row(put('', R=[22, 23, 24])))
-A(row(put('', o=[15, 30])))
+# --- the bottom: the landing is EARNED leftward; the fall line is fanged ---
+run(3, 14, 57)
+put(7, 56, 'M')
+put(10, 56, 'N')                    # kneeling: the shift ended here too
+run(16, 36, 57)
+run(16, 36, 56, 'X')
 
-# ---- 19 · THE GATE. It spans the shaft. You go down through it and it does
-#      not pass you back — the room says what planting means before anything
-#      hunts you. -----------------------------------------------------------
-A(row(put('', o=[12, 17, 22, 27, 32])))
-A(row())
+# --- motes: the cadence line and the pocket's edge -------------------------
+for x0, x1, y in ((14, 20, 7), (7, 13, 13), (19, 24, 26), (12, 16, 53)):
+    for x in range(x0, x1 + 1):
+        if g[y][x] == '.':
+            put(x, y, 'o')
 
-# ---- 21-31 · under the gate, the teeth come out: censers over the drop, a
-#      bolt on its wire, pistons out of both walls, and the famine's own
-#      floor to stand a spent breath on. --------------------------------------
-A(row(put('', R=[10, 11, 12])))
-A(row(put('', **{'=': [24, 25, 26, 27]})))
-A(row(put('', X=[10], R=[29, 30, 31])))
-A(row(put('', X=[10, 33], o=21)))
-A(row(put('', R=[15, 16, 17])))
-A(row(put('', X=[33], **{'=': [10, 11, 12]})))
-A(row(put('', R=[27, 28, 29], o=20)))
-A(row(put('', X=[10, 11])))
-A(row(put('', R=[18, 19, 20])))
-A(row(put('', X=[32, 33], o=26)))
-A(row(put('', R=[10, 11, 12], **{'=': [30, 31, 32]})))
+CENSERS = [
+    # the lantern over the second ice shelf, dodged with the wave coming
+    (16, 21, 2.6, 0.95, 3, 0.0),
+]
+CRUSHERS = [
+    # out of the housing, east across the arrival jump — the entry beat,
+    # opposite the lantern's phase
+    (18, 27, 2, 1, 4, 0, 4, 0.5),
+]
+SHUTTLES = [
+    # the moth, asleep across the lower descent until the light wakes it
+    (8, 44, 24, 47, 4, 0.0, True),
+]
 
-# ---- 32-35 · the trigger band. Two screens under the gate, as specified. ----
-A(row(put('', o=[14, 25])))
-A(row(put('', R=[21, 22, 23])))
-A(row(put('', X=[10, 33])))
-A(row(put('', R=[13, 14], o=29)))
-
-# ---- 36-49 · the pursuit descent. Rime density rises; the side pockets hold
-#      the braziers and the mid sconce, each costing a detour the wave taxes.
-A(row(put('', R=[25, 26, 27], X=[10])))
-A(row(put('', R=[11, 12, 13])))
-A(row(put('', o=22, R=[29, 30, 31])))
-# the left pocket: a brazier hung where a missed refill would cost the shaft
-A(row(put(floorRow([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]), **{'*': 12})))
-A(row(put('', S=11, R=[20, 21, 22])))
-A(row(put(floorRow([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]), o=15)))
-A(row(put('', R=[15, 16, 17], X=[33])))
-A(row(put('', **{'=': [26, 27, 28]})))
-A(row(put('', R=[10, 11, 12], o=24)))
-# the right pocket: the second brazier, the last refill before the seed
-A(row(put(floorRow([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]), **{'*': 31})))
-A(row(put('', R=[19, 20, 21])))
-A(row(put('', R=[28, 29, 30], X=[10])))
-A(row(put('', o=[16, 27], R=[12, 13])))
-A(row(put('', R=[23, 24, 25])))
-
-# ---- 50-55 · THE SEED. The wave breaks against the light and drains away.
-#      One figure kneeling, the room's only K, and the stone as the ember. ---
-A(row(put('', o=[14, 29])))
-A(row(floorRow([20, 21, 22, 23])))
-A(row())
-A(row(put('', N=17, M=22, o=[13, 30])))
-A(row())
-A(solid())
-
+rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
-    assert len(r) == W, f'row {i} is {len(r)} wide: {r}'
+    assert len(r) == W, f'row {i} is {len(r)}'
 
-defn = """  // 5 · THE EMBER — commitment, and the deepest shaft in the game. The top
-  // third is rime alone: crumble-and-regrow taught as a cadence, because a
-  // shelf that comes back is a rhythm and a shelf that does not is a trap,
-  // and the two never share a room (grammar §2 — THE WEATHER owns the trap).
-  // Then the gate, which is architecture saying what planting means before
-  // anything is chasing you. Then everything at once, down a shaft whose
-  // walls have bitten through, with the wave's edge lighting the way it
-  // takes. The seed is the only calm in it.
+censers = ',\n'.join(
+    "      { x: %d, y: %d, len: %.1f, arc: %.2f, period: %.2f, phase: %s }"
+    % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)
+crushers = ',\n'.join(
+    "      { x: %d, y: %d, w: %d, h: %d, dx: %d, dy: %d, period: %.2f, phase: %s }"
+    % (x, y, w, h, dx, dy, n * PULSE, ph) for x, y, w, h, dx, dy, n, ph in CRUSHERS)
+shuttles = ',\n'.join(
+    "      { x0: %d, y0: %d, x1: %d, y1: %d, period: %.2f, phase: %s%s }"
+    % (a, b, c, d, n * PULSE, ph, ', snuff: true' if sn else '')
+    for a, b, c, d, n, ph, sn in SHUTTLES)
+
+defn = """  // 5 · THE EMBER — commitment, in open sky. The deepest drop in the game:
+  // a floating descent with the rime cadence taught over the void, then the
+  // one-way gate, then the wave pouring down behind you while the shelves
+  // crumble, the lantern swings, the piston bites and the moth hunts. Two
+  // braziers, one pocket breath. The bottom is the thesis sharpened: the
+  // landing sits LEFT of the fall line, and the fall line is fanged — you
+  // descend the route, or you land on what the dark left there.
   {
     glyph: 'ember',
-    // one cut, and the entry sconce stands on it: the shaft is read as two
-    // columns of descent, and which one you are in when the wave arrives is
-    // the drift you took twenty rows above
-    chambers: [21],
+    chambers: [19],
+    openEdges: true,
     censers: [
-      // three lanterns over the drop, each a quarter-pulse behind the last —
-      // dodged on the way down, and the middle one is the only footing across
-      // the gutter. Quarter-pulses, not thirds: §III's beat clock quantizes
-      // phase, and `pulse ratio` enforces it, so a room cannot quietly drift
-      // out of the groove the whole game moves to.
-      { x: 21, y: 20, len: 3.4, arc: 1.0, period: 2.55, phase: 0 },
-      { x: 15, y: 28, len: 2.8, arc: 0.85, period: 2.55, phase: 0.25 },
-      { x: 27, y: 36, len: 3.0, arc: 0.9, period: 2.55, phase: 0.5 },
-    ],
-    shuttles: [
-      // bolts walking the wire across the shaft, two pulses each
-      { x0: 10, y0: 26, x1: 33, y1: 26, period: 1.7, phase: 0 },
-      { x0: 33, y0: 44, x1: 10, y1: 44, period: 1.7, phase: 0.5 },
-      // and the moth, asleep on the left wall until the descent wakes it:
-      // it takes the breath and leaves you standing, which in a shaft with
-      // a wave in it is worse than a clean death
-      { x0: 11, y0: 33, x1: 30, y1: 35, period: 3.4, phase: 0, snuff: true },
+%s
     ],
     crushers: [
-      // pistons out of both walls on the pulse, opposite phase
-      { x: 10, y: 23, w: 3, h: 2, dx: 4, dy: 0, period: 3.4, phase: 0 },
-      { x: 31, y: 30, w: 3, h: 2, dx: -4, dy: 0, period: 3.4, phase: 0.5 },
-      // clear of the pocket sconce by seven courses: a checkpoint you cannot
-      // breathe after is not a checkpoint (grammar §4.2 wants five)
-      { x: 10, y: 48, w: 3, h: 2, dx: 4, dy: 0, period: 2.55, phase: 0.25 },
+%s
     ],
-    beams: [
-      // watch-lights on both walls, parked until you are through the gate and
-      // then sweeping in opposition. One per wall is also what P4 asks for:
-      // the shaft's right-hand column may introduce nothing its left has not
-      // already taught, and the cut runs down the middle of the descent.
-      { x: 33.5, y: 21.5, period: 4.25, phase: 0, spin: true, parked: true, arm: [10, 19, 33, 20] },
-      { x: 10.5, y: 31.5, period: 4.25, phase: 0.5, spin: true, parked: true, arm: [10, 19, 33, 20] },
+    shuttles: [
+%s
     ],
     gates: [
-      // the curtain across the shaft: down through it, never back up
-      { x0: 10, y0: 19, x1: 33, y1: 19 },
+      // the curtain across the descent: down through it, never back up
+      { x0: 4, y0: 18, x1: 35, y1: 18 },
     ],
     pursuit: {
-      zone: [10, 32, 33, 51],
+      // the dark, poured: armed one breath below the gate, and its zone
+      // ends a course above the landing so the stone is stood at in calm
+      zone: [4, 19, 35, 53],
       dir: 'down',
       speed: 2.9,
-      trigger: [10, 32, 33, 34],
+      trigger: [4, 19, 35, 21],
     },
     map: [
 %s
@@ -188,14 +158,14 @@ defn = """  // 5 · THE EMBER — commitment, and the deepest shaft in the game.
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % body
+out = defn % (censers, crushers, shuttles, body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
-start = s.index("  // 5 · THE EMBER")
-if start < 0:
-    raise SystemExit('anchor not found')
-end = s.index("  // 6 · THE WEATHER")
-s = s[:start] + out + s[end:]
-io.open(p, 'w', encoding='utf-8').write(s)
-print('EMBER written:', len(rows), 'rows x', W)
+start = s.index('  // 5 · THE EMBER')
+end = s.index('  // 6 · THE WEATHER')
+io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
+
+print(f'THE EMBER · {HGT} x {W}')
+for i, r in enumerate(rows):
+    print(f'{i:3d} {r}')

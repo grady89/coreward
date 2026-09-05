@@ -1,146 +1,161 @@
-"""THE WEATHER — V4 authoring. 60 x 40, an L: right across the surface, then
-down out of the storm.
+"""THE WEATHER — the storm crossing, in open sky. 54 x 46.
 
-The room enacts its own glyph. Depth is the only calm, so the wind is the
-whole of the crossing and then it is gone, storey by storey, until the master
-stands in the first still air of the act. Its rime is the ONE-SHOT kind — the
-trap under the trap light — because THE EMBER owns the cycle and a room may
-never teach both (grammar §2).
+An L walked in three storeys: across the surface INTO the wind, then down
+out of it, storey by storey, until the stone stands in the first still air.
+The wind blows LEFT against the whole crossing on the calm/gust clock, and
+shelter is STONE — the two-course pillars on the surface, and then the
+storeys themselves: each floor shades the one below it, so calm arrives
+with depth because the architecture says so, not because a flag flips.
 
-Cuts at 19 and 39. The descent past 39 is the last chamber: no sconce in it,
-and nothing in it the crossing has not already taught.
+Its rime is the ONE-SHOT kind (rimeOnce): THE EMBER owns the cycle, where
+a shelf returning is a rhythm you lean on; here it is the trap under the
+trap light, bridging gaps exactly once. The eave pistons bite down on the
+pulse the gust is counted in, the lantern swings IN the wind with its arc
+skewed, and one parked watch-light wakes on the second storey.
+
+Open sky (openEdges): unseen `_` planes under storeys one and two, holed
+where the route legitimately drops; below the third, the void.
 """
 import io
 
-W, H = 60, 40
-g = [['.'] * W for _ in range(H)]
+W, HGT = 54, 46
+PULSE = 0.85
 
-
-def box(x0, y0, x1, y1, ch='#'):
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if 0 <= y < H and 0 <= x < W:
-                g[y][x] = ch
-
-
-def run(y, x0, x1, ch='#'):
-    box(x0, y, x1, y, ch)
+g = [['.'] * W for _ in range(HGT)]
+LEFT, RIGHT = 2, W - 3
+F = [10, 24, 36]
 
 
 def put(x, y, ch):
     g[y][x] = ch
 
 
-# ---- the shell: sky above, stone below, and the storm between --------------
-box(0, 0, W - 1, 0)
-box(0, H - 1, W - 1, H - 1)
-box(0, 0, 0, H - 1)
-box(W - 1, 0, W - 1, H - 1)
+def run(x0, x1, y, ch='#'):
+    for x in range(x0, x1 + 1):
+        put(x, y, ch)
 
-# =============================================================================
-# THE SURFACE · cols 1-45 — the crossing. Walked RIGHT, into a wind blowing
-# left, so every step of it is paid for.
-# =============================================================================
-run(14, 1, 12)                    # KI: flat ground, where a gust only slides
-put(3, 13, '@')
-put(6, 13, 'S')                   # the entry sconce, in the lee of the first shelter
-run(13, 8, 12, 'o')
-box(6, 9, 10, 10)                 # shelter one
-box(15, 9, 19, 10)                # shelter two
-box(27, 9, 31, 10)                # shelter three
-run(14, 15, 24)                   # SHO: shelter runs with real drops
-run(14, 27, 35)
-run(20, 13, 26)                   # what a missed run costs: a storey down
-run(19, 14, 25, 'o')
-run(18, 17, 17); run(18, 22, 22)  # and the climb back out of it
-run(16, 15, 16); run(16, 23, 24)
-put(19, 13, 'S')                  # the cut-19 sconce, on the shelter's shoulder
-run(12, 15, 19, 'o')
 
-# THE TRAP LIGHT. A lit sconce on the obvious line, and the shelf under it is
-# rime that does not come back. Light is information, not permission.
-run(10, 32, 35, 'R')
-put(33, 9, 'S')
-run(8, 30, 36, 'o')
+def block(x0, x1, y0, y1):
+    for y in range(y0, y1 + 1):
+        run(x0, x1, y)
 
-# TEN · the current. An unjumpable gap, and one wind that is a road.
-run(14, 36, 39, 'o')              # the gap itself, marked
-run(11, 40, 45)                   # the far side, higher than the near one
-run(10, 41, 44, 'o')
-put(39, 13, 'S')                  # the cut-39 sconce, at the current's mouth
 
-# KETSU · the low eave, crossed flat out under gust pressure
-box(40, 8, 45, 9)
-run(12, 40, 45, 'o')
-put(42, 12, 'F')                  # two braced together behind the last shelter
-put(44, 12, 'C')
+# the legitimate drops: (x0, x1) holes in the plane below each storey
+DROPS = [(47, 51), (6, 10)]
 
-# =============================================================================
-# THE DESCENT · cols 46-58 — three quiet storeys. The force fades per row and
-# the room goes still. Nothing new lives down here; that is the point of it.
-# =============================================================================
-box(46, 1, 46, 10)
-run(11, 46, 58)                   # the lip of the turn
-run(15, 48, 58)
-run(19, 46, 55)
-run(23, 50, 58)
-run(27, 46, 54)
-run(31, 49, 58)
-run(35, 46, 58)                   # the still floor
-run(14, 50, 57, 'o')
-run(22, 52, 57, 'o')
-run(30, 50, 56, 'o')
-run(34, 48, 57, 'o')
-put(52, 34, 'M')
-put(49, 34, 'N')                  # one kneeling in the first still air
+# --- storey 1: the surface, into the wind ----------------------------------
+run(3, 10, F[0])
+put(4, F[0] - 1, '@')
+put(7, F[0] - 1, 'S')
+block(10, 10, F[0] - 2, F[0] - 1)     # shelter: wait out the gust behind it
+run(11, 13, F[0], 'R')                # one-shot ice over the first gap
+run(14, 20, F[0])
+block(20, 20, F[0] - 2, F[0] - 1)
+run(21, 23, F[0], 'R')
+run(24, 30, F[0])
+put(17, F[0] - 1, 'S')
+block(30, 30, F[0] - 2, F[0] - 1)
+run(31, 34, F[0], 'R')
+run(35, 41, F[0])
+# the eave: a hanging housing whose piston bites down across the walk
+block(33, 34, 3, 4)
+run(46, 50, F[0])
+put(44, 4, '#')                       # the skewed lantern's mount stone
+
+# --- storey 2: back to the left, half in the surface's shadow --------------
+run(44, 50, F[1])
+run(40, 43, F[1], 'R')
+run(33, 39, F[1])
+put(35, F[1] - 1, 'S')
+put(24, 17, '#')                      # the parked watch-light's mount
+run(24, 30, F[1])
+block(20, 21, 18, 19)                 # the second eave's hanging housing
+run(20, 23, F[1], 'R')
+run(12, 19, F[1])
+put(16, 18, '#')                      # the low lantern's mount stone
+run(6, 11, F[1])
+
+# --- storey 3: the first still air ------------------------------------------
+run(6, 12, F[2])
+run(16, 21, F[2])
+put(18, F[2] - 1, 'F')                # fallen: the storm struck from the left
+run(25, 30, F[2])
+run(34, 42, F[2])
+put(38, F[2] - 1, 'M')
+put(36, F[2] - 1, 'N')
+
+# --- the planes, holed where the route drops -------------------------------
+for f, (d0, d1) in zip(F[:2], DROPS):
+    y = f + 8
+    for x in range(LEFT, RIGHT + 1):
+        if not (d0 <= x <= d1) and g[y][x] == '.':
+            put(x, y, '_')
+
+# --- motes: the gust's own line, and the drops -----------------------------
+for x0, x1, y in ((11, 13, 7), (21, 23, 7), (31, 34, 7)):
+    for x in range(x0, x1 + 1):
+        if g[y][x] == '.':
+            put(x, y, 'o')
+for (d0, d1), f in zip(DROPS, F[:2]):
+    for y in range(f + 1, f + 6):
+        for x in range(d0, d1 + 1):
+            if g[y][x] == '.':
+                put(x, y, 'o')
+
+CENSERS = [
+    # the lantern IN the wind, its arc skewed by the gust it swings through
+    (44, 5, 3.2, 1.0, 3, 0.0),
+    # and the low lantern on the sheltered storey, met again out of the gust
+    (16, 19, 3.0, 0.95, 3, 0.5),
+]
+CRUSHERS = [
+    # the eaves' teeth, biting down on the pulse the gust is counted in
+    (33, 5, 2, 1, 0, 4, 4, 0.0),
+    (20, 20, 2, 1, 0, 3, 4, 0.5),
+]
+BEAMS = [
+    # the watch-light on the second storey, parked until the drop arms it
+    (24.5, 18.3, 5, 0.0),
+]
 
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
-defn = """  // 6 · THE WEATHER — the room enacts its own glyph. Depth is the only calm,
-  // so the wind is the whole of the crossing and then it is gone, storey by
-  // storey, until the master stands in the first still air of the act. An L:
-  // right across the surface into a wind blowing left, then down out of it.
-  //
-  // Its rime is the ONE-SHOT kind. THE EMBER owns the cycle, where a shelf
-  // coming back is a rhythm you lean on; here it is the trap under the trap
-  // light, and a room may never teach both (grammar §2).
+censers = ',\n'.join(
+    "      { x: %d, y: %d, len: %.1f, arc: %.2f, period: %.2f, phase: %s }"
+    % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)
+crushers = ',\n'.join(
+    "      { x: %d, y: %d, w: %d, h: %d, dx: %d, dy: %d, period: %.2f, phase: %s }"
+    % (x, y, w, h, dx, dy, n * PULSE, ph) for x, y, w, h, dx, dy, n, ph in CRUSHERS)
+beams = ',\n'.join(
+    "      { x: %s, y: %s, period: %.2f, phase: %s, spin: true, parked: true,"
+    " arm: [44, 21, 51, 23] }"
+    % (x, y, n * PULSE, ph) for x, y, n, ph in BEAMS)
+
+defn = """  // 6 · THE WEATHER — the storm crossing, in open sky. An L in three
+  // storeys: across the surface INTO the wind behind two-course shelter
+  // stones, then down out of it — and calm arrives with depth because each
+  // storey shades the one below it, architecture saying what the glyph
+  // says. The rime is the ONE-SHOT kind (THE EMBER owns the cycle): ice
+  // bridges the surface gaps exactly once, under the eaves' falling teeth.
+  // The lantern swings inside the gust with its arc skewed; a parked
+  // watch-light wakes when the first drop is taken; and the stone stands
+  // with the fallen in the first still air.
   {
     glyph: 'weather',
-    chambers: [19, 39],
+    chambers: [17, 35],
+    openEdges: true,
     wind: { dir: -1, calm: 3.4, gust: 2.55, force: 30 },
     rimeOnce: true,
     censers: [
-      // the lantern returns IN the wind: its arc skewed by the gust, so the
-      // crossing is two clocks read at once
-      // hung clear of both shoulder sconces by four courses at every point of
-      // their arcs — a swinging hazard is a moving danger volume, and the
-      // buffer is measured against the whole swing, not the lantern's rest
-      { x: 26, y: 6, len: 3.2, arc: 1.0, period: 2.55, phase: 0 },
-      { x: 38, y: 3, len: 2.6, arc: 0.85, period: 2.55, phase: 0.5 },
-    ],
-    shuttles: [
-      // bolts down the shelter runs, into the wind's own line
-      { x0: 15, y0: 7, x1: 24, y1: 7, period: 1.7, phase: 0.25 },
-      { x0: 35, y0: 19, x1: 26, y1: 19, period: 2.55, phase: 0.75 },
+%s
     ],
     crushers: [
-      // the eave's own teeth, on the pulse the gust is counted in
-      { x: 25, y: 10, w: 2, h: 1, dx: 0, dy: 3, period: 3.4, phase: 0 },
-      { x: 44, y: 8, w: 2, h: 1, dx: 0, dy: 2, period: 3.4, phase: 0.5 },
-      { x: 50, y: 12, w: 2, h: 1, dx: 0, dy: 3, period: 2.55, phase: 0.25 },
-    ],
-    currents: [
-      // TEN: wind was the enemy, and now one wind is the road
-      { x0: 36, y0: 5, x1: 39, y1: 20, force: 46 },
+%s
     ],
     beams: [
-      // a watch-light on the descent, parked until the turn downward
-      // one on the crossing and one on the descent: by P4 the last chamber
-      // may hold nothing the room has not already taught
-      { x: 12.5, y: 11.5, period: 4.25, phase: 0.5, spin: true, parked: true, arm: [8, 12, 14, 14] },
-      { x: 46.5, y: 21.5, period: 4.25, phase: 0, spin: true, parked: true, arm: [46, 11, 58, 13] },
+%s
     ],
     map: [
 %s
@@ -148,12 +163,14 @@ defn = """  // 6 · THE WEATHER — the room enacts its own glyph. Depth is the 
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % body
+out = defn % (censers, crushers, beams, body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
 start = s.index('  // 6 · THE WEATHER')
 end = s.index('  // 7 · THE DEBT')
-s = s[:start] + out + s[end:]
-io.open(p, 'w', encoding='utf-8').write(s)
-print('WEATHER written:', len(rows), 'rows x', W)
+io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
+
+print(f'THE WEATHER · {HGT} x {W}')
+for i, r in enumerate(rows):
+    print(f'{i:3d} {r}')

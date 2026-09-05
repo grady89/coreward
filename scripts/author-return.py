@@ -1,167 +1,142 @@
-"""THE RETURN — V4 authoring. 56 x 38, the U walked in full.
+"""THE RETURN — the U, in open sky. 50 x 44.
 
-Down the left chimney, across the bottom, up the right. Introduces no noun;
-it introduces a ROLE. You have spent the whole game dodging the lantern and
-here there is a gutter no jump crosses, no floor serves, and the only thing
-in reach is the crown at the top of its swing. The ride is discovered because
-nothing else is left (grammar §1.6), over a gutter shallow enough that being
-wrong about it costs seconds.
+Down the left limb dodging lanterns with the moth awake to your light;
+through the one-way curtain into the corridor that IS sideways-down — a
+band of right-gravity where the far wall is the floor, and the ones who
+stayed are standing on it with the sconce you cannot pass without lighting;
+then out on the vent's updraft, and the last reach is RIDDEN: the lantern
+you spent the room dodging is the only thing between the wind's crest and
+the door. Three sconces, and the door's price is all three.
 
-Cuts at 17 and 38, each with a sconce on it. The ascent past 38 is the last
-chamber: no sconce, and nothing in it the U has not already walked.
+Open sky (openEdges): the corridor's wall caps its own gravity, a small
+plane sits under the left landing, and everything else that falls, falls
+out of the world.
 """
 import io
 
-W, H = 56, 38
-g = [['.'] * W for _ in range(H)]
+W, HGT = 50, 44
+PULSE = 0.85
 
-
-def box(x0, y0, x1, y1, ch='#'):
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if 0 <= y < H and 0 <= x < W:
-                g[y][x] = ch
-
-
-def run(y, x0, x1, ch='#'):
-    box(x0, y, x1, y, ch)
+g = [['.'] * W for _ in range(HGT)]
+LEFT, RIGHT = 2, W - 3
 
 
 def put(x, y, ch):
     g[y][x] = ch
 
 
-box(0, 0, W - 1, 1)
-box(0, H - 1, W - 1, H - 1)
-box(0, 0, 0, H - 1); box(W - 1, 0, W - 1, H - 1)
-box(1, 32, W - 2, H - 2)          # the bed under the whole U, with no hollow
+def run(x0, x1, y, ch='#'):
+    for x in range(x0, x1 + 1):
+        put(x, y, ch)
 
-# =============================================================================
-# THE DESCENT · cols 1-16. Censers across the chimney, dodged as taught —
-# until the gutter, where dodging is not one of the options.
-# =============================================================================
-run(5, 1, 16)
-put(3, 4, '@')
-put(6, 4, 'S')                    # the entry sconce
-run(4, 8, 14, 'o')
-run(9, 1, 8)
-run(13, 10, 16)
-run(17, 1, 7)
-run(21, 9, 16)
-run(8, 10, 15, 'o')
-run(12, 2, 7, 'o')
-run(16, 10, 15, 'o')
-run(20, 2, 7, 'o')
-# THE GUTTER. Shallow, and there is nothing across it but the lantern.
-run(25, 1, 5)
-run(28, 1, 16)                    # the gutter's own floor, three courses down
-run(24, 6, 15, 'o')               # the arc the ride is taken on, marked
-run(25, 13, 16)
-box(1, 31, 16, 31)
-run(23, 15, 18)
-run(25, 13, 18)                   # the gutter's far lip, widened to stand on
 
-# =============================================================================
-# THE BOTTOM · cols 17-38, gravity RIGHT. The corridor is sideways-down and
-# it is walked along its wall, threaded with bolts on the way through.
-# =============================================================================
-box(17, 6, 38, 30, '>')
-box(17, 6, 22, 21)                # the roof of the corridor, which is its wall
-box(26, 6, 31, 18)
-box(35, 6, 38, 22)
-put(17, 24, 'S')                  # the cut-17 sconce, placed AFTER the gravity
-                                  # zone that would otherwise write over it,
-                                  # and four clear courses off the ride's arc
-run(31, 17, 38)                   # the corridor's far side
-run(26, 23, 25, 'o')
-run(24, 32, 34, 'o')
-put(28, 29, 'C')                  # the one who stayed
-put(30, 29, 'F')
-put(37, 24, 'S')                  # the cameo sconce, which door 1 requires
-box(38, 23, 39, 28, '1')          # and the door it pays for, straddling the
-                                  # cut so the ascent introduces no new noun
+def block(x0, x1, y0, y1, ch='#'):
+    for y in range(y0, y1 + 1):
+        run(x0, x1, y, ch)
 
-# =============================================================================
-# THE ASCENT · cols 41-54. Wall-jumps up the right limb, a gate sealing the
-# bottom behind you, and the lanterns ridden UPWARD this time, apex to apex.
-# =============================================================================
-run(30, 41, 54)
-box(41, 3, 41, 25)                # the limb's own wall — open at its foot, or
-                                  # the whole ascent is a room with no door
-run(28, 42, 45)                   # ledges alternating either side of the
-run(26, 47, 50)                   # chimney, a course apart: the climb is
-run(24, 42, 45)                   # wall-jumps and lantern-rides, and the
-run(22, 47, 50)                   # difficulty is what is swinging through it
-run(20, 42, 45)
-run(18, 47, 50)
-run(16, 42, 45)
-run(14, 47, 50)
-run(12, 47, 50)
-run(10, 42, 44)                   # the last ledge steps back to the near side,
-                                  # stopping short of col 46 so the chimney it
-                                  # climbs stays open all the way to the top
-run(27, 47, 50, 'o')
-run(19, 42, 45, 'o')
-run(11, 47, 50, 'o')
-box(51, 11, 54, 29)               # the limb's far wall
-# THE GALLERY. Offset from the ledge below it: a floor laid straight over the
-# last rung leaves one course of clearance, and the body is two courses tall —
-# the climb would end one jump short of the room it exists to reach.
-run(8, 47, 54)
-run(7, 47, 53, 'o')
-put(50, 7, 'M')
-put(48, 7, 'K')                   # reaching, still
-put(52, 7, 'N')
+
+# --- the descent: dodged lanterns, and the moth ----------------------------
+run(3, 12, 6)
+put(4, 5, '@')
+put(7, 5, 'S')
+put(17, 5, '#')                       # dodge-lantern one's mount
+run(15, 19, 10)
+put(11, 9, '#')                       # dodge-lantern two's mount
+run(9, 13, 14)
+run(15, 19, 18)
+run(5, 12, 22)                        # the landing before the commitment
+put(8, 21, 'S')
+
+# --- the corridor: sideways-down, walled by its own floor ------------------
+block(10, 38, 26, 31, '>')
+block(39, 39, 24, 33)                 # the wall that is the ground
+block(20, 20, 27, 31)                 # fins: stone the sweep sets you against
+block(28, 28, 26, 30)
+put(27, 28, 'S')                      # the cameo: you stand with them, or wait
+put(27, 26, 'C')                      # curled away: not further down
+put(27, 30, 'F')                      # fallen, lamp still raised
+
+# --- the way out: wall-jump to the top of the ground itself, step into the
+# vent east of it, and the last reach is RIDDEN back west to the door ------
+put(40, 5, '#')                       # the RIDDEN lantern's mount
+run(27, 38, 10)                       # the high shelf before the door
+block(32, 32, 6, 9, '1')              # the door: priced at all three
+put(29, 9, 'M')
+put(30, 9, 'K')                       # reaching: it was always this close
+
+# --- a plane under the landing's own fall line (the rescue vent's lane
+# --- at the far left stays open — a kill tile inside a wind is a lie) ------
+for x in range(5, 9 + 1):
+    if g[30][x] == '.':
+        put(x, 30, '_')
+
+# --- motes: the drop into the corridor, the wall-top exit, the vent --------
+for y in range(23, 26):
+    for x in range(13, 17):
+        if g[y][x] == '.':
+            put(x, y, 'o')
+for xy in ((38, 25), (38, 24), (39, 23), (40, 22), (41, 21)):
+    if g[xy[1]][xy[0]] == '.':
+        put(xy[0], xy[1], 'o')
+for y in range(10, 22):
+    for x in (42, 43):
+        if g[y][x] == '.':
+            put(x, y, 'o')
+
+CENSERS = [
+    # dodged on the way down...
+    (17, 6, 3.0, 0.95, 3, 0.0),
+    (11, 10, 2.5, 0.9, 3, 0.5),
+    # ...and RIDDEN at the top of the vent, because nothing else is there
+    (40, 6, 3.0, 0.95, 3, 0.25),
+]
+SHUTTLES = [
+    # the moth on the descent, awake to the light you are carrying
+    (4, 12, 18, 20, 4, 0.0, True),
+]
 
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
-defn = """  // 8 · THE RETURN — the U walked in full, and the only new thing in it is a
-  // ROLE. You have spent the game dodging the lantern; here there is a gutter
-  // no jump crosses, no floor serves, and the only thing in reach is the
-  // crown at the top of its swing. The ride is discovered because nothing
-  // else is left, over a gutter shallow enough that being wrong costs
-  // seconds (grammar §1.6).
-  //
-  // The bottom is right-gravity: the corridor IS sideways-down, walked along
-  // its own wall, and midway through it is the one who stayed and the sconce
-  // beside them. You cannot pass without standing with them.
+censers = ',\n'.join(
+    "      { x: %d, y: %d, len: %.1f, arc: %.2f, period: %.2f, phase: %s }"
+    % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)
+shuttles = ',\n'.join(
+    "      { x0: %d, y0: %d, x1: %d, y1: %d, period: %.2f, phase: %s%s }"
+    % (a, b, c, d, n * PULSE, ph, ', snuff: true' if sn else '')
+    for a, b, c, d, n, ph, sn in SHUTTLES)
+
+defn = """  // 8 · THE RETURN — the U, in open sky. Down the left limb through the
+  // dodged lanterns and the moth; through the one-way curtain into the
+  // corridor that IS sideways-down, where the far wall is the ground and
+  // the ones who stayed hold the sconce you cannot pass without lighting;
+  // out on the vent's updraft — and the last reach is RIDDEN, the lantern
+  // you spent the room dodging now the only footing between the wind's
+  // crest and the door. The door's price is all three lights: the U does
+  // not un-happen, and neither does anyone walked past.
   {
     glyph: 'return',
-    chambers: [17, 38],
+    chambers: [17, 35],
+    openEdges: true,
     doorNeeds: { '1': 3 },
     censers: [
-      // dodged on the way down...
-      { x: 9, y: 7, len: 3.0, arc: 0.95, period: 2.55, phase: 0 },
-      { x: 6, y: 15, len: 2.8, arc: 0.9, period: 2.55, phase: 0.5 },
-      // ...and RIDDEN across the gutter, because there is nothing else
-      { x: 10, y: 22, len: 3.2, arc: 1.0, period: 2.55, phase: 0.25 },
-      // then ridden upward on the far limb, apex to apex
-      { x: 46, y: 22, len: 3.0, arc: 0.95, period: 2.55, phase: 0 },
-      { x: 50, y: 14, len: 2.8, arc: 0.9, period: 2.55, phase: 0.5 },
-      { x: 45, y: 8, len: 2.6, arc: 0.85, period: 2.55, phase: 0.25 },
+%s
     ],
     shuttles: [
-      // bolts threading the sideways corridor
-      { x0: 23, y0: 26, x1: 32, y1: 26, period: 1.7, phase: 0 },
-      { x0: 34, y0: 29, x1: 23, y1: 29, period: 2.55, phase: 0.5 },
-      // and the moth on the descent, awake to the light you are carrying
-      { x0: 3, y0: 11, x1: 14, y1: 19, period: 3.4, phase: 0, snuff: true },
-    ],
-    currents: [
-      // the vent under the corridor's far end, the road out of the bottom
-      { x0: 36, y0: 24, x1: 37, y1: 30, force: 46 },
-    ],
-    crushers: [
-      // one on the descent, so the ascent's pair recombine rather than debut
-      { x: 1, y: 12, w: 2, h: 2, dx: 4, dy: 0, period: 3.4, phase: 0.25 },
-      { x: 44, y: 27, w: 2, h: 2, dx: 0, dy: -3, period: 3.4, phase: 0 },
-      { x: 49, y: 19, w: 2, h: 2, dx: 0, dy: -3, period: 3.4, phase: 0.5 },
+%s
     ],
     gates: [
-      // the return does not un-happen
-      { x0: 38, y0: 29, x1: 47, y1: 29 },
+      // the drop into the corridor: down through it, never back up
+      { x0: 13, y0: 24, x1: 16, y1: 24 },
+    ],
+    currents: [
+      // a soft vent off the descent's west edge — the carry taught early,
+      // and a second chance for a fall that was almost caught
+      { x0: 2, y0: 8, x1: 4, y1: 20, force: 46 },
+      // and the vent past the corridor's ground: wall-jump to the top of
+      // the world you walked on, step east, and be carried
+      { x0: 41, y0: 8, x1: 44, y1: 22, force: 46 },
     ],
     map: [
 %s
@@ -169,12 +144,14 @@ defn = """  // 8 · THE RETURN — the U walked in full, and the only new thing 
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % body
+out = defn % (censers, shuttles, body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
 start = s.index('  // 8 · THE RETURN')
 end = s.index('  // 9 · THE KINDLED')
-s = s[:start] + out + s[end:]
-io.open(p, 'w', encoding='utf-8').write(s)
-print('RETURN written:', len(rows), 'rows x', W)
+io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
+
+print(f'THE RETURN · {HGT} x {W}')
+for i, r in enumerate(rows):
+    print(f'{i:3d} {r}')

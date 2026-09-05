@@ -1,153 +1,144 @@
-"""THE DEBT — V4 authoring. 54 x 30, a mirrored diptych sharing a wall.
+"""THE DEBT — the mirror, in open sky. 50 x 52.
 
-Rotated gravity taught honestly, and the mirrored crushers are one system
-with it: the same period, opposite phase, both sides of the ledger paid. The
-door is not a lock — it is arithmetic, and its price is one sconce lit under
-EACH gravity, so the sum can only be paid by understanding both halves.
+One floating cell of inverted gravity, and the ledger read on both sides of
+it. The normal approach crosses under a piston and a lantern; then the leap
+UP into the cell, where down is up: you fall to the undersides of the
+slabs and climb the mirror by jumping toward the world's floor. The cell
+is CAPPED — a full stone lid, because a body that falls up with nothing
+above it never comes back — and its own piston descends on the same period
+as the approach's, opposite phase: both sides of the ledger paid.
 
-Cuts at 17 and 35. The crossing past 35 is the last chamber: no sconce, and
-nothing in it either cell has not already taught.
+The door is not a lock. Its price is one sconce lit under EACH gravity —
+the entry's and the one hanging in the mirror — so the sum cannot be paid
+without understanding both halves. It melts open at the end of the fall
+OUT of the cell, with the stone behind it.
+
+Open sky (openEdges): one plane under the normal-gravity route; the cell
+needs none, its lid is the plane.
 """
 import io
 
-W, H = 54, 30
-g = [['.'] * W for _ in range(H)]
+W, HGT = 50, 52
+PULSE = 0.85
 
+g = [['.'] * W for _ in range(HGT)]
+LEFT, RIGHT = 2, W - 3
 
-def box(x0, y0, x1, y1, ch='#'):
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if 0 <= y < H and 0 <= x < W:
-                g[y][x] = ch
-
-
-def run(y, x0, x1, ch='#'):
-    box(x0, y, x1, y, ch)
+# The cell: every tile in here falls UP (slabs overwrite with stone). Its
+# floor sits at row 32 — high enough that an ordinary jump on the approach
+# below never grazes it — and the only way in is the THROAT: a narrow
+# chute of inverted air hanging over the launch pad alone, so entering the
+# mirror is a chosen leap, never an accident.
+CELL = (24, 42, 8, 32)
+THROAT = (33, 38, 33, 37)
 
 
 def put(x, y, ch):
     g[y][x] = ch
 
 
-box(0, 0, W - 1, 1)
-box(0, H - 1, W - 1, H - 1)
-box(0, 0, 0, H - 1); box(W - 1, 0, W - 1, H - 1)
+def run(x0, x1, y, ch='#'):
+    for x in range(x0, x1 + 1):
+        put(x, y, ch)
 
-# =============================================================================
-# THE ANTECHAMBER and THE LEFT CELL · cols 1-16, gravity down.
-# A ledge climb with the wall's own pistons, read the way the whole game has
-# read a ledge climb up to now. This is the half you already know.
-# =============================================================================
-run(26, 1, 16)                    # the antechamber floor
-put(3, 25, '@')
-put(6, 25, 'S')                   # the entry sconce
-run(25, 8, 14, 'o')
-run(22, 2, 8)
-run(19, 9, 15)
-run(16, 1, 7)
-run(13, 8, 15)
-run(10, 2, 9)
-run(21, 10, 14, 'o')
-run(12, 3, 7, 'o')
-put(16, 9, 'S')                   # LEDGER ONE: lit under gravity as given
-box(11, 9, 15, 9)
-box(1, 24, 1, 24, 'X'); box(16, 20, 16, 20, 'X')
-box(1, 14, 1, 14, 'X'); box(16, 15, 16, 15, 'X')
 
-# =============================================================================
-# THE SHARED WALL · cols 17-18. The seam. Motes fall SIDEWAYS past it before
-# you cross, so the dialect is shown before it is entered.
-# =============================================================================
-box(17, 2, 18, 27)
-# the doorway is TWO courses thick, because the wall is: opening only the far
-# column leaves the door walled off from the side you approach it from
-box(17, 22, 18, 25, '1')          # the door, priced at two — one per gravity
+def block(x0, x1, y0, y1, ch='#'):
+    for y in range(y0, y1 + 1):
+        run(x0, x1, y, ch)
 
-# =============================================================================
-# THE RIGHT CELL · cols 19-35, gravity UP. The same climb re-read: what your
-# body calls the floor is the ceiling, and the pistons descend out of it.
-# =============================================================================
-box(19, 2, 35, 27, '^')
-run(3, 19, 35)                    # the right cell's "floor", overhead
-run(6, 20, 26)
-run(9, 27, 34)
-run(12, 19, 25)
-run(15, 26, 34)
-run(18, 20, 27)
-run(21, 28, 35)
-run(24, 19, 26)
-run(27, 19, 35)                   # and its "ceiling", which is the stone below
-run(5, 28, 34, 'o')
-run(11, 27, 33, 'o')
-run(17, 29, 34, 'o')
-run(23, 20, 25, 'o')
-put(35, 22, 'S')                  # LEDGER TWO: lit under gravity reversed, and
-                                  # hung UNDER its course, because over there
-                                  # the body rests against the underside
-box(19, 5, 19, 5, 'X'); box(35, 13, 35, 13, 'X')
-box(19, 17, 19, 17, 'X')
 
-# =============================================================================
-# THE CROSSING · cols 36-52. Ketsu: over the seam at the top, gravity flipping
-# under you, both crusher banks interleaved. Density of the known.
-# =============================================================================
-box(36, 2, 36, 14)
-box(36, 20, 36, 27)
-run(15, 36, 44, '^')              # the flip happens mid-crossing
-box(37, 2, 44, 14, '^')
-run(3, 37, 45)
-run(7, 38, 43)
-run(11, 37, 44)
-run(6, 39, 43, 'o')
-run(10, 38, 42, 'o')
-run(16, 45, 51)                   # and out the far side, gravity as given
-run(20, 46, 52)
-run(24, 45, 51)
-run(19, 46, 51, 'o')
-run(23, 46, 50, 'o')
-put(48, 23, 'M')
-put(46, 23, 'N')
-put(50, 23, 'F')                  # feet pointing opposite ways across the wall
-box(45, 2, 45, 15)
-box(1, 28, 52, 28)                # and the bed under all of it, so the room
-box(1, 27, 16, 27)                # has no hollow nobody was meant to find
+# --- the inverted cell, filled first so stone can overwrite it -------------
+cx0, cx1, cy0, cy1 = CELL
+block(cx0, cx1, cy0, cy1, '^')
+block(*THROAT, '^')
+run(cx0 - 1, cx1 + 1, cy0 - 1)        # the LID: a full stone cap
+# the mirror's slabs, walked on their UNDERSIDES, climbed by jumping down
+run(31, 38, 24)
+run(24, 28, 20)
+put(26, 21, 'S')                      # the sconce hung in the mirror
+run(31, 36, 16)
+run(24, 29, 12)
+# the mirror's piston: housed in the cell's east flank, biting west across
+# the climb between the second and third slabs
+block(41, 42, 20, 21)
+
+# --- the normal approach, left to right under the cell ---------------------
+run(3, 12, 40)
+put(4, 39, '@')
+put(7, 39, 'S')
+run(16, 21, 40)
+# the approach piston's housing, biting down over the pad
+block(24, 25, 35, 36)
+run(24, 29, 40)
+put(32, 35, '#')                      # the lantern's mount stone
+run(33, 38, 40)                       # the launch pad: jump UP into the cell
+
+# --- the way out: off the lid's west edge, down the cell's flank. The
+# collector pad catches the fall (and, for a climber who missed the mirror
+# sconce, a step east off its edge re-enters the cell right beneath it)
+run(16, 23, 30)
+put(20, 29, 'F')                      # fallen: struck from the mirror's side
+run(3, 12, 34)                        # the door's porch, hung over the entry
+block(8, 8, 30, 33, '1')              # the door, priced one sconce per gravity
+block(3, 3, 30, 33)                   # the stone's alcove wall
+put(5, 33, 'M')
+put(6, 33, 'N')                       # kneeling: the ledger closed
+
+# --- one plane under the normal route --------------------------------------
+for x in range(LEFT, RIGHT + 1):
+    if g[48][x] == '.':
+        put(x, 48, '_')
+
+# --- motes: the leap into the mirror, and the fall out of it ---------------
+for y in range(35, 40):
+    for x in range(34, 38):
+        if g[y][x] == '.':
+            put(x, y, 'o')
+for y in range(10, 28):
+    if g[y][22] == '.':
+        put(22, y, 'o')
+
+CENSERS = [
+    # the lantern over the approach's last gap, in the world's own down
+    (32, 36, 2.8, 0.9, 3, 0.0),
+]
+CRUSHERS = [
+    # the mirror's piston, biting west across the inverted climb...
+    (41, 20, 2, 2, -4, 0, 4, 0.0),
+    # ...and the approach's, biting down over the pad: same period,
+    # opposite phase, both sides of the ledger paid
+    (24, 37, 2, 1, 0, 2, 4, 0.5),
+]
 
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
-defn = """  // 7 · THE DEBT — a mirrored diptych sharing a wall, and the mirror is the
-  // lesson: everything you did on the left, re-read upside down on the right.
-  // The pistons are one system with the gravity — same period, opposite
-  // phase, both sides of the ledger paid.
-  //
-  // The door is not a lock. Its price is one sconce lit under EACH gravity,
-  // so the sum cannot be paid without understanding both halves, which is
-  // what "this is arithmetic" means when a room says it.
+censers = ',\n'.join(
+    "      { x: %d, y: %d, len: %.1f, arc: %.2f, period: %.2f, phase: %s }"
+    % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)
+crushers = ',\n'.join(
+    "      { x: %d, y: %d, w: %d, h: %d, dx: %d, dy: %d, period: %.2f, phase: %s }"
+    % (x, y, w, h, dx, dy, n * PULSE, ph) for x, y, w, h, dx, dy, n, ph in CRUSHERS)
+
+defn = """  // 7 · THE DEBT — the mirror, in open sky. One floating cell of inverted
+  // gravity with a full stone lid, entered by a leap from the launch pad
+  // beneath it: inside, you land on the UNDERSIDES of the slabs and climb
+  // the mirror by jumping toward the world's floor. The pistons are one
+  // system across the flip — same period, opposite phase — and the door's
+  // price is one sconce lit under EACH gravity, so the sum cannot be paid
+  // without understanding both halves. Out the cell's west flank, down its
+  // own long fall, to the stone behind the melted door.
   {
     glyph: 'debt',
     chambers: [17, 35],
+    openEdges: true,
     doorNeeds: { '1': 2 },
-    crushers: [
-      // the left bank, out of the wall the way a piston has always come
-      { x: 1, y: 17, w: 2, h: 2, dx: 4, dy: 0, period: 3.4, phase: 0 },
-      { x: 13, y: 18, w: 2, h: 2, dx: -4, dy: 0, period: 3.4, phase: 0.5 },
-      // and the right bank, mirrored: same period, opposite phase, descending
-      // out of what the body over there calls the floor
-      { x: 24, y: 4, w: 2, h: 2, dx: 0, dy: 4, period: 3.4, phase: 0.5 },
-      { x: 26, y: 22, w: 2, h: 2, dx: 0, dy: -4, period: 3.4, phase: 0 },
-      // interleaved once more across the crossing
-      { x: 38, y: 4, w: 2, h: 2, dx: 0, dy: 3, period: 2.55, phase: 0.25 },
-      { x: 46, y: 17, w: 2, h: 2, dx: 0, dy: 3, period: 2.55, phase: 0.75 },
-    ],
     censers: [
-      // one lantern per cell, swinging in each cell's own down
-      { x: 9, y: 16, len: 2.8, arc: 0.9, period: 2.55, phase: 0 },
-      { x: 27, y: 12, len: 2.8, arc: 0.9, period: 2.55, phase: 0.5 },
+%s
     ],
-    shuttles: [
-      { x0: 20, y0: 7, x1: 34, y1: 7, period: 3.4, phase: 0.25 },
-      { x0: 15, y0: 20, x1: 3, y1: 20, period: 2.55, phase: 0.75 },
+    crushers: [
+%s
     ],
     map: [
 %s
@@ -155,12 +146,14 @@ defn = """  // 7 · THE DEBT — a mirrored diptych sharing a wall, and the mirr
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % body
+out = defn % (censers, crushers, body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
 start = s.index('  // 7 · THE DEBT')
 end = s.index('  // 8 · THE RETURN')
-s = s[:start] + out + s[end:]
-io.open(p, 'w', encoding='utf-8').write(s)
-print('DEBT written:', len(rows), 'rows x', W)
+io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
+
+print(f'THE DEBT · {HGT} x {W}')
+for i, r in enumerate(rows):
+    print(f'{i:3d} {r}')
