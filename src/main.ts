@@ -59,29 +59,36 @@ type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault' | 'interior
 /** right stick, pixels a second: a menu scrolls about a panel-height per push */
 const MENU_SCROLL = 1100;
 
+/** visible point-light counts are padded to a multiple of this — see cullLights() */
+const LIGHT_STEP = 4;
+
 /** one discrete request from the player, whichever device made it */
 type Action =
   | 'interact' | 'escape' | 'dash' | 'lance' | 'flare' | 'charge' | 'arrestor'
   | 'shaftlight' | 'depot' | 'lamp' | 'map' | 'recall' | 'warpsell' | 'mute'
   | 'zoomin' | 'zoomout';
 
-/** free every GL resource a retired scene holds; disposing a shared material
- *  or texture is safe — three.js re-uploads it the next time it is drawn */
+/** free the heavy GL resources a retired scene holds — geometries and
+ *  textures re-upload cheaply the next time they are drawn. Materials are
+ *  deliberately NOT disposed: disposing one releases its compiled shader
+ *  program, and recompiling on first sight is a visible hitch on every
+ *  arrival. The material set is small and shared across worlds, so keeping
+ *  the programs warm costs almost nothing and kills the transit stutter. */
 function disposeSceneDeep(scene: THREE.Scene): void {
-  const mats = new Set<THREE.Material>();
+  const texs = new Set<{ dispose(): void }>();
   scene.traverse(o => {
     const m = o as THREE.Mesh;
     if (m.geometry) m.geometry.dispose();
     const list = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
-    for (const mat of list) mats.add(mat);
-  });
-  for (const mat of mats) {
-    const anyMat = mat as unknown as Record<string, { dispose?: () => void } | undefined>;
-    for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'aoMap']) {
-      anyMat[k]?.dispose?.();
+    for (const mat of list) {
+      const anyMat = mat as unknown as Record<string, { dispose?: () => void } | undefined>;
+      for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'aoMap']) {
+        const t = anyMat[k];
+        if (t?.dispose) texs.add(t as { dispose(): void });
+      }
     }
-    mat.dispose();
-  }
+  });
+  for (const t of texs) t.dispose();
 }
 
 class Game {
@@ -703,6 +710,24 @@ class Game {
     this.applyKeeping();
   }
 
+  /**
+   * Pay the one-time GPU costs of a freshly revealed world — the chunk band
+   * around the camera and every first-sight shader compile — while a transit
+   * flash, title fade, or panel still covers the frame. Without this the
+   * same work lands scattered across the first seconds of play as hitches.
+   */
+  private prewarm(): void {
+    this.chunks.update(Math.max(0, this.ctrl.row), this.time);
+    this.cullLights(); // settle the cull + ballast state before compiling
+    this.renderer.compile(this.scene, this.cam.camera);
+    // creatures waking after arrival push the padded light count one boundary
+    // up — pay for that shader combo now too, while the cover is still down
+    const k = this.fillerPts.filter(f => f.visible).length;
+    this.fillerPts.forEach((f, i) => { f.visible = i < k + LIGHT_STEP; });
+    this.renderer.compile(this.scene, this.cam.camera);
+    this.fillerPts.forEach((f, i) => { f.visible = i < k; });
+  }
+
   /** wear what the meta store says: pod coat, suit coat, and the room */
   private applyKeeping(): void {
     this.pod?.applyFinish(rigFinish(this.meta.finishRig), flameStyle(this.meta.flame), lampTint(this.meta.lampTint));
@@ -737,6 +762,22 @@ class Game {
     this.ctrl = new PodController(this.terrain, this.state, this.events());
     this.glyphMarks = new GlyphMarks(this.scene);
     this.glyphMarks.build(this.terrain.glyphStones, ACTIVE.glyphHue, this.state.glyphsSet);
+    // light-count ballast for cullLights(): parked far away, zero intensity,
+    // negligible falloff — they exist only to hold the shader light count
+    // still. Two steps' worth, so prewarm() can present the next boundary up.
+    this.fillerPts = []; this.fillerSpots = [];
+    for (let i = 0; i < LIGHT_STEP * 2 - 1; i++) {
+      const l = new THREE.PointLight(0x000000, 0, 0.001, 2);
+      l.visible = false; l.userData.filler = true;
+      l.position.set(0, 1000, 0);
+      this.fillerPts.push(l);
+      this.scene.add(l);
+    }
+    const s = new THREE.SpotLight(0x000000, 0, 0.001, 0.1, 1, 2);
+    s.visible = false; s.userData.filler = true;
+    s.position.set(0, 1000, 0);
+    this.fillerSpots = [s];
+    this.scene.add(s);
   }
 
   private events() {
@@ -905,6 +946,8 @@ class Game {
     this.ctrl.px = SPAWN_X;
     this.ctrl.py = 3.2;
     this.ctrl.vx = 0; this.ctrl.vy = 0;
+    // no prewarm here: the title screen was this same world's surface, so its
+    // shaders are already warm, and the intro descent covers the chunk builds
     this.introT = 0;
     this.mode = 'intro';
   }
@@ -915,6 +958,7 @@ class Game {
     this.title?.hide();
     this.title = null;
     this.cam.snap(this.ctrl.px, this.ctrl.py + 1.8, 14);
+    this.prewarm(); // the title is still fading over the frame
     this.hud.show();
     this.hud.setConsumables(this.state.flares, this.state.charges);
     this.hud.setLamp(this.lampOn);
@@ -1082,6 +1126,7 @@ class Game {
     this.comms.clear();
     this.setupWorld();
     this.cam.snap(this.ctrl.px, this.ctrl.py + 1.8, 14);
+    this.prewarm(); // the transit whiteout is still covering the frame
     this.hud.toast(`ARRIVED — ${ACTIVE.name}`, 'stratum');
     this.audio.stratum();
     this.saveNow();
@@ -1922,35 +1967,60 @@ class Game {
     this.renderer.render(this.scene, this.cam.camera);
   }
 
-  private lightCullAt = -9;
-
   /**
    * Forward rendering folds EVERY visible light into every lit material's
    * fragment loop, distance or no distance — a dock lamp five hundred tiles
    * overhead still costs full-screen shading. Cull any point/spot light
-   * whose falloff radius cannot reach the view. Owners keep authority over
-   * turning lights off; we only turn back on what we ourselves culled.
+   * whose falloff radius cannot reach the view, and any light sitting at
+   * zero intensity (dark fauna glows, pooled flares waiting for a throw).
+   * Owners keep authority through intensity; we only ever re-show what we
+   * ourselves culled. This runs every frame, after all owners have updated
+   * and before render, so a lamp lights up the same frame it is turned on.
+   *
+   * The second job matters as much as the first: the visible light COUNT is
+   * baked into every compiled shader, so any change — a swarm waking, a
+   * warden standing up, a spill claimed, this very culler — recompiles every
+   * lit material in view, and each recompile is a dropped frame. The filler
+   * lights are ballast: they pad the point count to a multiple of
+   * LIGHT_STEP and the spot count to a multiple of 2, so the count the
+   * shaders see almost never moves.
    */
   private cullLights(): void {
-    if (this.time - this.lightCullAt < 0.12) return;
-    this.lightCullAt = this.time;
     const cx = this.cam.camera.position.x, cy = this.cam.camera.position.y;
-    this.scene.traverse(o => {
+    let pts = 0, spots = 0;
+    const walk = (o: THREE.Object3D): void => {
       const l = o as THREE.PointLight;
-      if (!(l.isPointLight || (l as unknown as THREE.SpotLight).isSpotLight)) return;
-      if (!l.distance) return; // unbounded lights are someone's deliberate sun
-      l.getWorldPosition(this.lightPos);
-      const reach = l.distance + 24; // pad: half a zoomed-out view, generously
-      const dx = this.lightPos.x - cx, dy = this.lightPos.y - cy;
-      if (dx * dx + dy * dy > reach * reach) {
-        if (l.visible) { l.visible = false; l.userData.culled = true; }
-      } else if (l.userData.culled) {
-        l.visible = true;
-        l.userData.culled = false;
+      const isPt = l.isPointLight === true;
+      const isSpot = (l as unknown as THREE.SpotLight).isSpotLight === true;
+      if (isPt || isSpot) {
+        if (l.userData.filler) return;
+        // unbounded lights are someone's deliberate sun — never culled
+        if (l.distance) {
+          l.getWorldPosition(this.lightPos);
+          const reach = l.distance + 24; // pad: half a zoomed-out view, generously
+          const dx = this.lightPos.x - cx, dy = this.lightPos.y - cy;
+          if (l.intensity === 0 || dx * dx + dy * dy > reach * reach) {
+            if (l.visible) { l.visible = false; l.userData.culled = true; }
+          } else if (l.userData.culled) {
+            l.visible = true;
+            l.userData.culled = false;
+          }
+        }
+        if (l.visible) { if (isPt) pts++; else spots++; }
+        return;
       }
-    });
+      if (!o.visible) return; // the renderer skips hidden subtrees, so do we
+      for (const c of o.children) walk(c);
+    };
+    walk(this.scene);
+    const wantPts = Math.ceil(pts / LIGHT_STEP) * LIGHT_STEP;
+    this.fillerPts.forEach((f, i) => { f.visible = i < wantPts - pts; });
+    const wantSpots = Math.ceil(spots / 2) * 2;
+    this.fillerSpots.forEach((f, i) => { f.visible = i < wantSpots - spots; });
   }
   private lightPos = new THREE.Vector3();
+  private fillerPts: THREE.PointLight[] = [];
+  private fillerSpots: THREE.SpotLight[] = [];
 
   private playFrame(dt: number): void {
     const paused = this.panels.isOpen;
@@ -2678,6 +2748,7 @@ class Game {
     this.setupWorld();
     this.ctrl.respawnAtSurface();
     this.cam.snap(this.ctrl.px, 2, 15.5);
+    this.prewarm(); // the epilogue panel is still closing over the frame
     this.hud.show();
     this.mode = 'play';
     this.hud.toast('THE MOMENT BEFORE — THE CHOICE IS STILL YOURS', 'stratum');

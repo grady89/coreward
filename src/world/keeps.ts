@@ -88,7 +88,7 @@ export class ShaftlightField {
   /** hand the live lights to the fixtures nearest the pod */
   update(px: number, py: number, time: number): void {
     if (this.list.length === 0) {
-      for (const pt of this.lights) { pt.intensity = 0; pt.visible = false; }
+      for (const pt of this.lights) pt.intensity = 0;
       return;
     }
     const flick = 1 + Math.sin(time * 6.3) * 0.06;
@@ -98,12 +98,13 @@ export class ShaftlightField {
       .slice(0, this.lights.length);
     this.lights.forEach((pt, k) => {
       const r = ranked[k];
-      // a dark light still occupies a shader slot while visible — drop it
-      if (!r || r.d > 26) { pt.intensity = 0; pt.visible = false; return; }
+      // dark lights stay visible: hiding one changes the scene's light count,
+      // and that recompiles every shader in the world — a far worse hitch
+      // than the idle slot costs
+      if (!r || r.d > 26) { pt.intensity = 0; return; }
       const p = this.list[r.i];
       pt.position.set(p.x - 0.2, p.y + 0.2, 0.6);
       pt.intensity = 5.5 * flick;
-      pt.visible = true;
     });
   }
 }

@@ -75,7 +75,6 @@ export class Polyps implements Creature {
     scene.add(this.cores);
 
     this.glow = new THREE.PointLight(0x6affc8, 0, 7, 1.8);
-    this.glow.visible = false;
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) this.clusters.push({ alive: false, ax: 0, ay: 0, life: 0, seen: false, noticed: false });
     for (let i = 0; i < MAX_POLYPS; i++) {
@@ -89,7 +88,7 @@ export class Polyps implements Creature {
     for (const p of this.polyps) p.alive = false;
     for (const c of this.clusters) c.alive = false;
     this.sacs.count = 0; this.cores.count = 0;
-    this.glow.visible = false;
+    this.glow.intensity = 0;
     this.menace = 0;
   }
 
@@ -270,12 +269,11 @@ export class Polyps implements Creature {
       if (this.cores.instanceColor) this.cores.instanceColor.needsUpdate = true;
     }
     if (gw > 0.05) {
-      this.glow.visible = true;
       this.glow.position.set(gx / gw, gy / gw, 0.5);
       this.glow.intensity = 1 + peak * 9;
       this.glow.color.setHex(ACTIVE.swarm.hunting);
     } else {
-      this.glow.visible = false;
+      this.glow.intensity = 0;
     }
     this.menace += (peak - this.menace) * Math.min(1, dt * 3);
   }

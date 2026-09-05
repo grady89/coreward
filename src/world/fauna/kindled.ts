@@ -99,7 +99,12 @@ export class Kindled {
   }
 
   private setVisible(v: boolean): void {
-    for (const f of this.figs) { f.points.visible = v; f.core.visible = v; f.light.visible = v; }
+    // the lights never leave the light state — toggling one recompiles every
+    // shader in the world. Dark means intensity 0; update() re-drives it.
+    for (const f of this.figs) {
+      f.points.visible = v; f.core.visible = v;
+      if (!v) f.light.intensity = 0;
+    }
   }
 
   reset(): void {

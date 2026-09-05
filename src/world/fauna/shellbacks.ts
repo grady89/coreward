@@ -83,7 +83,6 @@ export class Shellbacks implements Creature {
 
     for (let i = 0; i < MAX; i++) {
       const l = new THREE.PointLight(0xe8dcff, 0, 4.5, 1.8);
-      l.visible = false;
       this.lights.push(l);
       scene.add(l);
       this.backs.push({
@@ -98,7 +97,7 @@ export class Shellbacks implements Creature {
     this.pendingKill = 0;
     for (const b of this.backs) b.alive = false;
     this.plates.count = 0; this.legs.count = 0; this.feelers.count = 0;
-    for (const l of this.lights) l.visible = false;
+    for (const l of this.lights) l.intensity = 0;
     this.sealed = 0;
   }
 
@@ -243,11 +242,11 @@ export class Shellbacks implements Creature {
     for (let k = 0; k < this.backs.length; k++) {
       const b = this.backs[k];
       const light = this.lights[k];
-      if (!b.alive) { light.visible = false; continue; }
+      if (!b.alive) { light.intensity = 0; continue; }
       b.life += dt;
       const dx = podX - b.x, dy = podY - b.y;
       const dist = Math.hypot(dx, dy);
-      if (dist > 34 || b.life > 150) { this.die(b); light.visible = false; continue; }
+      if (dist > 34 || b.life > 150) { this.die(b); light.intensity = 0; continue; }
 
       b.stagger = Math.max(0, b.stagger - dt);
       if (b.curlT > 0) b.curlT -= dt;
@@ -291,7 +290,6 @@ export class Shellbacks implements Creature {
 
       // ---- body ----
       b.chain.follow(b.x, b.y, 1);
-      light.visible = true;
       light.position.set(b.x, b.y, 0.5);
       light.intensity = 1.2 + b.curl * 0.6 + (b.stagger > 0 ? Math.sin(time * 30) * 0.8 : 0);
       const iris = time * 0.25;

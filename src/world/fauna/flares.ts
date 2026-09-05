@@ -27,7 +27,6 @@ export class FlareField {
     scene.add(this.mesh);
     for (let i = 0; i < MAX_FLARES; i++) {
       const l = new THREE.PointLight(0xffb066, 0, 14, 1.6);
-      l.visible = false;
       this.lights.push(l);
       scene.add(l);
       this.list.push({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 });
@@ -37,7 +36,7 @@ export class FlareField {
   reset(): void {
     for (const f of this.list) f.alive = false;
     this.mesh.count = 0;
-    for (const l of this.lights) l.visible = false;
+    for (const l of this.lights) l.intensity = 0;
   }
 
   throw(x: number, y: number, vx: number, vy: number): boolean {
@@ -79,9 +78,9 @@ export class FlareField {
     for (let i = 0; i < this.list.length; i++) {
       const f = this.list[i];
       const light = this.lights[i];
-      if (!f.alive) { light.visible = false; continue; }
+      if (!f.alive) { light.intensity = 0; continue; }
       f.life -= dt;
-      if (f.life <= 0) { f.alive = false; light.visible = false; continue; }
+      if (f.life <= 0) { f.alive = false; light.intensity = 0; continue; }
       f.vy -= 16 * dt;
       const nx = f.x + f.vx * dt;
       const ny = f.y + f.vy * dt;
@@ -92,7 +91,6 @@ export class FlareField {
 
       const flicker = 0.85 + Math.sin(f.life * 24) * 0.15;
       const fade = Math.min(1, f.life / 3);
-      light.visible = true;
       light.position.set(f.x, f.y, 0.4);
       light.intensity = 22 * flicker * fade;
       tmpP.set(f.x, f.y, 0.3);

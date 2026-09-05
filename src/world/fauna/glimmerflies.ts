@@ -64,7 +64,6 @@ export class Glimmerflies implements Creature {
     this.mesh.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.mesh);
     this.glow = new THREE.PointLight(0xffe08a, 0, 9, 1.8);
-    this.glow.visible = false;
     scene.add(this.glow);
     for (let i = 0; i < MAX_SWARMS; i++) {
       this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, woke: false });
@@ -77,7 +76,7 @@ export class Glimmerflies implements Creature {
     this.flies.length = 0;
     for (const s of this.swarms) s.alive = false;
     this.mesh.count = 0;
-    this.glow.visible = false;
+    this.glow.intensity = 0;
     this.menace = 0;
   }
 
@@ -282,13 +281,12 @@ export class Glimmerflies implements Creature {
       let cx = 0, cy = 0, c = 0;
       for (const f of this.flies) if (this.swarms[f.swarm]?.alerted) { cx += f.x; cy += f.y; c++; }
       if (c > 0) {
-        this.glow.visible = true;
         this.glow.position.set(cx / c, cy / c, 0.4);
         this.glow.intensity = 7;
         this.glow.color.setHex(ACTIVE.swarm.hunting);
       }
     } else {
-      this.glow.visible = false;
+      this.glow.intensity = 0;
     }
     const target = anyAlert ? Math.max(0, 1 - closest / NOTICE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);

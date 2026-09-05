@@ -78,7 +78,6 @@ export class Rimewings implements Creature {
     this.mesh.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.mesh);
     this.glow = new THREE.PointLight(0xbfe0ff, 0, 8, 1.8);
-    this.glow.visible = false;
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
       this.clusters.push({ alive: false, phase: 'frozen', t: 0, coldFor: 0, ax: 0, ay: 0, life: 0, woke: false });
@@ -91,7 +90,7 @@ export class Rimewings implements Creature {
     this.wings.length = 0;
     for (const c of this.clusters) c.alive = false;
     this.mesh.count = 0;
-    this.glow.visible = false;
+    this.glow.intensity = 0;
     this.menace = 0;
   }
 
@@ -323,12 +322,11 @@ export class Rimewings implements Creature {
       if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     }
     if (gc > 0) {
-      this.glow.visible = true;
       this.glow.position.set(gx / gc, gy / gc, 0.4);
       this.glow.intensity = 6;
       this.glow.color.setHex(ACTIVE.swarm.hunting);
     } else {
-      this.glow.visible = false;
+      this.glow.intensity = 0;
     }
     const target = anyHunt ? Math.max(0, 1 - closest / WAKE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);
