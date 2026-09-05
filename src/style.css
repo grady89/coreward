@@ -593,7 +593,7 @@ body.sm-open #survey {
 }
 @keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
-#title .menu { display: flex; flex-direction: column; gap: 12px; margin-top: 52px; width: 240px; animation: fade-up 0.9s var(--ease-out) 1.5s both; }
+#title .menu { display: flex; flex-direction: column; gap: 12px; margin-top: 52px; min-width: 240px; animation: fade-up 0.9s var(--ease-out) 1.5s both; }
 #title .btn { padding: 15px; font-size: 14px; letter-spacing: 0.3em; background: var(--glass); backdrop-filter: blur(8px); }
 #title .advance-line {
   margin-top: 26px; font-family: var(--font-display);
