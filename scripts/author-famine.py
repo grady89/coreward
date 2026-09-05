@@ -153,12 +153,13 @@ LASER = [
     # Then hall A's ground bolt is met again on the left slab's crossing.
     [('v', 44, 3, 0.0), ('v', 40, 2, 0.5), ('v', 38, 2, 0.25), ('v', 35, 2, 0.75),
      ('h', 28, 31, 3, 0.5)],
-    # HALL C is the horizontal hall, one of each kind: a long bolt hung OVER
-    # the three gap jumps from one-tile anchor stones (the drawing's
-    # squares) -- every full jump's apex grazes its line, so the gaps are
-    # timed against it -- and a ground bolt laid along the finish slab,
-    # jumped over on the run home to the stone.
-    [('H', 28, 44, 3, 4, 0.0), ('h', 46, 50, 3, 0.5)],
+    # HALL C is the horizontal hall: a PARALLEL PAIR. One long bolt hung
+    # OVER the three gap jumps from one-tile anchor stones (the drawing's
+    # squares) -- every full jump's apex grazes its line -- and its match
+    # laid along the ground directly beneath, same clock, opposite phase,
+    # so the bolts sweep toward each other and pass. The ground rail runs
+    # one tile longer (28..45): a post stands on stone, never over a pit.
+    [('H', 28, 44, 3, 4, 0.0), ('h', 28, 45, 4, 0.5)],
 ]
 LEDGE_RISE = 2
 

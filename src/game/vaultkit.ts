@@ -1634,8 +1634,12 @@ export interface CurrentParts {
  * loosening as it climbs. It CARRIES — it is the generosity object — so it
  * has to be unmistakable against a gust, which fights: warmer, vertical,
  * and visibly going up rather than blowing sideways.
+ *
+ * `down` builds the mirror: a DOWNDRAFT pouring out of a vent at the TOP,
+ * cold where the updraft is warm, its sparks falling — so the eye reads
+ * which way this wind will take the body before the body is in it.
  */
-export function buildCurrent(x0: number, x1: number, y0: number, y1: number): CurrentParts {
+export function buildCurrent(x0: number, x1: number, y0: number, y1: number, down = false): CurrentParts {
   const g = new THREE.Group();
   const w = x1 - x0 + 1, h = y1 - y0 + 1;
   const cx = x0 + w / 2, cyTop = -y0, cyBot = -(y1 + 1);
@@ -1643,13 +1647,16 @@ export function buildCurrent(x0: number, x1: number, y0: number, y1: number): Cu
   const n = 90;
   const pos = new Float32Array(n * 3);
   const col = new Float32Array(n * 3);
-  const hot = new THREE.Color(0xffe6bc), cool = new THREE.Color(0xffa860);
+  const hot = down ? new THREE.Color(0xd8ecff) : new THREE.Color(0xffe6bc);
+  const cool = down ? new THREE.Color(0x8fa8dc) : new THREE.Color(0xffa860);
   for (let i = 0; i < n; i++) {
     const u = Math.random();
     pos[i * 3] = cx + (Math.random() - 0.5) * w * (0.3 + u * 0.7);
     pos[i * 3 + 1] = cyBot + u * h;
     pos[i * 3 + 2] = 0.15;
-    const c = cool.clone().lerp(hot, 1 - u);
+    // brightest where it pours from: the floor of an updraft, the mouth of
+    // a downdraft
+    const c = cool.clone().lerp(hot, down ? u : 1 - u);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   const geo = new THREE.BufferGeometry();
@@ -1662,25 +1669,26 @@ export function buildCurrent(x0: number, x1: number, y0: number, y1: number): Cu
   }));
   g.add(pts);
 
-  // three braids of haze twisting up the column's length
+  // three braids of haze twisting along the column's length
   const braids: THREE.Mesh[] = [];
   for (let i = 0; i < 3; i++) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.42, h),
       new THREE.MeshBasicMaterial({
-        map: softDisc(), color: 0xffc078, transparent: true, opacity: 0.16,
+        map: softDisc(), color: down ? 0xa8c4ec : 0xffc078, transparent: true, opacity: 0.16,
         blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
       }));
     m.position.set(cx, (cyTop + cyBot) / 2, 0.12);
     g.add(m);
     braids.push(m);
   }
-  // the vent it comes out of: the hottest thing in a current is its floor
+  // the vent it comes out of: the hottest thing in a current is its floor —
+  // and a downdraft's vent is its ceiling, the mouth it pours from
   const ventMat = new THREE.MeshBasicMaterial({
-    map: softDisc(), color: 0xffe0b0, transparent: true, opacity: 0.55,
+    map: softDisc(), color: down ? 0xcfe2ff : 0xffe0b0, transparent: true, opacity: 0.55,
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
   const vent = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.5, 1.3), ventMat);
-  vent.position.set(cx, cyBot + 0.3, 0.1);
+  vent.position.set(cx, down ? cyTop - 0.3 : cyBot + 0.3, 0.1);
   g.add(vent);
   return { group: g, pts, braids, ventMat };
 }

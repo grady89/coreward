@@ -84,6 +84,7 @@ const SNUFF_R = 0.5;        // the moth's reach — box half-extent, both axes
 const CENSER_TOP = 0.45;    // the lantern's crown sits this far above the bob centre
 const CENSER_RIDE_BAND = 0.3; // how forgiving the crown is about the landing
 const CURRENT_RISE = 7;     // a current carries — it never outruns the spark (P5)
+const CURRENT_SINK = 11;    // a downdraft drives the fall, shy of MAX_FALL so steering stays
 const SNUFF_SATE = 1.2;     // a moth that has just fed is sated this long — over
                             // refill stone the theft would otherwise fire every
                             // frame the floor re-arms you, sting and all
@@ -941,7 +942,7 @@ export class VaultRun {
     // motes, so the carrier and the fighter can never be confused (grammar §2)
     // drawn to the SEATED span, so the wind you can see is the wind that lifts
     for (const cu of this.currentSpan) {
-      const parts = buildCurrent(cu.x0, cu.x1, cu.y0, cu.y1);
+      const parts = buildCurrent(cu.x0, cu.x1, cu.y0, cu.y1, cu.force < 0);
       this.scene.add(parts.group);
       this.currentPts.push({ parts, c: cu });
     }
@@ -1622,11 +1623,18 @@ export class VaultRun {
 
       // CURRENTS — the rising updraft: a vertical carry, capped so it lifts
       // like a breath and never fires like a cannon (P5). The generosity
-      // object: wind was the enemy; this one wind is the road
+      // object: wind was the enemy; this one wind is the road.
+      // A NEGATIVE force is the mirror noun — a DOWNDRAFT that drives the
+      // fall (THE LAST SHIFT's descent shafts). It is capped the same way,
+      // shy of MAX_FALL, so the steer out of it is always still yours.
       for (const cu of this.currentSpan) {
         if (this.px > cu.x0 && this.px < cu.x1 + 1
-          && -this.py > cu.y0 && -this.py < cu.y1 + 1 && this.vy < CURRENT_RISE) {
-          this.vy = Math.min(CURRENT_RISE, this.vy + cu.force * dt);
+          && -this.py > cu.y0 && -this.py < cu.y1 + 1) {
+          if (cu.force >= 0) {
+            if (this.vy < CURRENT_RISE) this.vy = Math.min(CURRENT_RISE, this.vy + cu.force * dt);
+          } else if (this.vy > -CURRENT_SINK) {
+            this.vy = Math.max(-CURRENT_SINK, this.vy + cu.force * dt);
+          }
         }
       }
 
@@ -2860,14 +2868,16 @@ export class VaultRun {
       gm.parts.poolMat.opacity = 0.42 + Math.sin(this.time * 2.1) * 0.1;
       gm.parts.sillMat.opacity = 0.6 + Math.sin(this.time * 3.4) * 0.18;
     }
-    // currents -- the column's sparks rise and the braids twist behind them;
-    // the fighter falls, the carrier climbs, and the eye tells them apart
+    // currents -- the column's sparks run with the wind and the braids twist
+    // behind them; the fighter blows sideways, the carrier climbs, the
+    // downdraft pours, and the eye tells them all apart
     for (const { parts, c } of this.currentPts) {
+      const dir = c.force < 0 ? -1 : 1;
       const cpos = parts.pts.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < cpos.count; i++) {
-        let y = cpos.getY(i) + (3 + (i % 5) * 0.6) * dt;
-        if (y > -c.y0) {
-          y = -(c.y1 + 1);
+        let y = cpos.getY(i) + dir * (3 + (i % 5) * 0.6) * dt;
+        if (dir > 0 ? y > -c.y0 : y < -(c.y1 + 1)) {
+          y = dir > 0 ? -(c.y1 + 1) : -c.y0;
           cpos.setX(i, c.x0 + Math.random() * (c.x1 - c.x0 + 1));
         }
         cpos.setY(i, y);

@@ -511,23 +511,29 @@ await stage('famine', ['the famine', 'light shuttles'], async () => {
 });
 
 await stage('shift', ['spinning beams'], async () => {
-  // --- the last shift: spinning beams point away half the time; cover cuts them ---
+  // --- the last shift (V4, to the drawing): spinning beams point away half
+  // the time and cover cuts them; two RIDDEN censers cross the floorless
+  // storey; three shafts blow DOWN ---
   const shift = await page.evaluate(async () => {
     const { g, until } = window.__H();
     g.devVault('shift');
     await until(() => g.mode === 'vault', 20);
     const v = g.vault;
+    const def = window.__VAULTS.find(x => x.glyph === 'shift');
+    const b0 = def.beams[0];
     const lens = [];
     for (let i = 0; i < 14; i++) {
       await new Promise(r => setTimeout(r, 200));
       const b = v.beamRays[0];
-      lens.push(Math.hypot(b.ex - 25.5, b.ey + 4.2));
+      lens.push(Math.hypot(b.ex - b0.x, b.ey + b0.y));
     }
     const varies = Math.max(...lens) - Math.min(...lens) > 3; // cover + rotation change the ray
-    const censers = (window.__VAULTS.find(x => x.glyph === 'shift').censers ?? []).length;
-    return { varies, censers, min: +Math.min(...lens).toFixed(1), max: +Math.max(...lens).toFixed(1) };
+    const censers = (def.censers ?? []).length;
+    const downdrafts = (def.currents ?? []).filter(c => c.force < 0).length;
+    return { varies, censers, downdrafts,
+      min: +Math.min(...lens).toFixed(1), max: +Math.max(...lens).toFixed(1) };
   });
-  ok('spinning beams', shift, shift.varies && shift.censers === 1);
+  ok('spinning beams', shift, shift.varies && shift.censers === 2 && shift.downdrafts === 3);
   await page.screenshot({ path: OUT + '/v-shift.png' });
 });
 
