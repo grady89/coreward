@@ -513,12 +513,12 @@ class Game {
    * hands off to `enterVault` on its last frame; 'out' runs 1.5 pulses,
    * sealing the word behind a pilot who is already back on the surface.
    */
-  private beginFold(kind: 'in' | 'out', id: string): void {
+  private beginFold(kind: 'in' | 'out', id: string): boolean {
     const stone = this.terrain.glyphStones.find(s => s.id === id);
     const glyph = glyphById(id);
     if (!stone || !glyph) {
       if (kind === 'in') this.enterVault(id);   // no stone (dev rooms): old door
-      return;
+      return false;
     }
     const short = this.state.glyphsSet.has(id) || this.reducedMotion;
     const throat = buildFoldThroat(glyph, ACTIVE.glyphHue);
@@ -538,6 +538,7 @@ class Game {
     this.hud.setPrompt(null);
     this.audio.airlock();
     this.audio.duckAmbience(0.4, this.fold.dur);
+    return true;
   }
 
   private tickFold(dt: number): void {
@@ -561,7 +562,9 @@ class Game {
       f.throat.dispose();
       this.fold = null;
       this.chunks.foldRestore();
-      this.enterVault(f.id);            // the hard cut, on the downbeat
+      // quiet: the airlock already sounded when the fold began — a second
+      // sting right on the cut was the seam made audible
+      this.enterVault(f.id, true);
     } else if (f.kind === 'abort' && f.t <= 0) {
       f.throat.dispose();
       this.fold = null;
@@ -579,7 +582,7 @@ class Game {
     }
   }
 
-  private enterVault(id: string): void {
+  private enterVault(id: string, quiet = false): void {
     // entering ends any threshold still in motion — a stale fold would
     // freeze while the vault owns the frame and eat the next Escape
     if (this.fold) { this.fold.throat.dispose(); this.fold = null; }
@@ -591,7 +594,7 @@ class Game {
     if (!def || !glyph) return;
     // one stone at a time — a stacked run leaks its scene and its HUD
     if (this.vault) { this.vault.dispose(); this.vault = null; }
-    this.audio.airlock();
+    if (!quiet) this.audio.airlock();
     this.hud.hide();
     this.hud.setPrompt(null);
     this.hud.setEva(null);
@@ -615,7 +618,6 @@ class Game {
     const id = v.glyphId;
     v.dispose();
     this.vault = null;
-    this.audio.airlock();
     this.mode = 'eva';
     this.hud.show();
     if (completed && id && glyphById(id) && !this.state.glyphsSet.has(id)) {
@@ -658,8 +660,9 @@ class Game {
         }
       }
     }
-    // seal the word behind you — the fold, run in reverse
-    if (id) this.beginFold('out', id);
+    // seal the word behind you — the fold, run in reverse; its own airlock
+    // is the exit's only sting, and a room with no stone gets the old one
+    if (!(id && this.beginFold('out', id))) this.audio.airlock();
   }
 
   // ---------- THE QUARTERS ----------

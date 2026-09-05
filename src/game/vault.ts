@@ -2790,7 +2790,7 @@ export class VaultRun {
     } else if (this.phase === 'leave') {
       this.leaveT += dt;
       this.driveAssembly(this.leaveT, -1);
-      if (this.leaveT >= PULSE * 2.4) this.closed = true;
+      if (this.leaveT >= PULSE * 3) this.closed = true;
     } else {
       this.invuln = Math.max(0, this.invuln - dt);
       this.step(dt, input);
@@ -3295,14 +3295,14 @@ export class VaultRun {
       a.rx[i] = rnd(i, 4) * 1.1;
       a.rz[i] = rnd(i, 5) * 1.1;
       // the room builds OUTWARD from the tile you stand on
-      a.delayIn[i] = Math.hypot(tiles[i].px - (e.x + 0.5), tiles[i].py + e.y + 0.5) * 0.06;
+      a.delayIn[i] = Math.hypot(tiles[i].px - (e.x + 0.5), tiles[i].py + e.y + 0.5) * 0.075;
     }
     this.assembly.push(a);
   }
 
   /** drive every flying course; t counts up, dir +1 arrives, -1 lets go */
   private driveAssembly(t: number, dir: 1 | -1): boolean {
-    const AD = 0.8;
+    const AD = 1.4;
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const eu = new THREE.Euler();
