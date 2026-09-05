@@ -46,6 +46,7 @@ node scripts/shops.mjs   out/  # sell → garage → pause → save/continue rou
 node scripts/hazards.mjs out/  # side drill, fall damage, gas, death, rescue
 node scripts/spill.mjs   out/  # the spill: claim filed, recovered, expired, replaced
 node scripts/hulks.mjs   out/  # wrecked pods as solid bodies: land, bump, shove, salvage
+node scripts/mineralshots.mjs  # ore review plates: each mineral alone, and in the stone
 node scripts/progression.mjs out/  # wrecks, EVA salvage, core walk ending, forge, dash, world travel
 node scripts/features.mjs out/     # per-stack selling, survey scanner + map, wreck settling, EVA recall
 node scripts/contracts.mjs out/    # contract accept/claim/abandon + settings panel & persistence

@@ -77,7 +77,7 @@ export class SpillSite {
     for (let i = 0; i < MAX_SHARDS; i++) {
       const m = new THREE.Mesh(GEM_GEOS[0], new THREE.MeshStandardMaterial({
         color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.6,
-        roughness: 0.22, metalness: 0.1, flatShading: true,
+        roughness: 0.22, metalness: 0.1, flatShading: true, vertexColors: true,
       }));
       m.visible = false;
       this.group.add(m);

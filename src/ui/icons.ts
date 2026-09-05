@@ -22,7 +22,7 @@ function setup(): void {
   camera = new THREE.PerspectiveCamera(32, 1, 0.1, 10);
   camera.position.set(1.5, 1.2, 2.3);
   camera.lookAt(0, 0, 0);
-  mat = new THREE.MeshStandardMaterial({ roughness: 0.18, metalness: 0.5, flatShading: true });
+  mat = new THREE.MeshStandardMaterial({ roughness: 0.18, metalness: 0.5, flatShading: true, vertexColors: true });
   gem = new THREE.Mesh(GEM_GEOS[0], mat);
   gem.rotation.set(0.45, 0.55, 0.1);
   scene.add(gem);

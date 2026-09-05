@@ -25,8 +25,11 @@ const rockMat = new THREE.MeshStandardMaterial({ roughness: 0.93, metalness: 0.0
 // emissive term is patched to follow each instance's colour so a gem still
 // shines in a pitch-dark tunnel instead of flattening into a silhouette.
 const gemMat = new THREE.MeshStandardMaterial({
-  // no vertexColors: instanceColor drives vColor on its own, and asking for a
-  // per-vertex colour the geometry lacks renders every gem black
+  // vertexColors multiplies the tint every gem geometry now bakes in (crusts
+  // dark, fissures bright) with the per-instance ore colour — and because the
+  // emissive patch below rides vColor, a dark crust also glows less. Every
+  // GEM_GEOS entry ships a color attribute; one without would render black.
+  vertexColors: true,
   flatShading: true,
   roughness: 0.16,
   metalness: 0.55,

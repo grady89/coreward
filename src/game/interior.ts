@@ -4,7 +4,7 @@ import { Input } from '../player/controller';
 import { Meta } from './meta';
 import { wallPalette, WING_GALLERY, WING_VIVARIUM } from './furnish';
 import { FAUNA, FaunaEntry } from './bestiary';
-import { GEM_GEOS, gemScaleOf } from '../world/gemshapes';
+import { GEM_GEOS, DISPLAY_CUT, gemScaleOf } from '../world/gemshapes';
 import { def as tileDef } from '../world/tiles';
 import { glyphs } from '../input/prompts';
 
@@ -513,7 +513,7 @@ export class Interior {
         color: gemColor, flatShading: true, roughness: 0.16, metalness: 0.55,
         emissive: gemColor, emissiveIntensity: trophy.grade >= 2 ? 1.15 : 0.75,
       });
-      const gem = new THREE.Mesh(GEM_GEOS[5], mat);   // BRILLIANT — the display cut
+      const gem = new THREE.Mesh(GEM_GEOS[DISPLAY_CUT], mat);   // the display cut
       const s = (trophy.grade >= 2 ? 0.62 : 0.5) * gemScaleOf(trophy.t) * 1.6;
       gem.scale.setScalar(Math.max(0.34, s));
       gem.position.set(px, 1.28, -1.1);
