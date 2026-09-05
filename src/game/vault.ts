@@ -2781,7 +2781,6 @@ export class VaultRun {
         const i = this.riteOrder[k];
         if (!this.sconceLit[i]) { this.sconceLit[i] = true; this.sconceChord(i); }
       }
-      this.masterGroup.scale.setScalar(1 + Math.sin(this.phaseT * 3) * 0.04);
       if (this.phaseT >= this.riteOrder.length * HALF + PULSE && !this.completed) {
         this.completed = true;
         this.audio.complete();
@@ -2814,6 +2813,15 @@ export class VaultRun {
       if (x > f.x1) x = f.x0;
       f.mesh.position.x = x;
     }
+    // leaving: the veil returns over the collapse's tail, so the cut
+    // lands in black and nothing ever blinks out of existence
+    if (this.phase === 'leave' && this.veilMat) {
+      this.veilMat.opacity = Math.max(this.veilMat.opacity,
+        Math.max(0, (this.leaveT - PULSE * 1.6) / (PULSE * 1.3)));
+      this.hud.style.opacity = '0';
+      this.card?.style.setProperty('opacity', '0');
+      this.card?.style.setProperty('transition', 'opacity 0.8s');
+    } else
     // the veil lifts; the HUD follows it up
     if (this.veilMat && this.veilMat.opacity > 0) {
       this.veilT += dt;
@@ -2851,9 +2859,9 @@ export class VaultRun {
       const near = Math.max(0, Math.min(1, (9 - d) / 7));
       let swell = 0.55 * (0.55 + 0.85 * near * near);
       if (this.phase === 'leave' && this.leaveVia === 'master') {
-        // stepping OUT through the stone: the sanctum floods to take you
+        // stepping OUT through the stone: the sanctum floods to take you —
+        // in light only; scaled stone was clipping through its own dais
         swell = 0.55 * (1.4 + 2.2 * Math.min(1, this.leaveT / PULSE));
-        this.masterGroup.scale.setScalar(1 + Math.min(1, this.leaveT / PULSE) * 0.12);
       }
       for (const gm2 of this.sanctumGlow) gm2.opacity = swell;
     }
