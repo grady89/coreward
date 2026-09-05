@@ -481,12 +481,15 @@ export const VAULTS: VaultDef[] = [
   // below the finish.
   {
     glyph: 'shift',
-    chambers: [17, 35],
+    // the second cut sits at 39: crossing it happens ON the safe shelves
+    // and shaft lips, so every fading deck is framed BEFORE its jump —
+    // the far lip of a gap must be visible from the launch (P3)
+    chambers: [17, 39],
     openEdges: true,
     beams: [
       { x: 14.5, y: 4.5, period: 4.25, phase: 0.0, spin: true },
       { x: 29.5, y: 7.2, period: 3.40, phase: 0.5, spin: true, cw: true },
-      { x: 25.5, y: 53.3, period: 3.40, phase: 0.25, spin: true }
+      { x: 25.5, y: 53.3, period: 3.40, phase: 0.25, spin: true, cw: true }
     ],
     censers: [
       { x: 16, y: 22, len: 3.4, arc: 1.0, period: 2.55, phase: 0.0 },

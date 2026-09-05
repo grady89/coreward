@@ -130,7 +130,7 @@ for c0, c1, r0, r1 in SHAFTS:
 BEAMS = [
     (14.5, 4.5, 5, 0.0, False),
     (29.5, 7.2, 4, 0.5, True),
-    (25.5, 53.3, 4, 0.25, False),
+    (25.5, 53.3, 4, 0.25, True),
 ]
 # The ridden lanterns: (x, pivot-row, len, arc, period-in-pulses, phase).
 # THREE, seven columns apart — each bob reaches len*sin(arc) = 2.86 aside,
@@ -187,7 +187,10 @@ defn = """  // 3 · THE LAST SHIFT — the descent, to the drawing. Four storeys
   // below the finish.
   {
     glyph: 'shift',
-    chambers: [17, 35],
+    // the second cut sits at 39: crossing it happens ON the safe shelves
+    // and shaft lips, so every fading deck is framed BEFORE its jump —
+    // the far lip of a gap must be visible from the launch (P3)
+    chambers: [17, 39],
     openEdges: true,
     beams: [
 %s
