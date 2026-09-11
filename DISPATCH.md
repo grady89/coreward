@@ -130,31 +130,31 @@ carrying — you were the good one. [quietly] Dispatch out."*
 *Direction: her job voice. Bright, procedural, a little wry. Nothing is wrong
 yet.*
 *Settings: Natural · style low · speed 1.0.*
-*Status: recorded.*
+*Status: recorded — every line below is ✅ DONE.*
 
-### v3-start — play begins on VEIL-3
+### v3-start — play begins on VEIL-3  ✅ DONE
 1. [cheerfully] Dusklight, this is Dispatch. Contract's live.
 2. Advance of forty is posted against your account. [wryly] Standard terms — you signed them.
 3. [warmly] Pull something up and we'll both have had a good day.
 
-### v3-first-sale — first ore sold
+### v3-first-sale — first ore sold  ✅ DONE
 1. [cheerfully] Trade post logged your first sale. Nice.
 2. [wryly] Against the advance, mind — the balance is what you keep.
 
-### v3-d60 — sixty metres down
+### v3-d60 — sixty metres down  ✅ DONE
 1. Reading you at sixty. Regolith's soft down to about a hundred and twenty.
 2. Slate starts after. It rings when you cut it. [warmly] You'll hear what I mean.
 
-### v3-fuel-warning — seven minutes of play
+### v3-fuel-warning — seven minutes of play  ✅ DONE
 1. [wryly] Friendly reminder: the tow is fifteen percent and I hate writing those up.
 2. Not because of the paperwork. [quietly] Because of what it does to your balance.
 
-### v3-d130 — into the slate
+### v3-d130 — into the slate  ✅ DONE
 *Direction: line 2 is the first crack in the wry surface. Generate as one take.*
 1. [curious] You hear it? The slate. Old crews said the planet remembers the impact.
 2. [quietly] I used to laugh at that. [pause] Sixteen years on this dish and I don't anymore.
 
-### v3-contract-1 — first contract cleared
+### v3-contract-1 — first contract cleared  ✅ DONE
 1. Contract cleared. Posted to your balance same day — [wryly] that's me pushing it through.
 2. [quietly] Don't tell anyone I can do that.
 
@@ -163,44 +163,44 @@ yet.*
 *Direction: still professional, but she's started noticing. Hedged, careful,
 reading her own instruments twice.*
 *Settings: Natural · style low · speed 1.0.*
-*Status: recorded.*
+*Status: recorded — every line below is ✅ DONE.*
 
-### v3-first-wreck — first wreck salvaged
+### v3-first-wreck — first wreck salvaged  ✅ DONE
 1. [carefully] That beacon you tripped is a registered wreck.
 2. Salvage rights are yours. Company takes nothing off a dead driller.
 3. [long pause] [quietly] …That's meant to be a comfort. I hear it isn't one.
 
-### v3-d220 — deeper than anyone this year
+### v3-d220 — deeper than anyone this year  ✅ DONE
 1. Two hundred and twenty. That's deeper than anyone's taken a Coreward-class this year.
 2. [quietly] I checked. It wasn't hard to check. [pause] There aren't many of you left.
 
-### veinlight-1 — first veinlight harvested
+### veinlight-1 — first veinlight harvested  ✅ DONE
 1. [curious] Your cell just gained on a descent. That's the veinlight.
 2. Burns clean, grows where nothing should. Survey has it filed as a mineral.
 3. [flatly] It isn't one. Nobody's updated the file.
 
-### v3-d340 — in the veins
+### v3-d340 — in the veins  ✅ DONE
 1. You're in the veins. Survey says nothing lives down there.
 2. [hesitantly] Survey's from before my time. [steadily] Keep your readings coming.
 
-### v3-wrecks-3 — third wreck
+### v3-wrecks-3 — third wreck  ✅ DONE
 *Direction: slow. She's reading from the registry as she talks. Speed 0.9.*
 1. [carefully] Three wrecks now. I pulled the registry.
 2. [reading aloud] They're all Cindral contracts. Same terms as yours, near enough word for word.
 3. [quietly] The oldest is a hundred and forty years old [pause] and it is the deepest one down there.
 
-### v3-dusk — twenty-five minutes of play
+### v3-dusk — twenty-five minutes of play  ✅ DONE
 *Direction: line 3's "Actually — don't" is a real flinch, not a joke.*
 1. Something for your logs, since you keep them.
 2. [carefully] The dusk-line moved again. Nine metres this quarter, toward the rig.
 3. A tidally locked world does not have a moving dusk-line. Ask anyone. [pause] [nervously] Actually — don't.
 
-### v3-d520 — right angles in the rock
+### v3-d520 — right angles in the rock  ✅ DONE
 *Direction: two lines, both short. The second "Say again" is flat with disbelief.*
 1. Say again, Dusklight? [long pause] …Right angles. At five hundred metres.
 2. [flatly] Say again.
 
-### ruins-1 — first Custodian structure imaged
+### ruins-1 — first Custodian structure imaged  ✅ DONE
 1. [quietly] I've got your imaging. That is cut stone.
 2. Nobody was on this rock before us. That's in the charter. [carefully] That's the whole basis of the claim.
 3. Keep digging. [pause] I'm going to go and read the charter again.
@@ -210,43 +210,43 @@ reading her own instruments twice.*
 *Direction: the procedure is gone. Quieter, closer to the mic, and for the
 first time she sounds like she's choosing sides.*
 *Settings: Natural · style low · speed 0.95.*
-*Status: recorded.*
+*Status: recorded — every line below is ✅ DONE.*
 
-### v3-d700 — told to stop logging
+### v3-d700 — told to stop logging  ✅ DONE
 *Direction: line 2 is the whole character in three words. Steady, not defiant-loud. Generate as one take.*
 1. [quietly] They've asked me to stop logging your depth readings.
 2. [steadily] I'm logging them.
 
-### v3-d900 — nine hundred metres
+### v3-d900 — nine hundred metres  ✅ DONE
 1. [quietly] Nine hundred. It's getting brighter down there, isn't it.
 2. That's the part nobody warned me to lie about, so I'll say it plain: [steadily] that is not normal.
 3. Whatever you find — tell me. I'm not cleared for it. [quietly] Tell me anyway.
 
-### core-1 — first core reached
+### core-1 — first core reached  ✅ DONE
 *Direction: shaken. Long pause before line 2. Generate as one take.*
 1. [shaken] Dusklight? Your telemetry went to white and came back.
 2. [long pause] …I filed your report an hour ago.
 3. [quietly] It came back stamped. Approved, countersigned, closed. [pause] Before I sent it.
 
-### core-1-after — follow-up to the first core
+### core-1-after — follow-up to the first core  ✅ DONE
 1. [flatly] Cindral is opening a second site. They had the survey ready.
 2. They had it ready before you went down. [quietly] I want you to sit with that.
 
 ## Reactive — deaths, tows, milestones
 
 *Settings: Natural · style low · speed 1.0.*
-*Status: recorded, except the stipend letters and the descent greeting.*
+*Status: ✅ DONE for the first three; the stipend letters and the descent greeting still need takes.*
 
-### first-death — first hull loss
+### first-death — first hull loss  ✅ DONE
 *Direction: gentle. The apology is real.*
 1. [gently] Recovery has you. Hull's a write-off, the pod's salvageable.
 2. Fee's posted to your balance. [quietly] I'm sorry. I really am — I don't set the schedule.
 
-### first-stranded — first tow
+### first-stranded — first tow  ✅ DONE
 1. Tow's rolling. Sit tight and keep your lamp off, it's a long ride.
 2. [warmly] Don't do that again. I mean it kindly.
 
-### rich-1 — advance fully cleared
+### rich-1 — advance fully cleared  ✅ DONE
 1. [warmly] Your balance cleared the advance today. Properly cleared it.
 2. [quietly] Most drillers never see that. Most drillers are down there being salvage.
 
@@ -283,29 +283,29 @@ third line is dry, not ominous. NOT RECORDED. Lives in `main.ts`, not
 ## Other worlds
 
 *Settings: Natural · style low · speed 1.0.*
-*Status: recorded.*
+*Status: recorded — every line below is ✅ DONE.*
 
-### cryos-arrive — arrival on CRYOS-2
+### cryos-arrive — arrival on CRYOS-2  ✅ DONE
 1. Cryos-Two. They airlifted the rig ahead of you — [wryly] same buildings, same dish, same me.
 2. Ore assays half again on what Dusklight paid. That's the pitch.
 3. [flatly] The pitch does not mention that this world froze solid and nobody has written down why.
 
-### cryos-d200 — two hundred metres on CRYOS-2
+### cryos-d200 — two hundred metres on CRYOS-2  ✅ DONE
 1. [carefully] Cold's reading wrong on my end. It gets worse with depth.
 2. Heat rises. Cold does not sink. [pause] I don't know what to tell you.
 
-### cryos-accl — rime salt acclimation
+### cryos-accl — rime salt acclimation  ✅ DONE
 *Direction: urgent but controlled — a warning, not panic.*
 1. [urgently] Your radiators are shedding heat you do not have. Shut them down.
 2. The crews here packed their hulls with rime salt — the white stuff in the upper beds.
 3. [steadily] Bring a load to the garage. You are not going deeper without it.
 
-### maelis-arrive — arrival on MAELIS-6
+### maelis-arrive — arrival on MAELIS-6  ✅ DONE
 1. Maelis-Six. Third site. Ore pays double and change.
 2. [quietly] I asked what happened to the first two sites they closed this year.
 3. [flatly] I'm told they were exhausted. [pause] I'm told that a lot now.
 
-### maelis-accl — nacre acclimation
+### maelis-accl — nacre acclimation  ✅ DONE
 1. [carefully] Hull's reading pressure it was not built for. That climbs the whole way down.
 2. Nacre. The pale layers in the shallows — the reef lays it over a wound.
 3. [steadily] Do the same to your hull at the garage, or stop here.
