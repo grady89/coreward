@@ -318,14 +318,14 @@ The extraction order is the one exception — read flat, as written, and let
 the flatness carry the contempt.*
 *Settings: Creative · style low · speed 0.9. The corporate line in
 `extraction-order` is the one line in the file generated on Robust.*
-*Status: NOT RECORDED.*
+*Status: recorded — every line below is ✅ DONE.*
 
-### husk-arrive — arrival at SITE 297
+### husk-arrive — arrival at SITE 297  ✅ DONE
 1. [quietly] Site Two-Ninety-Seven. I don't have a briefing for this one.
 2. No extraction schedule, no assay codes. The colony beacon is on. [pause] The colony isn't.
 3. [nervously] Look around. Then come back and tell me I'm wrong to be afraid of this.
 
-### extraction-order — Cindral's offer relayed
+### extraction-order — Cindral's offer relayed  ✅ DONE
 *Direction: line 2 is corporate text read verbatim — no tag, no feeling,
 sentence case, generated separately on Robust with style at zero. If the
 voice still warms it up, `[flatly] [reading aloud]` in front and try again.
@@ -335,31 +335,31 @@ Lines 1, 3 and 4 are hers, on Creative.*
 3. [quietly] That's the whole message. They know what's down there. [pause] They've always known.
 4. [steadily] I'm required to relay offers. I'm not required to tell you what to do with them.
 
-### first-extract — a fragment in the hold
+### first-extract — a fragment in the hold  ✅ DONE
 *Direction: real alarm. The capitalised "ORBIT" is the loudest she ever gets — the caps are deliberate, v3 reads them as emphasis. Generate as one take.*
 1. [nervously] Your hold reads hot and your world reads… dimmer. From orbit. [urgently] I can see it from ORBIT.
 2. [urgently] Whatever you're carrying — the tunnels are waking up around it. Climb.
 
-### first-seat — a fragment carried home instead
+### first-seat — a fragment carried home instead  ✅ DONE
 *Direction: line 3 lands soft. It's the closest she comes to saying she's proud.*
 1. Telemetry says you went down heavy and came up empty.
 2. Cindral flagged the delivery as failed. [pause] I logged it as: driller declined.
 3. [quietly] I've never typed that before. [warmly] It felt good.
 
-### stillwalker-fragment — Stillwalkers freeze before the hold (CRYOS-2)
+### stillwalker-fragment — Stillwalkers freeze before the hold (CRYOS-2)  ✅ DONE
 1. [hushed] The tall ones just stopped. Mid-stride, all of them, the moment you came close.
 2. Whatever is riding in your hold, they will not walk at it. [quietly] I am not putting that in the log.
 
-### fauna-dead — a world gone quiet after extraction
+### fauna-dead — a world gone quiet after extraction  ✅ DONE
 1. [flatly] Listening post has nothing. No wings, no worms, nothing on the vibration bands.
 2. [quietly] Everything down there kept time by that light. You are digging through a world that stopped.
 
-### cores-2 — second core
+### cores-2 — second core  ✅ DONE
 1. [quietly] Two of them now. [pause] Two.
 2. I went back through the closure records. Every site Cindral has ever exhausted went dark.
 3. [steadily] Not poor. Dark. No daylight in the survey imaging, not anywhere on the planet.
 
-### cores-3 — all three cores. Her last transmission.
+### cores-3 — all three cores. Her last transmission.  ✅ DONE
 *Direction: her goodbye. Steady until the last line, which is allowed to
 catch. If Creative doesn't give the catch on "you were the good one", put
 `[voice breaking]` in front of it and take the better of the two. Generate as

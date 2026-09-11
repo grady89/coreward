@@ -47,6 +47,16 @@ export const DISPATCH_VOICED = new Set<string>([
   'cryos-accl-1', 'cryos-accl-2', 'cryos-accl-3',
   'maelis-arrive-1', 'maelis-arrive-2', 'maelis-arrive-3',
   'maelis-accl-1', 'maelis-accl-2', 'maelis-accl-3',
+
+  // ---- ACT IV: the pattern ----
+  'husk-arrive-1', 'husk-arrive-2', 'husk-arrive-3',
+  'extraction-order-1', 'extraction-order-2', 'extraction-order-3', 'extraction-order-4',
+  'first-extract-1', 'first-extract-2',
+  'first-seat-1', 'first-seat-2', 'first-seat-3',
+  'stillwalker-fragment-1', 'stillwalker-fragment-2',
+  'fauna-dead-1', 'fauna-dead-2',
+  'cores-2-1', 'cores-2-2', 'cores-2-3',
+  'cores-3-1', 'cores-3-2', 'cores-3-3',
 ]);
 
 /** The Lamplighters: one id per glyph, matching GlyphDef.id in world/glyphs.ts. */
