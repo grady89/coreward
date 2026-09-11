@@ -24,7 +24,7 @@ import {
   Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
 } from '../game/contracts';
 import { ENDING_PAGES, EndingKind, transmissionById } from '../game/narrative';
-import { EXTRACT_OFFER, TILE_M } from '../config';
+import { EXTRACT_OFFER, TILE_M, LEASE_POD, LEASE_PASSAGE } from '../config';
 import { GLYPHS, glyphSvg } from '../world/glyphs';
 import { FAUNA, faunaSeen } from '../game/bestiary';
 import { DISPATCH_VOICED, LAMPLIGHTERS_VOICED, dispatchVoiceUrl, lamplightersVoiceUrl } from '../audio/voice-manifest';
@@ -93,6 +93,7 @@ export class Panels {
   private scrim: HTMLElement | null = null;
   private deathCause = '';
   private deathFee = 0;
+  private deathBilled = 0;
   private lostCargo = 0;
   private spilled: { value: number; count: number } | null = null;
   private endingKind: EndingKind = 'extract';
@@ -294,10 +295,14 @@ export class Panels {
     // the order pays in local scrip: harder worlds price their fragments up,
     // so the bribe keeps pace with what a driller out here actually earns
     const offer = Math.round(EXTRACT_OFFER * ACTIVE.valueMul);
+    // the book, posted beside every sale: what the day's ore did not touch
+    const lease = st.debtSettled !== null
+      ? `<div class="lease-strip settled"><span>CINDRAL LEASE</span><b>SETTLED · ORDER 9-1-1</b></div>`
+      : `<div class="lease-strip"><span>CINDRAL LEASE · OWED</span><b>${fmt(st.debtOwed)}</b></div>`;
     const order = st.extractOrderHeard ? `
       <div class="order-card">
         <div class="order-head">CINDRAL EXTRACTION ORDER 9-1-1</div>
-        <div class="order-body">FRAGMENT RECOVERY · <b>${fmt(offer)}</b> PER UNIT ON DELIVERY · ALL DEBTS CLEARED</div>
+        <div class="order-body">FRAGMENT RECOVERY · <b>${fmt(offer)}</b> PER UNIT ON DELIVERY · ${st.debtSettled !== null ? 'DEBTS SETTLED' : `ALL DEBTS CLEARED · <b>${fmt(st.debtOwed)}</b>`}</div>
         ${st.carrying
           ? `<button class="btn primary wide" id="deliver">DELIVER THE FRAGMENT · ${fmt(offer)}</button>`
           : `<div class="order-note">no fragment in hold</div>`}
@@ -307,6 +312,7 @@ export class Panels {
       ${rows}
       <div class="sell-total"><span>TOTAL</span><b>${fmt(st.cargoValue)}</b></div>
       <button class="btn primary wide" id="sell" ${st.cargoCount === 0 ? 'disabled' : ''}>SELL ALL</button>
+      ${lease}
       ${order}
       <button class="btn wide" id="to-contracts">CONTRACT BOARD${st.contract ? ' · 1 ACTIVE' : ''}</button>
       <div class="hint">Press E or Esc to leave</div>
@@ -832,6 +838,9 @@ export class Panels {
     // floor, never round: a fee rounded UP past a fractional purse overdraws
     // the account into -0.4, and the HUD dutifully printed "✦-0"
     this.deathFee = Math.min(owed, Math.max(0, Math.floor(st.money)));
+    // what the purse can't cover, the lease can — Cindral collects either way
+    this.deathBilled = owed - this.deathFee;
+    st.billToLease(this.deathBilled);
     this.spilled = spilled;
     // anything the crash did not scatter is simply gone (a spill already
     // emptied the hold, so this reads 0 whenever a claim was filed)
@@ -852,7 +861,7 @@ export class Panels {
       <div class="screen-title bad">POD DESTROYED</div>
       <div class="screen-sub">
         Lost to ${this.deathCause}.<br/>
-        Salvage fee: <b style="color:var(--magma)">${fmt(this.deathFee)}</b><br/>
+        Salvage fee: <b style="color:var(--magma)">${fmt(this.deathFee)}</b>${this.deathBilled > 0 ? ` · <b style="color:var(--amber)">${fmt(this.deathBilled)}</b> billed to the lease` : ''}<br/>
         ${cargoLine}
       </div>
       <button class="btn primary wide" id="respawn">BACK TO THE SURFACE</button>
@@ -871,18 +880,23 @@ export class Panels {
     // the tow bills the 35% fill at pump rates too — an empty-purse rescue
     // stopped being a net gift of fuel (OVERHAUL B5); mercy floor unchanged
     const fuelBill = Math.round(st.maxFuel * 0.35 * FUEL_PRICE * st.priceMul);
-    const fee = free ? 0 : Math.min(Math.max(0, Math.floor(st.money)), Math.round(st.money * RESCUE_FEE_FRAC) + fuelBill);
+    const full = Math.round(st.money * RESCUE_FEE_FRAC) + fuelBill;
+    const fee = free ? 0 : Math.min(Math.max(0, Math.floor(st.money)), full);
+    // nothing is on the house: what the purse can't cover goes on the lease
+    const billed = full - fee;
+    const onLease = billed > 0 ? ` <b style="color:var(--amber)">${fmt(billed)}</b> of it goes on the lease.` : '';
     this.body().innerHTML = `
       <div class="screen-title bad">OUT OF FUEL</div>
       <div class="screen-sub">
         The pod is dark. Thrusters cold.<br/>
-        ${free ? 'The rig crew will tow you up — this one is on the house.' : `A recovery tow costs <b style="color:var(--amber)">${fmt(fee)}</b> — the winch, and a 35% fill at pump rates. Cargo stays aboard.`}
+        ${free ? `The rig crew will tow you up. The winch and the fill go on the lease — <b style="color:var(--amber)">${fmt(billed)}</b>.` : `A recovery tow costs <b style="color:var(--amber)">${fmt(fee)}</b> — the winch, and a 35% fill at pump rates. Cargo stays aboard.${onLease}`}
       </div>
       <button class="btn primary wide" id="rescue">${free ? 'ACCEPT THE TOW' : 'PAY ' + fmt(fee) + ' — TOW ME UP'}</button>
       <button class="btn wide" id="stay">SIT IN THE DARK</button>
     `;
     this.body().querySelector('#rescue')?.addEventListener('click', () => {
       st.money -= fee;
+      st.billToLease(billed);
       st.fuel = st.maxFuel * 0.35;
       this.ctx.audio.buy();
       this.close();
@@ -984,6 +998,18 @@ export class Panels {
     const st = this.ctx.state;
     const m = this.ctx.meta;
     const dep = (amt: number) => Math.floor(Math.min(st.money, amt) / KEEP_RATE) * KEEP_RATE;
+    const hours = (st.playTime / 3600).toFixed(1);
+    const leaseBlock = st.debtSettled !== null ? `
+      <div class="forge-head">THE LEASE<span class="forge-shards">closed</span></div>
+      <div class="sell-total"><span>SETTLED · ORDER 9-1-1</span><b>${fmt(st.debtSettled)}</b></div>
+      <div class="tx-sub">The book is closed. The invoices call it a rescue.</div>` : `
+      <div class="forge-head">THE LEASE<span class="forge-shards">settlement on completion of contract</span></div>
+      <div class="row"><span class="r-name">Coreward-class pod · leased</span><span class="r-val">${fmt(st.price(LEASE_POD))}</span></div>
+      <div class="row"><span class="r-name">Passage to the Dusklight Rig</span><span class="r-val">${fmt(st.price(LEASE_PASSAGE))}</span></div>
+      <div class="row"><span class="r-name">Carrying charge · ${hours}h on the clock</span><span class="r-val">${fmt(st.leaseCarry)}</span></div>
+      ${st.debtCharges > 0 ? `<div class="row"><span class="r-name">Fees the purse could not cover</span><span class="r-val">${fmt(Math.round(st.debtCharges))}</span></div>` : ''}
+      <div class="sell-total"><span>OWED</span><b>${fmt(st.debtOwed)}</b></div>
+      <div class="tx-sub">Ore never touches it. Completion is determined by Cindral Extraction, and Cindral has never once determined it.</div>`;
     this.body().innerHTML = `
       ${this.header('THE LEDGER', true)}
       <div class="stat-grid">
@@ -992,6 +1018,7 @@ export class Panels {
         <div class="row"><span class="r-name">Banked, lifetime</span><span class="r-val">${fmt(m.lifetimeBanked)}</span></div>
         <div class="row"><span class="r-name">Tows underwritten</span><span class="r-val">${st.stipends} · ${m.stipendsLifetime} ever</span></div>
       </div>
+      ${leaseBlock}
       <div class="forge-head">DEPOSIT<span class="forge-shards">${CUR}${KEEP_RATE} → ${KEEP}1 · never withdrawn</span></div>
       <div class="tx-sub">Light you bank is light you kept. It outlives the pod, the lease, the expedition — kept light is what the wardrobe, the catalog and the vivarium take in trade.</div>
       <div class="btn-row">
@@ -1550,7 +1577,9 @@ export class Panels {
     const stats: [string, string][] = [
       ['RECORD DEPTH', `${st.bestDepthM}m`],
       ['LIFETIME EARNINGS', fmt(st.totalEarned)],
-      ['BLOCKS CUT', st.blocksDug.toLocaleString()],
+      this.endingKind === 'extract'
+        ? ['DEBT CLEARED', fmt(st.debtSettled ?? 0)]
+        : ['STILL OWED', fmt(st.debtOwed)],
       ['ENDINGS SEEN', `${GameState.endingsSeen().size} / 3`],
     ];
     this.scrim!.classList.add('rite');

@@ -87,6 +87,17 @@ export const SPILL_WARN = 60;       // the clock goes red under this
 export const SPILL_PICKUP_R = 1.25; // tiles — fly into the pile to reclaim it
 export const DEATH_FEE_FRAC = 0.12;
 export const RESCUE_FEE_FRAC = 0.15;
+/**
+ * THE LEASE. The ✦40 advance is wages; this is the book. A Coreward-class
+ * pod at replacement (the model they stopped insuring), passage out to the
+ * Dusklight Rig, and a carrying charge on the lot. Settlement on completion
+ * of contract — and Cindral decides what completion is. Ore never touches
+ * it; Order 9-1-1 is the only time they have ever named one.
+ */
+export const LEASE_POD = 185000;
+export const LEASE_PASSAGE = 22500;
+/** carrying charge: fraction of the principal per hour on the clock */
+export const LEASE_CARRY_PER_HOUR = 0.006;
 export const RESCUE_MIN_MONEY = 30; // below this, rescue is free
 
 // ---- upgrades: 6 tracks, 5 tiers above base ----

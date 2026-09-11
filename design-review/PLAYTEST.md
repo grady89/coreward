@@ -74,9 +74,17 @@ in, snap out) and whether the held side-aim feels right.
   early?
 - **Contracts**: at your record depth the board pays measured-hold-indexed
   rewards. Open it late-save: worth reading now?
-- **Extract offer**: ✦300k × world (450k CRYOS-2 / 675k MAELIS-6). **Call:
-  is scaling enough, or does the temptation need a fiction wrapper** (debt
-  clearance itemized, per-fragment escalation)?
+- **Extract offer**: ✦300k × world (450k CRYOS-2 / 675k MAELIS-6), unchanged.
+  **Resolved Sep 11 — the debt got a figure.** The ✦40 advance was reading as
+  the whole debt. It is wages; the lease is the book: pod ✦185k + passage
+  ✦22.5k + a carrying charge (~✦1.2k/h on the clock) + any salvage or tow fee
+  the purse couldn't cover. Posted at the trade post from the first sale,
+  itemized on the Ledger, printed on the order card as the exact figure it
+  would wipe, and settled on the first delivery (the epilogue shows what it
+  cleared, or what you still owe). Ore never touches it — settlement is on
+  completion of contract, and Cindral decides what completion is. Escalation
+  skipped: Cindral doesn't haggle. **Check**: does the OWED line beside SELL
+  ALL change how the order card reads when it arrives?
 - **Cut confirmations**: Blink Coil gone (shards refunded to stash), cargo 5
   gone (✦58k refunded), Deep Array folded into the scanner (✦12k/site
   refunded). Load your existing save and check the refunds landed sanely.
@@ -85,7 +93,7 @@ in, snap out) and whether the held side-aim feels right.
 
 1. Polyp canon = distance (committed; docs rewritten). Veto?
 2. Kindled pod-touch = zero damage (code + test enshrine it; docs now agree). Veto?
-3. Extract number: scaled offer enough, or fiction wrapper?
+3. ~~Extract number~~ — resolved: offer kept, the lease itemized (§4). Veto?
 4. Veinlight-free shard shelf: intended cruelty or generator accident?
 5. **Tank curve direction** for the deferred re-point — after feeling the deep
    fuel wall, should top tanks get cheaper, smaller, or stay?

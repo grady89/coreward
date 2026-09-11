@@ -67,6 +67,14 @@ the cover; ore is a byproduct. What Cindral wants is for someone with no better
 option to dig all the way to the bottom, because a survey team down there is a
 lawsuit and a driller down there is an accident.
 
+**The lease, in numbers.** The ✦40 advance is wages. The book is the pod
+(✦185,000 — a Coreward-class at replacement, the one they stopped insuring),
+passage out to the Dusklight Rig (✦22,500), a carrying charge on the lot
+(0.6% an hour on the clock), and every salvage or tow fee the purse couldn't
+cover. Settlement is on completion of contract; completion is determined by
+Cindral Extraction. Ore never touches it. Order 9-1-1 is the only time
+Cindral has ever named a completion — which is what the order is *for*.
+
 **Dispatch** is the voice on the assay dish: a real person, an operator, chatty
 and decent. Their transmissions are the game's emotional barometer — invoicing
 and small talk early, hedging in the middle, and by Emberreach they've stopped

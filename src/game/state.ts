@@ -1,4 +1,4 @@
-import { TRACKS, TrackKey, START_MONEY, ForgeKey, DESCENT_PRICE_MULS } from '../config';
+import { TRACKS, TrackKey, START_MONEY, ForgeKey, DESCENT_PRICE_MULS, LEASE_POD, LEASE_PASSAGE, LEASE_CARRY_PER_HOUR } from '../config';
 import { ActiveContract } from './contracts';
 import { worldById } from '../world/worlds';
 import { oreValue, T } from '../world/tiles';
@@ -64,6 +64,21 @@ export class GameState {
   }
   /** a Lumen sticker at this descent's rates — whole Lumens, always */
   price(n: number): number { return Math.round(n * this.priceMul); }
+  /**
+   * THE LEASE — Cindral's book against the driller. The advance is wages;
+   * this is the pod, the passage out here, a carrying charge on the lot,
+   * and every fee the purse could not cover. Ore never touches it.
+   */
+  get leasePrincipal(): number { return this.price(LEASE_POD) + this.price(LEASE_PASSAGE); }
+  get leaseCarry(): number { return Math.round(this.leasePrincipal * LEASE_CARRY_PER_HOUR * this.playTime / 3600); }
+  get debtOwed(): number {
+    if (this.debtSettled !== null) return 0;
+    return this.leasePrincipal + this.leaseCarry + Math.round(this.debtCharges);
+  }
+  /** a fee the purse could not cover lands on the book instead */
+  billToLease(amount: number): void {
+    if (amount > 0 && this.debtSettled === null) this.debtCharges += amount;
+  }
   upgrades: Record<TrackKey, number> = { drill: 0, engine: 0, tank: 0, cargo: 0, hull: 0, radiator: 0 };
   fuel = trackValue('tank', 0);
   hull = trackValue('hull', 0);
@@ -107,6 +122,10 @@ export class GameState {
   worldBestRow = 0;
   /** lifetime counters contracts measure against */
   fuelSpent = 0;
+  /** fees the purse could not cover, billed to the lease instead */
+  debtCharges = 0;
+  /** the figure Order 9-1-1 wiped, once it has; null while the book is open */
+  debtSettled: number | null = null;
   oreMined = 0;
   playTime = 0;
   contract: ActiveContract | null = null;
@@ -165,6 +184,7 @@ export class GameState {
   endingSnapshot: {
     money: number; carrying: string | null;
     extracted: string[]; delivered: string[]; reseated: string[]; offered: string[];
+    debtSettled: number | null;
   } | null = null;
   /** native material mined, per world */
   native: Record<string, number> = {};
@@ -345,6 +365,8 @@ export class GameState {
     this.gear = {};
     this.worldBestRow = 0;
     this.fuelSpent = 0;
+    this.debtCharges = 0;
+    this.debtSettled = null;
     this.oreMined = 0;
     this.playTime = 0;
     this.contract = null;
@@ -481,6 +503,8 @@ export class GameState {
         foundLogs: [...this.foundLogs],
         gear: this.gear,
         fuelSpent: this.fuelSpent,
+        debtCharges: this.debtCharges,
+        debtSettled: this.debtSettled,
         oreMined: this.oreMined,
         playTime: this.playTime,
         contract: this.contract,
@@ -610,6 +634,8 @@ export class GameState {
         // after upgrades, stash, tech AND gear are all in: settle the cut list
         this.refundCutTiers();
         this.fuelSpent = d.fuelSpent ?? 0;
+        this.debtCharges = d.debtCharges ?? 0;
+        this.debtSettled = d.debtSettled ?? null;
         this.oreMined = d.oreMined ?? 0;
         this.playTime = d.playTime ?? 0;
         this.contract = d.contract ?? null;

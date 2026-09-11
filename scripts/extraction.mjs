@@ -19,7 +19,9 @@ async function toChamber() {
     g.state.upgrades.radiator = 5;
     g.cam.snap(g.ctrl.px, g.ctrl.py, 12.5);
   });
-  await page.waitForTimeout(2200);
+  // settle on the game clock, not the wall: SwiftShader time crawls under load
+  await page.waitForFunction(() => window.__game.ctrl.grounded, { timeout: 20000 });
+  await page.waitForTimeout(300);
 }
 
 /** walk the pilot to within arm's reach of the cradle */

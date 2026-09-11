@@ -511,6 +511,7 @@ export const HUSK_READABLES: HuskReadable[] = [
     lines: [
       'The contract on the desk is yours. Not like yours — yours. Same advance, same clauses, word for word.',
       'CINDRAL ADVANCE · ✦40 · RECOVERABLE AGAINST EARNINGS.',
+      'COREWARD-CLASS POD · LEASED. PASSAGE · BILLED. SETTLEMENT ON COMPLETION OF CONTRACT. COMPLETION AS DETERMINED BY CINDRAL EXTRACTION.',
       'The signature line is blank, and you catch yourself reaching for it.',
     ],
   },

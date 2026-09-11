@@ -232,6 +232,7 @@ class Game {
   private endingSnapshot: {
     money: number; carrying: string | null;
     extracted: string[]; delivered: string[]; reseated: string[]; offered: string[];
+    debtSettled: number | null;
   } | null = null;
   private clock = new THREE.Clock();
   private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3025,12 +3026,16 @@ class Game {
     st.carrying = null;
     st.delivered.add(id);
     const offer = Math.round(EXTRACT_OFFER * ACTIVE.valueMul);
+    // the first delivery closes the book; the figure is kept so the
+    // epilogue can say exactly what the fragment bought
+    const cleared = st.debtSettled === null ? st.debtOwed : 0;
+    if (st.debtSettled === null) st.debtSettled = cleared;
     st.money += offer;
     st.totalEarned += offer;
     this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
     this.hud.popup('+' + fmtMoney(offer), '#ff9a3c', this.screen.sx, this.screen.sy);
     this.audio.sell(8);
-    this.hud.toast('DELIVERED — DEBTS CLEARED', 'stratum');
+    this.hud.toast(cleared > 0 ? `DELIVERED — ${fmtMoney(cleared)} IN DEBT CLEARED` : 'DELIVERED', 'stratum');
     this.saveNow();
     if (st.delivered.size >= WORLDS.length) this.triggerEnding('extract');
   }
@@ -3046,6 +3051,7 @@ class Game {
       money: st.money, carrying: st.carrying,
       extracted: [...st.extracted], delivered: [...st.delivered],
       reseated: [...st.reseated], offered: [...st.offered],
+      debtSettled: st.debtSettled,
     };
   }
 
@@ -3086,6 +3092,7 @@ class Game {
       st.delivered = new Set(snap.delivered);
       st.reseated = new Set(snap.reseated);
       st.offered = new Set(snap.offered);
+      st.debtSettled = snap.debtSettled ?? null;
     }
     this.pendingEnding = null;
     this.endingSnapshot = null;

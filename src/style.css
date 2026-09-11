@@ -823,6 +823,13 @@ body.sm-open #survey {
   color: var(--ink-dim); text-align: center;
 }
 .order-card .btn { margin-top: 12px; }
+.lease-strip {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: 12px; padding: 8px 2px 0; border-top: 1px solid var(--line);
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-dim);
+}
+.lease-strip b { font-size: 13px; color: var(--magma); letter-spacing: 0.08em; }
+.lease-strip.settled b { color: var(--amber); }
 
 /* hold-to-commit meter, drawn inside the contextual prompt */
 .hold-bar {
