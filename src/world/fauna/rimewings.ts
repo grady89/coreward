@@ -19,6 +19,8 @@ const CLUSTER_MIN = 7;
 const CLUSTER_MAX = 12;
 const MAX_CLUSTERS = 3;
 const WAKE_RANGE = 7.5;
+const FLARE_PULL = WAKE_RANGE * 2;  // a flare only exists within ~2× wake range
+const SCATTER = 2;         // seconds a lanced wing tumbles dark
 const BAND_LO = 120;
 const BAND_HI = 470;
 const SHIVER = 1.3;        // seconds from first warmth to flight
@@ -34,6 +36,7 @@ interface Wing {
   dartT: number;        // moth flight: time until the next dart
   phase: number;
   freeAt: number;       // wake offset — they do not all come loose together
+  stunT: number;        // seconds of lance-daze left — flung, dim, harmless
   cluster: number;
 }
 
@@ -44,6 +47,7 @@ interface Cluster {
   coldFor: number;
   ax: number; ay: number;
   life: number;
+  dazedT: number;       // lanced: warmth means nothing to it for a beat
   woke: boolean;
 }
 
@@ -80,7 +84,7 @@ export class Rimewings implements Creature {
     this.glow = new THREE.PointLight(0xbfe0ff, 0, 8, 1.8);
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
-      this.clusters.push({ alive: false, phase: 'frozen', t: 0, coldFor: 0, ax: 0, ay: 0, life: 0, woke: false });
+      this.clusters.push({ alive: false, phase: 'frozen', t: 0, coldFor: 0, ax: 0, ay: 0, life: 0, dazedT: 0, woke: false });
     }
   }
 
@@ -105,7 +109,7 @@ export class Rimewings implements Creature {
       if (y < 60 || x < 1 || x >= this.terrain.w - 1) continue;
       if (!onWall(this.terrain, x, y)) continue;
       const c = this.clusters[slot];
-      c.alive = true; c.phase = 'frozen'; c.t = 0; c.coldFor = 0; c.life = 0; c.woke = false;
+      c.alive = true; c.phase = 'frozen'; c.t = 0; c.coldFor = 0; c.life = 0; c.dazedT = 0; c.woke = false;
       c.ax = x + 0.5; c.ay = -(y + 0.5);
       const n = CLUSTER_MIN + Math.floor(Math.random() * (CLUSTER_MAX - CLUSTER_MIN + 1));
       const want = level === 'reduced' ? Math.ceil(n / 2) : n;
@@ -122,6 +126,7 @@ export class Rimewings implements Creature {
           rot: Math.random() * Math.PI * 2, dartT: 0,
           phase: Math.random() * Math.PI * 2,
           freeAt: 0.3 + Math.random() * 0.9,
+          stunT: 0,
           cluster: slot,
         });
       }
@@ -153,11 +158,32 @@ export class Rimewings implements Creature {
     }
   }
 
+  // Scatter, not delete: wings in the corridor are flung off the beam line,
+  // dazed dark for a beat, and the cluster drops out of the hunt to settle
+  // wherever it was knocked. The lance stays a light verb — nothing dies.
   lance(x: number, y: number, dir: number, range: number): void {
-    for (let i = this.wings.length - 1; i >= 0; i--) {
-      const w = this.wings[i];
-      const dx = (w.x - x) * dir;
-      if (dx > -0.5 && dx < range && Math.abs(w.y - y) < 1.3) this.wings.splice(i, 1);
+    for (let ci = 0; ci < this.clusters.length; ci++) {
+      const c = this.clusters[ci];
+      if (!c.alive) continue;
+      let hit = 0;
+      for (const w of this.wings) {
+        if (w.cluster !== ci) continue;
+        const dx = (w.x - x) * dir;
+        if (dx <= -0.5 || dx >= range || Math.abs(w.y - y) > 1.3) continue;
+        const side = w.y >= y ? 1 : -1;
+        w.vx = dir * (3 + Math.random() * 3);
+        w.vy = side * (8 + Math.random() * 4);
+        w.stunT = SCATTER;
+        this.particles.sparkBurst(w.x, w.y, 0xbfe8ff, { count: 3, speed: 2, life: 0.4, gravity: 6 });
+        hit++;
+      }
+      if (!hit) continue;
+      c.phase = 'settling'; c.t = 0; c.coldFor = 0; c.dazedT = SCATTER;
+      const away = Math.sign(c.ax - x) || dir;
+      for (let step = 5; step >= 2; step--) {
+        const nx = c.ax + away * step;
+        if (air(this.terrain, Math.floor(nx), Math.floor(-c.ay))) { c.ax = nx; break; }
+      }
     }
   }
 
@@ -180,7 +206,6 @@ export class Rimewings implements Creature {
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY } = ctx;
     const row = Math.floor(-podY);
-    const flare = this.flares.brightest();
     // engine heat, drill heat — both are warmth. It is in the wrecks.
     const hot = ctx.thrust > 0.05 || ctx.drilling;
 
@@ -199,9 +224,13 @@ export class Rimewings implements Creature {
       if (!c.alive) continue;
       c.life += dt;
       c.t += dt;
+      c.dazedT = Math.max(0, c.dazedT - dt);
       const dist = Math.hypot(podX - c.ax, podY - c.ay);
+      // a flare only exists to a cluster within FLARE_PULL of it — heat
+      // across the map is not heat here
+      const flare = this.flares.brightest(c.ax, c.ay, FLARE_PULL);
       const flareNear = flare ? Math.hypot(flare.x - c.ax, flare.y - c.ay) < 4.5 : false;
-      const warmth = (hot && dist < WAKE_RANGE) || flareNear;
+      const warmth = c.dazedT <= 0 && ((hot && dist < WAKE_RANGE) || flareNear);
       if (dist > 36 || c.life > 150) { this.despawn(ci); continue; }
 
       switch (c.phase) {
@@ -247,10 +276,21 @@ export class Rimewings implements Creature {
       const c = this.clusters[w.cluster];
       if (!c || !c.alive) continue;
       w.phase += dt * 3;
+      w.stunT = Math.max(0, w.stunT - dt);
       let shiver = 0;
       let heat = 0;
 
-      if (c.phase === 'frozen') {
+      if (w.stunT > 0) {
+        // lanced: knocked off the beam line, dim and tumbling. It hurts
+        // nothing while it spins — and it is still here when it lands.
+        heat = 0.12;
+        w.rot += dt * 5 * (i % 2 ? 1 : -1);
+        w.vx *= 1 - Math.min(1, dt * 2);
+        w.vy = w.vy * (1 - Math.min(1, dt * 2)) - 2 * dt;
+        const nx = w.x + w.vx * dt, ny = w.y + w.vy * dt;
+        if (!this.terrain.solidAt(Math.floor(nx), Math.floor(-ny))) { w.x = nx; w.y = ny; }
+        else { w.vx = 0; w.vy = 0; }
+      } else if (c.phase === 'frozen') {
         // nothing. That is the point.
         w.vx = 0; w.vy = 0;
       } else if (c.phase === 'waking') {
@@ -267,6 +307,7 @@ export class Rimewings implements Creature {
         const late = c.t < w.freeAt;
         w.dartT -= dt;
         if (!late && w.dartT <= 0) {
+          const flare = this.flares.brightest(c.ax, c.ay, FLARE_PULL);
           const tx = flare ? flare.x : podX;
           const ty = flare ? flare.y : podY - 0.45; // the nozzle
           let dx = tx - w.x, dy = ty - w.y;

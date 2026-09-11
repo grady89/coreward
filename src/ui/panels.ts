@@ -1,9 +1,9 @@
-import { GameState } from '../game/state';
+import { GameState, SAVE_SLOTS, SlotSummary } from '../game/state';
 import { AudioEngine } from '../audio/audio';
 import {
   FUEL_PRICE, REPAIR_PRICE, TRACKS, GAME_NAME, FORGE, WRECK_LOGS,
   DEATH_FEE_FRAC, RESCUE_FEE_FRAC, RESCUE_MIN_MONEY, SPILL_TTL, fmtMoney, SCANNER_PRICE,
-  DEEP_ARRAY_PRICE, BEACON_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE,
+  BEACON_PRICE, CUR, FLARE_PRICE, CHARGE_PRICE,
   MAX_FLARES_HELD, MAX_CHARGES_HELD,
   GLYPHS_TO_TRANSLATE, ARRESTOR_PRICE, MAX_ARRESTORS,
   CUT_UNITS, CUT_FEE_MUL, FLAWLESS_CHANCE, STIPEND_PRICE,
@@ -49,7 +49,7 @@ function describe(c: Contract, maxFuel: number): string {
 }
 
 export type PanelKind = 'fuel' | 'trade' | 'garage' | 'assay' | 'pause' | 'death' | 'rescue' | 'ending' | 'settings' | 'contracts' | 'finale' | 'transcript'
-  | 'ledger' | 'wardrobe' | 'catalog' | 'faunalog' | 'depot' | 'mineral';
+  | 'ledger' | 'wardrobe' | 'catalog' | 'faunalog' | 'depot' | 'mineral' | 'controls';
 
 /** what a sponsorship costs, by temperament (SPEC-KEEPING §5) */
 const SPONSOR_COST: Record<string, number> = {
@@ -67,6 +67,8 @@ interface PanelCtx {
   toast(msg: string, cls?: string): void;
   /** a legacy purchase changed — recoat the pod/suit, re-dress the quarters */
   onKeepingChanged(): void;
+  /** a garage tier was bought — refit the machine in view, with punctuation */
+  onUpgradePurchased(): void;
   onRespawn(): void;
   onRescued(): void;
   /** free lift home after a core is met — no fee, no fuss */
@@ -77,6 +79,8 @@ interface PanelCtx {
   onEndingContinue(): void;
   /** an ending's epilogue chose a fresh start */
   onNewExpedition(): void;
+  /** the epilogue chose NG+: keep the knowledge, steepen the ledger */
+  onSecondDescent(): void;
   onQuitToTitle(): void;
   onOpenStarmap(): void;
   onSettingsChanged(): void;
@@ -100,24 +104,41 @@ export class Panels {
   get isOpen(): boolean { return this.current !== null; }
 
   close(): void {
-    this.scrim?.remove();
+    const scrim = this.scrim;
     this.scrim = null;
     this.current = null;
+    if (!scrim) return;
+    // the exit is choreographed, not a DOM deletion; reduced-motion collapses
+    // the animation to 0.001s so animationend still fires at once. The body
+    // loses its id at once — a leaving panel must never shadow the next one.
+    scrim.querySelector('#panel-body')?.removeAttribute('id');
+    scrim.classList.add('leaving');
+    const done = (): void => scrim.remove();
+    scrim.addEventListener('animationend', done, { once: true });
+    setTimeout(done, 260);
   }
 
   open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind; mineral?: number; spilled?: { value: number; count: number } | null }): void {
-    this.close();
+    // a NEW panel purges the old one at once — the exit choreography is for
+    // genuine closes. Exactly one panel's DOM may exist at open time, or a
+    // stale fading copy shadows the fresh one's buttons and selectors.
+    this.scrim?.remove();
+    this.scrim = null;
+    this.current = null;
+    for (const n of this.ui.querySelectorAll('.panel-scrim.leaving')) n.remove();
     this.current = kind;
     if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause, opts.spilled ?? null);
     if (kind === 'finale' && opts?.ending) this.endingKind = opts.ending;
     if (kind === 'mineral' && opts?.mineral !== undefined) this.mineralT = opts.mineral;
     this.scrim = document.createElement('div');
     this.scrim.className = 'panel-scrim';
+    // the garage stages the pod: the world stays visible, the panel steps aside
+    if (kind === 'garage') this.scrim.classList.add('stage');
     this.scrim.innerHTML = `<div class="panel" id="panel-body"></div>`;
     this.ui.appendChild(this.scrim);
     // click outside closes shop panels (not fate panels)
     if (kind === 'fuel' || kind === 'trade' || kind === 'garage' || kind === 'assay' ||
-      kind === 'pause' || kind === 'settings' || kind === 'contracts' || kind === 'transcript' ||
+      kind === 'pause' || kind === 'settings' || kind === 'controls' || kind === 'contracts' || kind === 'transcript' ||
       kind === 'ledger' || kind === 'wardrobe' || kind === 'catalog' || kind === 'faunalog' ||
       kind === 'depot' || kind === 'mineral') {
       this.scrim.addEventListener('pointerdown', e => {
@@ -143,6 +164,7 @@ export class Panels {
       case 'ending': this.renderEnding(); break;
       case 'finale': this.renderFinale(); break;
       case 'settings': this.renderSettings(); break;
+      case 'controls': this.renderControls(); break;
       case 'contracts': this.renderContracts(); break;
       case 'transcript': this.renderTranscript(); break;
       case 'ledger': this.renderLedger(); break;
@@ -166,12 +188,17 @@ export class Panels {
     const st = this.ctx.state;
     const space = st.maxFuel - st.fuel;
     const quarter = Math.min(space, st.maxFuel * 0.25);
-    const costQ = quarter * FUEL_PRICE;
-    const costFull = space * FUEL_PRICE;
+    const fuelRate = FUEL_PRICE * st.priceMul;
+    const flarePrice = st.price(FLARE_PRICE);
+    const chargePrice = st.price(CHARGE_PRICE);
+    const shaftlightPrice = st.price(SHAFTLIGHT_PRICE);
+    const depotPrice = st.price(DEPOT_PRICE);
+    const costQ = quarter * fuelRate;
+    const costFull = space * fuelRate;
     this.body().innerHTML = `
       ${this.header('FUEL DEPOT')}
       <div class="row"><span class="r-name">Tank</span><span class="r-val">${Math.ceil(st.fuel)} / ${st.maxFuel}</span></div>
-      <div class="row"><span class="r-name">Price</span><span class="r-val">${fmt(FUEL_PRICE)} / unit</span></div>
+      <div class="row"><span class="r-name">Price</span><span class="r-val">${fmt(fuelRate)} / unit</span></div>
       <div class="btn-row">
         <button class="btn" id="buy-q" ${quarter < 1 || st.money < 1 ? 'disabled' : ''}>+25% · ${fmt(Math.min(costQ, st.money))}</button>
         <button class="btn primary" id="buy-f" ${space < 1 || st.money < 1 ? 'disabled' : ''}>FILL · ${fmt(Math.min(costFull, st.money))}</button>
@@ -181,14 +208,14 @@ export class Panels {
         <span><span class="r-name">FLARES</span><div class="r-sub">Q — thrown light. Something else to look at.</div></span>
         <span class="r-right">
           <span class="r-val">×${st.flares}</span>
-          <button class="btn" id="buy-flare" ${st.money < FLARE_PRICE || st.flares >= MAX_FLARES_HELD ? 'disabled' : ''}>${fmt(FLARE_PRICE)}</button>
+          <button class="btn" id="buy-flare" ${st.money < flarePrice || st.flares >= MAX_FLARES_HELD ? 'disabled' : ''}>${fmt(flarePrice)}</button>
         </span>
       </div>
       <div class="row">
         <span><span class="r-name">SEISMIC CHARGES</span><div class="r-sub">G — seals a tunnel with rubble. Mind the blast.</div></span>
         <span class="r-right">
           <span class="r-val">×${st.charges}</span>
-          <button class="btn" id="buy-charge" ${st.money < CHARGE_PRICE || st.charges >= MAX_CHARGES_HELD ? 'disabled' : ''}>${fmt(CHARGE_PRICE)}</button>
+          <button class="btn" id="buy-charge" ${st.money < chargePrice || st.charges >= MAX_CHARGES_HELD ? 'disabled' : ''}>${fmt(chargePrice)}</button>
         </span>
       </div>
       <div class="forge-head">WORKS<span class="forge-shards">permanent, per dig site</span></div>
@@ -196,14 +223,14 @@ export class Panels {
         <span><span class="r-name">SHAFTLIGHT KIT</span><div class="r-sub">L — hang a lamp in the shaft, for good. Light where you keep coming back.</div></span>
         <span class="r-right">
           <span class="r-val">×${st.shaftlights}</span>
-          <button class="btn" id="buy-shaftlight" ${st.money < SHAFTLIGHT_PRICE || st.shaftlights >= MAX_SHAFTLIGHTS ? 'disabled' : ''}>${fmt(SHAFTLIGHT_PRICE)}</button>
+          <button class="btn" id="buy-shaftlight" ${st.money < shaftlightPrice || st.shaftlights >= MAX_SHAFTLIGHTS ? 'disabled' : ''}>${fmt(shaftlightPrice)}</button>
         </span>
       </div>
       <div class="row">
         <span><span class="r-name">WAYSTATION DEPOT</span><div class="r-sub">N — a serviced silo at depth. Every unit metered at ${DEPOT_RATE_MUL}× — Cindral charges for the drop.</div></span>
         <span class="r-right">
           <span class="r-val">×${st.depotKits}</span>
-          <button class="btn" id="buy-depot" ${st.money < DEPOT_PRICE || st.depotKits >= MAX_DEPOTS ? 'disabled' : ''}>${fmt(DEPOT_PRICE)}</button>
+          <button class="btn" id="buy-depot" ${st.money < depotPrice || st.depotKits >= MAX_DEPOTS ? 'disabled' : ''}>${fmt(depotPrice)}</button>
         </span>
       </div>
       <div class="hint">Press E or Esc to leave</div>
@@ -211,23 +238,23 @@ export class Panels {
     this.body().querySelector('#buy-q')?.addEventListener('click', () => this.buyFuel(quarter));
     this.body().querySelector('#buy-f')?.addEventListener('click', () => this.buyFuel(space));
     this.body().querySelector('#buy-flare')?.addEventListener('click', () => {
-      if (st.money < FLARE_PRICE || st.flares >= MAX_FLARES_HELD) { this.ctx.audio.denied(); return; }
-      st.money -= FLARE_PRICE; st.flares++;
+      if (st.money < flarePrice || st.flares >= MAX_FLARES_HELD) { this.ctx.audio.denied(); return; }
+      st.money -= flarePrice; st.flares++;
       this.ctx.audio.buy(); this.ctx.saveNow(); this.renderFuel();
     });
     this.body().querySelector('#buy-charge')?.addEventListener('click', () => {
-      if (st.money < CHARGE_PRICE || st.charges >= MAX_CHARGES_HELD) { this.ctx.audio.denied(); return; }
-      st.money -= CHARGE_PRICE; st.charges++;
+      if (st.money < chargePrice || st.charges >= MAX_CHARGES_HELD) { this.ctx.audio.denied(); return; }
+      st.money -= chargePrice; st.charges++;
       this.ctx.audio.buy(); this.ctx.saveNow(); this.renderFuel();
     });
     this.body().querySelector('#buy-shaftlight')?.addEventListener('click', () => {
-      if (st.money < SHAFTLIGHT_PRICE || st.shaftlights >= MAX_SHAFTLIGHTS) { this.ctx.audio.denied(); return; }
-      st.money -= SHAFTLIGHT_PRICE; st.shaftlights++;
+      if (st.money < shaftlightPrice || st.shaftlights >= MAX_SHAFTLIGHTS) { this.ctx.audio.denied(); return; }
+      st.money -= shaftlightPrice; st.shaftlights++;
       this.ctx.audio.buy(); this.ctx.saveNow(); this.renderFuel();
     });
     this.body().querySelector('#buy-depot')?.addEventListener('click', () => {
-      if (st.money < DEPOT_PRICE || st.depotKits >= MAX_DEPOTS) { this.ctx.audio.denied(); return; }
-      st.money -= DEPOT_PRICE; st.depotKits++;
+      if (st.money < depotPrice || st.depotKits >= MAX_DEPOTS) { this.ctx.audio.denied(); return; }
+      st.money -= depotPrice; st.depotKits++;
       this.ctx.audio.buy(); this.ctx.toast('WAYSTATION KIT LOADED — N TO PLANT IT', 'stratum');
       this.ctx.saveNow(); this.renderFuel();
     });
@@ -235,9 +262,10 @@ export class Panels {
 
   private buyFuel(units: number): void {
     const st = this.ctx.state;
-    const affordable = Math.min(units, st.money / FUEL_PRICE);
+    const fuelRate = FUEL_PRICE * st.priceMul;
+    const affordable = Math.min(units, st.money / fuelRate);
     if (affordable < 1) { this.ctx.audio.denied(); return; }
-    st.money -= affordable * FUEL_PRICE;
+    st.money -= affordable * fuelRate;
     st.fuel = Math.min(st.maxFuel, st.fuel + affordable);
     this.ctx.audio.buy();
     this.ctx.saveNow();
@@ -263,12 +291,15 @@ export class Panels {
       : `<div class="row"><span class="r-sub">Your hold is empty. The crust is not.</span></div>`;
     // Cindral's standing order: posted forever once relayed, so the number
     // sits there every time you sell a load of ordinary ore beside it
+    // the order pays in local scrip: harder worlds price their fragments up,
+    // so the bribe keeps pace with what a driller out here actually earns
+    const offer = Math.round(EXTRACT_OFFER * ACTIVE.valueMul);
     const order = st.extractOrderHeard ? `
       <div class="order-card">
         <div class="order-head">CINDRAL EXTRACTION ORDER 9-1-1</div>
-        <div class="order-body">FRAGMENT RECOVERY · <b>${fmt(EXTRACT_OFFER)}</b> PER UNIT ON DELIVERY · ALL DEBTS CLEARED</div>
+        <div class="order-body">FRAGMENT RECOVERY · <b>${fmt(offer)}</b> PER UNIT ON DELIVERY · ALL DEBTS CLEARED</div>
         ${st.carrying
-          ? `<button class="btn primary wide" id="deliver">DELIVER THE FRAGMENT · ${fmt(EXTRACT_OFFER)}</button>`
+          ? `<button class="btn primary wide" id="deliver">DELIVER THE FRAGMENT · ${fmt(offer)}</button>`
           : `<div class="order-note">no fragment in hold</div>`}
       </div>` : '';
     this.body().innerHTML = `
@@ -302,9 +333,21 @@ export class Panels {
       const kinds = st.cargo.size;
       const total = st.sellAll();
       this.ctx.audio.sell(kinds + 2);
-      this.ctx.toast(`SOLD FOR ${fmt(total)}`, 'stratum');
       this.ctx.saveNow();
-      this.renderTrade();
+      // the tally drains while the register rings, then the panel re-renders
+      const btn = this.body().querySelector('#sell') as HTMLButtonElement | null;
+      if (btn) btn.disabled = true;
+      const el = this.body().querySelector('.sell-total b');
+      const t0 = performance.now(), dur = 560;
+      const tick = (): void => {
+        if (!el?.isConnected || this.current !== 'trade') return;
+        const k = Math.min(1, (performance.now() - t0) / dur);
+        el.textContent = fmt(Math.round(total * (1 - k)));
+        if (k < 1) { requestAnimationFrame(tick); return; }
+        this.ctx.toast(`SOLD FOR ${fmt(total)}`, 'stratum');
+        this.renderTrade();
+      };
+      requestAnimationFrame(tick);
     });
   }
 
@@ -312,21 +355,26 @@ export class Panels {
   private renderGarage(): void {
     const st = this.ctx.state;
     const missing = st.maxHull - st.hull;
-    const repairCost = Math.ceil(missing * REPAIR_PRICE);
+    const repairRate = REPAIR_PRICE * st.priceMul;
+    const arrestorPrice = st.price(ARRESTOR_PRICE);
+    const repairCost = Math.ceil(missing * repairRate);
     const upgradeRows = TRACKS.map(tr => {
       const tier = st.upgrades[tr.key];
       const cur = tr.tiers[tier];
       const next = tr.tiers[tier + 1];
       const maxed = !next;
+      // the game's one real build fork, stated where the money changes hands
+      const forkNote = tr.key === 'radiator' && st.emberTech.converter
+        ? ' · resist starves the PYRO EXCHANGER' : '';
       return `
         <div class="row">
           <span>
             <span class="r-name">${tr.name}</span>
-            <div class="r-sub">${maxed ? cur.label + ' — maxed' : cur.label + ' → ' + next.label + ' (' + next.v + tr.unit + ')'}</div>
+            <div class="r-sub">${(maxed ? cur.label + ' — maxed' : cur.label + ' → ' + next.label + ' (' + next.v + tr.unit + ')') + forkNote}</div>
           </span>
           ${maxed
             ? `<span class="r-val">MAX</span>`
-            : `<button class="btn" data-track="${tr.key}" ${st.money < next.price ? 'disabled' : ''}>${fmt(next.price)}</button>`}
+            : `<button class="btn" data-track="${tr.key}" ${st.money < st.price(next.price) ? 'disabled' : ''}>${fmt(st.price(next.price))}</button>`}
         </div>`;
     }).join('');
     // Stash: long-term storage, off to one side of the hold — stowed ore
@@ -387,7 +435,7 @@ export class Panels {
         <span><span class="r-name">ARRESTORS</span><div class="r-sub">B — deploy a landing pad in your own shaft. Drop at full speed, land clean. Recoverable.</div></span>
         <span class="r-right">
           <span class="r-val">×${st.arrestors}</span>
-          <button class="btn" id="buy-arrestor" ${st.money < ARRESTOR_PRICE || st.arrestors >= MAX_ARRESTORS ? 'disabled' : ''}>${fmt(ARRESTOR_PRICE)}</button>
+          <button class="btn" id="buy-arrestor" ${st.money < arrestorPrice || st.arrestors >= MAX_ARRESTORS ? 'disabled' : ''}>${fmt(arrestorPrice)}</button>
         </span>
       </div>
       ${bayRows}
@@ -429,8 +477,8 @@ export class Panels {
       this.renderGarage();
     });
     this.body().querySelector('#buy-arrestor')?.addEventListener('click', () => {
-      if (st.money < ARRESTOR_PRICE || st.arrestors >= MAX_ARRESTORS) { this.ctx.audio.denied(); return; }
-      st.money -= ARRESTOR_PRICE;
+      if (st.money < arrestorPrice || st.arrestors >= MAX_ARRESTORS) { this.ctx.audio.denied(); return; }
+      st.money -= arrestorPrice;
       st.arrestors++;
       this.ctx.audio.buy();
       this.ctx.saveNow();
@@ -452,9 +500,9 @@ export class Panels {
       });
     });
     this.body().querySelector('#repair')?.addEventListener('click', () => {
-      const afford = Math.min(missing, st.money / REPAIR_PRICE);
+      const afford = Math.min(missing, st.money / repairRate);
       if (afford < 1) { this.ctx.audio.denied(); return; }
-      st.money -= afford * REPAIR_PRICE;
+      st.money -= afford * repairRate;
       st.hull = Math.min(st.maxHull, st.hull + afford);
       this.ctx.audio.buy();
       this.ctx.saveNow();
@@ -465,13 +513,14 @@ export class Panels {
         const key = (btn as HTMLElement).dataset.track as keyof typeof st.upgrades;
         const tr = TRACKS.find(t => t.key === key)!;
         const next = tr.tiers[st.upgrades[key] + 1];
-        if (!next || st.money < next.price) { this.ctx.audio.denied(); return; }
-        st.money -= next.price;
+        if (!next || st.money < st.price(next.price)) { this.ctx.audio.denied(); return; }
+        st.money -= st.price(next.price);
         st.upgrades[key]++;
         // hull/tank upgrades top you up to the new max delta
         if (key === 'hull') st.hull = Math.min(st.maxHull, st.hull + (next.v - tr.tiers[st.upgrades[key] - 1].v));
         this.ctx.audio.buy();
         this.ctx.toast(`${tr.name}: ${next.label}`, 'stratum');
+        this.ctx.onUpgradePurchased();
         this.ctx.saveNow();
         this.renderGarage();
       });
@@ -582,23 +631,17 @@ export class Panels {
       </div>
       <div class="forge-head">SURVEY — ${ACTIVE.name}<span class="forge-shards">fitted per dig site</span></div>
       <div class="row">
-        <span><span class="r-name">SURVEY SCANNER</span><div class="r-sub">${st.hasScanner ? 'Installed — TAB toggles the map · + / − to zoom' : 'A live map of every tunnel you cut · toggled with TAB'}</div></span>
+        <span><span class="r-name">SURVEY SCANNER</span><div class="r-sub">${st.hasScanner ? 'Installed — TAB toggles the map · + / − to zoom · ore painted in its own colors' : 'A live map of every tunnel you cut, every deposit in reach · toggled with TAB'}</div></span>
         ${st.hasScanner
           ? '<span class="r-val">INSTALLED</span>'
-          : `<button class="btn" id="buy-scanner" ${st.money < SCANNER_PRICE ? 'disabled' : ''}>${fmt(SCANNER_PRICE)}</button>`}
+          : `<button class="btn" id="buy-scanner" ${st.money < st.price(SCANNER_PRICE) ? 'disabled' : ''}>${fmt(st.price(SCANNER_PRICE))}</button>`}
       </div>
       ${st.hasScanner ? `
-      <div class="row">
-        <span><span class="r-name">DEEP ARRAY</span><div class="r-sub">${st.hasDeepArray ? 'Installed — the map reads ore, not just voids' : 'Scanner upgrade: paints every ore deposit on the map'}</div></span>
-        ${st.hasDeepArray
-          ? '<span class="r-val">INSTALLED</span>'
-          : `<button class="btn" id="buy-array" ${st.money < DEEP_ARRAY_PRICE ? 'disabled' : ''}>${fmt(DEEP_ARRAY_PRICE)}</button>`}
-      </div>
       <div class="row">
         <span><span class="r-name">SALVAGE BEACONS</span><div class="r-sub">${st.hasBeacons ? 'Installed — registered wrecks marked on the map' : 'Tunes the scanner to distress registries. Somebody should read what they left.'}</div></span>
         ${st.hasBeacons
           ? '<span class="r-val">INSTALLED</span>'
-          : `<button class="btn" id="buy-beacons" ${st.money < BEACON_PRICE ? 'disabled' : ''}>${fmt(BEACON_PRICE)}</button>`}
+          : `<button class="btn" id="buy-beacons" ${st.money < st.price(BEACON_PRICE) ? 'disabled' : ''}>${fmt(st.price(BEACON_PRICE))}</button>`}
       </div>` : ''}
       <div class="forge-head">STARMAP<span class="forge-shards">${charted} / ${WORLDS.length} sites charted</span></div>
       ${starmap}
@@ -660,8 +703,8 @@ export class Panels {
       });
     });
     this.body().querySelector('#buy-beacons')?.addEventListener('click', () => {
-      if (st.money < BEACON_PRICE) { this.ctx.audio.denied(); return; }
-      st.money -= BEACON_PRICE;
+      if (st.money < st.price(BEACON_PRICE)) { this.ctx.audio.denied(); return; }
+      st.money -= st.price(BEACON_PRICE);
       st.buyGear('beacons');
       this.ctx.audio.buy();
       this.ctx.toast('SALVAGE BEACONS TUNED', 'stratum');
@@ -669,20 +712,11 @@ export class Panels {
       this.renderAssay();
     });
     this.body().querySelector('#buy-scanner')?.addEventListener('click', () => {
-      if (st.money < SCANNER_PRICE) { this.ctx.audio.denied(); return; }
-      st.money -= SCANNER_PRICE;
+      if (st.money < st.price(SCANNER_PRICE)) { this.ctx.audio.denied(); return; }
+      st.money -= st.price(SCANNER_PRICE);
       st.buyGear('scanner');
       this.ctx.audio.buy();
       this.ctx.toast('SURVEY SCANNER ONLINE — TAB', 'stratum');
-      this.ctx.saveNow();
-      this.renderAssay();
-    });
-    this.body().querySelector('#buy-array')?.addEventListener('click', () => {
-      if (st.money < DEEP_ARRAY_PRICE) { this.ctx.audio.denied(); return; }
-      st.money -= DEEP_ARRAY_PRICE;
-      st.buyGear('array');
-      this.ctx.audio.buy();
-      this.ctx.toast('DEEP ARRAY ONLINE — ORE VISIBLE ON SURVEY', 'stratum');
       this.ctx.saveNow();
       this.renderAssay();
     });
@@ -694,27 +728,16 @@ export class Panels {
 
   // ---------- PAUSE ----------
   private renderPause(): void {
-    // the legend follows whichever device is in the player's hands
-    const legend = PROMPTS.pad ? `
-        left stick steer · A / RT thrust · stick down to drill<br/>
-        hold the stick against a wall to drill sideways<br/>
-        X dock / EVA · VIEW survey map · B recall (EVA) · MENU pause<br/>
-        <span style="color:var(--amber)">hold LT:</span> X flare · A charge · B arrestor · Y shaftlight · RB depot<br/>
-        <span style="color:var(--amber)">forge tech:</span> LB dash · hold thrust at a ceiling to drill up · L3 warp-sell` : `
-        ← → steer · ↑ / SPACE thrust · ↓ drill down<br/>
-        hold ← / → against a wall to drill sideways<br/>
-        E dock / EVA · TAB survey map · R recall (EVA) · M mute · ESC pause<br/>
-        <span style="color:var(--amber)">forge tech:</span> SHIFT dash · hold ↑ at a ceiling to drill up · C warp-sell`;
     this.body().innerHTML = `
       <div class="screen-title good">PAUSED</div>
-      <div class="screen-sub">${legend}
-      </div>
       <button class="btn primary wide" id="resume">RESUME</button>
+      <button class="btn wide" id="to-controls">CONTROLS</button>
       <button class="btn wide" id="to-settings">SETTINGS</button>
       <button class="btn wide" id="quit">QUIT TO TITLE</button>
       <div class="hint">Progress saves automatically at the surface</div>
     `;
     this.body().querySelector('#resume')?.addEventListener('click', () => { this.ctx.audio.click(); this.close(); });
+    this.body().querySelector('#to-controls')?.addEventListener('click', () => { this.ctx.audio.click(); this.open('controls'); });
     this.body().querySelector('#to-settings')?.addEventListener('click', () => { this.ctx.audio.click(); this.open('settings'); });
     this.body().querySelector('#quit')?.addEventListener('click', () => {
       this.ctx.saveNow();
@@ -723,11 +746,92 @@ export class Panels {
     });
   }
 
+  // ---------- CONTROLS ----------
+  // The full mapping, written for whichever hands are on the game — the same
+  // law as every prompt in it. Bindings live in main.ts (bindInput / pollPad);
+  // this page is their statement, so keep the two in step.
+  private renderControls(): void {
+    const pad = PROMPTS.pad;
+    const row = (keys: string, what: string): string => `
+      <div class="row"><span class="r-name">${what}</span>
+        <span class="ctl-keys">${keys.split(' / ').map(k => `<span class="key${pad ? ' pad' : ''}">${k}</span>`).join('<i>/</i>')}</span>
+      </div>`;
+    const flight = pad ? `
+      ${row('L-STICK', 'Steer')}
+      ${row('A / RT', 'Thrust')}
+      ${row('L-STICK ↓', 'Drill down')}
+      ${row('L-STICK ← →', 'Drill sideways — hold into a wall')}
+      ${row('HOLD THRUST ↑', 'Drill up, at a ceiling (forge tech)')}` : `
+      ${row('← → / A D', 'Steer')}
+      ${row('↑ / W / SPACE', 'Thrust')}
+      ${row('↓ / S', 'Drill down')}
+      ${row('← →', 'Drill sideways — hold against a wall')}
+      ${row('HOLD ↑', 'Drill up, at a ceiling (forge tech)')}`;
+    const surface = pad ? `
+      ${row('X', 'Dock · EVA · interact')}
+      ${row('B', 'Recall to pod (EVA)')}
+      ${row('LB', 'Dash (vault dives)')}` : `
+      ${row('E', 'Dock · EVA · interact')}
+      ${row('R', 'Recall to pod (EVA)')}
+      ${row('SHIFT', 'Dash (vault dives)')}`;
+    const kit = pad ? `
+      ${row('LT+X', 'Flare')}
+      ${row('LT+A', 'Blast charge')}
+      ${row('LT+B', 'Arrestor pad')}
+      ${row('LT+Y', 'Shaftlight')}
+      ${row('LT+RB', 'Waystation depot')}` : `
+      ${row('Q', 'Flare')}
+      ${row('G', 'Blast charge')}
+      ${row('B', 'Arrestor pad')}
+      ${row('L', 'Shaftlight')}
+      ${row('N', 'Waystation depot')}`;
+    const forge = pad ? `
+      ${row('RB', 'Lance')}
+      ${row('L3', 'Warp-sell')}` : `
+      ${row('X', 'Lance')}
+      ${row('C', 'Warp-sell')}`;
+    const system = pad ? `
+      ${row('VIEW', 'Survey map')}
+      ${row('R-STICK ↑↓', 'Map zoom')}
+      ${row('Y', 'Lamp')}
+      ${row('R3', 'Mute')}
+      ${row('MENU', 'Pause · close')}` : `
+      ${row('TAB', 'Survey map')}
+      ${row('+ / −', 'Map zoom')}
+      ${row('F', 'Lamp')}
+      ${row('M', 'Mute')}
+      ${row('ESC', 'Pause · close')}`;
+    this.body().innerHTML = `
+      <h2><span>CONTROLS<span class="accent"> ▮</span></span></h2>
+      <div class="forge-head">FLIGHT & DRILLING</div>
+      ${flight}
+      <div class="forge-head">DOCKING & EVA</div>
+      ${surface}
+      <div class="forge-head">KIT${pad ? ' — HOLD LT' : ''}</div>
+      ${kit}
+      <div class="forge-head">FORGE TECH</div>
+      ${forge}
+      <div class="forge-head">SYSTEM</div>
+      ${system}
+      <button class="btn wide" id="c-close">BACK</button>
+    `;
+    this.body().querySelector('#c-close')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.open('pause');
+    });
+  }
+
   // ---------- DEATH ----------
   private prepareDeath(cause: string, spilled: { value: number; count: number } | null): void {
     const st = this.ctx.state;
     this.deathCause = cause;
-    this.deathFee = Math.round(st.money * DEATH_FEE_FRAC);
+    // the fee reads the manifest, not just the purse — banking every Lumen at
+    // the Ledger before a dive no longer makes dying free (OVERHAUL B5)
+    const cargoBasis = spilled?.value ?? st.cargoValue;
+    const owed = Math.round(Math.max(st.money * DEATH_FEE_FRAC, cargoBasis * DEATH_FEE_FRAC));
+    // floor, never round: a fee rounded UP past a fractional purse overdraws
+    // the account into -0.4, and the HUD dutifully printed "✦-0"
+    this.deathFee = Math.min(owed, Math.max(0, Math.floor(st.money)));
     this.spilled = spilled;
     // anything the crash did not scatter is simply gone (a spill already
     // emptied the hold, so this reads 0 whenever a claim was filed)
@@ -764,12 +868,15 @@ export class Panels {
   private renderRescue(): void {
     const st = this.ctx.state;
     const free = st.money < RESCUE_MIN_MONEY;
-    const fee = free ? 0 : Math.round(st.money * RESCUE_FEE_FRAC);
+    // the tow bills the 35% fill at pump rates too — an empty-purse rescue
+    // stopped being a net gift of fuel (OVERHAUL B5); mercy floor unchanged
+    const fuelBill = Math.round(st.maxFuel * 0.35 * FUEL_PRICE * st.priceMul);
+    const fee = free ? 0 : Math.min(Math.max(0, Math.floor(st.money)), Math.round(st.money * RESCUE_FEE_FRAC) + fuelBill);
     this.body().innerHTML = `
       <div class="screen-title bad">OUT OF FUEL</div>
       <div class="screen-sub">
         The pod is dark. Thrusters cold.<br/>
-        ${free ? 'The rig crew will tow you up — this one is on the house.' : `A recovery tow costs <b style="color:var(--amber)">${fmt(fee)}</b>. Cargo stays aboard.`}
+        ${free ? 'The rig crew will tow you up — this one is on the house.' : `A recovery tow costs <b style="color:var(--amber)">${fmt(fee)}</b> — the winch, and a 35% fill at pump rates. Cargo stays aboard.`}
       </div>
       <button class="btn primary wide" id="rescue">${free ? 'ACCEPT THE TOW' : 'PAY ' + fmt(fee) + ' — TOW ME UP'}</button>
       <button class="btn wide" id="stay">SIT IN THE DARK</button>
@@ -895,7 +1002,7 @@ export class Panels {
       <div class="forge-head">STIPENDS</div>
       <div class="row">
         <span><span class="r-name">UNDERWRITE A TOW</span><div class="r-sub">Somewhere on this rock a tank just ran dry. The fee lands on your ledger instead of theirs. Nobody is told who paid.</div></span>
-        <button class="btn" id="stipend" ${st.money < STIPEND_PRICE ? 'disabled' : ''}>${fmt(STIPEND_PRICE)}</button>
+        <button class="btn" id="stipend" ${st.money < st.price(STIPEND_PRICE) ? 'disabled' : ''}>${fmt(st.price(STIPEND_PRICE))}</button>
       </div>
       <div class="hint">Press E or Esc to leave</div>
     `;
@@ -913,8 +1020,8 @@ export class Panels {
     this.body().querySelector('#dep-10')?.addEventListener('click', () => deposit(10000));
     this.body().querySelector('#dep-all')?.addEventListener('click', () => deposit(st.money));
     this.body().querySelector('#stipend')?.addEventListener('click', () => {
-      if (st.money < STIPEND_PRICE) { this.ctx.audio.denied(); return; }
-      st.money -= STIPEND_PRICE;
+      if (st.money < st.price(STIPEND_PRICE)) { this.ctx.audio.denied(); return; }
+      st.money -= st.price(STIPEND_PRICE);
       st.stipends++;
       m.stipendsLifetime++;
       saveMeta(m);
@@ -1174,8 +1281,8 @@ export class Panels {
   /** a waystation at depth: everything works, everything is metered */
   private renderDepot(): void {
     const st = this.ctx.state;
-    const fuelRate = FUEL_PRICE * DEPOT_RATE_MUL;
-    const repairRate = REPAIR_PRICE * DEPOT_RATE_MUL;
+    const fuelRate = FUEL_PRICE * st.priceMul * DEPOT_RATE_MUL;
+    const repairRate = REPAIR_PRICE * st.priceMul * DEPOT_RATE_MUL;
     const space = st.maxFuel - st.fuel;
     const quarter = Math.min(space, st.maxFuel * 0.25);
     const missing = st.maxHull - st.hull;
@@ -1456,15 +1563,22 @@ export class Panels {
       <div class="end-stats">
         ${stats.map(([k, v]) => `<div class="end-stat"><b>${v}</b><span>${k}</span></div>`).join('')}
       </div>
+      <button class="btn primary wide" id="rewind">CONTINUE — THE MOMENT BEFORE</button>
       <div class="btn-row">
-        <button class="btn primary" id="rewind">CONTINUE — THE MOMENT BEFORE</button>
+        <button class="btn" id="second">BEGIN THE ${['SECOND', 'THIRD', 'FOURTH'][Math.min(this.ctx.state.descent, 2)]} DESCENT</button>
         <button class="btn" id="fresh">NEW EXPEDITION</button>
       </div>
+      <div class="hint">A descent keeps the Forge, the glyphs and the archive — and Cindral, who has read your file, revises every price upward.</div>
     `;
     this.body().querySelector('#rewind')?.addEventListener('click', () => {
       this.ctx.audio.click();
       this.close();
       this.ctx.onEndingContinue();
+    });
+    this.body().querySelector('#second')?.addEventListener('click', () => {
+      this.ctx.audio.click();
+      this.close();
+      this.ctx.onSecondDescent();
     });
     this.body().querySelector('#fresh')?.addEventListener('click', () => {
       this.ctx.audio.click();
@@ -1475,10 +1589,18 @@ export class Panels {
 }
 
 // ---------- title screen ----------
+/** a slot row's one-line identity: where, how deep, how rich, how long */
+function slotLine(s: SlotSummary): string {
+  const w = worldById(s.world)?.name ?? s.world.toUpperCase();
+  const h = Math.floor(s.playTime / 3600), m = Math.floor((s.playTime % 3600) / 60);
+  const t = s.playTime < 60 ? '' : ` · ${h > 0 ? `${h}H ${m}M` : `${m}M`}`;
+  const ng = s.descent > 0 ? ` · NG+${s.descent > 1 ? s.descent : ''}` : '';
+  return `${w} · ${Math.round(s.depthM)}M · ${fmt(s.money)}${t}${ng}`;
+}
+
 export function createTitle(
   ui: HTMLElement,
-  hasSave: boolean,
-  cb: { onNew(): void; onContinue(): void; onHover(): void },
+  cb: { onNew(slot: number): void; onContinue(slot: number): void; onHover(): void },
 ): { hide(): void; el: HTMLElement } {
   const el = document.createElement('div');
   el.id = 'title';
@@ -1495,37 +1617,92 @@ export function createTitle(
     <div id="wordmark">${letters}</div>
     <div class="tagline">${ACTIVE.tagline}</div>
     ${emblems}
-    <div class="menu">
-      ${hasSave ? `<button class="btn primary" id="t-continue">CONTINUE — ${ACTIVE.name}</button>` : ''}
-      <button class="btn ${hasSave ? '' : 'primary'}" id="t-new">${hasSave ? 'NEW EXPEDITION' : 'DESCEND'}</button>
-    </div>
+    <div class="menu"></div>
     <div class="advance-line">CINDRAL ADVANCE · ${CUR}40 · RECOVERABLE AGAINST EARNINGS</div>
     <a class="ghost-link" href="https://store.steampowered.com" target="_blank" rel="noopener">WISHLIST ON STEAM →</a>
     <div class="controls-hint">${glyphs(CONTROLS_HINT)}</div>
   `;
   ui.appendChild(el);
-  // two-step confirm in the button itself — native confirm() is blocked in
-  // sandboxed iframes (the hosted build), so never rely on it
-  const newBtn = el.querySelector('#t-new') as HTMLButtonElement | null;
-  let armed = false;
-  let armTimer = 0;
-  newBtn?.addEventListener('click', () => {
-    if (!hasSave || armed) {
-      cb.onNew();
-      return;
-    }
-    armed = true;
-    newBtn.textContent = 'ERASE SAVE — CLICK AGAIN';
-    newBtn.classList.add('danger');
-    clearTimeout(armTimer);
-    armTimer = window.setTimeout(() => {
-      armed = false;
-      newBtn.textContent = 'NEW EXPEDITION';
-      newBtn.classList.remove('danger');
-    }, 3500);
-  });
-  el.querySelector('#t-continue')?.addEventListener('click', () => cb.onContinue());
-  el.querySelectorAll('.btn').forEach(b => b.addEventListener('mouseenter', () => cb.onHover()));
+
+  // Three expedition slots. Filled ones continue; the first empty one hosts
+  // NEW EXPEDITION; erasing is per-slot, armed in the button itself — native
+  // confirm() is blocked in sandboxed iframes (the hosted build), so never
+  // rely on it. When every slot is full, NEW arms an erase of the last-played
+  // slot, exactly the old single-save contract.
+  const menu = el.querySelector('.menu') as HTMLElement;
+  const renderMenu = (): void => {
+    const active = GameState.activeSlot();
+    const summaries = Array.from({ length: SAVE_SLOTS },
+      (_, i) => GameState.slotSummary(i + 1));
+    const anySave = summaries.some(s => s !== null);
+    const firstEmpty = summaries.findIndex(s => s === null) + 1; // 0 = full
+    // the last-played slot carries #t-continue; if it was erased, the first
+    // surviving slot inherits the spotlight
+    const primarySlot = summaries[active - 1] ? active
+      : summaries.findIndex(s => s !== null) + 1;
+    const rows = summaries.map((s, i) => {
+      const slot = i + 1;
+      if (!s) return '';
+      const primary = slot === primarySlot;
+      return `
+        <div class="slot-row">
+          <button class="btn ${primary ? 'primary' : ''}"
+            ${primary ? 'id="t-continue"' : ''} data-continue="${slot}">
+            CONTINUE — ${slotLine(s)}</button>
+          <button class="btn slot-erase" data-erase="${slot}" title="ERASE SLOT ${slot}">✕</button>
+        </div>`;
+    }).join('');
+    menu.innerHTML = `
+      ${rows}
+      <button class="btn ${anySave ? '' : 'primary'}" id="t-new">${anySave ? 'NEW EXPEDITION' : 'DESCEND'}</button>
+    `;
+
+    menu.querySelectorAll<HTMLButtonElement>('[data-continue]').forEach(b =>
+      b.addEventListener('click', () => cb.onContinue(Number(b.dataset.continue))));
+
+    const newBtn = menu.querySelector('#t-new') as HTMLButtonElement | null;
+    let newArmed = false;
+    let newTimer = 0;
+    newBtn?.addEventListener('click', () => {
+      if (firstEmpty > 0) { cb.onNew(firstEmpty); return; }
+      // all slots full: two-step erase of the last-played slot
+      if (newArmed) { GameState.wipe(active); cb.onNew(active); return; }
+      newArmed = true;
+      newBtn.textContent = `ERASE SLOT ${active} — CLICK AGAIN`;
+      newBtn.classList.add('danger');
+      clearTimeout(newTimer);
+      newTimer = window.setTimeout(() => {
+        newArmed = false;
+        newBtn.textContent = 'NEW EXPEDITION';
+        newBtn.classList.remove('danger');
+      }, 3500);
+    });
+
+    menu.querySelectorAll<HTMLButtonElement>('[data-erase]').forEach(b => {
+      let armed = false;
+      let timer = 0;
+      b.addEventListener('click', () => {
+        if (armed) {
+          GameState.wipe(Number(b.dataset.erase));
+          renderMenu();
+          return;
+        }
+        armed = true;
+        b.textContent = 'ERASE?';
+        b.classList.add('danger');
+        clearTimeout(timer);
+        timer = window.setTimeout(() => {
+          armed = false;
+          b.textContent = '✕';
+          b.classList.remove('danger');
+        }, 3500);
+      });
+    });
+
+    menu.querySelectorAll('.btn').forEach(b => b.addEventListener('mouseenter', () => cb.onHover()));
+  };
+  renderMenu();
+
   return {
     el,
     hide() {

@@ -38,6 +38,16 @@ html, body {
   background: radial-gradient(ellipse at center, transparent 52%, rgba(4, 6, 14, 0.55) 100%);
   opacity: 0.9;
 }
+/* something unlit is walking at you — a deep red creep, colder than damage */
+#dread-wash {
+  background: radial-gradient(ellipse at center, transparent 44%, rgba(140, 8, 22, 0.62) 100%);
+  opacity: 0; transition: opacity 0.35s linear;
+}
+/* the Warden's beam is finding you — overexposure gathering at the edges */
+#scrutiny-wash {
+  background: radial-gradient(ellipse at center, transparent 38%, rgba(255, 244, 224, 0.66) 100%);
+  opacity: 0; transition: opacity 0.2s linear;
+}
 #damage-flash {
   background: radial-gradient(ellipse at center, rgba(255, 77, 41, 0.12) 0%, rgba(255, 77, 41, 0.42) 100%);
   opacity: 0; transition: opacity 0.5s var(--ease-out);
@@ -146,6 +156,8 @@ html, body {
   pointer-events: none !important; z-index: 11;
 }
 #prompt.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* a docked prompt has done its job — it never peeks out from under a panel */
+#ui:has(.panel-scrim) #prompt { opacity: 0; }
 #prompt .key {
   display: inline-block; padding: 1px 8px; margin-right: 8px; border-radius: 5px;
   border: 1px solid var(--amber); color: var(--amber); font-weight: 700;
@@ -202,6 +214,16 @@ input[type="range"].nav-focus {
   75% { opacity: 1; }
   100% { opacity: 0; margin-top: -46px; }
 }
+/* an ore popup hops, then arcs into the cargo corner instead of dying in place */
+.popup.arc { animation: popup-arc 0.66s cubic-bezier(0.45, 0, 0.6, 1) both; }
+@keyframes popup-arc {
+  0% { opacity: 0; margin-top: 6px; }
+  16% { opacity: 1; margin-top: -20px; }
+  45% { opacity: 1; }
+  100% { opacity: 0.1; margin-left: var(--ax); margin-top: var(--ay); font-size: 9px; }
+}
+#hud-cargo-count.bump { animation: cargo-bump 0.32s var(--ease-out); }
+@keyframes cargo-bump { 30% { transform: scale(1.16); color: var(--amber); } }
 
 /* ---------- panels ---------- */
 .panel-scrim {
@@ -222,6 +244,18 @@ input[type="range"].nav-focus {
   scrollbar-width: thin; scrollbar-color: rgba(232,226,213,0.2) transparent;
 }
 @keyframes panel-in { from { opacity: 0; transform: translateY(16px) scale(0.985); } }
+/* the garage stages the pod: world stays lit on the left, panel steps aside */
+.panel-scrim.stage {
+  background: linear-gradient(90deg, rgba(4, 6, 14, 0) 34%, rgba(4, 6, 14, 0.5) 62%);
+  backdrop-filter: none;
+  justify-content: flex-end;
+  padding-right: max(4vw, 24px);
+}
+/* the exit is choreographed, not a DOM deletion (DIRECTION §5) */
+.panel-scrim.leaving { animation: scrim-out 0.18s var(--ease-out) both; pointer-events: none !important; }
+@keyframes scrim-out { to { opacity: 0; } }
+.panel-scrim.leaving .panel { animation: panel-out 0.18s var(--ease-out) both; }
+@keyframes panel-out { to { opacity: 0; transform: translateY(12px) scale(0.985); } }
 .panel h2 {
   font-family: var(--font-display); font-size: 17px; letter-spacing: 0.34em; font-weight: 700;
   padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--line);
@@ -279,6 +313,16 @@ button.btn.wide { width: 100%; margin-top: 12px; padding: 13px; font-size: 13px;
 
 .btn-row { display: flex; gap: 10px; margin-top: 12px; }
 .btn-row .btn { flex: 1; }
+
+/* the controls page: every binding as a key pill against its deed */
+.panel .ctl-keys { display: flex; align-items: center; gap: 5px; }
+.panel .ctl-keys .key {
+  display: inline-block; padding: 2px 8px; border-radius: 5px;
+  border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.panel .ctl-keys i { font-style: normal; font-size: 10px; color: var(--ink-dim); }
 
 .forge-head {
   font-family: var(--font-display); font-size: 11px; font-weight: 700;
@@ -595,6 +639,13 @@ body.sm-open #survey {
 
 #title .menu { display: flex; flex-direction: column; gap: 12px; margin-top: 52px; min-width: 240px; animation: fade-up 0.9s var(--ease-out) 1.5s both; }
 #title .btn { padding: 15px; font-size: 14px; letter-spacing: 0.3em; background: var(--glass); backdrop-filter: blur(8px); }
+/* expedition slots: the continue line carries a whole run's identity, so it
+   trades the wordmark's tracking for room; the erase is small and off to the
+   side, where a stray thumb won't find it */
+#title .slot-row { display: flex; gap: 8px; }
+#title .slot-row [data-continue] { flex: 1; font-size: 12px; letter-spacing: 0.14em; }
+#title .slot-erase { flex: 0 0 auto; padding: 15px 13px; font-size: 12px; letter-spacing: 0.05em; color: var(--ink-dim); }
+#title .slot-erase.danger { color: #ff8a6a; }
 #title .advance-line {
   margin-top: 26px; font-family: var(--font-display);
   font-size: 10px; letter-spacing: 0.26em; color: var(--ink-dim);
@@ -1084,3 +1135,28 @@ body.sm-open #survey {
 
 /* the vault's title plate: the mark IS the headline, the name the caption */
 .vh-mark .vh-svg { width: 30px; height: 30px; display: block; margin: 0 auto 2px; opacity: 0.9; }
+
+/* ---------- keyboard focus (DIRECTION §5) ----------
+   A pad gets the amber ring (.nav-focus); Tab was still getting Chromium's
+   stock blue outline. Same treatment, same three cases, driven off
+   :focus-visible so a mouse click never lights it. The selectors mirror
+   MenuNav's FOCUSABLE list — buttons, the volume sliders, the one link —
+   which is everything the panels and the title screen actually build.
+   The UA outline is dropped only on the elements that get the ring. */
+button:focus-visible,
+a:focus-visible,
+[role]:focus-visible,
+input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--amber);
+  border-color: var(--amber) !important;
+}
+/* a 4px track can't carry a ring — light the whole row instead */
+input[type="range"]:focus-visible {
+  background: rgba(255, 154, 60, 0.4);
+  box-shadow: 0 0 0 4px rgba(255, 154, 60, 0.16);
+}
+.row:has(:focus-visible) {
+  background: rgba(255, 154, 60, 0.07);
+  box-shadow: inset 2px 0 0 var(--amber);
+}

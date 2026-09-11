@@ -140,20 +140,16 @@ await page.waitForTimeout(700);
 await page.keyboard.press('KeyE');
 await page.waitForTimeout(600);
 await page.screenshot({ path: OUT + '/p-forge.png' });
-await page.click('button[data-forge="dash"]');
+// the Blink Coil left the forge (OVERHAUL cut list) — the Ascent Coil now
+// proves the purchase path, and the board must not offer a dash at all
+const noDash = await page.evaluate(() => !document.querySelector('button[data-forge="dash"]'));
+await page.click('button[data-forge="updrill"]');
 await page.waitForTimeout(400);
 const tech = await page.evaluate(() => window.__game.state.emberTech);
-console.log('forge purchase:', JSON.stringify(tech), tech.dash ? 'OK' : 'FAIL');
+console.log('forge purchase:', JSON.stringify({ ...tech, noDash }),
+  tech.updrill && !tech.dash && noDash ? 'OK' : 'FAIL');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
-
-// 5) dash
-const vx0 = await page.evaluate(() => window.__game.ctrl.vx);
-await page.keyboard.press('ShiftLeft');
-await page.waitForTimeout(50);
-const vx1 = await page.evaluate(() => Math.abs(window.__game.ctrl.vx));
-console.log('dash:', vx0.toFixed(1), '->', vx1.toFixed(1), vx1 > 5 ? 'OK' : 'FAIL');
-await page.waitForTimeout(800);
 
 // 6) travel to CRYOS-2 via the assay starmap
 await page.evaluate(() => {

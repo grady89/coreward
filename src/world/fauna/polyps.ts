@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Terrain } from '../terrain';
+import { oreValue } from '../tiles';
 import { ACTIVE } from '../worlds';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
@@ -14,6 +15,10 @@ import { Creature, ThreatCtx, ThreatLevel, onWall, tmpM, tmpP, tmpQ, tmpS, tmpE,
 // burst: a hull hit and a shove, and the neighbours catch it. Thread past
 // slowly and they only swell. Rush and the wall goes off like a string of
 // charges. A flare within reach pops them from a distance.
+//
+// They grow where the world is worth something. A cluster roots by ore
+// seams, wreck bays, the approach to a carved stone — so the risk stands
+// between you and the reward instead of decorating an empty wall.
 
 const MAX_POLYPS = 30;
 const CLUSTER_MIN = 3;
@@ -92,9 +97,28 @@ export class Polyps implements Creature {
     this.menace = 0;
   }
 
+  /** how much a wall tile is worth guarding: ore seams, wrecks, stones */
+  private valueNear(x: number, y: number): number {
+    let v = 0;
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (oreValue(this.terrain.get(x + dx, y + dy)) > 0) v += 1;
+      }
+    }
+    for (const w of this.terrain.wrecks) {
+      if (Math.abs(w.x - x) < 5 && Math.abs(w.y - y) < 5) v += 8;
+    }
+    for (const g of this.terrain.glyphStones) {
+      if (Math.abs(g.x - x) < 7 && Math.abs(g.y - y) < 7) v += 8;
+    }
+    return v;
+  }
+
   private trySpawn(podX: number, podY: number, level: ThreatLevel): void {
     const slot = this.clusters.findIndex(c => !c.alive);
     if (slot < 0) return;
+    // sample the ring and root at the RICHEST wall in reach, not the first
+    let bestX = -1, bestY = -1, bestV = -1;
     for (let attempt = 0; attempt < 30; attempt++) {
       const ang = Math.random() * Math.PI * 2;
       const dist = 8 + Math.random() * 9;
@@ -102,6 +126,11 @@ export class Polyps implements Creature {
       const y = Math.round(-podY + Math.sin(ang) * dist);
       if (y < 60 || x < 1 || x >= this.terrain.w - 1) continue;
       if (!onWall(this.terrain, x, y)) continue;
+      const v = this.valueNear(x, y) + Math.random() * 1.5;
+      if (v > bestV) { bestV = v; bestX = x; bestY = y; }
+    }
+    if (bestX >= 0) {
+      const x = bestX, y = bestY;
       const c = this.clusters[slot];
       c.alive = true; c.ax = x + 0.5; c.ay = -(y + 0.5); c.life = 0; c.seen = false; c.noticed = false;
       const n = CLUSTER_MIN + Math.floor(Math.random() * (CLUSTER_MAX - CLUSTER_MIN + 1));
@@ -129,8 +158,7 @@ export class Polyps implements Creature {
         p.cluster = slot;
         placed++;
       }
-      if (placed === 0) { c.alive = false; continue; }
-      return;
+      if (placed === 0) c.alive = false;
     }
   }
 
@@ -220,10 +248,25 @@ export class Polyps implements Creature {
       const d = Math.hypot(dx, dy);
       const flare = this.flares.near(p.x, p.y, 2.6);
 
-      // nearness charges it; speed charges it faster; distance lets it settle
+      // Nearness is the trigger; SPEED is the detonator. The sac answers to
+      // pressure waves, and dynamic pressure goes with v² — so the dial is
+      //   rate = (0.08 + 0.28·near + 0.13·v²)·near − 0.14
+      // with the 0.14/s settle applied everywhere, inside NOTICE too.
+      // Against NOTICE 4.2 / burst 1.0 that makes the taught rule true:
+      //   • parked at d=2 (near .524, v=0): charge (.08+.28·.524)·.524
+      //     = .118/s < .14/s settle → net −.021/s. A stationary pod at
+      //     2+ tiles NEVER bursts one. (Old dial: +.266/s, burst in 3.8s.)
+      //   • crawl past at 1.2 t/s, 1.5-tile clearance: ∫rate dt over the
+      //     pass peaks at .32 — they swell and tremble, then settle.
+      //   • rush the same gap at 3.5 t/s: inflate crosses 1.0 while the
+      //     pod is 1.3 tiles past the sac — inside its 2.4-tile blast.
+      //     At 6+ t/s it bursts before the pod even draws level.
+      //   • room protects rushers too: at 3-tile clearance even 6 t/s
+      //     only swells them to .74. Slow OR wide, both are safe.
+      // (verified numerically; the pass integral uses d(t) = √(x(t)²+c²))
       if (d < NOTICE) {
         const near = 1 - d / NOTICE;
-        p.inflate += dt * (0.22 + near * 0.55 + speed * 0.09) * near;
+        p.inflate += dt * ((0.08 + near * 0.28 + speed * speed * 0.13) * near - 0.14);
         if (!c.noticed) { c.noticed = true; ctx.onAlert(); }
       } else {
         p.inflate -= dt * 0.14;

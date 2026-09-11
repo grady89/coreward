@@ -1,4 +1,4 @@
-import { TRACKS, TrackKey, START_MONEY, ForgeKey } from '../config';
+import { TRACKS, TrackKey, START_MONEY, ForgeKey, DESCENT_PRICE_MULS } from '../config';
 import { ActiveContract } from './contracts';
 import { worldById } from '../world/worlds';
 import { oreValue, T } from '../world/tiles';
@@ -11,6 +11,21 @@ import type { SpillClaim } from '../world/spill';
 
 const SAVE_KEY = 'coreward_save_v2';
 const SAVE_KEY_V1 = 'coreward_save_v1';
+const SLOT_PTR = 'coreward_slot';
+export const SAVE_SLOTS = 3;
+/** slot 1 keeps the historical key, so every existing save is already slot 1 */
+function slotKey(slot: number): string {
+  return slot <= 1 ? SAVE_KEY : `${SAVE_KEY}_s${slot}`;
+}
+
+/** what a title-screen slot row can say without loading the whole save */
+export interface SlotSummary {
+  world: string;
+  depthM: number;
+  money: number;
+  playTime: number;
+  descent: number;
+}
 
 function trackValue(key: TrackKey, tier: number): number {
   const track = TRACKS.find(t => t.key === key)!;
@@ -41,6 +56,14 @@ export interface WorldSave {
 
 export class GameState {
   money = START_MONEY;
+  /** NG+ counter: 0 = first playthrough, 1 = the Second Descent, … */
+  descent = 0;
+  /** what Cindral charges this deep into the ledger */
+  get priceMul(): number {
+    return DESCENT_PRICE_MULS[Math.min(this.descent, DESCENT_PRICE_MULS.length - 1)];
+  }
+  /** a Lumen sticker at this descent's rates — whole Lumens, always */
+  price(n: number): number { return Math.round(n * this.priceMul); }
   upgrades: Record<TrackKey, number> = { drill: 0, engine: 0, tank: 0, cargo: 0, hull: 0, radiator: 0 };
   fuel = trackValue('tank', 0);
   hull = trackValue('hull', 0);
@@ -305,6 +328,7 @@ export class GameState {
   /** back to a brand-new pod: used by NEW EXPEDITION (no page reload needed) */
   reset(): void {
     this.money = START_MONEY;
+    this.descent = 0;
     this.upgrades = { drill: 0, engine: 0, tank: 0, cargo: 0, hull: 0, radiator: 0 };
     this.fuel = trackValue('tank', 0);
     this.hull = trackValue('hull', 0);
@@ -355,6 +379,26 @@ export class GameState {
     this.worlds = {};
   }
 
+  /**
+   * NG+: a fresh expedition that keeps what the driller KNOWS — the Forge's
+   * tech, the translated glyphs, the found-log archive — and nothing they
+   * OWN. Money back to the advance, upgrades to stock, worlds re-seeded,
+   * and every shop sticker one step steeper (see priceMul).
+   */
+  beginDescent(): void {
+    const tech = this.emberTech;
+    const glyphs = new Set(this.glyphsSet);
+    const logs = new Set(this.foundLogs);
+    const seen = this.transcriptSeen; // read-marks travel with the archive
+    const d = this.descent + 1;
+    this.reset();
+    this.emberTech = tech;
+    this.glyphsSet = glyphs;
+    this.foundLogs = logs;
+    this.transcriptSeen = seen;
+    this.descent = d;
+  }
+
   // ---- ending emblems: meta-progress that survives NEW EXPEDITION ----
   private static ENDINGS_KEY = 'coreward_endings';
   static endingsSeen(): Set<string> {
@@ -372,6 +416,23 @@ export class GameState {
   }
 
   // ---- persistence ----
+  // Three slots. The pointer names the one every save/load touches; the
+  // title screen is the only place it moves.
+  private static slot = 0; // 0 = pointer not read yet
+  static activeSlot(): number {
+    if (GameState.slot === 0) {
+      try {
+        const n = Number(localStorage.getItem(SLOT_PTR));
+        GameState.slot = n >= 1 && n <= SAVE_SLOTS ? n : 1;
+      } catch { GameState.slot = 1; }
+    }
+    return GameState.slot;
+  }
+  static setActiveSlot(slot: number): void {
+    GameState.slot = slot;
+    try { localStorage.setItem(SLOT_PTR, String(slot)); } catch { /* ignore */ }
+  }
+
   save(
     terrain: Terrain, podX: number, podY: number,
     looted: Set<number>, arrestors: { x: number; y: number }[] = [],
@@ -402,7 +463,7 @@ export class GameState {
   persist(): void {
     if (this.ephemeral) return;
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({
+      localStorage.setItem(slotKey(GameState.activeSlot()), JSON.stringify({
         v: 2,
         money: this.money,
         fuel: this.fuel,
@@ -453,18 +514,76 @@ export class GameState {
         endingSnapshot: this.endingSnapshot,
         activeWorld: this.activeWorld,
         worlds: this.worlds,
+        descent: this.descent,
       }));
     } catch { /* storage unavailable — play on */ }
   }
 
-  static hasSave(): boolean {
-    try { return localStorage.getItem(SAVE_KEY) !== null || localStorage.getItem(SAVE_KEY_V1) !== null; } catch { return false; }
+  static hasSave(slot = GameState.activeSlot()): boolean {
+    try {
+      return localStorage.getItem(slotKey(slot)) !== null
+        || (slot === 1 && localStorage.getItem(SAVE_KEY_V1) !== null);
+    } catch { return false; }
+  }
+
+  /** the title row's one line — null when the slot is empty */
+  static slotSummary(slot: number): SlotSummary | null {
+    try {
+      const raw = localStorage.getItem(slotKey(slot));
+      if (raw) {
+        const d = JSON.parse(raw);
+        return {
+          world: d.activeWorld ?? 'veil3',
+          depthM: d.bestDepthM ?? 0,
+          money: d.money ?? 0,
+          playTime: d.playTime ?? 0,
+          descent: d.descent ?? 0,
+        };
+      }
+      // an unmigrated v1 save can only be sitting in slot 1
+      if (slot === 1) {
+        const raw1 = localStorage.getItem(SAVE_KEY_V1);
+        if (raw1) {
+          const d = JSON.parse(raw1);
+          return { world: 'veil3', depthM: d.bestDepthM ?? 0, money: d.money ?? 0, playTime: 0, descent: 0 };
+        }
+      }
+      return null;
+    } catch { return null; }
   }
 
   /** restores all fields; returns true when a save was loaded */
+  /**
+   * The OVERHAUL cut list, honored on load — nothing a save paid for is
+   * simply confiscated:
+   * - Cargo tier 5 ("Pocket Dimension", 58k): the tank empties before 60
+   *   slots fill wherever the ore is worth hauling (B3). Full price back.
+   * - The Blink Coil (3 shards): a lateral dash in a vertical game. The
+   *   shards go back to the stash, where the Forge can spend them.
+   * - The Deep Array (12k/site): legibility is never a purchase — value
+   *   painting now ships with the scanner. Full price back, per site.
+   */
+  private refundCutTiers(): void {
+    // a fee briefly rounded past a fractional purse; saves that carried the
+    // few negative tenths come back to an honest zero
+    if (this.money < 0) this.money = 0;
+    if (this.upgrades.cargo > 4) {
+      this.upgrades.cargo = 4;
+      this.money += 58000;
+    }
+    if (this.emberTech.dash) {
+      this.emberTech.dash = false;
+      this.stored.set(T.EMBERSHARD, (this.stored.get(T.EMBERSHARD) ?? 0) + 3);
+    }
+    for (const g of Object.values(this.gear)) {
+      if (g.array) { g.array = false; this.money += 12000; }
+    }
+  }
+
   load(): boolean {
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
+      const slot = GameState.activeSlot();
+      const raw = localStorage.getItem(slotKey(slot));
       if (raw) {
         const d = JSON.parse(raw);
         if (d.v !== 2) return false;
@@ -488,6 +607,8 @@ export class GameState {
             ...(this.gear.veil3 ?? {}),
           };
         }
+        // after upgrades, stash, tech AND gear are all in: settle the cut list
+        this.refundCutTiers();
         this.fuelSpent = d.fuelSpent ?? 0;
         this.oreMined = d.oreMined ?? 0;
         this.playTime = d.playTime ?? 0;
@@ -521,15 +642,18 @@ export class GameState {
         this.endingSnapshot = d.endingSnapshot ?? null;
         this.activeWorld = d.activeWorld ?? 'veil3';
         this.worlds = d.worlds ?? {};
+        this.descent = d.descent ?? 0;
         return true;
       }
-      // migrate a v1 save into the multi-world shape
-      const raw1 = localStorage.getItem(SAVE_KEY_V1);
+      // migrate a v1 save into the multi-world shape (v1 predates slots,
+      // so it can only ever be slot 1's)
+      const raw1 = slot === 1 ? localStorage.getItem(SAVE_KEY_V1) : null;
       if (raw1) {
         const d = JSON.parse(raw1);
         if (d.v !== 1) return false;
         this.money = d.money; this.fuel = d.fuel; this.hull = d.hull;
         this.upgrades = { ...this.upgrades, ...d.upgrades };
+        this.refundCutTiers();
         this.cargo = new Map(d.cargo);
         this.bestDepthM = d.bestDepthM; this.totalEarned = d.totalEarned;
         this.blocksDug = d.blocksDug;
@@ -548,10 +672,10 @@ export class GameState {
     } catch { return false; }
   }
 
-  static wipe(): void {
+  static wipe(slot = GameState.activeSlot()): void {
     try {
-      localStorage.removeItem(SAVE_KEY);
-      localStorage.removeItem(SAVE_KEY_V1);
+      localStorage.removeItem(slotKey(slot));
+      if (slot === 1) localStorage.removeItem(SAVE_KEY_V1);
     } catch { /* ignore */ }
   }
 }

@@ -45,6 +45,10 @@ export class Hud {
   private whiteEl!: HTMLElement;
   private coldEl!: HTMLElement;
   private hazeEl!: HTMLElement;
+  private dreadEl!: HTMLElement;
+  private scrutinyEl!: HTMLElement;
+  private lastDread = -1;
+  private lastScrutiny = -1;
   private hudEl!: HTMLElement;
   private shownMoney = 0;
 
@@ -53,6 +57,8 @@ export class Hud {
     ui.insertAdjacentHTML('beforeend', `
       <div id="vignette" class="fx-layer"></div>
       <div id="heat-haze" class="fx-layer"></div>
+      <div id="dread-wash" class="fx-layer"></div>
+      <div id="scrutiny-wash" class="fx-layer"></div>
       <div id="damage-flash" class="fx-layer"></div>
       <div id="cold-flash" class="fx-layer"></div>
       <div id="white-flash" class="fx-layer"></div>
@@ -116,6 +122,8 @@ export class Hud {
     this.whiteEl = $('#white-flash');
     this.coldEl = $('#cold-flash');
     this.hazeEl = $('#heat-haze');
+    this.dreadEl = $('#dread-wash');
+    this.scrutinyEl = $('#scrutiny-wash');
     this.contractEl = $('#hud-contract');
     this.ctName = $('#ct-name');
     this.ctReward = $('#ct-reward');
@@ -166,7 +174,27 @@ export class Hud {
   }
 
   show(): void { this.hudEl.classList.add('visible'); }
-  hide(): void { this.hudEl.classList.remove('visible'); }
+  hide(): void {
+    this.hudEl.classList.remove('visible');
+    this.setDread(0);
+    this.setScrutiny(0);
+  }
+
+  /** something unlit is walking at you: red creeps up the edges (THREATS.md's promise, kept) */
+  setDread(v: number): void {
+    const o = Math.round(Math.min(1, Math.max(0, v)) * 100) / 100;
+    if (o === this.lastDread) return;
+    this.lastDread = o;
+    this.dreadEl.style.opacity = String(o);
+  }
+
+  /** the Warden's beam is finding you: the edges of the frame whiten as exposure builds */
+  setScrutiny(v: number): void {
+    const o = Math.round(Math.min(1, Math.max(0, v)) * 100) / 100;
+    if (o === this.lastScrutiny) return;
+    this.lastScrutiny = o;
+    this.scrutinyEl.style.opacity = String(o);
+  }
 
   /** re-sync per-world gauge fiction (called again after in-place travel) */
   applyWorld(): void {
@@ -300,6 +328,31 @@ export class Hud {
     el.textContent = text;
     this.root.appendChild(el);
     setTimeout(() => el.remove(), 1150);
+  }
+
+  /** an earned value arcs into the cargo corner, which bumps as it lands */
+  popupArc(text: string, color: string, sx: number, sy: number): void {
+    const r = this.cargoCount.getBoundingClientRect();
+    if (!r.width || !this.hudEl.classList.contains('visible')) {
+      this.popup(text, color, sx, sy);
+      return;
+    }
+    const el = document.createElement('div');
+    el.className = 'popup arc';
+    el.style.color = color;
+    el.style.left = sx + 'px';
+    el.style.top = sy + 'px';
+    el.style.setProperty('--ax', (r.left + r.width / 2 - sx) + 'px');
+    el.style.setProperty('--ay', (r.top + r.height / 2 - sy) + 'px');
+    el.textContent = text;
+    this.root.appendChild(el);
+    setTimeout(() => { el.remove(); this.bumpCargo(); }, 620);
+  }
+
+  bumpCargo(): void {
+    this.cargoCount.classList.remove('bump');
+    void this.cargoCount.offsetWidth; // restart the animation when hits chain
+    this.cargoCount.classList.add('bump');
   }
 
   damageFlash(): void {

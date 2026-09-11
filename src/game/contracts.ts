@@ -31,6 +31,30 @@ function rot(seed: number, n: number): number {
   return Math.abs(Math.imul(seed ^ 0x9e3779b9, 2246822519)) % n;
 }
 
+/**
+ * ✦ per solid tile dug, by depth — measured off the generator itself
+ * (OVERHAUL audit, 8 seeds). This is what a metre of work is worth down there.
+ */
+const BAND_TILE_VALUE: [number, number][] = [
+  [120, 1.3], [320, 3.0], [600, 7.6], [720, 15.1], [860, 24], [940, 46.6],
+];
+function tileValue(m: number): number {
+  for (const [lim, v] of BAND_TILE_VALUE) if (m < lim) return v;
+  return 76;
+}
+
+/**
+ * The board pays against the ground your record says you can work. Authored
+ * rewards were priced for the slate band (✦3/tile); a driller whose record
+ * runs deeper gets the same jobs quoted at the deep rate, so a contract is
+ * never a rounding error next to one hold of ore (OVERHAUL B6). Haul and
+ * frugal TARGETS scale the same way — "fill the hold" has to keep meaning
+ * something; depth, speed and ore-count targets are physical and stay put.
+ */
+function econIndex(bestDepthM: number): number {
+  return Math.min(20, Math.max(1, tileValue(bestDepthM) / 3.0));
+}
+
 export const POOL: Omit<Contract, 'id' | 'worldId'>[] = [
   {
     title: 'SHALLOW SWEEP', flavor: 'The refinery wants volume, not glory.',
@@ -86,11 +110,14 @@ export function offers(bestDepthM: number, worldDepthM: number, worldId: string,
     used.add(idx);
     const base = usable[idx];
     const world = WORLDS.find(w => w.id === worldId)!;
+    const econ = econIndex(bestDepthM);
+    const scalesTarget = base.kind === 'haul' || base.kind === 'frugal';
     out.push({
       ...base,
       id: `${worldId}:${dayIndex}:${idx}`,
       worldId,
-      reward: Math.round(base.reward * world.valueMul),
+      target: scalesTarget ? Math.round(base.target * econ) : base.target,
+      reward: Math.round(base.reward * world.valueMul * econ),
     });
   }
   return out;

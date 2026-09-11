@@ -29,19 +29,19 @@ await page.keyboard.press('KeyE');
 await page.waitForTimeout(700);
 await page.click('#buy-scanner');
 await page.waitForTimeout(300);
-await page.click('#buy-array');
-await page.waitForTimeout(300);
 await page.click('#buy-beacons');
 await page.waitForTimeout(400);
 await page.screenshot({ path: OUT + '/s-assay.png' });
+// the Deep Array folded into the scanner (OVERHAUL cut list): two SKUs, and
+// value paint rides the scanner — there must be nothing left to buy for it
 const kit = await page.evaluate(() => ({
   scanner: window.__game.state.hasScanner,
-  array: window.__game.state.hasDeepArray,
+  arraySku: !!document.querySelector('#buy-array'),
   beacons: window.__game.state.hasBeacons,
   gear: window.__game.state.gear,
 }));
 console.log('veil3 kit:', JSON.stringify(kit),
-  kit.scanner && kit.array && kit.beacons ? 'OK' : 'FAIL');
+  kit.scanner && kit.beacons && !kit.arraySku ? 'OK' : 'FAIL');
 
 // wrecks show on the map now
 await page.keyboard.press('Escape');

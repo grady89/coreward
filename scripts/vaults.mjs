@@ -147,7 +147,10 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
     const early = g.mode === 'vault';
     const woke = await until(() => g.glyphMarks.chargeOf(s.id) >= 1, 200);
     key('KeyE'); key('KeyE', false);
-    const inVault = await until(() => g.mode === 'vault', 20);
+    // the fold takes its time now: the stone folds the world in over real
+    // pulses before the vault exists — wait for the exchange, not a stopwatch
+    const inVault = await until(() => g.mode === 'vault' && !!g.vault, 200);
+    if (!g.vault) return { eva, early, woke, inVault, glyph: null };
     // F11: the frame is chamber-locked from the first frame — centred on the
     // entry chamber, and far enough back that the whole slice fits. The old
     // assertion here was that the camera had settled onto the BODY; it now
@@ -443,7 +446,9 @@ await stage('wick', ['entry on foot', 'the spark', 'movement metrics', 'wall mov
     const sequenced = await until(() => v.completed, 60);
     const card = !!document.querySelector('#vault-card .vc-reforms');
     key('KeyE'); key('KeyE', false);
-    const out = await until(() => g.mode === 'eva', 20);
+    // the exit closes its own eyes: leave choreography + fold-out take real
+    // seconds, and the glyph lands only when the frame is handed back
+    const out = await until(() => g.mode === 'eva', 400);
     return { sequenced, card, out, glyphs: g.state.glyphs, has: g.state.glyphsSet.has('wick') };
   });
   ok('wick translated', complete, complete.sequenced && complete.card && complete.out && complete.has);

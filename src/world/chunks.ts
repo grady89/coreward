@@ -19,7 +19,37 @@ const VIEW_ROWS = 30; // rows above/below camera kept alive
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const lavaGeo = new THREE.BoxGeometry(0.94, 0.9, 0.94);
 
-const rockMat = new THREE.MeshStandardMaterial({ roughness: 0.93, metalness: 0.04 });
+// Per-face shade baked ONCE into the shared rock box. Every cube used to be
+// flat on all six sides, so a wall of them read as a quilt of tinted squares
+// instead of stone. Giving the geometry a colour attribute costs nothing per
+// tile and adds no draw call: the shader multiplies it into the per-instance
+// colour, so strata palettes, the ±14% cell variance and the carved-edge
+// ×1.22 all still land on top of it. Faces are keyed off the normal rather
+// than BoxGeometry's vertex order so the table survives any geometry change.
+// The back face is never seen (the camera looks down +z); it matches the
+// underside so a tumbling fold brick never flashes a bright rear.
+function bakeFaceShade(g: THREE.BufferGeometry): void {
+  const nrm = g.getAttribute('normal');
+  const col = new Float32Array(nrm.count * 3);
+  for (let i = 0; i < nrm.count; i++) {
+    const nx = nrm.getX(i), ny = nrm.getY(i), nz = nrm.getZ(i);
+    const s = ny > 0.5 ? 1 : ny < -0.5 ? 0.86
+      : nz > 0.5 ? 0.96 : nz < -0.5 ? 0.86
+      : nx > 0.5 ? 0.93 : 0.91;
+    col[i * 3] = s; col[i * 3 + 1] = s; col[i * 3 + 2] = s;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
+bakeFaceShade(boxGeo);
+
+// vertexColors picks up the face shade above. It is a pure multiplier on the
+// instance colour (three.js builds vColor as 1 × color × instanceColor in the
+// vertex shader), so nothing about the existing tinting changes. Only THIS
+// material opts in — lava's MeshBasicMaterial leaves vertexColors false and
+// carries its own geometry, so it is untouched.
+const rockMat = new THREE.MeshStandardMaterial({
+  roughness: 0.93, metalness: 0.04, vertexColors: true,
+});
 
 // Ore is lit AND self-glowing: flat shading makes every facet read, while the
 // emissive term is patched to follow each instance's colour so a gem still
@@ -297,6 +327,8 @@ class Chunk {
 }
 
 export class ChunkField {
+  /** frame-spike attribution: how many chunk builds this frame paid for */
+  builtLastFrame = 0;
   /** set false when the player prefers reduced motion */
   animated = true;
   private live = new Map<number, Chunk>();
@@ -348,12 +380,14 @@ export class ChunkField {
         if (!this.live.has(k) || this.dirty.has(k)) work.push({ cx, cy, k });
       }
     }
+    this.builtLastFrame = 0;
     if (work.length) {
       const ccy = centerRow / CHUNK;
       work.sort((a, b) => Math.abs(a.cy + 0.5 - ccy) - Math.abs(b.cy + 0.5 - ccy));
       // a cold field (arrival, world change) fills whole behind the
       // transit cover; the budget only paces a field that is already warm
       let budget = this.live.size < 8 ? work.length : 2;
+      this.builtLastFrame = Math.min(budget, work.length);
       for (const w of work) {
         if (budget-- <= 0) break;
         let ch = this.live.get(w.k);

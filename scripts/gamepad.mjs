@@ -317,14 +317,20 @@ await stick(0, 0);
 const vx1 = await page.evaluate(() => window.__game.vault.px);
 check('the stick walks the vault', Math.abs(vx1 - vx0) > 0.5, `px ${vx0.toFixed(2)} -> ${vx1.toFixed(2)}`);
 
-// jump is edge-triggered and buffered, so the pad has to give it real edges
-const vy0 = await page.evaluate(() => window.__game.vault.py);
+// jump is edge-triggered and buffered, so the pad has to give it real edges —
+// and the room slopes away under the walk now, so wait for the feet first
+// and measure the PEAK of the rise, not wherever the arc happens to land
+await page.waitForFunction(() => window.__game.vault.grounded, null, { timeout: 9000 }).catch(() => {});
 await press(['a']);
-await page.waitForTimeout(500);
+const rise = await page.evaluate(async () => {
+  const v = window.__game.vault;
+  const y0 = v.py; let p = y0;
+  for (let i = 0; i < 14; i++) { await new Promise(r => setTimeout(r, 50)); p = Math.max(p, v.py); }
+  return p - y0;
+});
 await release(['a']);
 await page.waitForTimeout(200);
-const vy1 = await page.evaluate(() => window.__game.vault.py);
-check('A jumps in the vault', vy1 > vy0 + 0.3, `py ${vy0.toFixed(2)} -> ${vy1.toFixed(2)}`);
+check('A jumps in the vault', rise > 0.3, `rise ${rise.toFixed(2)}`);
 await page.waitForTimeout(900);
 await page.screenshot({ path: OUT + '/g-vault.png' });
 

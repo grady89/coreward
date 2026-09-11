@@ -195,6 +195,17 @@ export class Shellbacks implements Creature {
     return false;
   }
 
+  /** true if plating (sx, sy) would leave the builder's own tile with no air neighbour */
+  private sealsSelfIn(b: Shellback, sx: number, sy: number): boolean {
+    const cx = Math.floor(b.x), cy = Math.floor(-b.y);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x = cx + dx, y = cy + dy;
+      if (x === sx && y === sy) continue;
+      if (air(this.terrain, x, y)) return false;
+    }
+    return true;
+  }
+
   /** pick the next tunnel tile: away from the pod, toward any flare, never straight back */
   private steer(b: Shellback, podX: number, podY: number): void {
     const cx = Math.floor(b.x), cy = Math.floor(-b.y);
@@ -212,7 +223,23 @@ export class Shellbacks implements Creature {
       if (x === b.px && y === b.py) score -= 3;
       if (score > bestScore) { bestScore = score; bx = x; by = y; }
     }
-    if (bestScore === -Infinity) { b.idle = 1; return; }
+    if (bestScore === -Infinity) {
+      // walled in — by its own pearl, or anyone's rock-work. It made the
+      // nacre; it can unmake it: eat a plate and crawl through the gap.
+      for (const [dx, dy] of dirs) {
+        const x = cx + dx, y = cy + dy;
+        if (y < 2 || x < 1 || x >= this.terrain.w - 1) continue;
+        if (this.terrain.get(x, y) !== T.NACRE) continue;
+        this.terrain.carve(x, y);
+        this.sealed = Math.max(0, this.sealed - 1);
+        this.particles.dustBurst(x + 0.5, -(y + 0.5), 0xe8dff2, { count: 8, speed: 1.5, up: 1, life: 0.6, gravity: 5, spread: 0.5 });
+        b.px = cx; b.py = cy;
+        b.tx = x + 0.5; b.ty = -(y + 0.5);
+        return;
+      }
+      b.idle = 1;
+      return;
+    }
     b.px = cx; b.py = cy;
     b.tx = bx + 0.5; b.ty = -(by + 0.5);
     b.trail.push(this.terrain.idx(cx, cy));
@@ -274,6 +301,7 @@ export class Shellbacks implements Creature {
             const x = i % this.terrain.w, y = Math.floor(i / this.terrain.w);
             const wx = x + 0.5, wy = -(y + 0.5);
             if (this.terrain.get(x, y) === T.AIR && Math.hypot(wx - podX, wy - podY) > 2 && Math.hypot(wx - b.x, wy - b.y) > 0.9
+              && !this.sealsSelfIn(b, x, y)
               && !this.wouldTrap(x, y, podX, podY)) {
               this.terrain.fill(x, y, T.NACRE);
               this.sealed++;

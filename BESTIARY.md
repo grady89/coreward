@@ -37,7 +37,7 @@ is [entities.ts](src/world/entities.ts).
   hang where they lost you, dim, and wait for the light to come back.
 
 ### The Long Ones · hunter · [longone.ts](src/world/fauna/longone.ts)
-**First impression:** *the dust is jumping off the wall in a line, and the line is coming here.*
+**First impression:** *the rumble is getting louder, and it is getting louder because it is getting closer.*
 - **Look.** Eyeless. A split mandible, a body of overlapping chitin plates,
   a line of dorsal lights that pulse tail-to-head so the direction of the
   wave tells you which way it is moving. It fills a passage.
@@ -81,20 +81,28 @@ is [entities.ts](src/world/entities.ts).
 - **Motion.** Cruise (wander the pool) → churn (the glow rises, the surface
   boils for a full second — your one warning) → breach in an arc at the
   nozzle → fall → sink. A drilled hit stuns it.
-- **Rule.** Keyed on heat within ~7 tiles: your engine near a pool, or a
-  flare in it. The bite isn't what kills you; the drag back toward the
-  brine is. A flare into a pool is heat too — scout with it.
+- **Rule.** Keyed on heat: your engine within ~7 tiles of the pool, or a flare
+  burning within 6 of the wyrm — the lip counts, it needn't be in the water.
+  The bite isn't what kills you; the drag back toward the brine is. A flare is
+  heat too, and it takes the strike instead of you — scout with it.
 
 ### Stillwalkers · stalker · [stillwalkers.ts](src/world/fauna/stillwalkers.ts)
 **First impression:** *that wasn't there a second ago.*
 - **Look.** Too tall. A figure inside the rock, black as a cut-out with a
   cold blue rim, standing where there was nothing.
-- **Motion.** While your lamp is on it: not a tremor. Lamp off: it walks
-  through rock and ice straight at you with a gait that is almost right.
-  Eight limbs, three body blocks, a stride that is slightly too long.
-- **Rule.** Keyed on the ABSENCE of light. Dark hides you from the Wardens
-  and feeds you to these — the rule collision is the point. Their approach
-  drives a red **dread** wash on the screen.
+- **Motion.** While your lamp is on it AND you are facing it: not a tremor.
+  Lamp off — or the walker on your blind side — and it walks through rock and
+  ice straight at you with a gait that is almost right. Eight limbs, three
+  body blocks, a stride that is slightly too long. Two thirds of them rise on
+  the side you are not watching.
+- **Rule.** Keyed on the ABSENCE of attention. Your lamp is a leash exactly as
+  long as your gaze: it holds a walker you are FACING (within 7.5 tiles), and
+  does nothing for the one behind you — turn, or it walks. Placed light works
+  from any side: a flare beside it, a Lance pulse for a couple of seconds, and
+  in Act IV the fragment in your hold, which freezes them while it damns you
+  to the Wardens. Their approach drives a red **dread** wash; in the dark, two
+  cold points open in the head — if you can see the gaze, it is pointed at
+  you. A charge makes one sink back into the rock. Nothing kills them.
 
 ### Frostbloom · bait · (tile, [entities.ts](src/world/entities.ts) `frostbloom()`)
 **First impression:** *the veinlight just bit me.*
@@ -150,14 +158,19 @@ is [entities.ts](src/world/entities.ts).
 - **Motion.** Plant, lift, swing, PLANT — one leg at a time, each footfall a
   thud through the rock. The beam sweeps the hall in slow arcs and is the
   only part of it that hurries: catch you in it and it narrows, goes white,
-  and it walks. Two charges bring it down over a second and a half; its post
-  stays dark three minutes after.
-- **Rule.** Tracks luminance only. Run dark and it sweeps past. A fragment
-  in the hold is light; a flare is light; the Lumen Lance is *too much*
-  light and blinds it. Contact is overexposure — and so is the beam: held
-  in the narrowed white beam the hull cooks, ramping over a second or so.
-  Break the line of sight or run dark and it cools. It takes post as you
-  *approach* a ruin (never when you're already inside).
+  and it walks. The arc is the readable thing — it is slow, it is honest, and
+  crossing behind it while it looks the other way is the counterplay. Two
+  charges bring it down over a second and a half; that hall stays dark three
+  minutes after, and the next hall knows nothing about it.
+- **Rule.** The beam IS the sensor: caught inside the sweep fan with a clear
+  line, you are seen — lamp on or lamp off. It reads where ITS light falls,
+  not what yours is doing; running dark only trims the fringe (a lit pod, or
+  a fragment in the hold, registers at ~1.4× the drawn arc). A flare is light
+  it must inspect; the Lumen Lance is *too much* light and blinds it. Contact
+  is overexposure — and so is the beam: held in the narrowed white beam the
+  hull cooks, ramping over a second or so. Slip the arc or put rock in its
+  line and it cools. Only one is ever up: it takes post as you *approach* a
+  ruin — its hall is a glyph hall, and the stone is what it guards.
 
 ### The Kindled · [kindled.ts](src/world/fauna/kindled.ts)
 **First impression:** *they turned around.*
@@ -174,12 +187,19 @@ is [entities.ts](src/world/entities.ts).
 
 ## The arsenal — light-first, gun-last
 1. **Lamp toggle** — free, instant, the highest-tension mechanic in the game.
-2. **Flares** — light somewhere that is not you: pull a swarm, wake a wyrm,
-   pop a polyp, lure a Shellback.
+2. **Flares** — light somewhere that is not you: divert a swarm, wake a wyrm,
+   pop a polyp, lure a Shellback, freeze a Stillwalker. Three alight at once,
+   26 s each, 12 in the rack. A decoy has to be placed where the thing can
+   already notice it — a swarm only turns for a flare within about twice its
+   own notice range, so you throw *ahead*, not across the map.
 3. **The drill** — already a weapon; stuns a wyrm, kills a mimic, curls a
    Shellback.
 4. **Seismic charges** — the only thing that fells a Warden, and it takes two.
-5. **Lumen Lance** — fires Lumens. Shooting spends money, so it stays last.
+   They also drive a Stillwalker back into the rock without killing it.
+5. **Lumen Lance** — fires Lumens. Shooting spends money, so it stays last. It
+   **blinds; it does not kill** — a swarm is flung apart, de-alerted and
+   stunned a couple of seconds, a Stillwalker flash-freezes for about two, a
+   Warden overexposes for six. The one thing it does kill is a mimic.
 
 ## The sandbox — how to actually look at one
 Run the game with **`?fauna`** in the URL. It loads the right world, carves

@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Pod Refit Review</title>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #22282e; }
+    .tag {
+      position: fixed; transform: translateX(-50%);
+      font: 700 13px "Chakra Petch", system-ui, sans-serif; letter-spacing: 0.28em;
+      color: #b8b2c4; text-align: center; pointer-events: none; white-space: nowrap;
+    }
+    .tag b { display: block; font-size: 10px; letter-spacing: 0.12em; color: #6c6880; }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import { Pod } from '/src/player/pod.ts';
+    import { STOCK_RIG, STOCK_FLAME, STOCK_LAMP, rigFinish, flameStyle, lampTint } from '/src/game/cosmetics.ts';
+
+    // Beauty-shot stage for the parametric refit: the T0..T5 uniform ladder
+    // plus one mixed build, drills spinning, flames at moderate thrust, lamps
+    // on. Same sodium-dusk key family as structures-review. Shots:
+    //   ?shot=ladder    — the seven pods, garage scale
+    //   ?shot=distance  — same ladder, pulled back to the gameplay read (~58px hull)
+    //   ?shot=mixed     — the mixed build close up (heat glow + cargo glow)
+    const params = new URLSearchParams(location.search);
+    const shot = params.get('shot') ?? 'ladder';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x22282e);
+
+    // dusk lighting, warm sodium key like the game's surface review stage —
+    // darker overall so the semantic emissives have something to say
+    scene.add(new THREE.HemisphereLight(0xffb066, 0x2a2a30, 0.65));
+    const key = new THREE.DirectionalLight(0xffc98a, 1.5);
+    key.position.set(-8, 10, 9);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x8ac8ff, 0.45);
+    rim.position.set(9, 6, -7);
+    scene.add(rim);
+    scene.add(new THREE.AmbientLight(0x2a2338, 0.5));
+
+    // ground: a barely-lighter disc so the headlamps have a floor to pool on
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(60, 48),
+      new THREE.MeshStandardMaterial({ color: 0x2e363c, roughness: 1 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    const uniform = n => ({ drill: n, engine: n, tank: n, cargo: n, hull: n, radiator: n });
+    const LADDER = [0, 1, 2, 3, 4, 5].map(n => ({
+      label: 'T' + n, sub: 'all tracks ' + n, tiers: uniform(n),
+      heat: 0.6, cargo: 0.8, finish: null,
+    }));
+    // the mixed build: proves tracks read independently, and that a refit and
+    // a non-stock finish coexist without bleeding onto the stock pods
+    const MIXED = {
+      label: 'MIXED', sub: 'drill5 eng2 tank1 cargo4 hull3 rad5',
+      tiers: { drill: 5, engine: 2, tank: 1, cargo: 4, hull: 3, radiator: 5 },
+      heat: 0.7, cargo: 0.9, finish: 'jade',
+    };
+
+    const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.1, 200);
+    let staged;
+    if (shot === 'mixed') {
+      staged = [{ ...MIXED, x: 0 }];
+      camera.position.set(1.15, 1.8, 2.7);
+      camera.lookAt(0, 1.05, 0);
+    } else {
+      staged = [...LADDER.map((p, i) => ({ ...p, x: (i - 3) * 1.75 })), { ...MIXED, x: 3 * 1.75 }];
+      if (shot === 'distance') {
+        camera.position.set(0, 1.4, 20.1);
+        camera.lookAt(0, 1.1, 0);
+      } else {
+        camera.position.set(0, 1.5, 8.6);
+        camera.lookAt(0, 1.05, 0);
+      }
+    }
+
+    const tags = [];
+    const tag = (worldPos, name, sub) => {
+      const el = document.createElement('div');
+      el.className = 'tag';
+      el.innerHTML = shot === 'distance' ? name : `${name}<b>${sub}</b>`;
+      document.body.appendChild(el);
+      tags.push({ el, worldPos });
+    };
+
+    const pods = staged.map(cfg => {
+      const pod = new Pod(scene);
+      pod.refit(cfg.tiers);      // refit BEFORE applyFinish — the contract allows either order
+      pod.setPos(cfg.x, 1.12);
+      if (cfg.finish) pod.applyFinish(rigFinish(cfg.finish), flameStyle('teal'), lampTint(''));
+      else pod.applyFinish(STOCK_RIG, STOCK_FLAME, STOCK_LAMP);
+      tag(new THREE.Vector3(cfg.x, 0.22, 0), cfg.label, cfg.sub);
+      return { pod, cfg };
+    });
+
+    const v = new THREE.Vector3();
+    const clock = new THREE.Clock();
+    let time = 2.1; // start mid-flicker so a screenshot lands on live flames
+    let frames = 0;
+    function frame() {
+      const dt = Math.min(0.05, clock.getDelta());
+      time += dt;
+      for (const { pod, cfg } of pods) {
+        pod.update(dt, {
+          vx: 0, thrust: 0.45, sideThrust: 0,
+          drilling: true, drillDir: 'down', depthRow: 26, time,
+          lampOn: true, heatFrac: cfg.heat, cargoFrac: cfg.cargo,
+        });
+      }
+      for (const t of tags) {
+        v.copy(t.worldPos).project(camera);
+        t.el.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px';
+        t.el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
+      }
+      renderer.render(scene, camera);
+      if (++frames === 40) document.title = 'READY:' + shot;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  </script>
+</body>
+</html>

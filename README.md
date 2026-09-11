@@ -100,7 +100,6 @@ hardware at 60fps the clamp never engages.
 | Q | throw a flare · G | place a seismic charge |
 | Tab | survey map (+ / − or scroll to zoom) |
 | R | recall to the pod during EVA |
-| Shift | Blink Coil dash (forge tech) |
 | C | Warp Hold remote-sell (forge tech) |
 | Esc | pause / close panel |
 | M | mute |
@@ -119,7 +118,7 @@ below); nothing needs configuring.
 | X | dock at a building · EVA · salvage · board pod · **hold** at a cradle |
 | B | recall to the pod during EVA · back out of a panel or the chart |
 | Y | headlamp on/off |
-| LB | Blink Coil dash · the spark inside a stone |
+| LB | the spark inside a stone |
 | RB | fire the lance |
 | **hold LT** | the kit: **X** flare · **A** seismic charge · **B** arrestor · **Y** shaftlight · **RB** depot |
 | View / Back | survey map (right stick up/down zooms it) |

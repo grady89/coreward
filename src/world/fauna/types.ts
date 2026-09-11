@@ -22,6 +22,8 @@ export interface ThreatCtx {
   still: number;
   /** a stolen fragment in the hold: the Wardens can feel it */
   carrying: boolean;
+  /** which way the pod faces, -1 | 1 — what the Stillwalkers exploit */
+  facing: number;
   dt: number;
   time: number;
   /** hull damage */
@@ -52,7 +54,7 @@ export type FaunaEvent =
   | 'rimewing-wake' | 'rimewing-freeze'
   | 'polyp-burst' | 'polyp-seen'
   | 'brinewyrm-churn' | 'brinewyrm-breach' | 'brinewyrm-bite'
-  | 'stillwalker-seen' | 'stillwalker-grab'
+  | 'stillwalker-seen' | 'stillwalker-grab' | 'stillwalker-fragment'
   | 'riptide-enter' | 'riptide-eye'
   | 'shellback-seen' | 'shellback-seal' | 'shellback-killed'
   | 'mimic-hatch' | 'mimic-escaped' | 'mimic-killed' | 'crab-skitter'

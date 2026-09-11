@@ -13,14 +13,31 @@ import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air, lineO
 // hurries: catch you in it and the beam narrows, goes white, and it walks.
 // Contact is not a bite. It is overexposure. The world goes white.
 //
-// It tracks light. Run dark and it sweeps past you. A fragment in the hold
-// is light. A flare is light. The Lumen Lance is TOO MUCH light: it blinds.
-// Only a seismic charge can bring one down, and it takes two.
+// The beam IS the sensor. Caught in the fan with a clear line, you are
+// seen — lamp on, lamp off, it does not care what YOU are doing with light,
+// only where ITS light falls. Running dark still narrows its notice: a lit
+// pod (or a stolen fragment) catches the fan's fringe a shade beyond the
+// drawn cone. A flare is light it must inspect. The Lumen Lance is TOO MUCH
+// light: it blinds. Only a seismic charge can bring one down; it takes two.
 
 const HIP_H = 2.2;
 const STEP_TIME = 0.36;
 const STEP_TRIGGER = 1.1;
 const FELLED_QUIET = 180;   // a hall whose Warden fell stays dark this long
+
+// Detection IS the beam — geometrically. Engagement needs the pod inside
+// the sweep fan AND in line of sight, and nothing else: a dark pod standing
+// in the light is a pod standing in the light. Running dark only trims the
+// fringe (a lit pod reads at 1.4× the arc). No seeing through rock, no
+// seeing behind itself. The drawn cone is built from ENGAGE_ARC so the
+// light you see is exactly the arc that sees a dark pod. Since arc-dodging
+// is now the whole game, the idle sweep hurries (1.05 → 1.6 rad/s: a pass
+// every ~4s) and the engaged walk closes properly.
+const ENGAGE_ARC = 0.55;    // rad half-angle of the engage fan
+const ENGAGE_DIST = 16;
+const IDLE_SWEEP = 1.6;     // rad/s
+const COOK_ARC = 0.3;       // the narrowed white shaft that actually burns
+const COOK_DIST = 14;
 
 interface Leg {
   footX: number; footY: number;
@@ -40,6 +57,8 @@ export class Wardens implements Creature {
   private felled = new Map<number, number>();
   private sweep = 0;
   engaged = false;
+  /** world-space angle the beam currently points, radians (read-only tell) */
+  get beamAngle(): number { return this.sweep; }
   integrity = 100;
   private blindT = 0;
   /** 0..1 — how long the white beam has been on the hull. Overexposure. */
@@ -84,13 +103,53 @@ export class Wardens implements Creature {
     this.lampMat = new THREE.MeshBasicMaterial({ color: 0xfff2c8, toneMapped: false });
     this.lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), this.lampMat);
     this.lamp.position.x = 0.12;
-    // the visible beam: a long additive cone, base at the lamp, tip far off
-    this.beamMat = new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-    const coneGeo = new THREE.ConeGeometry(2.6, 12, 18, 1, true);
+    // The visible beam, rendered as light rather than a prop. The alpha
+    // lives in a CanvasTexture: along the length (v) it is bright at the
+    // lantern and dissolves to nothing at the far end; across the width (u,
+    // the cone's circumference) it follows |cos| — the chord thickness of a
+    // lit volume — so the screen-space edges melt away instead of ending at
+    // a polygon silhouette. u=0/0.5 face the camera, u=0.25/0.75 are the
+    // visible edges of the fan.
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 128;
+    const g2d = cv.getContext('2d')!;
+    const lengthGrad = g2d.createLinearGradient(0, 0, 0, 128);
+    lengthGrad.addColorStop(0.0, 'rgba(255,255,255,0.95)');  // v=1: the lamp
+    lengthGrad.addColorStop(0.12, 'rgba(255,255,255,0.5)');
+    lengthGrad.addColorStop(0.45, 'rgba(255,255,255,0.2)');
+    lengthGrad.addColorStop(0.8, 'rgba(255,255,255,0.05)');
+    lengthGrad.addColorStop(1.0, 'rgba(255,255,255,0)');     // v=0: dissolved
+    g2d.fillStyle = lengthGrad;
+    g2d.fillRect(0, 0, 128, 128);
+    const widthGrad = g2d.createLinearGradient(0, 0, 128, 0);
+    for (let i = 0; i <= 16; i++) {
+      const u = i / 16;
+      widthGrad.addColorStop(u, `rgba(255,255,255,${Math.abs(Math.cos(u * Math.PI * 2)).toFixed(3)})`);
+    }
+    g2d.globalCompositeOperation = 'destination-in';
+    g2d.fillStyle = widthGrad;
+    g2d.fillRect(0, 0, 128, 128);
+    this.beamMat = new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(cv), color: 0xffe0a0, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    });
+    // idle: a broad lighthouse fan cut to ENGAGE_ARC, so the drawn light IS
+    // the danger zone. Engaged, it narrows to the white cook shaft. A second
+    // cone on the same material nests inside; the additive stack reads as a
+    // hot core inside soft spill.
+    // drawn light IS the trigger: the fan runs the full ENGAGE_DIST so its
+    // dissolve never understates the reach at maximum range
+    const coneGeo = new THREE.ConeGeometry(Math.tan(ENGAGE_ARC) * ENGAGE_DIST, ENGAGE_DIST, 24, 1, true);
     coneGeo.rotateZ(Math.PI / 2);
-    coneGeo.translate(6, 0, 0);
+    coneGeo.translate(ENGAGE_DIST / 2, 0, 0);
+    // the fan spreads in the play plane; toward the camera it stays as flat
+    // as the old cone was, so it never engulfs the view
+    coneGeo.scale(1, 1, 0.28);
     this.beamCone = new THREE.Mesh(coneGeo, this.beamMat);
-    this.beam = new THREE.SpotLight(0xffe0a0, 45, 22, 0.4, 0.55, 1.2);
+    const core = new THREE.Mesh(coneGeo, this.beamMat);
+    core.scale.set(0.9, 0.45, 0.45);
+    this.beamCone.add(core);
+    this.beam = new THREE.SpotLight(0xffe0a0, 45, 22, ENGAGE_ARC, 0.55, 1.2);
     this.beam.position.set(0.2, 0, 0);
     this.beamTarget = new THREE.Object3D();
     this.beamTarget.position.set(8, 0, 0);
@@ -191,7 +250,7 @@ export class Wardens implements Creature {
         const f = this.felled.get(i);
         if (f !== undefined && ctx.time - f < FELLED_QUIET) continue;
         const d = Math.hypot(r.x - podX, -r.y - podY);
-        if (d < wake && d > 5) {
+        if (d < wake && d > 2.5) {
           this.alive = true;
           this.homeIdx = i;
           this.x = this.homeX = r.x; this.y = -r.y + 1.2;
@@ -217,7 +276,7 @@ export class Wardens implements Creature {
       this.droop = -ease(f) * 1.1;
       this.lampMat.color.setHex(0x443a2a);
       this.beam.intensity = (1 - f) * 20 * (Math.random() < 0.5 ? 1 : 0.2);
-      this.beamMat.opacity = (1 - f) * 0.06;
+      this.beamMat.opacity = (1 - f) * 0.3 * (Math.random() < 0.5 ? 1 : 0.4);
       this.glow.intensity = (1 - f) * 2;
       if (Math.random() < dt * 8) this.particles.sparkBurst(this.x + (Math.random() - 0.5), this.y + 1, 0xffe0a0, { count: 3, speed: 2.5, up: 1, life: 0.5, gravity: 8, spread: 0.3 });
       if (this.collapseT <= 0 && this.pendingDown) {
@@ -234,12 +293,24 @@ export class Wardens implements Creature {
       return;
     }
 
-    // ---- sight: it tracks luminance, not motion ----
+    // ---- sight: it sees where its own light falls, and nothing else. The
+    // pod must be inside the sweep fan AND in line of sight — lamp state is
+    // no shield: stand in the beam and you are in the beam. Running dark
+    // trims the fringe; rock, and the gaps between passes, are the answer.
     this.blindT = Math.max(0, this.blindT - dt);
-    const flare = this.flares.brightest();
-    const flareDist = flare ? Math.hypot(flare.x - this.x, flare.y - this.y) : 999;
-    const seesPod = (lampOn || ctx.carrying) && dist < 15;
-    const seesFlare = flareDist < 17;
+    const lanternY = this.y + 1.15;
+    const flare = this.flares.brightest(this.x, lanternY, 17);
+    let podArc = Math.atan2(podY - lanternY, podX - this.x) - this.sweep;
+    while (podArc > Math.PI) podArc -= Math.PI * 2;
+    while (podArc < -Math.PI) podArc += Math.PI * 2;
+    // dark or lit, the fan finds you; light only widens the fringe it reads
+    const fan = lampOn || ctx.carrying ? ENGAGE_ARC * 1.4 : ENGAGE_ARC;
+    const seesPod = dist < ENGAGE_DIST
+      && Math.abs(podArc) < fan
+      && lineOfSight(this.terrain, this.x, lanternY, podX, podY);
+    // a flare wakes it from any direction — thrown light is the point —
+    // but never through solid rock
+    const seesFlare = !!flare && lineOfSight(this.terrain, this.x, lanternY, flare.x, flare.y);
     const wasEngaged = this.engaged;
     this.engaged = this.blindT <= 0 && (seesPod || seesFlare);
     if (this.engaged && !wasEngaged) {
@@ -252,14 +323,15 @@ export class Wardens implements Creature {
     // ---- walk ----
     const dmgMul = level === 'reduced' ? 0.5 : 1;
     if (this.engaged) {
-      const sp = 1.9 * (level === 'reduced' ? 0.8 : 1) * dt;
+      const sp = 2.6 * (level === 'reduced' ? 0.75 : 1) * dt;
       const nx = this.x + Math.sign(tx - this.x) * sp;
       if (Math.abs(tx - this.x) > 0.4 && air(this.terrain, Math.floor(nx), Math.floor(-(this.y - 1)))) this.x = nx;
       const want = Math.atan2(ty - this.y, tx - this.x);
       let da = want - this.sweep;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
-      this.sweep += da * Math.min(1, dt * 4);
+      // carrying a fragment it tracks a shade better — Act IV pays the toll
+      this.sweep += da * Math.min(1, dt * (ctx.carrying ? 7 : 5.5));
       // contact is the whole machine, legs included — not just the lantern
       const segY = Math.max(this.y - HIP_H + 0.4, Math.min(podY, this.y + 1));
       if (Math.hypot(podX - this.x, podY - segY) < 1.3) {
@@ -268,21 +340,20 @@ export class Wardens implements Creature {
         if (this.flashT <= 0) { this.flashT = 0.5; ctx.onEvent('warden-flash', this.x, this.y); }
       } else this.flashT = 0;
     } else {
-      // patrol: drift home and sweep the room, slow as a lighthouse
+      // patrol: drift home and sweep the room — a lighthouse in a hurry
       this.x += (this.homeX - this.x) * Math.min(1, dt * 0.6);
-      this.sweep += dt * (this.blindT > 0 ? 0 : 0.7);
+      this.sweep += dt * (this.blindT > 0 ? 0 : IDLE_SWEEP);
     }
 
     // ---- the beam is the weapon: contact is overexposure, and so is this.
     // Held in the narrowed white beam, the hull cooks — slowly at first,
-    // then properly. Break the line, or run dark, and it cools.
-    const lanternY = this.y + 1.15;
+    // then properly. Break the line, or slip the arc, and it cools.
     let inBeam = false;
-    if (this.engaged && this.blindT <= 0 && dist < 14) {
+    if (this.engaged && this.blindT <= 0 && dist < COOK_DIST) {
       let da = Math.atan2(podY - lanternY, podX - this.x) - this.sweep;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
-      inBeam = Math.abs(da) < 0.3 && lineOfSight(this.terrain, this.x, lanternY, podX, podY);
+      inBeam = Math.abs(da) < COOK_ARC && lineOfSight(this.terrain, this.x, lanternY, podX, podY);
     }
     this.exposure = clamp01(this.exposure + (inBeam ? dt / 1.2 : -dt * 1.5));
     if (this.exposure > 0.2) ctx.hurt(13 * this.exposure * dmgMul * dt, "a Warden's beam");
@@ -333,11 +404,18 @@ export class Wardens implements Creature {
     const white = this.engaged ? 1 : 0;
     this.lampMat.color.setHex(blind ? 0x2a2418 : this.engaged ? 0xffffff : 0xfff2c8);
     this.beam.intensity = blind ? 0 : this.engaged ? 110 : 45;
-    this.beam.angle = lerp(this.beam.angle, this.engaged ? 0.24 : 0.4, Math.min(1, dt * 4));
+    this.beam.angle = lerp(this.beam.angle, this.engaged ? 0.24 : ENGAGE_ARC, Math.min(1, dt * 4));
     this.beam.color.setHex(this.engaged ? 0xffffff : 0xffe0a0);
     this.beamMat.color.setHex(this.engaged ? 0xffffff : 0xffe0a0);
-    this.beamMat.opacity = blind ? 0 : lerp(this.beamMat.opacity, 0.07 + white * 0.08, Math.min(1, dt * 4));
-    this.beamCone.scale.set(1, this.engaged ? 0.6 : 1, this.engaged ? 0.6 : 1);
+    this.beamMat.opacity = blind ? 0 : lerp(this.beamMat.opacity, 0.4 + white * 0.35, Math.min(1, dt * 4));
+    // idle: the full soft fan. Engaged: it snaps down to the cook shaft
+    // (COOK_ARC of the fan's ENGAGE_ARC) and reaches a touch further —
+    // narrower, whiter, brighter all at once, so the state change lands.
+    const ks = Math.min(1, dt * 6);
+    const narrow = this.engaged ? Math.tan(COOK_ARC) / Math.tan(ENGAGE_ARC) : 1;
+    this.beamCone.scale.x = lerp(this.beamCone.scale.x, this.engaged ? 1.1 : 1, ks);
+    this.beamCone.scale.y = lerp(this.beamCone.scale.y, narrow, ks);
+    this.beamCone.scale.z = this.beamCone.scale.y;
     this.glow.intensity = blind ? 0.2 : 2.5 + white * 3;
     this.beamTarget.position.set(8, 0, 0);
     // a blinded lantern droops

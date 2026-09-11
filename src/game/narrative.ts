@@ -334,6 +334,19 @@ export const ADHOC_TRANSMISSIONS: Record<string, { world?: string; lines: string
     ],
   },
   // ---- fauna: Dispatch has a line for each the first time it shows itself ----
+  'stillwalker-fragment': {
+    world: 'cryos2',
+    lines: [
+      'The tall ones just stopped. Mid-stride, all of them, the moment you came close.',
+      'Whatever is riding in your hold, they will not walk at it. I am not putting that in the log.',
+    ],
+  },
+  'fauna-dead': {
+    lines: [
+      'Listening post has nothing. No wings, no worms, nothing on the vibration bands.',
+      'Everything down there kept time by that light. You are digging through a world that stopped.',
+    ],
+  },
   'longone-taught': {
     world: 'veil3',
     lines: [

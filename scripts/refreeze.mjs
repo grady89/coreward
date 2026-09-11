@@ -123,8 +123,10 @@ const highway = await page.evaluate(async () => {
   g.state.accl.cryos2 = 3; // isolate fall damage from frost damage
   g.cam.snap(g.ctrl.px, g.ctrl.py, 12.5);
   const hull0 = g.state.hull;
-  // the chain runs in clamped game time — poll for touchdown, don't guess
-  for (let i = 0; i < 80; i++) {
+  // the chain runs in clamped game time — poll for touchdown, don't guess.
+  // Budget generously: on a loaded machine game time runs at a quarter of
+  // wall clock, and the 26-row chain wants ~8 game-seconds all by itself.
+  for (let i = 0; i < 300; i++) {
     await new Promise(r => setTimeout(r, 250));
     if (g.ctrl.grounded && g.ctrl.row >= 288) break;
   }

@@ -49,10 +49,18 @@ export class FlareField {
     return true;
   }
 
-  /** the brightest live flare, if any — creatures prefer it to the pod */
-  brightest(): Flare | null {
+  /**
+   * The brightest live flare, if any — creatures prefer it to the pod.
+   * Pass (x, y, maxDist) to only consider flares a creature could plausibly
+   * perceive: a flare 200 tiles away must not steer every swarm in the world.
+   */
+  brightest(x?: number, y?: number, maxDist = Infinity): Flare | null {
     let best: Flare | null = null;
-    for (const f of this.list) if (f.alive && (!best || f.life > best.life)) best = f;
+    for (const f of this.list) {
+      if (!f.alive) continue;
+      if (x !== undefined && y !== undefined && Math.hypot(f.x - x, f.y - y) > maxDist) continue;
+      if (!best || f.life > best.life) best = f;
+    }
     return best;
   }
 

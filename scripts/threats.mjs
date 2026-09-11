@@ -69,11 +69,15 @@ const hunt = await page.evaluate(async () => {
     await new Promise(r => setTimeout(r, 100));
     hullAfter = g.state.hull;
   }
-  // now go dark
-  // 5s wall-clock: headless sim-time runs ~30% slow (dt is clamped at 0.05)
+  // now go dark — and wait on the CONDITION, not the wall clock: headless
+  // sim-time can crawl to a fifth of wall under SwiftShader, so a fixed 5s
+  // understates the ~2 sim-seconds the flock needs to lose you
   g.lampOn = false;
-  await new Promise(r => setTimeout(r, 5000));
-  const alertedDark = g.threats.flies.swarms.some(x => x.alerted);
+  let alertedDark = true;
+  for (let i = 0; i < 240 && alertedDark; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    alertedDark = g.threats.flies.swarms.some(x => x.alerted);
+  }
   const detail = g.threats.flies.swarms.map(x => ({
     alive: x.alive, alerted: x.alerted, dark: +x.darkFor.toFixed(2),
   }));

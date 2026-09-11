@@ -107,6 +107,22 @@ export class FollowCam {
     this.camera.lookAt(this.cx, this.cy, 0);
   }
 
+  /**
+   * The garage framing (DIRECTION §5's "ease to shop framing"): the camera
+   * closes on the parked pod and holds it left-of-center so the panel can
+   * stand to the right. Resuming `follow` eases back out on its own.
+   */
+  dockPose(dt: number, x: number, y: number): void {
+    const tz = 5.8;
+    const tx = x + this.halfW(tz) * 0.5;
+    const k = Math.min(1, dt * 4.2);
+    this.cx += (tx - this.cx) * k;
+    this.cy += (y + 0.55 - this.cy) * k;
+    this.cz += (tz - this.cz) * Math.min(1, dt * 3);
+    this.apply(dt);
+    this.camera.lookAt(this.cx, this.cy, 0);
+  }
+
   /** cinematic pose used by the title screen; drift + mouse parallax */
   titlePose(time: number, mouseX: number, mouseY: number): void {
     const ox = Math.sin(time * 0.11) * 1.6 + mouseX * 1.2;

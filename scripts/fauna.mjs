@@ -27,6 +27,17 @@ const HELPERS = `
   const room = (x0, x1, y0, y1) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) g.terrain.carve(x, y); };
   const park = (x, y) => { g.ctrl.drilling = null; g.ctrl.px = x; g.ctrl.py = -y + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0; g.cam.snap(x, -y, 12.5); };
   const until = async (fn, n = 60, ms = 100) => { for (let i = 0; i < n; i++) { if (fn()) return true; await new Promise(r => setTimeout(r, ms)); } return fn(); };
+  // the same wait, budgeted in GAME seconds — headless sim-time runs anywhere
+  // from 1x to 0.2x of wall depending on machine load, so anything that needs
+  // the world to actually advance must watch g.time, not the wall clock
+  const untilSim = async (fn, simSeconds, capMs = 120000) => {
+    const t0 = g.time, w0 = Date.now();
+    while (g.time - t0 < simSeconds && Date.now() - w0 < capMs) {
+      if (fn()) return true;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return fn();
+  };
   const stage = async id => {
     g.devStage(id);
     const s = window.__STAGES.find(s => s.id === id);
@@ -35,7 +46,7 @@ const HELPERS = `
     return s;
   };
   g.state.hull = 100000; g.state.fuel = g.state.maxFuel; g.state.upgrades.radiator = 5; g.state.upgrades.drill = 5;
-  return { g, room, park, until, stage };
+  return { g, room, park, until, untilSim, stage };
 `;
 await page.evaluate(src => { window.__H = new Function(src); }, HELPERS);
 
@@ -163,7 +174,7 @@ const wyrm = await page.evaluate(async () => {
   // hover: thrust wakes it
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowUp' }));
   const churned = await until(() => bw.phase !== 'cruise', 200);
-  const breached = await until(() => bw.phase === 'breach' || bw.phase === 'fall' || bw.phase === 'sinking', 60);
+  const breached = await until(() => bw.phase === 'breach' || bw.phase === 'fall' || bw.phase === 'sinking', 300);
   window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowUp' }));
   return { spawned, phase0, churned, breached, phase: bw.phase, taught: g.state.firedEvents.has('brinewyrm-taught') };
 });
@@ -174,46 +185,78 @@ await page.screenshot({ path: OUT + '/f-brinewyrm.png' });
 const walker = await page.evaluate(async () => {
   const { g, stage } = window.__H();
   await stage('stillwalkers');
+  const { until } = window.__H();
   const sw = g.threats.stillwalkers;
   const spawned = sw.walkers.some(w => w.alive);
   const w = sw.walkers.find(w => w.alive);
   if (!w) return { spawned };
-  // put it in the wall 5 tiles off and light it
+  // put it in the wall 5 tiles off on the FACED side and light it
+  g.ctrl.facing = 1;
   w.x = g.ctrl.px + 5; w.y = g.ctrl.py; g.lampOn = true;
   await new Promise(r => setTimeout(r, 600));
   const x0 = w.x;
-  await new Promise(r => setTimeout(r, 1200));
+  await new Promise(r => setTimeout(r, 1800));
   const movedLit = Math.abs(w.x - x0);
   const seen = g.state.firedEvents.has('stillwalker-taught');
   g.lampOn = false;
   const x1 = w.x;
-  await new Promise(r => setTimeout(r, 1500));
+  await until(() => Math.abs(w.x - x1) > 0.8, 80);
   const movedDark = Math.abs(w.x - x1);
   const dread = g.threats.dread;
   g.lampOn = true;
-  return { spawned, movedLit: +movedLit.toFixed(2), movedDark: +movedDark.toFixed(2), seen, dread: +dread.toFixed(2) };
+  // the lamp is a leash only as long as your gaze: same walker, lamp ON,
+  // moved to your blind side — it walks anyway
+  w.x = g.ctrl.px - 5; w.y = g.ctrl.py; w.lit = 0; w.freezeT = 0;
+  const x2 = g.ctrl.px - 5;
+  await until(() => Math.abs(w.x - x2) > 0.8, 80);
+  const movedBehind = Math.abs(w.x - x2);
+  return { spawned, movedLit: +movedLit.toFixed(2), movedDark: +movedDark.toFixed(2), movedBehind: +movedBehind.toFixed(2), seen, dread: +dread.toFixed(2) };
 });
 ok('stillwalker', walker, walker.spawned && walker.movedLit < 0.05 && walker.movedDark > 0.5 && walker.seen);
+ok('stillwalker ignores light on your back', walker, walker.movedBehind > 0.5);
 await page.screenshot({ path: OUT + '/f-stillwalker.png' });
 
-// --- the Warden walks: legs step, feet land on the floor ---
-const wardenGait = await page.evaluate(async () => {
-  const { g, room, park, until } = window.__H();
-  // it posts as you approach: a lit pocket just above the hall, then it walks the floor toward you
+// --- the Warden posts, sees a DARK pod in the fan, and walks at it ---
+// The hall is carved by the test itself so the geometry never depends on
+// the seed: an open room around the post, the pod dark on its floor.
+const wardenDark = await page.evaluate(async () => {
+  const { g, room, park, until, untilSim } = window.__H();
   const r = g.terrain.ruins[0];
   const rx = Math.floor(r.x), ry = Math.floor(r.y);
-  room(rx + 2, rx + 5, ry - 9, ry - 6);
-  park(rx + 3.5, ry - 7);
+  // approach ring first so it posts (2.5 < d < 18)
+  room(rx + 2, rx + 8, ry - 8, ry - 5);
+  park(rx + 6.5, ry - 6);
   g.lampOn = true;
   g.threats.reset();
   const wd = g.threats.wardens;
-  const posted = await until(() => wd.alive, 40);
+  const posted = await until(() => wd.alive, 60);
+  if (!posted) return { posted };
+  // now own the geometry: one open room holding both the post and the pod
+  const wx = Math.floor(wd.x), wy = Math.floor(-wd.y);
+  room(wx - 6, wx + 6, wy - 2, wy + 2);
+  g.lampOn = false;
+  g.ctrl.px = wx + 4.5; g.ctrl.py = wd.y - 0.5;
+  g.ctrl.vx = 0; g.ctrl.vy = 0;
+  // one full sweep is ~4 s of GAME time at 1.6 rad/s; give it two, then let
+  // the walk have four more. Budgeted in sim seconds so load cannot starve it.
+  const engagedDark = await untilSim(() => wd.engaged, 8);
+  // it re-floors onto the carved room before it can walk — wait that out
+  let y0 = wd.y;
+  await until(() => { const settled = Math.abs(wd.y - y0) < 0.02; y0 = wd.y; return settled; }, 60);
   const x0 = wd.x;
-  const walked = await until(() => Math.abs(wd.x - x0) > 0.8, 80);
-  return { posted, walked, dx: +(wd.x - x0).toFixed(2), engaged: wd.engaged, scrutiny: +g.threats.scrutiny.toFixed(2) };
+  const walked = await untilSim(() => Math.abs(wd.x - x0) > 0.8, 6);
+  return { posted, engagedDark, lamp: g.lampOn, walked, dx: +(wd.x - x0).toFixed(2) };
 });
-ok('warden walks', wardenGait, wardenGait.posted && wardenGait.walked);
+ok('warden sees a dark pod in the beam', wardenDark, wardenDark.posted && wardenDark.engagedDark && wardenDark.lamp === false);
+ok('warden walks at what it sees', wardenDark, wardenDark.walked);
 await page.screenshot({ path: OUT + '/f-warden.png' });
+// stand down before the next leg: the engaged machine was cooking the pod
+await page.evaluate(() => {
+  const g = window.__game;
+  g.threats.reset();
+  g.state.hull = g.state.maxHull;
+  g.lampOn = true;
+});
 
 // --- nacre + rime persist across a save/load ---
 const persist = await page.evaluate(() => {
@@ -293,7 +336,7 @@ const shell = await page.evaluate(async () => {
   const sb = g.threats.shellbacks;
   const spawned = sb.backs.some(b => b.alive);
   const b = sb.backs.find(b => b.alive);
-  const sealed = await until(() => sb.sealed > 0, 150);
+  const sealed = await until(() => sb.sealed > 0, 400);
   let nacre = 0;
   // the corridor is rows 200..202 — scan all three or a floor-row seal is missed
   for (let x = 10; x < 54; x++) for (let y = 200; y < 203; y++) if (g.terrain.get(x, y) === 25) nacre++;
@@ -338,6 +381,28 @@ const noTrap = await page.evaluate(async () => {
   return { refused, sealedNow };
 });
 ok('shellback never traps', noTrap, noTrap.refused && noTrap.sealedNow);
+
+// --- walled in, it eats its own pearl and crawls out ---
+const selfTrap = await page.evaluate(async () => {
+  const { g, until } = window.__H();
+  const sb = g.threats.shellbacks;
+  const b = sb.backs.find(b => b.alive);
+  if (!b) return { alive: false };
+  // build the trap Grady found in the wild: a 1-tile cell of nacre
+  const cx = Math.floor(b.x), cy = Math.floor(-b.y);
+  b.tx = cx + 0.5; b.ty = -(cy + 0.5); b.idle = 0; b.curlT = 0; b.stagger = 0;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const x = cx + dx, y = cy + dy;
+    if (g.terrain.get(x, y) === 0) g.terrain.fill(x, y, 25); // T.AIR -> T.NACRE
+  }
+  const walled = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => g.terrain.get(cx + dx, cy + dy) !== 0);
+  const escaped = await until(() => {
+    const nx = Math.floor(b.x), ny = Math.floor(-b.y);
+    return b.alive && (nx !== cx || ny !== cy);
+  }, 120);
+  return { alive: true, walled, escaped };
+});
+ok('shellback digs itself out', selfTrap, selfTrap.alive && selfTrap.walled && selfTrap.escaped);
 
 // --- nacre is native when cut ---
 const nacreCut = await page.evaluate(async () => {

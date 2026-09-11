@@ -42,36 +42,50 @@ const sighted = await page.evaluate(async () => {
 console.log('ruin sighted:', JSON.stringify(sighted), sighted.saw ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p3-ruin.png' });
 
-// --- a Warden takes post at the chamber and tracks luminance ---
+// --- a Warden takes post, and the BEAM is the sensor: engagement needs the
+// sweep to cross a lit pod it can actually see (OVERHAUL 3.2) ---
 const warden = await page.evaluate(async () => {
   const g = window.__game;
   const r = g.terrain.ruins[0];
-  // a Warden posts as you APPROACH its hall: wait in a pocket just above it
   g.ctrl.drilling = null;
   const rx = Math.floor(r.x), ry = Math.floor(r.y);
-  for (let y = ry - 9; y < ry - 6; y++) for (let x = rx - 1; x <= rx + 1; x++) g.terrain.carve(x, y);
+  // stand in a carved gallery BESIDE the hall with a clear sight line, and
+  // wait for the sweep to actually pass over the lamp
+  for (let y = ry - 2; y <= ry; y++) for (let x = rx - 9; x <= rx - 1; x++) g.terrain.carve(x, y);
   // the sighting flight may have posted a Warden at some OTHER hall; there is
   // only one of it, so stand that one down before watching this hall
   g.threats.reset();
-  g.ctrl.px = rx + 0.5; g.ctrl.py = -(ry - 7) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
+  g.ctrl.px = rx - 7.5; g.ctrl.py = -(ry - 1) + 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.state.hull = 100000;
   g.lampOn = true;
   g.cam.snap(r.x, -r.y, 15);
-  await new Promise(res => setTimeout(res, 1600));
-  const posted = g.threats.wardens.alive;
-  const engagedLit = g.threats.wardens.engaged;
+  const until = async (fn, n, ms = 100) => { for (let i = 0; i < n; i++) { if (fn()) return true; await new Promise(res => setTimeout(res, ms)); } return fn(); };
+  const posted = await until(() => g.threats.wardens.alive, 40);
+  // sight is real now: carve the ray from ITS lantern to the pod, wherever
+  // this seed actually posted it — a lit pod behind rock does not exist to it
+  if (posted) {
+    const w = g.threats.wardens;
+    const lr = Math.floor(-(w.y + 1.15)), pr = Math.floor(-g.ctrl.py);
+    const x0 = Math.min(Math.floor(w.x), Math.floor(g.ctrl.px));
+    const x1 = Math.max(Math.floor(w.x), Math.floor(g.ctrl.px));
+    for (let y = Math.min(lr, pr) - 1; y <= Math.max(lr, pr); y++)
+      for (let x = x0 - 1; x <= x1 + 1; x++) g.terrain.carve(x, y);
+  }
+  // up to ~two full sweep passes at SwiftShader time
+  const engagedLit = await until(() => g.threats.wardens.engaged, 320);
+  // caught in the narrowing beam, the exposure meter must ramp (the HUD tell)
+  const cooked = await until(() => g.threats.scrutiny > 0.05, 120);
   const diag = {
     dist: +Math.hypot(g.threats.wardens.x - g.ctrl.px, g.threats.wardens.y - g.ctrl.py).toFixed(1),
     lamp: g.lampOn,
   };
   // run dark: it should lose interest and go back to sweeping
   g.lampOn = false;
-  await new Promise(res => setTimeout(res, 1500));
-  const engagedDark = g.threats.wardens.engaged;
-  return { posted, engagedLit, engagedDark, diag, scrutiny: +g.threats.scrutiny.toFixed(2) };
+  const disengaged = await until(() => !g.threats.wardens.engaged, 160);
+  return { posted, engagedLit, cooked, disengaged, diag, scrutiny: +g.threats.scrutiny.toFixed(2) };
 });
 console.log('warden:', JSON.stringify(warden),
-  warden.posted && warden.engagedLit && !warden.engagedDark ? 'OK' : 'FAIL');
+  warden.posted && warden.engagedLit && warden.disengaged ? 'OK' : 'FAIL');
 await page.screenshot({ path: OUT + '/p3-warden.png' });
 
 // --- only demolition hurts a Warden ---
@@ -114,11 +128,15 @@ const glyph = await page.evaluate(async () => {
   const m = window.__parseVault(window.__VAULTS.find(x => x.glyph === stone.id));
   v.px = m.master.x + 0.5; v.py = -(m.master.y + 0.5);
   let done = false;
-  for (let i = 0; i < 80 && !done; i++) { await new Promise(r => setTimeout(r, 100)); done = v.completed; }
+  for (let i = 0; i < 120 && !done; i++) { await new Promise(r => setTimeout(r, 100)); done = v.completed; }
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
   window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
-  await new Promise(r => setTimeout(r, 400));
-  return { undrilled, before, after: g.state.glyphs, mode: g.mode };
+  // the exit closes its own eyes now: the leave choreography plus the fold-out
+  // take real seconds, and the glyph is only granted when the vault hands the
+  // frame back — wait for that, not for a stopwatch
+  let left = false;
+  for (let i = 0; i < 400 && !left; i++) { await new Promise(r => setTimeout(r, 100)); left = g.mode !== 'vault'; }
+  return { undrilled, done, left, before, after: g.state.glyphs, mode: g.mode };
 });
 console.log('glyph vault:', JSON.stringify(glyph),
   glyph.undrilled && glyph.after > glyph.before ? 'OK' : 'FAIL');

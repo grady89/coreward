@@ -30,9 +30,11 @@ const s1 = await page.evaluate(() => {
 });
 console.log('after intro:', JSON.stringify(s1));
 
-// step off the protected landing pad (left, away from dock foundations)
+// step off the protected landing pad (left, away from dock foundations) —
+// walk until actually clear of the plating, not for a stopwatch: on a loaded
+// machine a fixed walk falls short and the dig is then correctly refused
 await page.keyboard.down('ArrowLeft');
-await page.waitForTimeout(1100);
+await page.waitForFunction(() => window.__game.ctrl.px < 11.5, null, { timeout: 20000 }).catch(() => {});
 await page.keyboard.up('ArrowLeft');
 await page.waitForTimeout(600);
 await page.keyboard.down('ArrowDown');

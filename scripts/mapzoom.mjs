@@ -56,7 +56,8 @@ await page.waitForTimeout(700);
 const zOut = await page.evaluate(() => window.__game.map.zoom);
 console.log('zoom out clamps:', zOut, zOut === 0 ? 'OK' : 'FAIL');
 
-// deep array purchase paints ore
+// the scanner alone paints ore now — the Deep Array folded in (OVERHAUL cut
+// list: legibility is never a purchase). The assay office no longer sells it.
 await page.keyboard.press('Tab');
 await page.waitForTimeout(300);
 await page.evaluate(() => {
@@ -68,10 +69,13 @@ await page.waitForTimeout(800);
 await page.keyboard.press('KeyE');
 await page.waitForTimeout(700);
 await page.screenshot({ path: OUT + '/z-assay.png' });
-await page.click('#buy-array');
-await page.waitForTimeout(500);
-const bought = await page.evaluate(() => window.__game.state.hasDeepArray);
-console.log('deep array bought:', bought ? 'OK' : 'FAIL');
+const folded = await page.evaluate(() => ({
+  scanner: window.__game.state.hasScanner,
+  panel: window.__game.panels.current,
+  arraySku: !!document.querySelector('#buy-array'),
+}));
+console.log('ore paint ships with the scanner:', JSON.stringify(folded),
+  folded.scanner && folded.panel === 'assay' && !folded.arraySku ? 'OK' : 'FAIL');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 await page.evaluate(() => {

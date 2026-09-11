@@ -363,6 +363,21 @@ export class AudioEngine {
   click(): void { this.tone(1250, 0.04, 0.05, 'sine'); }
   toast(): void { this.tone(523, 0.3, 0.06); this.tone(784, 0.4, 0.05, 'sine', 80); }
 
+  /**
+   * A plain block comes free — a dry crack pitched by the rock's hardness,
+   * ducked when breaks chain so a fast drill never becomes a drumroll.
+   */
+  private lastBreakAt = -1;
+  rockBreak(hardness: number): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const duck = now - this.lastBreakAt < 0.14 ? 0.4 : 1;
+    this.lastBreakAt = now;
+    const h = Math.min(1, hardness * 0.45);
+    this.noise(0.07 + h * 0.05, 0.07 * duck, 2400 - h * 1400, 300);
+    this.thump(this.jit(120 - h * 45), 0.06 + h * 0.04, 0.055 * duck);
+  }
+
   damage(): void { this.noise(0.18, 0.16, 1600, 200); this.thump(110, 0.14, 0.12); }
   explosion(): void { this.noise(0.9, 0.4, 900, 50); this.thump(55, 0.7, 0.3); }
   landing(impact: number): void {
@@ -570,6 +585,12 @@ export class AudioEngine {
     this.noise(0.14, 0.14 * v, 3000, 400);
     this.glide(520, 180, 0.16, 0.08 * v);
   }
+  /** the beam is finding you: a counter tick that climbs as exposure builds */
+  scrutinyTick(v: number): void {
+    this.tone(760 + v * 980, 0.07, 0.04 + v * 0.05, 'sine');
+    this.tone(1520 + v * 1960, 0.05, 0.02 + v * 0.03, 'sine', 20);
+  }
+
   /** your own pulse, when something unlit walks at you */
   heartbeat(dread: number): void {
     const v = 0.06 + dread * 0.08;

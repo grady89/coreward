@@ -20,6 +20,8 @@ const MAX_SWARMS = 2;
 const NOTICE_RANGE = 8.5;
 const LOSE_RANGE = 15;
 const DARK_CALM = 1.7;
+const FLARE_PULL = NOTICE_RANGE * 2;  // a flare only exists within ~2× notice
+const SCATTER = 2;  // seconds a lanced fly tumbles dark
 const BAND_LO = 90;
 const BAND_HI = 470;
 
@@ -28,6 +30,7 @@ interface Fly {
   vx: number; vy: number;
   phase: number;
   glint: number;      // seconds of wing-flash left
+  stunT: number;      // seconds of lance-daze left — flung, dim, harmless
   swarm: number;
 }
 
@@ -38,6 +41,7 @@ interface Swarm {
   darkFor: number;
   life: number;
   lash: number;       // the collapse-and-burst on first alert
+  dazedT: number;     // lanced: the swarm cannot re-notice anything for a beat
   woke: boolean;      // the alert toast/stinger fires once per swarm, not per re-notice
 }
 
@@ -66,7 +70,7 @@ export class Glimmerflies implements Creature {
     this.glow = new THREE.PointLight(0xffe08a, 0, 9, 1.8);
     scene.add(this.glow);
     for (let i = 0; i < MAX_SWARMS; i++) {
-      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, woke: false });
+      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, dazedT: 0, woke: false });
     }
   }
 
@@ -93,7 +97,7 @@ export class Glimmerflies implements Creature {
       const s = this.swarms[slot];
       s.alive = true;
       s.ax = x + 0.5; s.ay = -(y + 0.5);
-      s.alerted = false; s.darkFor = 0; s.life = 0; s.lash = 0; s.woke = false;
+      s.alerted = false; s.darkFor = 0; s.life = 0; s.lash = 0; s.dazedT = 0; s.woke = false;
       const n = SWARM_MIN + Math.floor(Math.random() * (SWARM_MAX - SWARM_MIN + 1));
       const want = level === 'reduced' ? Math.ceil(n / 2) : n;
       for (let i = 0; i < want && this.flies.length < MAX_FLIES; i++) {
@@ -101,7 +105,7 @@ export class Glimmerflies implements Creature {
         const r = 1 + Math.random() * 1.2;
         this.flies.push({
           x: s.ax + Math.cos(a) * r, y: s.ay + Math.sin(a) * r,
-          vx: 0, vy: 0, phase: Math.random() * Math.PI * 2, glint: 0, swarm: slot,
+          vx: 0, vy: 0, phase: Math.random() * Math.PI * 2, glint: 0, stunT: 0, swarm: slot,
         });
       }
       return;
@@ -129,11 +133,35 @@ export class Glimmerflies implements Creature {
     }
   }
 
+  // The lance is light, not a gun: everything else it does is a light verb
+  // (stun, blind, stagger, pop), so here it SCATTERS. Flies in the corridor
+  // are flung off the beam line and tumble dark for a couple of seconds; the
+  // swarm loses you outright and re-anchors away from the shot. Nothing dies.
   lance(x: number, y: number, dir: number, range: number): void {
-    for (let i = this.flies.length - 1; i >= 0; i--) {
-      const f = this.flies[i];
-      const dx = (f.x - x) * dir;
-      if (dx > -0.5 && dx < range && Math.abs(f.y - y) < 1.3) this.flies.splice(i, 1);
+    for (let si = 0; si < this.swarms.length; si++) {
+      const s = this.swarms[si];
+      if (!s.alive) continue;
+      let hit = 0;
+      for (const f of this.flies) {
+        if (f.swarm !== si) continue;
+        const dx = (f.x - x) * dir;
+        if (dx <= -0.5 || dx >= range || Math.abs(f.y - y) > 1.3) continue;
+        const side = f.y >= y ? 1 : -1;
+        f.vx = dir * (3 + Math.random() * 4);
+        f.vy = side * (9 + Math.random() * 5);
+        f.stunT = SCATTER;
+        f.glint = 0;
+        hit++;
+      }
+      if (!hit) continue;
+      s.alerted = false; s.lash = 0; s.darkFor = 0; s.dazedT = SCATTER;
+      // the swarm's home shifts away from whoever fired — several tiles,
+      // to the first breathable spot
+      const away = Math.sign(s.ax - x) || dir;
+      for (let step = 5; step >= 2; step--) {
+        const nx = s.ax + away * step;
+        if (air(this.terrain, Math.floor(nx), Math.floor(-s.ay))) { s.ax = nx; break; }
+      }
     }
   }
 
@@ -156,7 +184,6 @@ export class Glimmerflies implements Creature {
   update(ctx: ThreatCtx, level: ThreatLevel): void {
     const { dt, podX, podY, lampOn } = ctx;
     const row = Math.floor(-podY);
-    const flare = this.flares.brightest();
 
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
@@ -173,9 +200,13 @@ export class Glimmerflies implements Creature {
       if (!s.alive) continue;
       s.life += dt;
       s.lash = Math.max(0, s.lash - dt);
+      s.dazedT = Math.max(0, s.dazedT - dt);
       const dist = Math.hypot(podX - s.ax, podY - s.ay);
+      // a flare only exists to a swarm within FLARE_PULL of it — one burning
+      // across the map is no longer a universal off-switch
+      const flare = this.flares.brightest(s.ax, s.ay, FLARE_PULL);
       const flareNear = flare ? Math.hypot(flare.x - s.ax, flare.y - s.ay) < NOTICE_RANGE * 1.6 : false;
-      if ((lampOn && dist < NOTICE_RANGE) || flareNear) {
+      if (s.dazedT <= 0 && ((lampOn && dist < NOTICE_RANGE) || flareNear)) {
         if (!s.alerted) {
           s.alerted = true; s.lash = 0.9;
           // toast + stinger once per swarm — lamp-flicking must not machine-gun it
@@ -207,53 +238,62 @@ export class Glimmerflies implements Creature {
       if (!s || !s.alive) continue;
       f.phase += dt * 2.6;
       f.glint = Math.max(0, f.glint - dt);
+      f.stunT = Math.max(0, f.stunT - dt);
       if (f.glint <= 0 && Math.random() < dt * 0.35) f.glint = 0.12;
 
-      let tx: number, ty: number, speed: number;
-      if (s.alerted) {
-        tx = flare ? flare.x : podX; ty = flare ? flare.y : podY;
-        speed = 3.95;
-        if (s.lash > 0.5) {
-          // the collapse: for the first half second every fly dives for the anchor
-          tx = s.ax; ty = s.ay; speed = 5.4;
-        }
+      if (f.stunT > 0) {
+        // lanced: flung off the beam line and dazed — no seeking, no
+        // flocking, no speed cap; just the impulse bleeding off
+        f.vx *= 1 - Math.min(1, dt * 2.2);
+        f.vy *= 1 - Math.min(1, dt * 2.2);
       } else {
-        // resting ring: a slow orbit of the anchor, each on its own radius
-        const r = 1.1 + (i % 5) * 0.22;
-        const a = f.phase * 0.45 + i * 1.3;
-        tx = s.ax + Math.cos(a) * r; ty = s.ay + Math.sin(a) * r;
-        speed = 1.2;
-      }
-      let ax = tx - f.x, ay = ty - f.y;
-      const d = Math.hypot(ax, ay) || 1;
-      ax = ax / d * speed * 4; ay = ay / d * speed * 4;
+        let tx: number, ty: number, speed: number;
+        if (s.alerted) {
+          const flare = this.flares.brightest(s.ax, s.ay, FLARE_PULL);
+          tx = flare ? flare.x : podX; ty = flare ? flare.y : podY;
+          speed = 3.95;
+          if (s.lash > 0.5) {
+            // the collapse: for the first half second every fly dives for the anchor
+            tx = s.ax; ty = s.ay; speed = 5.4;
+          }
+        } else {
+          // resting ring: a slow orbit of the anchor, each on its own radius
+          const r = 1.1 + (i % 5) * 0.22;
+          const a = f.phase * 0.45 + i * 1.3;
+          tx = s.ax + Math.cos(a) * r; ty = s.ay + Math.sin(a) * r;
+          speed = 1.2;
+        }
+        let ax = tx - f.x, ay = ty - f.y;
+        const d = Math.hypot(ax, ay) || 1;
+        ax = ax / d * speed * 4; ay = ay / d * speed * 4;
 
-      // separation + alignment against neighbours in the same swarm
-      let sx = 0, sy = 0, alx = 0, aly = 0, nb = 0;
-      for (let j = 0; j < flies.length; j++) {
-        if (j === i) continue;
-        const o = flies[j];
-        if (o.swarm !== f.swarm) continue;
-        const ox = f.x - o.x, oy = f.y - o.y;
-        const od = ox * ox + oy * oy;
-        if (od < 0.36) { const inv = 1 / (Math.sqrt(od) + 0.05); sx += ox * inv; sy += oy * inv; }
-        if (od < 4) { alx += o.vx; aly += o.vy; nb++; }
-      }
-      ax += sx * 9; ay += sy * 9;
-      if (nb > 0) { ax += (alx / nb - f.vx) * 2; ay += (aly / nb - f.vy) * 2; }
-      // a little sideways wander so no two paths match
-      ax += Math.cos(f.phase * 1.7 + i) * 1.6; ay += Math.sin(f.phase * 2.3 + i) * 1.6;
+        // separation + alignment against neighbours in the same swarm
+        let sx = 0, sy = 0, alx = 0, aly = 0, nb = 0;
+        for (let j = 0; j < flies.length; j++) {
+          if (j === i) continue;
+          const o = flies[j];
+          if (o.swarm !== f.swarm) continue;
+          const ox = f.x - o.x, oy = f.y - o.y;
+          const od = ox * ox + oy * oy;
+          if (od < 0.36) { const inv = 1 / (Math.sqrt(od) + 0.05); sx += ox * inv; sy += oy * inv; }
+          if (od < 4) { alx += o.vx; aly += o.vy; nb++; }
+        }
+        ax += sx * 9; ay += sy * 9;
+        if (nb > 0) { ax += (alx / nb - f.vx) * 2; ay += (aly / nb - f.vy) * 2; }
+        // a little sideways wander so no two paths match
+        ax += Math.cos(f.phase * 1.7 + i) * 1.6; ay += Math.sin(f.phase * 2.3 + i) * 1.6;
 
-      f.vx += ax * dt; f.vy += ay * dt;
-      const sp = Math.hypot(f.vx, f.vy);
-      const cap = s.alerted ? 5.85 : 1.8;
-      if (sp > cap) { f.vx *= cap / sp; f.vy *= cap / sp; }
+        f.vx += ax * dt; f.vy += ay * dt;
+        const sp = Math.hypot(f.vx, f.vy);
+        const cap = s.alerted ? 5.85 : 1.8;
+        if (sp > cap) { f.vx *= cap / sp; f.vy *= cap / sp; }
+      }
       const nx = f.x + f.vx * dt, ny = f.y + f.vy * dt;
       if (!this.terrain.solidAt(Math.floor(nx), Math.floor(-ny))) { f.x = nx; f.y = ny; }
       else { f.vx *= -0.4; f.vy *= -0.4; }
 
       const pd = Math.hypot(podX - f.x, podY - f.y);
-      if (pd < 0.62) {
+      if (pd < 0.62 && f.stunT <= 0) {
         ctx.hurt(2.6 * dmgMul * dt, 'glimmerflies');
         ctx.drain(0.5 * dmgMul * dt);
       }
@@ -266,7 +306,7 @@ export class Glimmerflies implements Creature {
       tmpS.set(1, flap, 1);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.mesh.setMatrixAt(n, tmpM);
-      const bright = s.alerted ? 1.25 : (f.glint > 0 ? 1.1 : 0.32);
+      const bright = f.stunT > 0 ? 0.14 : s.alerted ? 1.25 : (f.glint > 0 ? 1.1 : 0.32);
       tmpC.setHex(s.alerted ? ACTIVE.swarm.hunting : ACTIVE.swarm.color).multiplyScalar(bright);
       this.mesh.setColorAt(n, tmpC);
       n++;

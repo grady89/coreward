@@ -71,7 +71,7 @@ export class SurveyMap {
   /** cheap redraw of the visible window, throttled while open */
   refresh(
     terrain: Terrain, px: number, py: number, time: number,
-    revealRow: number, deepArray: boolean,
+    revealRow: number, paintOre: boolean,
     arrestors: { x: number; y: number }[] = [],
     wrecks: { x: number; y: number }[] = [],
     spill: { x: number; y: number } | null = null,
@@ -109,8 +109,8 @@ export class SurveyMap {
       for (let x = 0; x < WORLD_W; x++) {
         const t = terrain.get(x, y);
         const d = def(t);
-        if (deepArray && d.ore && t !== T.FUNGUS) {
-          g.fillStyle = css(d.gem, 1);      // the Deep Array reads value, not just voids
+        if (paintOre && d.ore && t !== T.FUNGUS) {
+          g.fillStyle = css(d.gem, 1);      // the scanner reads value, not just voids
         } else {
           g.fillStyle =
             t === T.AIR ? air :

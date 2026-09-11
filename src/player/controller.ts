@@ -92,7 +92,14 @@ export class PodController {
 
   get row(): number { return Math.floor(-this.py); }
   get depthM(): number { return Math.max(0, Math.round(-(this.py - HH) * TILE_M)); }
-  get drillDir(): DrillDir { return this.drilling?.dir ?? 'down'; }
+  /**
+   * The aim is the INTENT, not the active cut: between two bites of a side
+   * seam the cut is momentarily null, and an aim that snapped back to 'down'
+   * made the whole drill flicker down-side-down for as long as you mined
+   * sideways. The arm points where it last worked until told otherwise.
+   */
+  private lastDrillDir: DrillDir = 'down';
+  get drillDir(): DrillDir { return this.drilling?.dir ?? this.lastDrillDir; }
 
   /** always lands ON the pad — its plating can't be dug out from under you */
   respawnAtSurface(): void {
@@ -137,12 +144,16 @@ export class PodController {
     // a fragment in the hold: the pod runs hot and heavy
     const carryT = st.carrying ? CARRY_THRUST_MUL : 1;
     const carryF = st.carrying ? CARRY_FUEL_MUL : 1;
+    // THRUSTERS finally buy the climb (OVERHAUL 4.1): the lift cap rises with
+    // the engine (~14 → ~22 at tier 5) and a tuned engine sips on the way up
+    const riseCap = MAX_RISE * (1 + (st.thrustMul - 1) * 0.32);
+    const thrustEff = 1 - st.upgrades.engine * 0.06;
     const hasFuel = st.fuel > 0;
     this.thrust = 0; this.sideThrust = 0;
     if (input.up && hasFuel) {
       this.vy += 52 * st.thrustMul * carryT * dt;
       this.thrust = 1;
-      st.fuel = Math.max(0, st.fuel - FUEL_THRUST * carryF * dt);
+      st.fuel = Math.max(0, st.fuel - FUEL_THRUST * thrustEff * carryF * dt);
     }
     if (input.left && hasFuel) {
       this.vx -= 30 * st.thrustMul * carryT * dt;
@@ -161,11 +172,14 @@ export class PodController {
     }
     st.fuel = Math.max(0, st.fuel - FUEL_IDLE * carryF * dt);
     this.dashCd = Math.max(0, this.dashCd - dt);
+    // the sticky aim is a GROUNDED memory: airborne with no cut, the arm
+    // goes home to down — flying a shaft with the bit in the wall reads wrong
+    if (!this.grounded && !this.drilling) this.lastDrillDir = 'down';
     this.coreBalk(dt, input, time);
 
     // ---- integrate + collide ----
     this.vy -= GRAVITY * dt;
-    this.vy = Math.max(-MAX_FALL, Math.min(MAX_RISE, this.vy));
+    this.vy = Math.max(-MAX_FALL, Math.min(riseCap, this.vy));
     this.vx = Math.max(-MAX_SIDE * st.thrustMul, Math.min(MAX_SIDE * st.thrustMul, this.vx));
 
     // sub-step so fast falls can never cross a whole tile in one integration
@@ -348,6 +362,7 @@ export class PodController {
     if (this.state.fuel <= 0) return;
     const hardness = t === T.BOULDER ? d.hardness * (1 + y / 240) : d.hardness;
     this.drilling = { x, y, dir, progress: 0, hardness };
+    this.lastDrillDir = dir;
     this.vx = 0; this.vy = 0;
   }
 
@@ -543,6 +558,21 @@ export class PodController {
       // resting check
       const r = Math.floor(-(this.py - HH - 0.04));
       for (let c = left; c <= right; c++) {
+        if (this.terrain.blockedAt(c, r)) { this.grounded = true; break; }
+      }
+    }
+
+    // Standing is a fact about SUPPORT, not about this frame's travel. The
+    // resting snap parks the pod EPS above the floor, and above ~145 fps the
+    // per-frame fall (21·dt²) is smaller than EPS — so the downward path
+    // misses the floor for a frame or two and the flag flickered false,
+    // starving everything that reads it (ice traction, the side-drill
+    // gesture, the drill stow). A slow pod with rock within 0.04 of its
+    // skids is standing, whatever the integrator says this frame. The speed
+    // gate keeps a real fall from ever borrowing a free grounded frame.
+    if (!this.grounded && this.vy <= 0 && this.vy > -1.2) {
+      const r = Math.floor(-(this.py - HH - 0.04));
+      for (let c = Math.floor(this.px - HW + EPS); c <= Math.floor(this.px + HW - EPS); c++) {
         if (this.terrain.blockedAt(c, r)) { this.grounded = true; break; }
       }
     }

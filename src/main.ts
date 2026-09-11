@@ -40,6 +40,7 @@ import {
   pick as pickNarrative, WorldStats, HUSK_READABLES, ENDING_PAGES, EndingKind,
   ADHOC_TRANSMISSIONS,
 } from './game/narrative';
+import { DISPATCH_VOICED, dispatchVoiceUrl } from './audio/voice-manifest';
 import { Panels, createTitle, CONTROLS_HINT } from './ui/panels';
 import { Starmap } from './ui/starmap';
 import { AudioEngine } from './audio/audio';
@@ -61,8 +62,26 @@ type Mode = 'title' | 'intro' | 'play' | 'eva' | 'starmap' | 'vault' | 'interior
 /** right stick, pixels a second: a menu scrolls about a panel-height per push */
 const MENU_SCROLL = 1100;
 
-/** visible point-light counts are padded to a multiple of this — see cullLights() */
-const LIGHT_STEP = 4;
+/**
+ * The visible light count is held at a CONSTANT, not padded to a step.
+ *
+ * three.js keys a shader program on the light counts it renders with, so any
+ * count the renderer has not seen costs a compile — ~5 programs, ~50ms — the
+ * instant it first appears. Stepping (the old `ceil(n/4)*4`) still crossed a
+ * boundary every time the surface practicals culled out beneath a descending
+ * pod: the deep-shaft hitch, one stall per boundary, on the player's first
+ * dive of every session. Warming the boundaries at boot cannot fix it either,
+ * because `renderer.compile` can only warm materials already in view, and the
+ * deep bands' gems and creatures are not.
+ *
+ * So the count never changes at all. Fillers (black, zero-intensity, parked
+ * far away) top the scene up to exactly this many, and the census that set it
+ * is real: 13 point lights and 2 spots is the busiest the game ever gets.
+ * A scene that somehow exceeds the ceiling drops its farthest lights rather
+ * than growing the count.
+ */
+const FIXED_PTS = 16;
+const FIXED_SPOTS = 2;
 
 /** one discrete request from the player, whichever device made it */
 type Action =
@@ -131,6 +150,11 @@ class Game {
   private charges: { x: number; y: number; fuse: number }[] = [];
   private rumbleAcc = 0;
   private dreadAcc = 0;
+  private scrutinyAcc = 0;
+  /** frame-spike ring for real-hardware hitch attribution (dev-readable) */
+  spikes: { at: number; ms: number; built: number; row: number; vy: number; panel: string | null; focus: boolean; progNew: number; heapMB: number; heapD: number }[] = [];
+  private prevProgs = 0;
+  private prevHeap = 0;
   private faunaSfxAt = new Map<string, number>();
   private looted = new Set<number>();
   /** the one-minute warning only fires once per claim */
@@ -166,6 +190,8 @@ class Game {
    * a fifth of a tile — the ship stands ON the deck, eased both ways.
    */
   private podLift = 0;
+  /** keeps the garage stage's idle animation alive while the world is frozen */
+  private stageClock = 0;
   /**
    * THE FOLD (SPEC-FOLD.md): the threshold sequence between the surface and
    * a vault. While set, the pilot is latched still and the camera is the
@@ -224,7 +250,9 @@ class Game {
     this.cam.reducedMotion = this.reducedMotion;
 
     // load the save FIRST so the active world shapes the whole scene
-    const hadSave = this.state.load();
+    // the last-played slot paints the title backdrop; the menu can still
+    // continue any other slot, swapping the world in at that moment
+    this.state.load();
     setActiveWorld(this.state.activeWorld, this.state.extracted.has(this.state.activeWorld));
 
     this.ui = document.getElementById('ui')!;
@@ -233,12 +261,26 @@ class Game {
     this.comms = new Comms(ui);
     this.comms.reducedMotion = this.reducedMotion;
     this.comms.setBlip(() => this.audio.radio());
+    // the dispatcher's recorded lines speak on the strip as they type
+    // (DISPATCH.md: per-line files wire straight in); a decode failure on
+    // any one clip degrades to silent text, never to a stuck strip
+    this.comms.setVoice(
+      url => this.audio.playVoice([url], 'dispatch').catch(() => {}),
+      () => this.audio.stopVoice(),
+    );
     this.map = new SurveyMap(ui);
     this.panels = new Panels(ui, {
       state: this.state,
       meta: this.meta,
       audio: this.audio,
       onKeepingChanged: () => this.applyKeeping(),
+      onUpgradePurchased: () => {
+        // the machine changes while you watch: refit, spark, a thud of weight
+        this.pod.refit(this.state.upgrades);
+        this.particles.oreBurst(this.ctrl.px, this.ctrl.py + this.podLift + 0.3, 0xffd9a0);
+        this.cam.addShake(0.14);
+        this.pad.rumble(0.4, 0.25, 160);
+      },
       settings: this.settings,
       onSettingsChanged: () => this.applySettings(),
       saveNow: () => this.saveNow(),
@@ -266,15 +308,20 @@ class Game {
         this.endingSnapshot = null;
         this.startNew();
       },
+      onSecondDescent: () => {
+        this.pendingEnding = null;
+        this.endingSnapshot = null;
+        this.startDescent();
+      },
       onQuitToTitle: () => this.quitToTitle(),
       onOpenStarmap: () => this.openStarmap(),
     });
 
     this.setupWorld();
 
-    this.title = createTitle(ui, hadSave, {
-      onNew: () => this.startNew(),
-      onContinue: () => this.startContinue(),
+    this.title = createTitle(ui, {
+      onNew: slot => this.startNew(slot),
+      onContinue: slot => this.startContinue(slot),
       onHover: () => { if (this.audio.ready) this.audio.click(); },
     });
 
@@ -848,17 +895,22 @@ class Game {
   private prewarm(): void {
     this.chunks.update(Math.max(0, this.ctrl.row), this.time);
     this.cullLights(); // settle the cull + ballast state before compiling
+    // EVERY padded light count the cull can ever settle on gets its shader
+    // combo paid for here, behind the cover. Descending, the surface's
+    // practicals cull out and the padded count steps DOWN boundary by
+    // boundary — each count the renderer had never seen compiled ~5 fresh
+    // programs mid-fall, a ~50ms stall per boundary on real hardware (the
+    // deep-shaft hitch's second face; chunk builds were the first). The
+    // walk mirrors cullLights' own (hidden subtrees stay uncounted), and
+    // the culler gets its .visible authority back at the end.
+    // One combo is all there is now — the count is invariant (FIXED_PTS), so
+    // a single compile behind the cover serves every depth for the session.
     this.renderer.compile(this.scene, this.cam.camera);
-    // creatures waking after arrival push the padded light count one boundary
-    // up — pay for that shader combo now too, while the cover is still down
-    const k = this.fillerPts.filter(f => f.visible).length;
-    this.fillerPts.forEach((f, i) => { f.visible = i < k + LIGHT_STEP; });
-    this.renderer.compile(this.scene, this.cam.camera);
-    this.fillerPts.forEach((f, i) => { f.visible = i < k; });
   }
 
   /** wear what the meta store says: pod coat, suit coat, and the room */
   private applyKeeping(): void {
+    this.pod?.refit(this.state.upgrades);
     this.pod?.applyFinish(rigFinish(this.meta.finishRig), flameStyle(this.meta.flame), lampTint(this.meta.lampTint));
     this.pilot?.setLampColor(lampTint(this.meta.lampTint).color);
     applySuitFinish(suitFinish(this.meta.finishSuit));
@@ -895,18 +947,21 @@ class Game {
     // negligible falloff — they exist only to hold the shader light count
     // still. Two steps' worth, so prewarm() can present the next boundary up.
     this.fillerPts = []; this.fillerSpots = [];
-    for (let i = 0; i < LIGHT_STEP * 2 - 1; i++) {
+    // enough to hold the ceiling even when the scene offers nothing at all
+    for (let i = 0; i < FIXED_PTS; i++) {
       const l = new THREE.PointLight(0x000000, 0, 0.001, 2);
       l.visible = false; l.userData.filler = true;
       l.position.set(0, 1000, 0);
       this.fillerPts.push(l);
       this.scene.add(l);
     }
-    const s = new THREE.SpotLight(0x000000, 0, 0.001, 0.1, 1, 2);
-    s.visible = false; s.userData.filler = true;
-    s.position.set(0, 1000, 0);
-    this.fillerSpots = [s];
-    this.scene.add(s);
+    for (let i = 0; i < FIXED_SPOTS; i++) {
+      const s = new THREE.SpotLight(0x000000, 0, 0.001, 0.1, 1, 2);
+      s.visible = false; s.userData.filler = true;
+      s.position.set(0, 1000, 0);
+      this.fillerSpots.push(s);
+      this.scene.add(s);
+    }
   }
 
   private events() {
@@ -918,16 +973,20 @@ class Game {
           this.audio.cargoFull();
         } else {
           const color = '#' + def(t).gem.toString(16).padStart(6, '0');
-          this.hud.popup('+' + fmtMoney(value), color, this.screen.sx, this.screen.sy);
+          this.hud.popupArc('+' + fmtMoney(value), color, this.screen.sx, this.screen.sy);
           this.audio.chime(def(t).oreTier);
         }
       },
       onBlockBroken: (t: T, x: number, y: number) => {
         const wx = x + 0.5, wy = -(y + 0.5);
         this.particles.blockBreak(wx, wy, rockColor(t, x, y));
+        this.audio.rockBreak(def(t).hardness);
         if (def(t).ore) {
           this.particles.oreBurst(wx, wy, def(t).gem);
           if (!this.reducedMotion && this.settings.hitstop) this.hitstop = 0.035;
+        } else if (!this.reducedMotion && this.settings.hitstop) {
+          // a plain bite lands too — shorter, scaled by the rock (DIRECTION §5)
+          this.hitstop = Math.max(this.hitstop, 0.006 + Math.min(0.014, def(t).hardness * 0.008));
         }
         this.cam.addShake(0.1);
       },
@@ -1064,9 +1123,10 @@ class Game {
   }
 
   // ---------- flow ----------
-  private startNew(): void {
+  private startNew(slot = GameState.activeSlot()): void {
     this.audio.init();
     this.audio.click();
+    GameState.setActiveSlot(slot);
     GameState.wipe();
     this.state.reset();
     this.setupWorld();
@@ -1081,9 +1141,33 @@ class Game {
     this.mode = 'intro';
   }
 
-  private startContinue(): void {
+  /** NG+, in the same slot: the run ends, the knowledge stays, the prices climb */
+  private startDescent(): void {
     this.audio.init();
     this.audio.click();
+    GameState.wipe();
+    this.state.beginDescent();
+    this.setupWorld();
+    this.title?.hide();
+    this.title = null;
+    this.ctrl.px = SPAWN_X;
+    this.ctrl.py = 3.2;
+    this.ctrl.vx = 0; this.ctrl.vy = 0;
+    this.introT = 0;
+    this.mode = 'intro';
+  }
+
+  private startContinue(slot = GameState.activeSlot()): void {
+    this.audio.init();
+    this.audio.click();
+    // the backdrop world is the last-played slot's; continuing any other
+    // slot swaps state and world in whole before the camera lands
+    if (slot !== GameState.activeSlot()) {
+      GameState.setActiveSlot(slot);
+      this.state.reset();
+      this.state.load();
+      this.setupWorld();
+    }
     this.title?.hide();
     this.title = null;
     this.cam.snap(this.ctrl.px, this.ctrl.py + 1.8, 14);
@@ -1274,9 +1358,9 @@ class Game {
     if (this.mode === 'eva') this.pilot.hide();
     this.mode = 'title';
     this.title?.hide();
-    this.title = createTitle(this.ui, true, {
-      onNew: () => this.startNew(),
-      onContinue: () => this.startContinue(),
+    this.title = createTitle(this.ui, {
+      onNew: slot => this.startNew(slot),
+      onContinue: slot => this.startContinue(slot),
       onHover: () => { if (this.audio.ready) this.audio.click(); },
     });
   }
@@ -1993,6 +2077,30 @@ class Game {
     // always drain the clock, or the first frame after unpausing gets a
     // delta the size of however long the panel was open
     const raw = this.clock.getDelta();
+    // frame-spike tracer: on a high-refresh display a 30ms frame already
+    // reads as a hitch (3-4 dropped frames), so the bar sits low — and each
+    // entry carries enough context to tell a real stall from devtools noise.
+    // Read `__game.spikes` after; `focus:false` rows are the console's own.
+    if (this.mode === 'play') {
+      // catch the two remaining suspects in the act: a shader compile shows
+      // as the renderer's program count stepping up across the stall, and a
+      // GC shows as the JS heap dropping across it
+      const progs = this.renderer.info.programs?.length ?? 0;
+      const heap = ((performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0) / 1048576;
+      if (raw > 0.03 && this.spikes.length < 400) {
+        this.spikes.push({
+          at: +this.time.toFixed(1), ms: Math.round(raw * 1000),
+          built: this.chunks?.builtLastFrame ?? 0,
+          row: this.ctrl?.row ?? 0, vy: +(this.ctrl?.vy ?? 0).toFixed(1),
+          panel: this.panels?.current ?? null,
+          focus: document.hasFocus(),
+          progNew: progs - this.prevProgs,
+          heapMB: +heap.toFixed(1), heapD: +(heap - this.prevHeap).toFixed(1),
+        });
+      }
+      this.prevProgs = progs;
+      this.prevHeap = heap;
+    }
 
     // the pad is polled, not pushed — before anything reads an Input
     this.padFrame(Math.min(0.05, raw));
@@ -2024,6 +2132,20 @@ class Game {
     // but ore kept spinning, dust kept falling and Dispatch kept talking —
     // which reads as "not paused" no matter what the simulation is doing.
     if (this.panels.isOpen && this.mode !== 'title') {
+      // the garage is a stage, not a freeze-frame: the camera eases onto the
+      // parked pod, and the pod keeps idling so a purchase lands in view
+      if (this.panels.current === 'garage' && this.mode === 'play') {
+        const raw2 = Math.min(0.05, raw);
+        this.stageClock += raw2;
+        this.cam.dockPose(raw2, this.ctrl.px, this.ctrl.py + this.podLift);
+        this.pod.update(raw2, {
+          vx: 0, thrust: 0, sideThrust: 0, drilling: false, drillDir: 'down',
+          depthRow: this.ctrl.row, time: this.time + this.stageClock, lampOn: this.lampOn,
+          heatFrac: this.ctrl.heatFrac,
+          cargoFrac: this.state.cargoCap > 0 ? this.state.cargoCount / this.state.cargoCap : 0,
+        });
+        this.particles.update(raw2);
+      }
       this.renderer.render(this.scene, this.cam.camera);
       return;
     }
@@ -2057,7 +2179,7 @@ class Game {
       this.cam.titlePose(this.time, this.reducedMotion ? 0 : this.mouseX, this.reducedMotion ? 0 : this.mouseY);
       const bob = Math.sin(this.time * 1.7) * 0.12;
       this.pod.setPos(SPAWN_X, 1.3 + bob);
-      this.pod.update(dt, { vx: 0, thrust: 0.35, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: 0, time: this.time });
+      this.pod.update(dt, { vx: 0, thrust: 0.35, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: 0, time: this.time, stow: true });
       this.chunks.update(0, this.time);
       this.atmosphere.update(-4);
     } else if (this.mode === 'intro') {
@@ -2073,6 +2195,15 @@ class Game {
         this.hud.show();
         this.hud.setConsumables(this.state.flares, this.state.charges);
         this.hud.toast('WELCOME BACK, DRILLER', 'stratum');
+        // NG+: dispatch has read your file, and says so — once per descent
+        if (this.state.descent > 0 && !this.state.firedEvents.has('descent-greeting')) {
+          this.state.firedEvents.add('descent-greeting');
+          this.comms.say([
+            'Dispatch here. The board cleared a repeat expedition — same forty on the ledger.',
+            'One revision: the company read your file, and the rates read it too. Everything costs more this time down.',
+            'You know the way. That is the asset. That is also the problem.',
+          ]);
+        }
       }
     } else if (this.mode === 'eva') {
       this.evaFrame(dt);
@@ -2134,37 +2265,56 @@ class Game {
    */
   private cullLights(): void {
     const cx = this.cam.camera.position.x, cy = this.cam.camera.position.y;
-    let pts = 0, spots = 0;
+    const livePts = this.cullPts;
+    const liveSpots = this.cullSpots;
+    livePts.length = 0; liveSpots.length = 0;
     const walk = (o: THREE.Object3D): void => {
       const l = o as THREE.PointLight;
       const isPt = l.isPointLight === true;
       const isSpot = (l as unknown as THREE.SpotLight).isSpotLight === true;
       if (isPt || isSpot) {
         if (l.userData.filler) return;
+        let d2 = 0;
         // unbounded lights are someone's deliberate sun — never culled
         if (l.distance) {
           l.getWorldPosition(this.lightPos);
           const reach = l.distance + 24; // pad: half a zoomed-out view, generously
           const dx = this.lightPos.x - cx, dy = this.lightPos.y - cy;
-          if (l.intensity === 0 || dx * dx + dy * dy > reach * reach) {
+          d2 = dx * dx + dy * dy;
+          if (l.intensity === 0 || d2 > reach * reach) {
             if (l.visible) { l.visible = false; l.userData.culled = true; }
           } else if (l.userData.culled) {
             l.visible = true;
             l.userData.culled = false;
           }
         }
-        if (l.visible) { if (isPt) pts++; else spots++; }
+        if (l.visible) (isPt ? livePts : liveSpots).push({ l, d2 });
         return;
       }
       if (!o.visible) return; // the renderer skips hidden subtrees, so do we
       for (const c of o.children) walk(c);
     };
     walk(this.scene);
-    const wantPts = Math.ceil(pts / LIGHT_STEP) * LIGHT_STEP;
-    this.fillerPts.forEach((f, i) => { f.visible = i < wantPts - pts; });
-    const wantSpots = Math.ceil(spots / 2) * 2;
-    this.fillerSpots.forEach((f, i) => { f.visible = i < wantSpots - spots; });
+
+    // hold the count EXACTLY constant (see FIXED_PTS): anything past the
+    // ceiling gives up its slot, farthest first, so the shader's light loop
+    // is the same length at the surface and at the core.
+    const trim = (live: { l: THREE.Light; d2: number }[], cap: number): number => {
+      if (live.length <= cap) return live.length;
+      live.sort((a, b) => a.d2 - b.d2);
+      for (let i = cap; i < live.length; i++) {
+        live[i].l.visible = false;
+        live[i].l.userData.culled = true;
+      }
+      return cap;
+    };
+    const pts = trim(livePts, FIXED_PTS);
+    const spots = trim(liveSpots, FIXED_SPOTS);
+    this.fillerPts.forEach((f, i) => { f.visible = i < FIXED_PTS - pts; });
+    this.fillerSpots.forEach((f, i) => { f.visible = i < FIXED_SPOTS - spots; });
   }
+  private cullPts: { l: THREE.Light; d2: number }[] = [];
+  private cullSpots: { l: THREE.Light; d2: number }[] = [];
   private lightPos = new THREE.Vector3();
   private fillerPts: THREE.PointLight[] = [];
   private fillerSpots: THREE.SpotLight[] = [];
@@ -2236,13 +2386,19 @@ class Game {
       const px = this.ctrl.px;
       // surface band only: down a shaft py runs negative, and a dock's
       // columns must never read as a deck under the world
+      // lift only while actually OVER the slab — the old ±0.3 overhang let
+      // the rig step up at a deck's edge with nothing under the skids.
+      // The plates are FLUSH (0.04 tall, backdrop.ts) — the old 0.2 lift
+      // hovered the rig five plate-heights up, which the always-out drill
+      // used to hide; a stowed rig exposed it.
       const onPad = this.ctrl.py > -0.5 && this.ctrl.py < 2.2 && (
         (px > PAD_X0 - 0.3 && px < PAD_X1 + 1.3) ||
-        DOCKS.some(d => px > d.x0 - 0.3 && px < d.x1 + 0.3));
-      this.podLift += ((onPad ? 0.2 : 0) - this.podLift) * Math.min(1, dt * 7);
+        DOCKS.some(d => px > d.x0 + 0.05 && px < d.x1 - 0.05));
+      this.podLift += ((onPad ? 0.05 : 0) - this.podLift) * Math.min(1, dt * 7);
       if (this.podLift < 0.005) this.podLift = 0;
     }
     this.pod.setPos(this.ctrl.px, this.ctrl.py + this.podLift);
+    const stowInp = this.input();
     this.pod.update(dt, {
       vx: this.ctrl.vx,
       thrust: this.ctrl.thrust,
@@ -2252,6 +2408,12 @@ class Game {
       depthRow: this.ctrl.row,
       time: this.time,
       lampOn: this.lampOn,
+      heatFrac: this.ctrl.heatFrac,
+      cargoFrac: this.state.cargoCap > 0 ? this.state.cargoCount / this.state.cargoCap : 0,
+      // parked with no drill intent, the arm tucks away — airborne it is
+      // always out, pointing where it last worked
+      stow: this.ctrl.grounded && this.ctrl.drilling === null
+        && !stowInp.down && !stowInp.left && !stowInp.right,
     });
 
     if (!paused && dt > 0) {
@@ -2264,7 +2426,7 @@ class Game {
         lampOn: this.lampOn, thrust: Math.max(this.ctrl.thrust, Math.abs(this.ctrl.sideThrust) * 0.8),
         drilling: this.ctrl.drilling !== null, grounded: this.ctrl.grounded,
         still: this.ctrl.still,
-        carrying: !!this.state.carrying, dt, time: this.time,
+        carrying: !!this.state.carrying, facing: this.ctrl.facing, dt, time: this.time,
         hurt: (a, c) => this.ctrl.hurtFromThreat(a, c),
         drain: a => { st.fuel = Math.max(0, st.fuel - a); },
         push: (dx, dy) => { this.ctrl.vx += dx; this.ctrl.vy += dy; },
@@ -2307,7 +2469,11 @@ class Game {
           this.cam.addShake(this.threats.rumble * 0.12);
         }
       }
-      // something unlit is walking at you: your own pulse, getting faster
+      // an extracted world answers with nothing — Dispatch says so, once
+      if (this.faunaDead && !ACTIVE.husk) this.teach('fauna-dead');
+      // something unlit is walking at you: your own pulse, getting faster,
+      // and the red wash the field guide always promised
+      this.hud.setDread(this.threats.dread);
       if (this.threats.dread > 0.1) {
         this.dreadAcc -= dt;
         if (this.dreadAcc <= 0) {
@@ -2315,6 +2481,15 @@ class Game {
           this.audio.heartbeat(this.threats.dread);
         }
       }
+      // the beam is finding you: the frame whitens and a counter ticks faster
+      this.hud.setScrutiny(this.threats.scrutiny);
+      if (this.threats.scrutiny > 0.05) {
+        this.scrutinyAcc -= dt;
+        if (this.scrutinyAcc <= 0) {
+          this.scrutinyAcc = 0.55 - this.threats.scrutiny * 0.4;
+          this.audio.scrutinyTick(this.threats.scrutiny);
+        }
+      } else this.scrutinyAcc = 0;
       // the chamber has residents of its own
       const kh = this.threats.updateChamber(dt, this.time, this.ctrl.px, this.ctrl.py, false, false, (id, x, y) => this.onFaunaEvent(id, x, y));
       if (kh === 'pod') {
@@ -2406,7 +2581,7 @@ class Game {
     this.hud.update(st, this.ctrl.depthM, this.ctrl.row, this.ctrl.heatFrac, Math.max(dt, 0.001));
     if (this.map.visible) {
       this.map.refresh(this.terrain, this.ctrl.px, this.ctrl.py, this.time,
-        this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
+        this.state.worldBestRow, this.state.hasScanner, this.arrestors.list,
         this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : [],
         this.state.spill?.world === this.state.activeWorld ? this.state.spill : null);
     }
@@ -2459,7 +2634,7 @@ class Game {
     const e = pickNarrative(stats, st.firedEvents);
     if (e) {
       st.firedEvents.add(e.id);
-      this.comms.say(e.lines);
+      this.sayVoiced(e.id, e.lines);
       // the order, once heard, is posted at the trade post forever
       if (e.id === 'extraction-order') st.extractOrderHeard = true;
       this.state.persist();
@@ -2548,18 +2723,28 @@ class Game {
     if (froze && !this.state.firedEvents.has('rime-taught')) {
       this.state.firedEvents.add('rime-taught');
       // lines live in the transmission registry so the transcript can replay them
-      this.comms.say(ADHOC_TRANSMISSIONS['rime-taught'].lines);
+      this.sayVoiced('rime-taught', ADHOC_TRANSMISSIONS['rime-taught'].lines);
       this.state.persist();
     }
   }
 
   // ---------- Phase 3: the fauna talk back ----------
 
+  /**
+   * Deliver a transmission with whatever lines of it have a processed clip —
+   * ids follow DISPATCH.md's `<eventId>-<lineNumber>`. Unrecorded lines
+   * (and whole unrecorded transmissions) type silently, exactly as before.
+   */
+  private sayVoiced(id: string, lines: string[]): void {
+    this.comms.say(lines, lines.map((_, i) =>
+      DISPATCH_VOICED.has(`${id}-${i + 1}`) ? dispatchVoiceUrl(`${id}-${i + 1}`) : null));
+  }
+
   /** Dispatch explains a creature once, the first time it shows itself */
   private teach(id: string): void {
     if (this.state.firedEvents.has(id) || !ADHOC_TRANSMISSIONS[id]) return;
     this.state.firedEvents.add(id);
-    this.comms.say(ADHOC_TRANSMISSIONS[id].lines);
+    this.sayVoiced(id, ADHOC_TRANSMISSIONS[id].lines);
     this.state.persist();
   }
 
@@ -2593,6 +2778,9 @@ class Game {
         break;
       case 'longone-lost':
         this.hud.toast('IT LOST YOU. STAY QUIET.');
+        break;
+      case 'stillwalker-fragment':
+        this.teach('stillwalker-fragment');
         break;
       case 'rimewing-wake':
         this.faunaSfx(id, 3, () => this.audio.swarmAlert());
@@ -2836,10 +3024,11 @@ class Game {
     const id = st.carrying;
     st.carrying = null;
     st.delivered.add(id);
-    st.money += EXTRACT_OFFER;
-    st.totalEarned += EXTRACT_OFFER;
+    const offer = Math.round(EXTRACT_OFFER * ACTIVE.valueMul);
+    st.money += offer;
+    st.totalEarned += offer;
     this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
-    this.hud.popup('+' + fmtMoney(EXTRACT_OFFER), '#ff9a3c', this.screen.sx, this.screen.sy);
+    this.hud.popup('+' + fmtMoney(offer), '#ff9a3c', this.screen.sx, this.screen.sy);
     this.audio.sell(8);
     this.hud.toast('DELIVERED — DEBTS CLEARED', 'stratum');
     this.saveNow();
@@ -3073,7 +3262,7 @@ class Game {
 
     if (!paused && dt > 0) this.refreezeTick(dt);
     this.hud.setEva(rite || ACTIVE.husk ? null : this.pilot.o2);
-    this.pod.update(dt, { vx: 0, thrust: 0, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: this.ctrl.row, time: this.time });
+    this.pod.update(dt, { vx: 0, thrust: 0, sideThrust: 0, drilling: false, drillDir: 'down', depthRow: this.ctrl.row, time: this.time, stow: true });
     if (rite) {
       this.cam.finaleFollow(dt, this.pilot.px, this.pilot.py,
         this.ember.x, this.ember.y, fin.t, fin.touchBlend);
@@ -3094,7 +3283,7 @@ class Game {
 
     this.hud.update(this.state, this.ctrl.depthM, this.ctrl.row, 0, Math.max(dt, 0.001));
     this.map.refresh(this.terrain, this.pilot.px, this.pilot.py, this.time,
-      this.state.worldBestRow, this.state.hasDeepArray, this.arrestors.list,
+      this.state.worldBestRow, this.state.hasScanner, this.arrestors.list,
       this.state.hasBeacons ? this.terrain.wrecks.filter((_, i) => !this.looted.has(i)) : []);
   }
 }

@@ -99,7 +99,7 @@ export const STAGES: FaunaStage[] = [
     label: 'WARDEN',
     world: 'veil3',
     look: 'Plant, lift, swing, PLANT — one leg at a time. The beam narrows and goes white when it finds you.',
-    how: 'F to run dark and it sweeps past. G drops a charge — it takes two.',
+    how: 'The beam is the sensor — dark or lit, dodge the ARC. G drops a charge; it takes two.',
     setup(c) {
       // it posts as you APPROACH a hall, never once you are standing in one:
       // a lit pocket above ruins[0] is the only place that reads as approach
@@ -164,8 +164,8 @@ export const STAGES: FaunaStage[] = [
     id: 'stillwalkers',
     label: 'STILLWALKERS',
     world: 'cryos2',
-    look: 'A cut-out figure inside the rock. Lit, not a tremor. Unlit, it walks — through rock, straight at you.',
-    how: 'F. That is the whole creature. Watch the red dread wash come up as it closes.',
+    look: 'A cut-out figure inside the rock. Lit AND faced, not a tremor. Behind you, it walks — through rock.',
+    how: 'Light is a leash only while you FACE it. Turn your back and it moves. Watch the dread wash.',
     setup(c) {
       c.room(12, 52, 332, 346);
       c.park(31.5, 346, 17);

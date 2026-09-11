@@ -9,9 +9,43 @@
   <meta property="og:title" content="COREWARD" />
   <meta property="og:description" content="A modern 3D vertical mining game. Descend through the crust of VEIL-3 and dig toward the buried light of the Ember." />
   <meta property="og:type" content="website" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <!-- Fonts ship with the game. Nothing is fetched at runtime, so the build
+       runs identically offline and inside an Electron/Steam wrapper. Latin
+       subsets only, taken from the Google Fonts woff2 the CDN served.
+       Space Grotesk is one variable file covering 400-700; Chakra Petch is
+       three static weights. Family names match src/style.css exactly. -->
+  <link rel="preload" href="./fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./fonts/chakra-petch-700.woff2" as="font" type="font/woff2" crossorigin />
+  <style>
+    @font-face {
+      font-family: 'Chakra Petch';
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url('./fonts/chakra-petch-500.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Chakra Petch';
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url('./fonts/chakra-petch-600.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Chakra Petch';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url('./fonts/chakra-petch-700.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Space Grotesk';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url('./fonts/space-grotesk-var.woff2') format('woff2');
+    }
+  </style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛏️</text></svg>" />
 </head>
 <body>

@@ -66,7 +66,7 @@ export const FAUNA: FaunaEntry[] = [
     id: 'stillwalker', name: 'STILLWALKERS', world: 'cryos2',
     tier: 'stalker · keyed on the absence of light', color: 0x9ad0ff,
     desc: 'Too tall. A figure of black shards standing in the rock where there was nothing a second ago. Unlit, it walks — through ice, through rock, straight at you.',
-    rule: 'It does not move while it is seen. Keep it lit, or keep a flare between you.',
+    rule: 'It does not move while it is seen — lit, and faced. Light on your back is nothing to it. A flare or the fragment holds it from any side.',
     keys: ['fauna:stillwalker', 'stillwalker-taught'],
   },
   {
@@ -103,7 +103,7 @@ export const FAUNA: FaunaEntry[] = [
     id: 'warden', name: 'WARDENS', world: null,
     tier: 'Lamplighter machinery, still on post', color: 0xffe0a0,
     desc: 'A tripod with a lantern where a head should be, walking one leg at a time. Caught in the beam, it narrows, goes white, and the machine walks — and the beam itself burns.',
-    rule: 'It tracks light and nothing else. Run dark and it sweeps past. The Lance blinds it; two charges bring it down.',
+    rule: 'The beam is the sensor: caught in the fan, lit or dark, you are seen. Slip the arc, or put rock in its line. The Lance blinds it; two charges bring it down.',
     keys: ['fauna:warden'],
   },
   {

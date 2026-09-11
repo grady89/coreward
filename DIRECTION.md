@@ -152,7 +152,6 @@ tech bought with *embershards from cargo* (spend the ore instead of selling it �
 a real choice at 10k a shard):
 
 - **Ascent Coil** — drill upward (hold up against a ceiling)
-- **Blink Coil** — lateral dash on Shift, no fuel, short cooldown
 - **Warp Hold** — C teleport-sells your cargo from anywhere at 75% value
 - **Pyro Exchanger** — halves excess heat/cold damage and converts it to fuel
 
@@ -306,13 +305,12 @@ marked unread, which is the honest answer for a first visit.
 
 ### 8f. Survey scanner tiers (BUILT — per dig site)
 
-- **Survey Scanner** (✦1,500, assay office): TAB map of tunnels/caves/fluids,
-  revealed only to your deepest row per world. Four zoom steps (full column →
-  ×4 close-up) via + / − or the scroll wheel; zoom is free, because legibility
-  is never a purchase.
-- **Deep Array** (✦12,000, scanner upgrade): the map reads *value* as well as
-  voids — every ore deposit painted in its own color. That is the upgrade worth
-  paying for.
+- **Survey Scanner** (✦1,500, assay office): TAB map of tunnels/caves/fluids
+  — and *value*: every ore deposit painted in its own color — revealed only to
+  your deepest row per world. Four zoom steps (full column → ×4 close-up) via
+  + / − or the scroll wheel. Zoom is free and so is the ore paint, because
+  legibility is never a purchase. (The Deep Array, once a ✦12,000 second SKU
+  for the paint, was folded in; owners were refunded.)
 
 ### 8g. Threats & the light arsenal (BUILT 2026-09-01)
 
@@ -340,7 +338,7 @@ They are the Lamplighters', and their sameness across worlds is lore.
 - **Glimmerflies** (Slatebed, ~200m) — swarm drawn to the headlamp; chew hull,
   drain fuel. Counter: *kill your lamp* and go blind. Teaches the central
   lesson cheaply and early.
-- **The Long Ones** (Void Veins, 320m) — segmented burrowers that hunt by
+- **The Long Ones** (Void Veins, 600m+) — segmented burrowers that hunt by
   vibration **through the player's own tunnels**, fast in open shafts, unable
   to turn in tight ones. Your excavation becomes the threat; how you dig
   changes permanently.
@@ -374,25 +372,28 @@ They are the Lamplighters', and their sameness across worlds is lore.
 light, heat, or space died with its fragment. The threat is that nothing comes.
 
 **Constants on every world:**
-- **Wardens** (Emberreach, 600m) — Lamplighter machines still guarding the
-  vault. Slow, armoured, sweeping light-beams; they track by luminance. Not
-  evil — doing their job, which makes the player the thief.
+- **Wardens** (the ruins, ~660–920m) — Lamplighter machines still guarding the
+  vault. Slow, armoured, sweeping light-beams; they track by luminance, and
+  only when the sweep crosses you with a clear line — so the arc is readable
+  and moving between passes is real counterplay. One is up at a time; you meet
+  them hall by hall. Not evil — doing their job, which makes the player the
+  thief.
 - **The Kindled** (core chambers) — half-light shapes, non-hostile, lethal to
-  touch. Built: they yield on foot until cornered; the pod gets bitten and
-  thrown.
+  touch. Built: they yield on foot until cornered; the pod is merely refused —
+  thrown clear, never bitten, never hurt.
 
 **The arsenal — light-first, gun-last:**
 
 1. **Lamp toggle** — free, instant, the highest-tension mechanic in the game.
-2. **Flares** — cheap consumables that throw light elsewhere: pull aggro, scout
-   a chamber.
+2. **Flares** — cheap consumables that throw light elsewhere: divert aggro from
+   something already close enough to notice the flare, scout a chamber.
 3. **The drill** — already a weapon. Holding ground and cutting through
    something as it closes needs no new system.
 4. **Seismic charges** — mid-game purchase; clears rock *and* collapses a tunnel
    behind you. Driller-authentic escape, not a gun.
 5. **Lumen Lance** — late Ember Forge tech, the only true weapon, and it **fires
    Lumens as ammunition**. Shooting spends money, so the economy stays inside
-   the combat and the Lance stays a last resort.
+   the combat and the Lance stays a last resort. It buys seconds, not corpses.
 
 ### 8i. Act IV — the husk, extraction, the three endings (BUILT)
 
@@ -407,19 +408,28 @@ contract with the player's own terms on it. Walking all three unlocks Act IV.
 
 **Extraction** is the Communion's dark mirror, and never available at a first
 meeting — the rite stays pure. After the husk, Dispatch relays Cindral's
-Order 9-1-1 (✦300,000 a fragment, all debts cleared), which then stands at the
-trade post forever. At a met core, HOLD E takes the fragment: sconces gutter
+Order 9-1-1 (✦300,000 a fragment at local rates — ✦450k on CRYOS-2, ✦675k on
+MAELIS-6 — all debts cleared), which then stands at the trade post forever. At a met core, HOLD E takes the fragment: sconces gutter
 out one by one on a descending scale, the choir inverts to minor, and there is
 no white page — you do not get the bright screen for this.
 
 **The climb is systemic, never scripted.** One `carrying` state that existing
 systems read: the hold is the fragment (nothing else fits), thrust ×0.8 and
-fuel ×1.5, a slow heat clock, Wardens waking at every ruin band and tracking
-the fragment's light (the dark no longer hides you *from them*), veinlight
-dying in a radius as you rise, quakes shedding rubble into the tunnels
-*below*, and the fog draining toward slag from the bottom up. Carrying one
-back **down** is calm — no Wardens, no quakes. The world knows the difference
-between a thief and a lamplighter, and that asymmetry is the argument.
+fuel ×1.5, a slow heat clock, a Warden posting at each ruin band in turn — from
+further out, and holding on longer — tracking the fragment's light (the dark no
+longer hides you *from them*), veinlight dying in a radius as you rise, quakes
+shedding rubble into the tunnels *below*, and the fog draining toward slag from
+the bottom up. The fragment cuts the other way too: it **freezes any Stillwalker
+within five tiles**, lamp or no lamp. What you stole shields you from the thing
+that feeds on the dark and hands you to the things that hunt light — one object,
+both halves of the bargain. Carrying one back **down** is calm — no Wardens, no
+quakes. The world knows the difference between a thief and a lamplighter, and
+that asymmetry is the argument.
+
+**What extraction costs the world** is not only the Kindled going out with the
+fragment. Come back to an extracted world and **there is no fauna at all** —
+swarm, hunter, builder, the Wardens in the ruins, all of it gone, the way SITE
+297 is gone. You dig a husk you made.
 
 **Three endings, earned by disposition of the fragments, never by a menu:**
 EXTRACT (sell all three) is the game's only *black* page — "OUT", the rig
@@ -432,8 +442,11 @@ emblem on the title screen and then offers CONTINUE — THE MOMENT BEFORE, which
 rewinds to the fork so one save can walk every road.
 
 **The Lumen Lance** joins the forge at 9 shards: X fires, each shot spends
-✦120, and it blinds rather than kills — swarms vaporize, hunters stagger,
-Wardens overexpose for 6s. The climb is beatable without it, verified.
+✦120, and it blinds rather than kills — everywhere, not nearly everywhere.
+Swarms are flung apart de-alerted and stunned for a couple of seconds, hunters
+stagger, a Stillwalker flash-freezes for about two, Wardens overexpose for 6s.
+Nothing on the list dies but a mimic, which was a thief, not a threat. The climb
+is beatable without it, verified.
 
 ### 8h. Deferred (next)
 

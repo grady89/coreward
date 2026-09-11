@@ -5,7 +5,9 @@ export const GAME_NAME = 'COREWARD';
 // universal colony scrip: Lumens — light is worth, worth is light
 export const CUR = '✦';
 export const CUR_NAME = 'LUMENS';
-export const fmtMoney = (n: number): string => CUR + Math.round(n).toLocaleString();
+// `|| 0` launders negative zero — Math.round(-0.4) is -0, and a ledger that
+// prints "✦-0" reads as a bug even when the books are fine
+export const fmtMoney = (n: number): string => CUR + (Math.round(n) || 0).toLocaleString();
 
 // ---- world ----
 export const WORLD_W = 64;          // tiles wide
@@ -43,6 +45,13 @@ export const FALL_DMG = 7;          // dmg per unit speed over safe
 
 // ---- resources ----
 export const START_MONEY = 40;
+/**
+ * NG+ ("descents"): the advance is re-issued at the same ✦40, but every
+ * Lumen sticker in the shops compounds 1.5× per descent — Cindral has read
+ * your file. Capped once the third descent has made the point. Ore values
+ * hold still on purpose: one lever, squeezed from the price side only.
+ */
+export const DESCENT_PRICE_MULS = [1, 1.5, 2.25, 3.375];
 export const FUEL_IDLE = 0.28;      // per second
 export const FUEL_THRUST = 3.4;
 export const FUEL_SIDE = 1.4;
@@ -53,8 +62,9 @@ export const LOW_FUEL_FRAC = 0.22;
 // veinlight: living light, converted straight to fuel instead of cargo
 export const VEINLIGHT_FUEL = 10;
 
-// heat: rises past this row, damages hull beyond radiator resist
-export const HEAT_START_ROW = 290;
+// heat: rises toward the core, damages hull beyond radiator resist. The
+// start row lives per-world (worlds.ts hazardStartRow); only the floor of
+// the ramp is shared.
 export const HEAT_FULL_ROW = 500;
 /**
  * dmg/sec at gauge 1.0 with no resist. High enough that pushing deep without
@@ -127,8 +137,10 @@ export const TRACKS: Track[] = [
       { price: 500, v: 16, label: 'Std. Hold' },
       { price: 2000, v: 26, label: 'Expanded Hold' },
       { price: 7000, v: 40, label: 'Mag-Clamp Bay' },
+      // tier 5 ("Pocket Dimension", 90 slots, 58k) was cut: the tank empties
+      // before 60 slots fill on any dive where the ore is worth hauling, so
+      // the tier bought nothing (OVERHAUL B3). Owned copies refund on load.
       { price: 20000, v: 60, label: 'Graviton Hold' },
-      { price: 58000, v: 90, label: 'Pocket Dimension' },
     ],
   },
   {
@@ -167,16 +179,20 @@ export function boulderTierNeeded(row: number): number {
 export type ForgeKey = 'updrill' | 'dash' | 'warp' | 'converter' | 'lance';
 export interface ForgeItem { key: ForgeKey; name: string; desc: string; cost: number; }
 export const FORGE: ForgeItem[] = [
-  { key: 'dash', name: 'BLINK COIL', desc: 'Shift — lateral dash. No fuel, short cooldown.', cost: 3 },
+  // the Blink Coil (dash, ◆3) was cut: a lateral dash in a game whose economy
+  // and identity are vertical (OVERHAUL cut list). Every remaining item breaks
+  // a RULE; the dash just broke a speed limit. Owned coils refund their
+  // shards to the stash on load; the mechanics stay dormant behind the key.
   { key: 'updrill', name: 'ASCENT COIL', desc: 'Hold up against a ceiling to drill upward.', cost: 5 },
-  { key: 'converter', name: 'PYRO EXCHANGER', desc: 'Halves core damage and converts it to fuel.', cost: 6 },
+  { key: 'converter', name: 'PYRO EXCHANGER', desc: 'Halves core damage and converts it to fuel. Radiator resist starves it — bare fins feed it best.', cost: 6 },
   { key: 'warp', name: 'WARP HOLD', desc: 'C — teleport-sell your cargo from anywhere at 75% value.', cost: 8 },
   { key: 'lance', name: 'LUMEN LANCE', desc: `X — fires Lumens as ammunition, ${CUR}120 a shot. The only true weapon. A last resort.`, cost: 9 },
 ];
 export const WARP_RATE = 0.75;
-// survey gear — bought separately for each dig site
+// survey gear — bought separately for each dig site. The Deep Array
+// (✦12,000, value painting as a separate SKU) folded into the scanner:
+// legibility is never a purchase (OVERHAUL cut list; owners refunded on load)
 export const SCANNER_PRICE = 1500;
-export const DEEP_ARRAY_PRICE = 12000;
 export const BEACON_PRICE = 3000;
 
 // ---- consumables (bought at the fuel depot) ----
@@ -192,7 +208,8 @@ export const MAX_CHARGES_HELD = 6;
 export const GLYPHS_TO_TRANSLATE = 9;
 
 // ---- Phase 4: extraction, the climb, and the endings ----
-/** Cindral's standing offer per delivered fragment — genuinely tempting */
+/** Cindral's standing offer per delivered fragment — the base rate, paid
+ *  × the delivering world's valueMul so the bribe keeps pace out there */
 export const EXTRACT_OFFER = 300000;
 /** hold-to-commit seconds at a cradle (extract / seat / offer alike) */
 export const EXTRACT_HOLD = 2.5;

@@ -17,15 +17,14 @@
 > `coreward_meta_v1` and survives NEW EXPEDITION. Suites: `keeping.mjs`,
 > `quarters.mjs`. Colony relighting deliberately deferred — its own phase.
 > **Next: the ⛩ playtest gates below — they need a human, not another suite.**
-> Then Phase 4 (husk world, fragment extraction, three endings, Lumen Lance),
-> and the per-world *hunter* variants still outstanding: Brinewyrm,
-> Stillwalkers, the Riptide, Shellbacks, geode mimics, the Kindled.
 
 Design canon: [DIRECTION.md](DIRECTION.md) · [LORE.md](LORE.md)
-Current state: core loop, 3 worlds, forge, EVA, contracts, settings, survey
-map + Deep Array, veinlight-as-fuel, resource forms — all verified by 9
-headless suites. No enemies, no narrative systems in-game beyond static logs,
-no endings beyond the core walk, no Steam pipeline.
+Current state: the core loop, 3 worlds + the husk, forge, EVA, contracts,
+settings, the survey map, veinlight-as-fuel, resource forms, the
+narrative engine and Dispatch, the full twelve-creature bestiary and its
+counters, ruins, glyphs, extraction and the three endings, and the Keeping's
+endgame sinks — all verified headless. Outstanding: the playtest gates, the
+Phase 5 tuning/audio pass, colony relighting, and the Steam pipeline.
 
 **Standing rules for every phase**
 - `npx tsc --noEmit` green + a Playwright suite per phase before "done".

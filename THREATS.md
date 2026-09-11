@@ -21,17 +21,22 @@ To actually watch one move: run with `?fauna` (see [README](README.md#look-at-th
 | Threat | World | Depth | Set off by | Get away by |
 |---|---|---|---|---|
 | Glimmerflies | VEIL-3 | 180–940 m | Your headlamp within 17 m | Lamp off, wait ~2 s |
-| The Long Ones | VEIL-3 | 600 m+ | Engine / drill / scraping within 34 m | Sit dead still 2.2 s, or a 1-wide shaft |
+| The Long Ones | VEIL-3 | 600 m+ | Engine / drill / scraping within 34 m | Sit dead still 2.1 s, or a 1-wide shaft |
 | Geode mimics | VEIL-3 | 560–940 m | Cutting one | Kill it before 16 m / 14 s |
-| Rimewings | CRYOS-2 | 240–940 m | Thruster wash within 15 m | Cut thrust, drift ~2.4 s |
-| The Brinewyrm | CRYOS-2 | 460 m+ | Engine or flare within 15 m of brine | Don't run engines over pools |
-| Stillwalkers | CRYOS-2 | 400 m+ | Your lamp being **off** | Lamp **on** — it freezes instantly |
+| Rimewings | CRYOS-2 | 240–940 m | Thruster wash **or drill heat** within 15 m | Cut thrust, drift ~2.4 s |
+| The Brinewyrm | CRYOS-2 | 460 m+ | Engine within 15 m of brine, or a flare within 12 m of the wyrm | Don't run engines over pools |
+| Stillwalkers | CRYOS-2 | 400 m+ | Darkness — or your **turned back** | Lamp on **and facing it** — it freezes; flares hold any side |
 | Frostbloom | CRYOS-2 | 300–920 m | Cutting one | Don't cut it. Ram out of the ice |
 | Pressure polyps | MAELIS-6 | 300–940 m | Coming within 8.4 m — faster is worse | Drift slowly, or pop with a flare |
 | The Riptide | MAELIS-6 | 600 m+ | Being in open water | Dig into rock; a 1-wide shaft kills its grip |
 | Shellbacks | MAELIS-6 | 240 m+ | Nothing — they're always working | Ignore them, or lure with a flare |
-| Wardens | all | ruins, 660–920 m | Any light within 36 m of a hall (60 m carrying a fragment) | Run dark; Lance blinds; 2 charges kill |
+| Wardens | all | ruins, 660–920 m | Its sweep crossing YOU, lit or dark, with line of sight (lit reads ~1.4× the arc) | Slip the arc; move between passes; break its line; Lance blinds; 2 charges kill |
 | The Kindled | all | core chamber | Entering the chamber | Keep 4.4 m; on foot they retreat from you |
+
+**Flares**, which half that last column leans on: **3** alight at once, **26 s**
+each, **12** in the rack. A thrown flare only pulls a swarm already within about
+twice its own notice range — it is a decoy you place in front of yourself, not a
+switch that empties the room.
 
 ---
 
@@ -44,12 +49,14 @@ To actually watch one move: run with `?fauna` (see [README](README.md#look-at-th
 - **Trigger:** your **headlamp** within 8.5 tiles (17 m). Nothing else — not
   your engine, not your drill.
 - **Attack:** contact only, and it's a grind, not a hit — **2.6 hull/sec and
-  0.5 fuel/sec** while they're on you. Slow enough that it's a problem, never
-  a death sentence.
+  0.5 fuel/sec per fly on you**, and two to four of them are usually on you at
+  once. Slow enough that it's a problem, never a death sentence.
 - **Escape:** turn the lamp off. They lose you after **1.7 s** of dark, and
   fully give up past 15 tiles (30 m). Critically, **they don't go home** —
   they hang where they lost you, dim, waiting for the light to come back. So
-  the tunnel you fled is still theirs.
+  the tunnel you fled is still theirs. A **Lance** pulse flings the ribbon
+  apart blind — de-alerted, tumbling, a couple of seconds before they collect
+  themselves. Nothing dies; you get the corridor.
 - **Looks like:** a murmuration, not a cloud of dots. Each fly is a sliver of
   glass that only catches the light edge-on, so a resting swarm reads as a few
   stray sparks in the dark. Lit, the ring collapses inward, then unfolds into
@@ -67,16 +74,19 @@ To actually watch one move: run with `?fauna` (see [README](README.md#look-at-th
   drilling, or scraping the hull along rock. It is blind. Your lamp is
   irrelevant.
 - **Attack:** **26 hull/sec** while it has you, plus a shove. It moves at
-  4.8 tiles/s, which is faster than you.
+  4.8 tiles/s. A pod running clean air outruns that; a pod *drilling* does not,
+  and drilling is the noise that called it. You can outrun it or you can cut.
+  Not both.
 - **Escape:** two options, and both are the game's own verbs.
-  1. **Stop.** Engine off, drill off, hull still, for **2.2 s**. It loses you,
+  1. **Stop.** Engine off, drill off, hull still, for **2.1 s**. It loses you,
      casts about close enough to touch, and goes back into the rock.
   2. **Dig narrow.** It physically cannot enter a 1-wide shaft.
 - **Looks like:** eyeless, with a split mandible and a body of overlapping
   chitin plates. A line of dorsal lights pulses tail-to-head, so the direction
   of the wave tells you which way it's travelling. It fills a passage.
-- **Warning you get:** the screen rumbles and dust jumps off the wall **in a
-  line**, coming toward you, before the wall bursts.
+- **Warning you get:** a rumble and a screen shake that **grow as it closes** —
+  that swell is your only range-finder, and it is enough. A toast names it. Then
+  dust bursts from one spot on the wall, and that is the spot it comes through.
 - **Story:** the moment excavation stops being free. How you dig — wide and
   fast, or narrow and slow — becomes a permanent decision, because your own
   tunnel network is the thing hunting you through.
@@ -110,13 +120,17 @@ whole point of the second world.
 **The swarm, inverted.**
 
 - **Where:** 240–940 m, frozen to cave walls. Up to 3 clusters, 7–12 each.
-- **Trigger:** **thruster wash** within 7.5 tiles (15 m). Your lamp does
-  nothing. They take **1.3 s** to shiver loose after first warmth.
-- **Attack:** contact — **3 hull/sec and 0.8 fuel/sec**. Slightly worse than
-  glimmerflies, same shape of problem.
-- **Escape:** **cut the engine and coast.** After **2.4 s** of cold they slow,
-  sink, and lock solid again wherever they happen to be — taking **1.8 s** to
-  settle. Momentum is now your friend: you glide past on the drift.
+- **Trigger:** **warmth** within 7.5 tiles (15 m) — thruster wash, and a running
+  drill is warmth too, so you can wake them standing still. Your lamp does
+  nothing. They take **1.3 s** to shiver loose after first heat.
+- **Attack:** contact — **3 hull/sec and 0.8 fuel/sec per wing on you**, and
+  two to four ride you at a time. Slightly worse than glimmerflies, same shape
+  of problem.
+- **Escape:** **cut the engine and coast** — and stop cutting rock while you do
+  it. After **2.4 s** of cold they slow, sink, and lock solid again wherever
+  they happen to be — taking **1.8 s** to settle. Momentum is now your friend:
+  you glide past on the drift. A **Lance** pulse scatters them blind for a
+  second or two as well, without killing one.
 - **Looks like:** a constellation of ice hanging in the dark, absolutely
   motionless — which is the unsettling part, because nothing else down here
   holds that still. Thawed, they fly like moths: dart, hang, dart.
@@ -131,11 +145,14 @@ whole point of the second world.
 - **Where:** 460 m and below, living inside cryobrine pools and flooded
   galleries the pod can't enter.
 - **Trigger:** **heat within 7.5 tiles (15 m)** of its pool — your engine
-  running nearby, or a **flare thrown into the water** (a flare is heat too).
-  It takes ~1.1 s of sustained warmth to commit.
+  running nearby — or a **lit flare within 6 tiles (12 m) of the wyrm itself**,
+  which need not be in the water: the lip of the pool is close enough, and it
+  will breach at the flare instead of you. It takes ~1.1 s of sustained warmth
+  to commit.
 - **Attack:** it breaches in an arc at your nozzle for **22 hull**, but the
   bite isn't the danger — it **latches and drags you back toward the brine**,
-  and the brine itself does 24 hull/sec.
+  and CRYOS-2's cryobrine does **16 hull/sec and 2.5 fuel/sec**. It doesn't
+  just hurt you, it empties the tank you needed to climb out on.
 - **Escape:**
   - **Prevention:** don't run the engine over open brine. Coast across.
   - **Once it's committed:** you get **a full second of warning** (see below)
@@ -155,18 +172,26 @@ whole point of the second world.
 **The stalker. The rule collision.**
 
 - **Where:** 400 m and below, standing *inside* the rock and ice. Up to 2.
-- **Trigger:** your lamp being **OFF**. This is the exact opposite of every
-  other lesson the game has taught you.
+- **Trigger:** your lamp being **OFF** — or the walker being **behind you**.
+  The lamp only holds one you are FACING; light on your back is nothing to it,
+  and two thirds of them rise on your blind side.
 - **Attack:** it reaches you and **seizes the controls for 1.4 s**, drains
   **22 fuel**, and does **18 hull**. Losing the controls that deep is usually
   worse than the damage.
-- **Escape:** **turn the lamp on.** Within 7.5 tiles (15 m) of your light it
-  stops dead — not slows, *stops*, not a tremor. It only moves in the dark,
-  at 2.4 tiles/s. So the counter is instant and free, but it costs you the
-  darkness you were using to hide from the Wardens.
-- **Looks like:** tall. Too tall (2.3 tiles). A figure in the rock, black as a
-  cut-out with a cold blue rim, standing where there was nothing a second ago.
-  Its walk is *almost* right — the stride is slightly too long.
+- **Escape:** **turn the lamp on — and turn AROUND.** Within 7.5 tiles (15 m)
+  of your light, faced, it stops dead — not slows, *stops*, not a tremor. It
+  moves in the dark, or across your turned back, at 2.4 tiles/s. So the counter is instant and free, but it costs you the
+  darkness you were using to hide from the Wardens. A **flare** within 6 tiles
+  (12 m) of one freezes it the same way, and buys the dark back for the pod.
+  Failing both: a **Lance** pulse flash-freezes one for about **2 s**, and a
+  **seismic charge** makes one sink back into the rock. Note what that list
+  does not contain — nothing kills these; everything on it only postpones one.
+  And in Act IV a **fragment in the hold freezes any within 5 tiles**, lamp on
+  or lamp off.
+- **Looks like:** tall. Too tall (3 tiles). A figure in the rock, black as a
+  cut-out with a breathing frost rim, standing where there was nothing a
+  second ago. Its walk is *almost* right — the stride is slightly too long.
+  Hunting, two cold points open where a face should be, aimed at you.
 - **Warning you get:** a red **dread** wash creeps up the edges of the screen
   as one closes.
 - **Story:** VEIL-3 spent a whole world teaching you that dark is safe. This
@@ -200,16 +225,22 @@ whole point of the second world.
 **The swarm that never moves.**
 
 - **Where:** 300–940 m, growing on cave walls in clusters of 3–7. Up to 3
-  clusters, 30 polyps total.
+  clusters, 30 polyps total. A cluster roots at the **richest wall in reach** —
+  ore seams, wreck bays, the approach to a carved stone — so the sacs stand
+  between you and something you want, not on a wall you had no reason to
+  visit.
 - **Trigger:** proximity — within 4.2 tiles (8.4 m) — and **they inflate
   faster the faster you're moving.** Speed is the real trigger.
-- **Attack:** they burst for **5–12 hull** depending on how swollen they got,
-  plus a hard shove with the world's gas-fling force — **and the neighbours
-  catch it**, so a rushed approach sets off the whole wall like a string of
-  charges.
-- **Escape:** **slow down.** Thread past at a crawl and they only swell and
+- **Attack:** they burst for **5–12 hull** — and the range is **how close you
+  are when it goes**, not how swollen it got. A sac that pops at arm's length
+  takes the full 12; one that pops two tiles off barely scratches you. Plus a
+  hard shove with the world's gas-fling force — **and the neighbours catch
+  it**, so a rushed approach sets off the whole wall like a string of charges.
+- **Escape:** **slow down.** Speed is what inflates them, and it inflates them
+  hard: the same corridor that is a non-event at a crawl will go off in your
+  face if you enter it at pace. Thread past slowly and they only swell and
   settle. Or throw a **flare** into the cluster and pop them from a safe
-  distance before you commit.
+  distance before you commit — distance is the whole of the damage.
 - **Looks like:** not flies — *sacs*. Translucent, with a dark nucleus and a
   slow breathing pulse. As you near, the green drains to white and they
   tremble.
@@ -222,12 +253,13 @@ whole point of the second world.
 **The hunter that never touches you.**
 
 - **Where:** 600 m and below, in flooded and open systems. One at a time.
-- **Trigger:** **being in open water.** Not noise, not light — volume. Its
-  grip is proportional to how much open space surrounds you (`near² × room²`),
-  so a big cavern is dangerous and a tight tunnel is not.
-- **Attack:** it doesn't damage you at all. It **pulls** — up to 15 units of
-  force — dragging the pod toward brine, walls and dark. Everything that then
-  kills you is something you hit.
+- **Trigger:** **being in open water.** Not noise, not light — volume. Its grip
+  falls off linearly with distance but *squares* with the room around you
+  (`near · room²`), so a big cavern is dangerous and a tight tunnel is not.
+  Backing off helps a little; walls help enormously.
+- **Attack:** it doesn't damage you at all. It **pulls** — up to 26 units of
+  force — dragging the pod toward brine, walls and dark, and turning you as it
+  goes. Everything that then kills you is something you hit.
 - **Escape:** **dig.** Cut into the rock; in a 1-wide shaft its grip falls to
   effectively zero. The counter is literally the game's core verb, which is
   the point of the design.
@@ -235,6 +267,9 @@ whole point of the second world.
   all lean the same way; a shadow far too big behind the rock, visible only
   through gaps; and every so often, when you're close, **an eye the size of a
   room** that opens, looks at you, and closes again.
+- **Warning you get:** throw a flare and watch it. **The current takes your
+  flares too** — a lit thing spiralling away into the dark tells you which way
+  the room is leaning, and how hard, before it starts on the pod.
 - **Story:** the boss that can't be fought, only left. It's the clearest
   statement of the whole game's argument — the answer to the biggest thing
   down here is a shovel, not a gun.
@@ -270,21 +305,34 @@ These two are Lamplighter, not ecology. Their sameness everywhere is the lore.
 ## Wardens
 **The guard. Tracks light and nothing else.**
 
-- **Where:** the Lamplighter ruins, roughly 660–920 m. One posts at a hall as
-  you **approach** it (within 18 tiles / 36 m, but not once you're already
-  inside). Carrying a stolen fragment widens that to 30 tiles / 60 m — every
-  hall goes on alert.
-- **Trigger:** **luminance.** Your headlamp, a lit flare, or a fragment in
-  your hold. Nothing else registers — not your engine, not your drill.
+- **Where:** the Lamplighter ruins, roughly 660–920 m. There is only ever
+  **one on its feet** — it posts at the nearest hall as you **approach** it
+  (within 18 tiles / 36 m, but not once you're already inside), and stands
+  down when you're 30 tiles clear. Carrying a stolen fragment widens both:
+  it posts from 30 tiles / 60 m out and holds on to 50. So you meet them one
+  after another, never two at once, and with a fragment aboard you meet each
+  one earlier and shake it later.
+- **Trigger:** **the beam itself.** If the sweep fan crosses you with line of
+  sight, you are seen — lamp on, lamp off, it does not matter what your light
+  is doing; it reads where its own light falls. Running dark still trims the
+  fringe: a lit pod (or a fragment in the hold) registers at ~1.4× the drawn
+  arc. A lit flare pulls the beam from any direction. Rock still blinds it.
 - **Attack:** contact is **overexposure, not a bite** — the screen goes white
-  and you take **30 hull/sec**. It sweeps its beam in slow arcs; caught in it,
-  the beam narrows, goes white, and it walks toward you.
+  and you take **30 hull/sec**. So is the beam: held in the narrowed white one,
+  the hull cooks, ramping over a second or so. It sweeps in slow arcs; caught
+  in it, the beam narrows, goes white, and it walks toward you.
 - **Escape:**
-  - **Run dark.** It sweeps right past you.
-  - **Lumen Lance** — too much light, and it blinds the machine.
+  - **Watch the arc and move between passes.** The drawn cone is the truth:
+    dark or lit, inside it you are seen, outside it you are not. The sweep is
+    quick now (~a pass every 4 s) but honest — cross while the beam is going
+    the other way. Running dark narrows the fringe it reads, nothing more.
+  - **Put rock between you.** Breaking its line of sight drops you as surely
+    as going dark, and it cools off.
+  - **Lumen Lance** — too much light, and it blinds the machine for 6 s.
   - **Seismic charges** are the only thing that can actually fell one, and
     **it takes two.** It comes down over about a second and a half, and that
-    hall stays empty for **3 minutes**.
+    hall stays empty for **3 minutes**. The memory is per-hall: fell the one at
+    this ruin and the next ruin still posts a fresh one at you.
 - **Looks like:** a tripod. A lantern where a head should be, a hexagonal
   masonry-and-verdigris hip slung two tiles above the floor, three legs that
   step **one at a time** — plant, lift, swing, PLANT — each footfall a thud
@@ -292,7 +340,7 @@ These two are Lamplighter, not ecology. Their sameness everywhere is the lore.
 - **Story:** they aren't evil and they aren't broken. They're still doing the
   job they were left to do, which quietly makes *you* the thief. That reading
   gets much louder in Act IV, when you're carrying a fragment up and every
-  hall you pass lights up because of what's in your hold.
+  hall you pass lights up, one after another, because of what's in your hold.
 
 ## The Kindled
 **The core chamber's residents. Non-hostile. Lethal to touch.**
@@ -301,8 +349,8 @@ These two are Lamplighter, not ecology. Their sameness everywhere is the lore.
   fragment. Always exactly four.
 - **Trigger:** entering the chamber. They notice you within 8 tiles.
 - **Attack:** they never chase and never strike. Contact is the whole danger:
-  - **In the pod:** they take **40 hull**, throw you clear, and the screen
-    overexposes.
+  - **In the pod:** **no damage at all.** They throw you clear, unhurt, and
+    the screen overexposes. The pod they merely refuse.
   - **On foot:** your suit's oxygen is simply *gone* — blackout, wake in the
     pod. But this only happens if you **corner one against the chamber wall**.
 - **Escape:** just stop walking at them. They hold 2.2 tiles off. On foot they
@@ -326,8 +374,8 @@ These two are Lamplighter, not ecology. Their sameness everywhere is the lore.
 |---|---|---|---|
 | **Falling** | anywhere | 7 per unit of impact speed over 13 | Thrusters; fall arrestor pads |
 | **Gas pockets** | 120 m+ | 16, scaling with depth; on MAELIS-6 it also **flings** the pod | Hull plating; cut them deliberately, not by surprise |
-| **Lava / brine** | 460 m+ | **24 hull/sec** on contact | Don't touch it. Pyro Exchanger halves core damage and converts it to fuel |
-| **Core heat** | from 580 m, full at 1000 m | up to 7.5/sec | Radiator upgrades |
+| **Standing fluid** | 460 m+ | per world: VEIL-3 magma **24 hull/s**; CRYOS-2 cryobrine **16 hull/s + 2.5 fuel/s**; MAELIS-6 brine **12 hull/s + 4 fuel/s** | Don't touch it. Pyro Exchanger halves core damage and converts it to fuel |
+| **Core heat** | from 580 m, full at 1000 m | ramps from nothing at 580 m to 7.5/sec around 920 m and a worst case of **9.4/sec** at the core, unresisted | Radiator upgrades |
 | **EVA oxygen** | on foot | 45 seconds, then blackout | Watch the clock; R recalls you to the pod |
 | **Fuel** | everywhere | strand = death | Veinlight, and not burning it on the way down |
 
@@ -339,6 +387,11 @@ These two are Lamplighter, not ecology. Their sameness everywhere is the lore.
   light, heat or space died with its fragment. The threat there is that
   nothing comes — no drone, no swarm, no Warden. It is the game's first
   silence, and it is deliberate.
+- **A world you extracted from** goes the same way. Not just the Kindled:
+  **every creature on that world is gone** when you come back — the swarm, the
+  hunter, the builder, the Wardens in the ruins. You dig an empty planet in a
+  spent palette. The husk is what SITE 297's driller left behind; this is what
+  you leave behind.
 - There is **no boss fight** anywhere in the game, and no threat that must be
   killed to progress. A completely silent run past everything on this page is
   always possible.
