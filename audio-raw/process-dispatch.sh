@@ -10,7 +10,20 @@
 # files, regenerate src/audio/voice-manifest.ts (see the comment at its top).
 set -euo pipefail
 
-FF="/c/Users/grady/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.1-full_build/bin/ffmpeg.exe"
+# ffmpeg, found rather than assumed: $FFMPEG wins, then PATH, then the winget
+# install (whose folder carries the version, so it moves on every upgrade).
+if [ -n "${FFMPEG:-}" ] && [ -x "$FFMPEG" ]; then
+  FF="$FFMPEG"
+elif command -v ffmpeg >/dev/null 2>&1; then
+  FF="$(command -v ffmpeg)"
+else
+  FF=$(ls -1d /c/Users/*/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_*/ffmpeg-*/bin/ffmpeg.exe 2>/dev/null | sort -V | tail -1)
+fi
+if [ -z "${FF:-}" ] || [ ! -x "$FF" ]; then
+  echo "ffmpeg not found. Install it (winget install Gyan.FFmpeg) or set FFMPEG=/path/to/ffmpeg" >&2
+  exit 1
+fi
+
 TARGET_PEAK_DB=-2.0
 
 IN="$1"

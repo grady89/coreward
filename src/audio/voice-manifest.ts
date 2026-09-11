@@ -29,6 +29,24 @@ export const DISPATCH_VOICED = new Set<string>([
   'v3-dusk-1', 'v3-dusk-2', 'v3-dusk-3',
   'v3-d520-1', 'v3-d520-2',
   'ruins-1-1', 'ruins-1-2', 'ruins-1-3',
+
+  // ---- ACT III: off script ----
+  'v3-d700-1', 'v3-d700-2',
+  'v3-d900-1', 'v3-d900-2', 'v3-d900-3',
+  'core-1-1', 'core-1-2', 'core-1-3',
+  'core-1-after-1', 'core-1-after-2',
+
+  // ---- reactive: deaths, tows, milestones ----
+  'first-death-1', 'first-death-2',
+  'first-stranded-1', 'first-stranded-2',
+  'rich-1-1', 'rich-1-2',
+
+  // ---- other worlds ----
+  'cryos-arrive-1', 'cryos-arrive-2', 'cryos-arrive-3',
+  'cryos-d200-1', 'cryos-d200-2',
+  'cryos-accl-1', 'cryos-accl-2', 'cryos-accl-3',
+  'maelis-arrive-1', 'maelis-arrive-2', 'maelis-arrive-3',
+  'maelis-accl-1', 'maelis-accl-2', 'maelis-accl-3',
 ]);
 
 /** The Lamplighters: one id per glyph, matching GlyphDef.id in world/glyphs.ts. */
