@@ -325,6 +325,14 @@ export const EVENTS: NarrativeEvent[] = [
  * lines registered here, or the transcript cannot replay it.
  */
 export const ADHOC_TRANSMISSIONS: Record<string, { world?: string; lines: string[] }> = {
+  // NG+: Dispatch has read your file, and says so — once per descent
+  'descent-greeting': {
+    lines: [
+      'Dispatch here. The board cleared a repeat expedition — same forty on the ledger.',
+      'One revision: the company read your file, and the rates read it too. Everything costs more this time down.',
+      'You know the way. That is the asset. That is also the problem.',
+    ],
+  },
   'rime-taught': {
     world: 'cryos2',
     lines: [

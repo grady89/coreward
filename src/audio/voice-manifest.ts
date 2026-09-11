@@ -40,6 +40,11 @@ export const DISPATCH_VOICED = new Set<string>([
   'first-death-1', 'first-death-2',
   'first-stranded-1', 'first-stranded-2',
   'rich-1-1', 'rich-1-2',
+  'stipend-1-1', 'stipend-1-2',
+  'stipend-2-1', 'stipend-2-2',
+  'stipend-3-1', 'stipend-3-2',
+  'stipend-4-1', 'stipend-4-2',
+  'descent-greeting-1', 'descent-greeting-2', 'descent-greeting-3',
 
   // ---- other worlds ----
   'cryos-arrive-1', 'cryos-arrive-2', 'cryos-arrive-3',

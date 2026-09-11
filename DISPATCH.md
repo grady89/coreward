@@ -1,7 +1,7 @@
 # DISPATCH — Voice-Over Script
 
 Every transmission the dispatcher speaks, pulled from `src/game/narrative.ts`
-(`EVENTS` + `ADHOC_TRANSMISSIONS`) and the one greeting in `main.ts`, in the
+(`EVENTS` + `ADHOC_TRANSMISSIONS`), in the
 order the player is likely to hear them. The husk readables and ending pages
 are **not** in this file — those are the player reading, not her voice.
 
@@ -235,7 +235,7 @@ first time she sounds like she's choosing sides.*
 ## Reactive — deaths, tows, milestones
 
 *Settings: Natural · style low · speed 1.0.*
-*Status: ✅ DONE for the first three; the stipend letters and the descent greeting still need takes.*
+*Status: recorded — every line below is ✅ DONE.*
 
 ### first-death — first hull loss  ✅ DONE
 *Direction: gentle. The apology is real.*
@@ -253,29 +253,28 @@ first time she sounds like she's choosing sides.*
 ### Stipend letters — the Ledger's only return
 
 *Direction: the only good news she ever gets to deliver, and it undoes her a
-little each time. Warm, and trying not to show how much. NOT RECORDED.*
+little each time. Warm, and trying not to show how much.*
 
-### stipend-1 — first tow underwritten
+### stipend-1 — first tow underwritten  ✅ DONE
 1. [carefully] Accounting flagged a tow invoice on your ledger that is not yours. Driller out of Ridge Nine, dry tank at three hundred.
 2. I processed it. I did not tell them who paid. [quietly] They cried on the channel anyway.
 
-### stipend-2 — third tow underwritten
+### stipend-2 — third tow underwritten  ✅ DONE
 1. Another one of your tows went through. [quietly] Kid on her first lease, gas pocket took the hull.
 2. [wryly] You know Cindral bills me for the paperwork on these? [warmly] Worth it. I hate writing them up when nobody pays.
 
-### stipend-3 — sixth tow underwritten
+### stipend-3 — sixth tow underwritten  ✅ DONE
 1. [amused] The dispatchers have a name for you now. Not your registry — a name. They call you the Lamplighter.
 2. [quietly] I have not told them what that word means down where you dig. Let them have it.
 
-### stipend-4 — tenth tow underwritten
+### stipend-4 — tenth tow underwritten  ✅ DONE
 *Direction: line 2 is someone else's words. She reads them plainly and lets them land on their own. Generate as one take.*
 1. A letter came through the dish, no registry, routed through six relays. [pause] Read it to you? It is short.
 2. [reading aloud] [gently] "I do not know who you are. My mother came home. There is a plate for you at our table, whoever you are."
 
-### descent-greeting — start of a second descent (NG+)
+### descent-greeting — start of a second descent (NG+)  ✅ DONE
 *Direction: her job voice again, but she has been here before too. The
-third line is dry, not ominous. NOT RECORDED. Lives in `main.ts`, not
-`narrative.ts`.*
+third line is dry, not ominous.*
 1. [cheerfully] Dispatch here. The board cleared a repeat expedition — same forty on the ledger.
 2. [wryly] One revision: the company read your file, and the rates read it too. Everything costs more this time down.
 3. [quietly] You know the way. That is the asset. [pause] That is also the problem.

@@ -2196,15 +2196,10 @@ class Game {
         this.hud.show();
         this.hud.setConsumables(this.state.flares, this.state.charges);
         this.hud.toast('WELCOME BACK, DRILLER', 'stratum');
-        // NG+: dispatch has read your file, and says so — once per descent
-        if (this.state.descent > 0 && !this.state.firedEvents.has('descent-greeting')) {
-          this.state.firedEvents.add('descent-greeting');
-          this.comms.say([
-            'Dispatch here. The board cleared a repeat expedition — same forty on the ledger.',
-            'One revision: the company read your file, and the rates read it too. Everything costs more this time down.',
-            'You know the way. That is the asset. That is also the problem.',
-          ]);
-        }
+        // NG+: dispatch has read your file, and says so — once per descent.
+        // Routed like every other transmission so the takes play and the
+        // tape keeps it.
+        if (this.state.descent > 0) this.teach('descent-greeting');
       }
     } else if (this.mode === 'eva') {
       this.evaFrame(dt);
