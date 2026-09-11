@@ -170,7 +170,11 @@ export class PodController {
       const drag = SIDE_DRAG * (ACTIVE.iceTraction && this.grounded ? 0.28 : 1);
       this.vx -= this.vx * Math.min(1, drag * dt);
     }
-    st.fuel = Math.max(0, st.fuel - FUEL_IDLE * carryF * dt);
+    // parked up top the rig carries the load: the idle burn only bills you
+    // in the field, so stepping away on a pad is safe
+    if (!this.onSurfacePad) {
+      st.fuel = Math.max(0, st.fuel - FUEL_IDLE * carryF * dt);
+    }
     this.dashCd = Math.max(0, this.dashCd - dt);
     // the sticky aim is a GROUNDED memory: airborne with no cut, the arm
     // goes home to down — flying a shaft with the bit in the wall reads wrong
@@ -671,6 +675,18 @@ export class PodController {
       this.lastStratum = s;
       this.ev.onStratum(s);
     }
+  }
+
+  /**
+   * Settled on the landing pad or a dock apron. Reads the spans directly
+   * rather than this.dock, which docking() only latches at the END of the
+   * frame — one frame of idle burn on touchdown is exactly the kind of
+   * thing a player notices on a long stop.
+   */
+  get onSurfacePad(): boolean {
+    if (!this.grounded || this.py < -0.5 || this.py > 2.2) return false;
+    if (this.px > PAD_X0 - 0.3 && this.px < PAD_X1 + 1.3) return true;
+    return DOCKS.some(d => this.px >= d.x0 - 0.35 && this.px <= d.x1 + 0.35);
   }
 
   private docking(): void {
