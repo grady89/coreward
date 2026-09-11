@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Stillwalker Review</title>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #04060c; }
+    .tag {
+      position: fixed; transform: translateX(-50%);
+      font: 700 13px "Chakra Petch", system-ui, sans-serif; letter-spacing: 0.28em;
+      color: #b8c8d8; text-align: center; pointer-events: none; white-space: nowrap;
+    }
+    .tag b { display: block; font-size: 10px; letter-spacing: 0.12em; color: #5a6c80; }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import { StillwalkerBody, WALKER_HEIGHT } from '/src/world/fauna/stillwalker-body.ts';
+
+    // Beauty-shot stage for the Stillwalker body. Mimics HEARTREACH on
+    // CRYOS-2: near-black fog ambient, the pod's warm glow as the only key.
+    //   ?shot=lineup   — lit / hunting / in-rock, side by side at play distance
+    //   ?shot=lit      — held by the lamp, standing straight, frost up
+    //   ?shot=hunt     — walking in the dark: cracks and the gaze
+    //   ?shot=rock     — wading through the wall, flattened cut-out
+    //   ?shot=closeup  — head and shoulders, lit
+    //   ?shot=walk     — the gait, six phases across
+    const params = new URLSearchParams(location.search);
+    const shot = params.get('shot') ?? 'lineup';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x04060c);
+    scene.fog = new THREE.FogExp2(0x04060c, 0.028);
+
+    // HEARTREACH fog stop: hemi 0.05, amb 0x1e4a3c @ 1.0 (worlds.ts cryos2 row 330)
+    scene.add(new THREE.HemisphereLight(0xbfe0ff, 0x24303e, 0.05));
+    scene.add(new THREE.AmbientLight(0x1e4a3c, 1.0));
+
+    // ice-rock: floor and a back wall of tiles, the deep-blue stratum
+    const rock = new THREE.MeshStandardMaterial({ color: 0x2a3050, roughness: 0.95, metalness: 0.05 });
+    const rockLt = new THREE.MeshStandardMaterial({ color: 0x4a6a96, roughness: 0.9, metalness: 0.05 });
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    const tile = (x, y, z, m) => { const t = new THREE.Mesh(box, m); t.position.set(x, y, z); scene.add(t); return t; };
+    const FLOOR = -2.5;
+    for (let x = -14; x <= 14; x++) for (let y = 0; y < 3; y++) tile(x, FLOOR - 0.5 - y, 0, (x + y) % 3 ? rock : rockLt);
+    // backdrop: the far side of a wide hall, dark
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ color: 0x0c1220, roughness: 1 }));
+    back.position.set(0, 4, -2.5);
+    scene.add(back);
+
+    // the pod: a small lit hull and its lights, as in pod.ts (glow 20 + 2, headlamp 260 down)
+    const podAt = (x, y, lampOn) => {
+      const hull = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.5, metalness: 0.3, emissive: 0x332a18, emissiveIntensity: lampOn ? 1 : 0.2 }));
+      hull.position.set(x, y, 0);
+      scene.add(hull);
+      const glow = new THREE.PointLight(0xffd9a0, lampOn ? 22 : 1.6, 10, 1.5);
+      glow.position.set(x, y, 0.6);
+      scene.add(glow);
+      const spot = new THREE.SpotLight(0xffe6c0, lampOn ? 260 : 0, 22, 0.82, 0.5, 1.1);
+      spot.position.set(x, y + 0.3, 0.3);
+      const tgt = new THREE.Object3D(); tgt.position.set(x, y - 5, 0.5);
+      scene.add(tgt); spot.target = tgt; scene.add(spot);
+    };
+
+    const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 200);
+    const tags = [];
+    const tag = (worldPos, name, sub) => {
+      const el = document.createElement('div');
+      el.className = 'tag';
+      el.innerHTML = sub ? `${name}<b>${sub}</b>` : name;
+      document.body.appendChild(el);
+      tags.push({ el, worldPos });
+    };
+
+    // each staged walker: body + how to pose it each frame
+    const staged = [];
+    const walker = (x, pose, opts = {}) => {
+      const b = new StillwalkerBody();
+      b.group.position.set(x, FLOOR + WALKER_HEIGHT / 2, opts.rock ? 0.56 : 0.05);
+      if (opts.rock) b.group.scale.set(1, 1, 0.08);
+      if (opts.face < 0) b.group.rotation.y = Math.PI;
+      scene.add(b.group);
+      staged.push({ b, pose });
+      return b;
+    };
+    // a wall for the in-rock variant to stand in
+    const wallAt = x => { for (let dx = -2; dx <= 2; dx++) for (let y = 0; y < 5; y++) tile(x + dx, FLOOR + 0.5 + y, 0, (dx + y) % 2 ? rock : rockLt); };
+
+    const LIT = t => ({ gait: 0, walk: 0, lit: 1, hunt: 0, flash: 0, flat: false, time: t });
+    const HUNT = t => ({ gait: t * 5.3, walk: 1, lit: 0, hunt: 0.9, flash: 0, flat: false, time: t });
+    const ROCK = t => ({ gait: t * 5.3, walk: 1, lit: 0.55, hunt: 0.5, flash: 0, flat: true, time: t });
+
+    let cz = 12.5, cy = 1.1, cx = 0;
+    if (shot === 'lineup') {
+      podAt(-3.2, FLOOR + 0.5, true);
+      walker(0.6, LIT, { face: -1 });
+      tag(new THREE.Vector3(0.6, FLOOR - 0.3, 0), 'HELD', 'lamp on it, faced');
+      podAt(4.8, FLOOR + 0.5, false);
+      walker(7.6, HUNT, { face: -1 });
+      tag(new THREE.Vector3(7.6, FLOOR - 0.3, 0), 'HUNTING', 'lamp off — it walks');
+      wallAt(-8.5);
+      walker(-8.5, ROCK, { face: 1, rock: true });
+      tag(new THREE.Vector3(-8.5, FLOOR - 0.3, 0), 'IN THE WALL', 'wading');
+      cx = -0.5; cy = 0.2;
+    } else if (shot === 'lit') {
+      podAt(-2.6, FLOOR + 0.5, true);
+      walker(0.5, LIT, { face: -1 });
+      cx = -0.6; cy = -0.4; cz = 6.5;
+    } else if (shot === 'hunt') {
+      podAt(-3.4, FLOOR + 0.5, false);
+      walker(0.6, HUNT, { face: -1 });
+      cx = -0.8; cy = -0.4; cz = 6.5;
+    } else if (shot === 'rock') {
+      podAt(-3.2, FLOOR + 0.5, true);
+      wallAt(1.5);
+      walker(1.5, ROCK, { face: -1, rock: true });
+      cx = -0.6; cy = -0.3; cz = 6.5;
+    } else if (shot === 'closeup') {
+      podAt(-2.2, FLOOR + 1.6, true);
+      walker(0.5, t => ({ ...LIT(t), walk: 0.35 }), { face: -1 });
+      cx = 0.2; cy = FLOOR + 2.55; cz = 2.6;
+    } else if (shot === 'walk') {
+      podAt(-9, FLOOR + 0.5, false);
+      for (let i = 0; i < 6; i++) {
+        const ph = i / 6 * Math.PI * 2;
+        walker(-6.5 + i * 2.9, t => ({ gait: ph, walk: 1, lit: 0.3, hunt: 0.7, flash: 0, flat: false, time: t }), { face: 1 });
+      }
+      cx = 0.5; cy = -0.3; cz = 11;
+    }
+    camera.position.set(cx, cy, cz);
+    camera.lookAt(cx, cy, 0);
+
+    const v = new THREE.Vector3();
+    const clock = new THREE.Clock();
+    let time = 1.7;
+    let frames = 0;
+    function frame() {
+      const dt = Math.min(0.05, clock.getDelta());
+      time += dt;
+      for (const { b, pose } of staged) b.set(pose(time));
+      for (const t of tags) {
+        v.copy(t.worldPos).project(camera);
+        t.el.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px';
+        t.el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
+      }
+      renderer.render(scene, camera);
+      if (++frames === 40) document.title = 'READY:' + shot;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  </script>
+</body>
+</html>
