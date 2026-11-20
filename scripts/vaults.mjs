@@ -750,9 +750,10 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     // THE SHAKE BAN (precision §5.2): jump, land, wall-jump, spark and the
     // gutter must add nothing to that channel. Only the chord did, and softly.
     // every sconce already burning and clear of them all, so nothing but the
-    // banned verbs can touch the channel from here
+    // banned verbs can touch the channel from here. The entry is that place in
+    // any map: the buffer lint keeps it clear of danger, and it is no sconce
     for (let i = 0; i < v.sconceLit.length; i++) v.sconceLit[i] = true;
-    v.px = 24.5; v.py = -39.5; v.vx = 0; v.vy = 0;
+    v.px = v.p.entry.x + 0.5; v.py = -(v.p.entry.y + 0.5); v.vx = 0; v.vy = 0;
     await new Promise(r => setTimeout(r, 200));
     const afterChord = shakes.length;
     v.jumpPress(); v.jumpRelease();

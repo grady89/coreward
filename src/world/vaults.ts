@@ -980,100 +980,103 @@ export const VAULTS: VaultDef[] = [
       '..................................................'
     ],
   },
-  // 9 · THE KINDLED — the exam, in open sky and in the dark. Four
-  // movements over the void, three sconces for the whole of it, and
-  // nothing introduced: the dark traverse under the warden and the moth, a
-  // gate; the gallery whose middle lantern IS the floor; the one lit
-  // passage where the pistons bite both jumps and a watch-light wakes as
-  // you land, the vent out; a gate, and then the dark arriving at your
-  // heels — leftward over rime and fangs, past everyone who stayed, to
-  // the stone.
+  // 9 · THE KINDLED — the exam, in the dark. A boustrophedon that climbs:
+  // the lamplight floor right (a moth over the spark gap, half-time floors
+  // under plumb bolts, a dark wall to the first light); the lantern gallery
+  // up the hall (crown to crown, then a vent past a burning lantern); the
+  // middle floor left (rime under pistons, an inverted span, a piston
+  // chimney with one niche, a curtain); and the exhale, the one lit floor,
+  // where the dark wakes behind you and chases you right across everything
+  // in miniature to the dais and the four who stayed. Three lights.
   {
     glyph: 'kindled',
-    chambers: [19, 38],
+    chambers: [21, 43],
     openEdges: true,
     shuttles: [
-      { x0: 16, y0: 6, x1: 44, y1: 6, period: 3.40, phase: 0.0 },
-      { x0: 10, y0: 4, x1: 45, y1: 7, period: 3.40, phase: 0.25, snuff: true }
+      { x0: 12, y0: 45, x1: 12, y1: 40, period: 2.55, phase: 0, snuff: true },
+      { x0: 21, y0: 41, x1: 21, y1: 46, period: 1.70, phase: 0 },
+      { x0: 26, y0: 41, x1: 26, y1: 46, period: 1.70, phase: 0.5 },
+      { x0: 31, y0: 41, x1: 31, y1: 46, period: 1.70, phase: 0 },
+      { x0: 45, y0: 28, x1: 49, y1: 28, period: 1.70, phase: 0.5 },
+      { x0: 30, y0: 12, x1: 34, y1: 12, period: 1.70, phase: 0 }
     ],
     censers: [
-      { x: 40, y: 17, len: 3.4, arc: 1.00, period: 2.55, phase: 0.0 },
-      { x: 33, y: 17, len: 3.4, arc: 1.00, period: 2.55, phase: 0.25 },
-      { x: 26, y: 17, len: 3.4, arc: 1.00, period: 2.55, phase: 0.5 }
+      { x: 47.5, y: 31, len: 9.0, arc: 0.29, period: 2.55, phase: 0 },
+      { x: 54, y: 31, len: 9.6, arc: 0.29, period: 2.55, phase: 0.5 },
+      { x: 60, y: 26, len: 2.5, arc: 1.00, period: 2.55, phase: 0.5 },
+      { x: 35.5, y: 5, len: 3.0, arc: 1.00, period: 2.55, phase: 0 }
     ],
     crushers: [
-      { x: 16, y: 28, w: 2, h: 1, dx: 0, dy: 3, period: 3.40, phase: 0.0 },
-      { x: 26, y: 36, w: 2, h: 1, dx: 0, dy: -3, period: 3.40, phase: 0.5 }
-    ],
-    beams: [
-      { x: 20.5, y: 33.3, period: 4.25, phase: 0.0, spin: true, parked: true, arm: [8, 27, 14, 29] }
+      { x: 29, y: 26, w: 2, h: 1, dx: 0, dy: 2, period: 3.40, phase: 0 },
+      { x: 33, y: 26, w: 2, h: 1, dx: 0, dy: 2, period: 3.40, phase: 0.5 },
+      { x: 1, y: 23, w: 2, h: 2, dx: 2, dy: 0, period: 3.40, phase: 0 },
+      { x: 5, y: 18, w: 2, h: 2, dx: -2, dy: 0, period: 3.40, phase: 0.75 },
+      { x: 52, y: 10, w: 2, h: 1, dx: 0, dy: 3, period: 3.40, phase: 0 }
     ],
     gates: [
-      // between the movements, so the exam never un-happens
-      { x0: 48, y0: 10, x1: 51, y1: 10 },
-      { x0: 7, y0: 34, x1: 10, y1: 34 },
+      { x0: 3, y0: 15, x1: 4, y1: 15, dir: 'up' }
     ],
     currents: [
-      { x0: 34, y0: 27, x1: 36, y1: 33, force: 46 },
+      { x0: 62, y0: 26, x1: 63, y1: 37, force: 46 },
+      { x0: 35, y0: 5, x1: 36, y1: 15, force: 46 }
     ],
     pursuit: {
-      // IV: the dark, arriving, and its edge is how you read the floor
-      zone: [3, 38, 47, 45],
+      zone: [5, 2, 55, 17],
       dir: 'right',
-      speed: 3.1,
-      trigger: [3, 38, 10, 45],
+      speed: 3.2,
+      trigger: [17, 6, 20, 13],
     },
     map: [
-      '........................................................',
-      '........................................................',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.ddddddddddoooddddddoooddddddoooddddddooodddddddddddddd.',
-      '.ddd@ddSddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dd########ddd######ddd######ddd######ddd######dddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddooooddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddooooddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddooooddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddooooddd.',
-      '..______________________________________________oooo__..',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddooooddd.',
-      '.ddddddddddddddddddddddddd#dddddd#dddddd#dddddddooooddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.ddddddddddddddddSddddddddddddddddddddddddddddddddddddd.',
-      '.ddddddddddddd#######ddddddddddddddddddddddddd#######dd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '.dddddddddddddddddddddddddddddSdddddddddddddddddddddddd.',
-      '.....................____..###########.._____...........',
-      '................##......................................',
-      '................##..######..............................',
-      '........................................................',
-      '............######......................................',
-      '........#######.........................................',
-      '...######...............................................',
-      '.......oooo.......######................................',
-      '.......oooo.............................................',
-      '.......oooo................######.......................',
-      '.......oooo.............................................',
-      '.......oooo.._____________________###_________________..',
-      '.......oooo...............##............................',
-      '.ddddddooooddddddddddddddd##ddddddddddddddddddddddddddd.',
-      '.ddddddoooodddddddddddddddddddddddddddddddddddddddddddd.',
-      '.ddddddoooodddddddddddddddddddddd#ddddddddddddddddddddd.',
-      '.ddddddoooodddddddddddddddddddddd*ddddddddddddddddddddd.',
-      '.ddddddoooodddddddddddddddddddddddddddddddddddddddddddd.',
-      '.ddddNddddddddddddddFdddddXdKdddddCddddddddddFdddddMddd.',
-      '.dd#########dRRRRd######d######d######dRRRRd####d####dd.',
-      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
-      '........................................................',
-      '........................................................',
-      '........................................................',
-      '........................................................'
+      '..................................................................',
+      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
+      '.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
+      '.dddd................dddddddddddddddddddddddddddddddddddddddddddd.',
+      '.dddd................dddddddddddddd##dddddddddddddddddddddddddddd.',
+      '.dddd................dddddddddddddddddddddddddddddddddddddddddddd.',
+      '.dddd................dddddddddddddddddddddddddddddddddddddddddddd.',
+      '.dddd................dddddddddddddddddddddddddddddddddddddddddddd.',
+      '.dddd................ddddddddddddddddddddddddddddddd##ddddKNdMFCd.',
+      '.dddd................ddddddddddddddddddddddddddddddd##ddd#######d.',
+      '.dddd................dddddddddddddddddddddddddddddddddddd#######d.',
+      '.dddd................dddddddddddddddd#######ddddddddddddd#######d.',
+      '.dddd................dddddddddddddddddddddddodddddddddddd#######d.',
+      '.dddd...N..S.........dddddddddddddddddddddddodddddddddddd#######d.',
+      '.d#dd################dAAAd###d#####ddddddddddRRRRRR#############d.',
+      '.d#dd#ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
+      '.d#dd#dddddddddddddddXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXd.',
+      '.d#dd#ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.',
+      '.d#dd###########################################################d.',
+      '.d#dd###########################################################d.',
+      '.d#dd###########################################################d.',
+      '.d#dddd#######dd^^^X^^^X^^dd####################################d.',
+      '.d#dddd#######od^^^^^^^^^^dd####################################d.',
+      '.d#dd#########dd^^^^^^^^^^dd####################################d.',
+      '.d#dd#########do^^^^^^^^^^dd####################################d.',
+      '.d#do#########dd^^^^^^^^^^dd######################################',
+      '.d#dd#ddddddddod^^^^^^^^^^dddddddddddddddddddddddddddddddddddddd##',
+      '.d#od#dddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.d#ddddddddddddodddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.d#ddddddddddNddddddddddddddddddddddddFdSddddddddddddddddddddddd##',
+      '.d##############dddddddddd##RRRRRRRR###############dd#########dd##',
+      '.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.dddddddddddddddXXXXXXXXXXddXXXXXXXXdddddddddddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddddSdddddddodddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddd########oddddddddddddd########',
+      '.ddddddddddddddddddddddddddddddddddd########dddddddddddddddddddd##',
+      '.ddddddddddddddddddd#############ddd########dddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddd########dddddddddddddddddddd##',
+      '.ddddddddddddodddddddddddddddddddddd########dddddddddddddddddddd##',
+      '.ddddddddddodddodddddddddddddddddddd########dddddddddddddddddddd##',
+      '.dddddddddddddddddddddddddddddddd###########dddddddddddddddddddd##',
+      '.dddddddddddddddddddddddddddbbbddddd########dddddddddddddddddddd##',
+      '.dd@ddddFddddddddddKdddAAAdddddddddd########dddddddddddddddddddd##',
+      '.#########ddddddd####ddddddddddddddd########dddddddddddddddddddd##',
+      '.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd##',
+      '..........XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX..'
     ],
   },
 ];
