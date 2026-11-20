@@ -350,6 +350,53 @@ function arc({ runUp = 0, holdFrames = 999, dash = null, frames = 200 }) {
   };
 }
 
+/**
+ * THE LONG REACH, honestly. The table's spark rows fire the spark six frames
+ * into the jump, which is how a player uses it to go UP. The farthest a body
+ * can go ACROSS is a running jump held, then a 45° spark at the very end of
+ * the fall — and that carries more than twice the running jump. It is the
+ * number a gap must beat to be uncrossable, and it depends on the landing's
+ * height: falling adds reach, and three courses of climb cut it in half.
+ *
+ * Launch lip at row L (x < 10), landing floor at row F (x >= 12), open sky
+ * between; returns the best landing distance past the lip over every spark
+ * frame and direction, or null when nothing lands.
+ */
+export function lateReach(L, F) {
+  const W = 200, rows = [];
+  for (let y = 0; y < 60; y++) {
+    let r = '';
+    for (let x = 0; x < W; x++) r += (y >= L && x < 10) ? '#' : (y >= F && x >= 12) ? '#' : '.';
+    rows.push(r);
+  }
+  const world = new World(rows, true);
+  const fly = (dash) => {
+    const s = spawn(world, 2, L - 1);
+    for (let i = 0; i < 30; i++) step(s, { ...HOLD });
+    while (s.px < 10 - C.HW - C.WALK / 60) step(s, { ...HOLD, right: true });
+    step(s, { ...HOLD, right: true, press: true });
+    for (let f = 0; f < 240; f++) {
+      const inp = { ...HOLD, right: true, jump: true };
+      if (dash && f === dash.at) { inp.dash = true; inp.dashDX = dash.dx; inp.dashDY = dash.dy; }
+      step(s, inp);
+      if (s.dead) return null;
+      if (s.grounded && f > 4) return s.px - 10;
+    }
+    return null;
+  };
+  let best = fly(null) ?? 0;
+  // every way the spark can be aimed forward or up, on every frame: a
+  // straight-up spark at the apex and the glide after it is the farthest
+  // climb, and a search that skips it under-reports by two tiles
+  for (const [dx, dy] of [[1, 0], [1, 1], [0, 1], [1, -1], [0.5, 1], [1, 0.5]]) {
+    for (let at = 0; at < 100; at++) {
+      const d = fly({ at, dx, dy });
+      if (d !== null && d > best) best = d;
+    }
+  }
+  return +best.toFixed(2);
+}
+
 export function metrics() {
   const standing = arc({ runUp: 0 });
   const running = arc({ runUp: 30 });
@@ -405,6 +452,7 @@ export function metrics() {
     standing, running, shortHop, runDashFlat, runDashUp, standDash,
     runwayFrames, runway, skidFrames, skid,
     wallJumpGain: +gain.toFixed(2),
+    lateReach: { down2: lateReach(38, 40), level: lateReach(40, 40), up2: lateReach(40, 38), up3: lateReach(40, 37), up4: lateReach(40, 36), up5: lateReach(40, 35), up6: lateReach(40, 34) },
     coyoteFrames: +(C.COYOTE * 60).toFixed(1),
     bufferFrames: +(C.BUFFER * 60).toFixed(1),
     latchFrames: +(C.WJ_LATCH * 60).toFixed(1),

@@ -49,6 +49,26 @@ that does not exist:
 | standing + flat spark | ${t(m.standDash.height)} | ${t(m.standDash.distance)} | ${m.standDash.airFrames}f | the correction, from rest |
 | wall-jump, per kick | ${t(m.wallJumpGain)} | — | — | unlimited, and free |
 
+**The spark rows above fire it six frames in, to go up.** Fired at the END of
+the fall, a 45° spark is the game's true long reach, and it depends on where
+you land. This is the number a gap must beat to be uncrossable; note that
+distance alone never beats it inside a chamber, and three courses of climb do.
+
+| late spark, running jump | farthest landing |
+|---|---|
+| landing 2 courses lower | **${t(m.lateReach.down2)}** |
+| level | **${t(m.lateReach.level)}** |
+| landing 2 courses higher | ${t(m.lateReach.up2)} |
+| landing 3 courses higher | ${t(m.lateReach.up3)} |
+| landing 4 courses higher | ${t(m.lateReach.up4)} |
+| landing 5 courses higher | ${t(m.lateReach.up5)} |
+| landing 6 courses higher | ${t(m.lateReach.up6)} |
+
+**And none of it matters next to a wall.** Kicks are unlimited, so any wall
+within reach is free height, and a spark off a high kick reaches farther
+than any of these. A route that must not be walked back is closed with a
+one-way gate, not with distance.
+
 | forgiveness | value |
 |---|---|
 | coyote time | ${m.coyoteFrames} frames |
