@@ -98,10 +98,10 @@ function leave(ci, dir, xr, jh = 999, rel = 999) {
 // from its swap; off b's end into shaft 3, steering left k frames after
 const SHELVES = [[11, 16], [20, 25], [29, 34], [38, 43]];
 const swapIn = () => { const cyc = 3.4, half = 1.7; const tc = v.time % cyc; return Math.round(((tc < half ? half : cyc) - tc) * 60); };
-// ways off the last b and the frame (from the jump, or from leaving the lip)
-// the steer left begins: [jump at x (0 = walk off), jump held, steer at]
-// — measured, it is an ~8-frame window each
-const OFF = [[0, 0, 20], [0, 0, 24], [43, 8, 36], [43, 999, 42], [42, 8, 48], [42, 999, 54], [41, 8, 60], [41, 999, 60]];
+// ways off the last b: [jump at x (0 = walk off), jump held, frame the steer
+// left begins]. Since v6 any steer begun in the first 24 frames lands on the
+// sconce shelf (it was a 20-24 frame window under an unseen plane)
+const OFF = [[0, 0, 0], [0, 0, 8], [0, 0, 16], [0, 0, 24]];
 function crossing({ R, k, S }) {
   return (c) => {
     c.n = c.n ?? 0;                       // shelves landed on so far
@@ -170,8 +170,8 @@ const steps = [
   // ---- storey 3: the fading shelves ----
   // A and b hold 1.7 s each, in opposition: every hop is in the air across
   // the swap. Then straight on off b's end into the last wind, and the
-  // steer left out of it — below the plane, above the fangs.
-  ['7-8 the fading shelves, and the third drop', grid({}, { R: [30, 40, 50, 58], S: [6, 12], k: [0, 1, 2, 3, 4, 5, 6, 7] }).map(crossing),
+  // steer left out of it onto the sconce shelf, clear of the fangs.
+  ['7-8 the fading shelves, and the third drop', grid({}, { R: [30, 40, 50, 58], S: [6, 12], k: [0, 1, 2, 3] }).map(crossing),
     ok(() => v.grounded && v.ridingCenser < 0 && v.px > 38.8 && v.px < 43.2 && Math.abs(row() - 57.48) < 0.15 && Math.abs(v.vx) < 0.3), { period: 204, step: 4, maxF: 1200 }],
   ['8b the last sconce', [walkTo(41.0)], ok(() => v.sconceLit[3] && at(41.0)({})), { period: 1 }],
   // ---- the finish storey: one more breath of A, the last light, the stone ----
