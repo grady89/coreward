@@ -20,8 +20,8 @@ THE TEACH — no wave. Every element the chase will use, met once, alone:
       through behind it. L3 catches you under the chute.
    4  TWO BREATHS. West off L3 over a fanged gap that no single spark
       crosses: jump, spark, the brazier refills you in mid-air, spark again
-      onto L4 — the commit shelf, with the room's one light (S1) and an ember
-      hung under it.
+      onto L4 — the commit shelf, with the room's one light (S1). Out over
+      the void to its west hangs an ember: the way on.
 
 THE GATE — a curtain of light across the whole room under L4. You pass it
 falling; it will not pass you back. The trigger is the band just under it:
@@ -33,8 +33,10 @@ THE CHASE — each beat waits on a stone, and waiting is what the dark eats:
 
    5  THE PLUNGE. Off L4's west lip, through the gate, fourteen tiles west
       and twenty-two courses down onto P1 — two tiles of stone with a fang at
-      its lip. The legs alone do not reach it: spend the spark late in the
-      fall, flat west. P1 gives it back.
+      its lip. P1 is fifteen courses below the commit light's frame, so the
+      ember and a line of motes draw the way: spark flat west at the ember,
+      it gives the spark back, and the motes run on down to P1. The legs
+      alone do not reach it; straight down is a fang line over the throat.
    6  THE RIDE. The same lantern you plunged past: from P1, jump for its
       crown as it swings in, ride east over the fangs, step off onto the
       throat's west shoulder (P2). Three courses up — no spark reaches it.
@@ -58,8 +60,9 @@ The chase recombines and never introduces: lantern, rime, piston, brazier,
 gate — every one met above the line first. The last chamber holds no light.
 
 Fall-throughs are closed, not trusted: fang lines under the ice, the
-lanterns, both brazier gaps, the teach's east limb and the last piston's
-housing, so nothing missed above lands on something below.
+lanterns, both brazier gaps, the teach's east limb and the throat under L4,
+and the last piston's housing, so nothing missed above lands on something
+below.
 """
 import io
 import sys
@@ -118,7 +121,13 @@ put(29, 13)                              # its chain's stone
 run(24, 33, 24, 'X')
 run(19, 23, 18)                          # L4, the gate shelf
 put(20, 17, 'S')                         # the commit light
-put(20, 21, '*')                         # and the ember hung under it
+# the ember that points the way on: hung out over the plunge, west of the
+# lip, on the line the spark flies, so the one warm thing in the commit
+# light's frame says "out and down that way" -- not "straight down", where
+# the throat's housings wait under a fang line. Its chain runs up to a
+# stone under the ice walk's fangs, out of every reach.
+put(13, 21, '*')
+put(13, 10)                              # its chain's stone
 
 # ================================ THE GATE ===================================
 GATE_ROW = 26
@@ -126,7 +135,9 @@ GATE_ROW = 26
 # ================================ THE CHASE ==================================
 # nothing missed above the gate lands on the chase: a fang line under the
 # teach's east limb, so a fall off L3 never comes down on P4
-run(25, 43, 30, 'X')
+run(14, 43, 30, 'X')
+# ...and over the throat too: a drop straight off L4 used to land on the
+# throat's shoulders and skip the plunge and the ride
 # C1 · the plunge, past the lantern, onto the far-west ledge
 run(4, 5, 40)                            # P1
 put(6, 39, 'X')                          # a fang at its lip: come down onto it, not across
@@ -164,7 +175,7 @@ put(36, 94, 'N')
 # --- motes: the arcs the room asks for, traced before you jump them --------
 motes([(26, 4), (28, 3), (32, 3), (34, 5)])               # T2, the ride
 motes([(32, 16), (29, 15), (26, 15)])                     # T4, the two breaths
-motes([(15, 23), (12, 28), (9, 33), (7, 37)])             # C1, the plunge west
+motes([(17, 19), (15, 20), (11, 22), (9, 24), (8, 28), (6, 33), (5, 37)])  # C1, the plunge west, through the ember
 motes([(8, 35), (14, 34)])                                # C2, the swing's ends
 motes([(25, 50), (29, 50), (35, 53)])                     # C4, three breaths
 motes([(36, 62), (32, 63), (27, 65)])                     # C5, the cascade

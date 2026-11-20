@@ -80,6 +80,42 @@ then about 26 s from leaving the light to the stone.
 - **A lint failed.** The P4 climax lint failed because every brazier sat in
   the last chamber. An ember now hangs under the commit light, in chamber A.
 
+## v6: the way on from the commit light (2026-11-20)
+
+The playtest note was: "Its really not clear which way to go after the first
+section". The first section is the teach, which ends on S1. Standing there,
+the chamber-A frame shows rows of about 11 to 25 and nothing else. P1 is at
+row 40, fifteen courses under the frame's bottom edge, so the player cannot
+see it. The gate at row 26 is also just out of frame. The only warm thing on
+screen was the ember at (20,21), hanging straight under the player, and it
+said "drop here". A straight drop landed on the throat's shoulders and lid,
+which skips the plunge and the ride and often ends in the pistons. A plain
+walk off the west lip dies on the lantern's fanged mount at (11,34) before P1
+ever comes on screen.
+
+Changes:
+
+- The ember moved from (20,21) to (13,21). It now hangs out over the void,
+  west of the lip, on the flat-spark line. Its chain stone is at (13,10),
+  under the ice walk's fangs and out of every reach. A spark at it gets the
+  spark back. The P4 lint still sees the ember in chamber A.
+- The plunge motes were redrawn to run from the lip through the ember and
+  on down to P1. The new motes are at (17,19), (15,20), (11,22), (9,24),
+  (8,28), (6,33) and (5,37).
+- The row-30 fang line now starts at x 14 (it used to start at 25), so it
+  roofs the throat. Every braked drop off L4 now dies on it, where before
+  each one landed on P2, the lid or the east housing.
+
+The plunge sweep from S1 (walk off or run-jump, one west spark at frames
+10…90, flat or up) is 10/38 both before and after. The beat is no harder
+and no easier; only its read changed. The route is unchanged and still
+completes. See the before and after shots: `design-review/ember-v6-before.png`
+and `ember-v6-after.png`.
+
+Still open: a body that falls without sparking to about row 31 and then
+sparks east under the fang line lands on P2 and skips the ride. The window
+is a few frames, and the skip predates this change.
+
 ## A flaky check, not from this room
 
 `vaults.mjs` → `dead surface` (proving stage) failed three runs in a row
