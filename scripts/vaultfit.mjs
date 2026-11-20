@@ -29,7 +29,7 @@ const colsNeeded = Math.max(1, Math.ceil(HW * 2));
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
-await page.goto('http://localhost:4173');
+await page.goto(process.env.COREWARD_URL ?? 'http://localhost:4173');
 await page.waitForTimeout(3200);
 const maps = await page.evaluate(() =>
   [...window.__VAULTS, ...window.__TEST_VAULTS].map(v => ({ glyph: v.glyph, map: v.map })));

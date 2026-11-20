@@ -7,7 +7,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 const errors = [];
 page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
 
-await page.goto('http://localhost:4173');
+await page.goto(process.env.COREWARD_URL ?? 'http://localhost:4173');
 await page.waitForTimeout(2500);
 await page.evaluate(() => localStorage.clear());
 await page.click('#t-new');

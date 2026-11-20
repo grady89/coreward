@@ -59,7 +59,7 @@ const stage = async (key, checks, fn) => {
   await fn();
 };
 
-await page.goto('http://localhost:4173');
+await page.goto(process.env.COREWARD_URL ?? 'http://localhost:4173');
 await page.waitForTimeout(2500);
 await page.evaluate(() => localStorage.clear());
 await page.click('#t-new');
