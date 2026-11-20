@@ -60,3 +60,26 @@ frames. Coyote 6 f, jump buffer 7 f.
 - A bolt's rail drawn "to the tower" sweeps the tower's climb too. Check
   every rail's full travel against every route that passes it.
 - Anchor stones for rails are footholds whether you meant them or not.
+- **A drop that must be one-way is a curtain, not a narrow shaft.** The
+  playtest found the drop lane between the east tower and the ledge (cols
+  27-28 under row 22) climbable from the plaza, so the whole right limb was
+  skipped. Narrowing it cannot close it: the tower face beside it is a
+  twelve-course wall, kicks are free, and a one-wide shaft is two walls. A
+  'down' gate wall to wall at the ledge's course (x 27-28, row 22) does:
+  walls do not catch it, a body falls through it, and a rising head stops at
+  its underside. 825 techniques × 102 phases (84k runs: kick chains on the
+  tower, kick-and-steer-back, spark mid-climb, run + spark at five angles from
+  four starts, jump-buffer mash and pre-touch, spark into wall-kick):
+  phasesOK 0. The highest any of them got was head flush with the curtain.
+  The drop itself is 35 frames lip to plaza; 4 of 5 walk-off/hop/spark-down
+  techniques work at every phase.
+- **Check the other end of the same ledge.** Platform 37-38 stands six
+  courses under the ledge's east end: a standing jump plus a spark straight
+  up landed on the ledge at every phase. A second curtain (x 37-39, row 22,
+  over the gap and the half-time pad, to the anchor stone) closes it: 180
+  techniques × 102 phases from 37-38 (both ends) and the plaza's end,
+  phasesOK 0. **Still open:** from platform 41-45 a jump plus spark rises
+  just east of the anchor and lands on the ledge, pad 38-39 or the anchor at
+  every phase. That skips 49-50, the wall and the pads back. A curtain there
+  would also cap the 41-45 -> 49-50 jump, so closing it is a change to the
+  right limb's layout.

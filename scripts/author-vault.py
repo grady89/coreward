@@ -22,7 +22,8 @@ on the drawing:
    8  a wall to kick up, and the high platform beyond it
       ... back LEFT over four half-time pads ...
    9  the ledge and the third light
-  10  drop off the ledge's near end, left of the lasers, back to the plaza
+  10  drop off the ledge's near end, left of the lasers, back to the plaza,
+      through a falling curtain that lets nobody climb the lane the other way
   11  up the chimney, through the grate (all four lights), to the stone
 
 Nothing here forbids a wall-jumper a shortcut — kicks are free in this game
@@ -188,6 +189,26 @@ SHUTTLES = [
     (40, 23, 40, 28, 3, 0.0),
     (47, 22, 47, 27, 3, 0.5),
 ]
+# 10 · the drop lane between the east tower and the ledge is ONE-WAY. Down
+# it is the way home once the ledge light is lit; up it, from the plaza, is
+# the whole right limb skipped (playtest). Narrowing it cannot close it: the
+# tower's face is a twelve-course wall beside the lane, kicks are free, and a
+# one-wide shaft is two walls, easier still. So the lane is sealed at the
+# ledge's own course by a falling curtain (a 'down' gate): the body drops
+# through it freely, and a head rising into its underside stops as on stone.
+# It is wall to wall — tower face to ledge face — and walls do not catch it.
+# The ledge's EAST end needs the same seal: platform 37-38 stands six courses
+# under it, and a standing jump plus a spark straight up landed on the ledge
+# at every phase (measured headless) — the right limb skipped from its first
+# step. That curtain spans the gap and the half-time pad 38-39 (off, the pad
+# is a hole) to the anchor stone at 40. Arriving from the pads is from above:
+# the curtain passes a body falling onto the pad, and jumping off the pad
+# starts above its underside.
+GATES = [
+    # (x0, y0, x1, y1)
+    (27, 22, 28, 22),
+    (37, 22, 39, 22),
+]
 CENSERS = [
     # 3 · the swinging lamp, high. The slab's top is the perch: you climb out
     # onto it and WAIT, and the lamp's west apex — the slow end of the swing —
@@ -207,6 +228,8 @@ shuttles = ',\n'.join(
 censers = ',\n'.join(
     "      { x: %d, y: %d, len: %.1f, arc: %.2f, period: %.2f, phase: %s }"
     % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)
+gates = ',\n'.join(
+    "      { x0: %d, y0: %d, x1: %d, y1: %d }" % gt for gt in GATES)
 
 defn = """  // 4 · THE VAULT — to the drawing. The keep in the middle as before — a
   // plaza, a chimney of half-time floors between two towers, the stone's
@@ -230,13 +253,16 @@ defn = """  // 4 · THE VAULT — to the drawing. The keep in the middle as befo
     censers: [
 %s
     ],
+    gates: [
+%s
+    ],
     map: [
 %s
     ],
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % (shuttles, censers, body)
+out = defn % (shuttles, censers, gates, body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
