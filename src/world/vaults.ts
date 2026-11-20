@@ -473,8 +473,9 @@ export const VAULTS: VaultDef[] = [
   // walk the watched storey right, pour down, ride the lanterns back left,
   // pour down, cross the fading shelves right, and pour down once more to
   // the stone. The wind that was a road up in THE FAMINE is a fall here,
-  // and two of the three landings are spiked: the steer out of the wind
-  // onto the safe stone beside it is the whole of the landing.
+  // and the last landing is spiked: the steer out of the wind onto the
+  // safe stone beside it is the whole of it. The first wind only teaches
+  // the fall, onto stone run out under all of it.
   //
   // Storey 2 has NO floor — the crossing is ridden censer to censer over
   // the void, which is THE RETURN's coda taught two acts early and made
@@ -529,15 +530,15 @@ export const VAULTS: VaultDef[] = [
       '.......................................oooo.........',
       '....................................................',
       '....................................................',
-      '.._____________________________________...._______..',
+      '..________________________________.............___..',
       '....................................................',
       '....................................................',
       '................#......#......#.....................',
       '....................................................',
       '....................................................',
       '....................................S...............',
-      '..................................#####XX.XX........',
-      '.......######.....................##########........',
+      '..................................#############.....',
+      '.......######.....................#############.....',
       '...ooooo............................................',
       '...ooooo............................................',
       '...ooooo............................................',
