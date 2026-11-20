@@ -103,7 +103,10 @@ const salvaged = await page.evaluate(async () => {
   const g = window.__game;
   const before = g.state.wrecksSalvaged;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
-  await new Promise(r => setTimeout(r, 5000));
+  // 4s of GAME time: the clamped step crawls under SwiftShader, and a fixed
+  // 5s of wall clock can be under the 1.5s the salvage needs
+  const t0 = g.time;
+  while (g.time - t0 < 4 && g.state.wrecksSalvaged === before) await new Promise(r => setTimeout(r, 50));
   return { before, after: g.state.wrecksSalvaged, looted: g.looted.size };
 });
 console.log('salvaged after walking:', JSON.stringify(salvaged),

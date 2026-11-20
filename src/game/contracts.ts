@@ -44,15 +44,15 @@ function tileValue(m: number): number {
 }
 
 /**
- * The board pays against the ground your record says you can work. Authored
- * rewards were priced for the slate band (✦3/tile); a driller whose record
- * runs deeper gets the same jobs quoted at the deep rate, so a contract is
+ * The board pays against the ground you have worked on this world. Authored
+ * rewards were priced for the slate band (✦3/tile); a driller who has worked
+ * deeper here gets the same jobs quoted at the deep rate, so a contract is
  * never a rounding error next to one hold of ore (OVERHAUL B6). Haul and
  * frugal TARGETS scale the same way — "fill the hold" has to keep meaning
  * something; depth, speed and ore-count targets are physical and stay put.
  */
-function econIndex(bestDepthM: number): number {
-  return Math.min(20, Math.max(1, tileValue(bestDepthM) / 3.0));
+function econIndex(depthM: number): number {
+  return Math.min(20, Math.max(1, tileValue(depthM) / 3.0));
 }
 
 export const POOL: Omit<Contract, 'id' | 'worldId'>[] = [
@@ -110,7 +110,9 @@ export function offers(bestDepthM: number, worldDepthM: number, worldId: string,
     used.add(idx);
     const base = usable[idx];
     const world = WORLDS.find(w => w.id === worldId)!;
-    const econ = econIndex(bestDepthM);
+    // the rate is what THIS world's ground has paid you so far: a 1000 m
+    // record from the last world does not make a fresh one's shallows rich
+    const econ = econIndex(worldDepthM);
     const scalesTarget = base.kind === 'haul' || base.kind === 'frugal';
     out.push({
       ...base,

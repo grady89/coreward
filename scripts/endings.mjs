@@ -32,7 +32,10 @@ async function boot() {
   const armed = await page.evaluate(() =>
     (document.querySelector('#t-new')?.textContent ?? '').includes('ERASE'));
   if (armed) await page.click('#t-new');
-  await page.waitForTimeout(3400);
+  // wait for the intro to land, not a fixed wall-clock: under load the
+  // descent can outlast 3.4s and every E pressed during it is eaten
+  await page.waitForFunction(() => window.__game?.mode === 'play', { timeout: 60000 });
+  await page.waitForTimeout(400);
 }
 
 /** walk to the cradle and hold E until the state changes */

@@ -23,6 +23,8 @@ export interface SpillClaim {
   y: number;
   ttl: number;                // seconds of beacon battery left
   cargo: [number, number][];  // tile type -> count, still on the floor
+  /** a dropped fragment's core colour: the skip holds it instead of ore */
+  fragment?: number;
 }
 
 // rig paint: bone housing, dark hardware, dusty steel skip
@@ -201,6 +203,21 @@ export class SpillSite {
 
   /** heap the bin with what is actually still on the floor, richest first */
   private dressShards(c: SpillClaim): void {
+    if (c.fragment !== undefined) {
+      // one crystal, standing up out of the skip, lit from inside
+      this.shards.forEach((s, i) => { s.visible = i === 0; });
+      const s = this.shards[0];
+      s.geometry = GEM_GEOS[0];
+      const mat = s.material as THREE.MeshStandardMaterial;
+      mat.color.setHex(c.fragment);
+      mat.emissive.setHex(c.fragment);
+      mat.emissiveIntensity = 1.1;
+      s.position.set(0.14, 0.55, 0);
+      s.rotation.set(0.2, 0, 0.1);
+      s.scale.setScalar(1.15);
+      return;
+    }
+    (this.shards[0].material as THREE.MeshStandardMaterial).emissiveIntensity = 0.6;
     const kinds = [...c.cargo]
       .filter(([, n]) => n > 0)
       .sort((a, b) => def(b[0]).value - def(a[0]).value);
