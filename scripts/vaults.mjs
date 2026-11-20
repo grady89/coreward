@@ -659,26 +659,88 @@ await stage('ember', ['the pursuit', 'censers swing', 'the descent commits'], as
 });
 
 await stage('debt', ['the debt'], async () => {
-  // --- the debt: crushers cycle; the right cell still falls up ---
+  // --- the debt: the ledger read both ways. Rules, not coordinates:
+  //   · every piston goes out its full stroke and comes home again
+  //   · the room really has two downs: a body let go under a ceiling in an
+  //     up-gravity course STANDS on that ceiling, and one let go over a floor
+  //     in a down-gravity course stands on the floor
+  //   · the door is priced across both halves — more lights than either
+  //     gravity alone can pay, counting only lights reachable before it.
+  //     A light belongs to the gravity of the air it is lit from ---
   const debt = await page.evaluate(async () => {
-    const { g, until } = window.__H();
+    const { g, until, vaultOf } = window.__H();
     g.devVault('debt');
     await until(() => g.mode === 'vault', 20);
     const v = g.vault;
-    const r0 = v.crusherRect(0);
-    let extended = false;
-    for (let i = 0; i < 25 && !extended; i++) {
-      await new Promise(r => setTimeout(r, 150));
-      extended = Math.abs(v.crusherRect(0).x0 - r0.x0) > 1 || Math.abs(v.crusherRect(0).x0 - (r0.x0 + 1)) < 4 && v.crusherRect(0).x0 > r0.x0 + 0.5;
+    const def = v.def;
+    const p = vaultOf('debt');
+    // pistons: sample one full period of the slowest at the frame clock
+    const ext = (i) => {
+      const c = def.crushers[i]; const r = v.crusherRect(i);
+      return Math.hypot(r.x0 - c.x, -r.y0 - c.y) / Math.hypot(c.dx, c.dy);
+    };
+    const n = (def.crushers ?? []).length;
+    const lo = Array(n).fill(9), hi = Array(n).fill(0);
+    const t0 = v.time;
+    for (let k = 0; k < 120; k++) {
+      v.time = t0 + k * (Math.max(...def.crushers.map(c => c.period)) / 120);
+      for (let i = 0; i < n; i++) { const e = ext(i); lo[i] = Math.min(lo[i], e); hi[i] = Math.max(hi[i], e); }
     }
-    // never teleport during a re-form: the reform snap would override it
+    v.time = t0;
+    const pistons = n > 0 && lo.every(e => e < 0.02) && hi.every(e => e > 0.98);
+    // two downs: find a ceiling over up-gravity air and a floor under
+    // down-gravity air, both with two clear courses, and let a body go there
+    const at = (x, y) => (x < 0 || y < 0 || x >= p.w || y >= p.h) ? -1 : y * p.w + x;
+    const air = (x, y) => at(x, y) >= 0 && !p.solid[at(x, y)] && !p.kill[at(x, y)];
+    const grav = (x, y) => p.gravity[at(x, y)];
+    const solid = (x, y) => at(x, y) >= 0 && !!p.solid[at(x, y)];
+    // (clear of every piston's columns: this is about gravity, not timing)
+    const pistonCol = (x) => (def.crushers ?? []).some(c => x >= c.x - 1 && x <= c.x + c.w);
+    let ceil = null, floor = null;
+    for (let y = 1; y < p.h - 2 && !(ceil && floor); y++) for (let x = 1; x < p.w - 1; x++) {
+      if (pistonCol(x)) continue;
+      if (!ceil && solid(x, y - 1) && air(x, y) && air(x, y + 1) && grav(x, y) === 1 && grav(x, y + 1) === 1) ceil = { x, y };
+      if (!floor && solid(x, y + 1) && air(x, y) && air(x, y - 1) && grav(x, y) === 0 && grav(x, y - 1) === 0) floor = { x, y };
+    }
     await until(() => v.phase === 'run', 20);
-    v.invuln = 3;
-    v.px = 32; v.py = -12; v.vx = 0; v.vy = 0;
-    const roseUp = await until(() => v.vy > 0.5 || v.py > -6, 30);
-    return { extended, roseUp };
+    await new Promise(r => setTimeout(r, 1500));   // past the entry, into live frames
+    const drop = async (x, y, bodyRow) => {
+      v.invuln = 3; v.px = x + 0.5; v.py = -bodyRow; v.vx = 0; v.vy = 0;
+      await new Promise(r => setTimeout(r, 900));
+      return { grounded: v.grounded, row: +(-v.py).toFixed(2) };
+    };
+    const up = ceil ? await drop(ceil.x, ceil.y, ceil.y + 0.9) : null;
+    const down = floor ? await drop(floor.x, floor.y, floor.y + 0.1) : null;
+    const stoodUp = !!up && up.grounded && Math.abs(up.row - (ceil.y + 0.52)) < 0.05;
+    const stoodDown = !!down && down.grounded && Math.abs(down.row - (floor.y + 0.48)) < 0.05;
+    // the price: flood the room from the entry with every door shut
+    const doorTile = new Set(p.doors.flatMap(d => d.tiles.map(t => t.x + ',' + t.y)));
+    const seen = new Uint8Array(p.w * p.h);
+    const q = [[p.entry.x, p.entry.y]]; seen[at(p.entry.x, p.entry.y)] = 1;
+    while (q.length) {
+      const [x, y] = q.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, i = at(nx, ny);
+        if (i < 0 || seen[i] || p.solid[i] || p.kill[i] || doorTile.has(nx + ',' + ny)) continue;
+        seen[i] = 1; q.push([nx, ny]);
+      }
+    }
+    // a light's gravity is its neighbourhood's: the air around it, by majority
+    const side = (s) => {
+      let upN = 0, downN = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if ((dx || dy) && air(s.x + dx, s.y + dy)) { if (grav(s.x + dx, s.y + dy) === 1) upN++; else downN++; }
+      }
+      return upN > downN ? 'up' : 'down';
+    };
+    const before = p.sconces.filter(s => seen[at(s.x, s.y)]);
+    const price = Math.max(...Object.values(def.doorNeeds ?? { x: 0 }));
+    const ups = before.filter(s => side(s) === 'up').length;
+    const downs = before.length - ups;
+    const priced = price <= before.length && price > ups && price > downs;
+    return { pistons, ceil, up, floor, down, stoodUp, stoodDown, price, ups, downs, priced };
   });
-  ok('the debt', debt, debt.extended && debt.roseUp);
+  ok('the debt', debt, debt.pistons && debt.stoodUp && debt.stoodDown && debt.priced);
   await page.screenshot({ path: OUT + '/v-debt.png' });
 });
 
