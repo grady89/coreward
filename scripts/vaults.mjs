@@ -581,41 +581,81 @@ await stage('vault', ['brazier doors'], async () => {
     doors.shut && doors.cheapOpen && doors.dearHeld && doors.dearOpen);
 });
 
-await stage('ember', ['the pursuit', 'censers swing'], async () => {
-  // --- the ember: pursuit arms on the trigger and consumes the shaft ---
+await stage('ember', ['the pursuit', 'censers swing', 'the descent commits'], async () => {
+  // --- the ember: the dark arms on the trigger, pours down, consumes, resets.
+  // Read off the room's own def, so a rewrite of the map moves the check with
+  // it instead of breaking it. Stepped on the game's own frame, not the clock.
   const pursuit = await page.evaluate(async () => {
     const { g, until } = window.__H();
     g.devVault('ember');
-    await until(() => g.mode === 'vault', 20);
+    await until(() => g.mode === 'vault' && g.vault?.glyphId === 'ember', 20);
     const v = g.vault;
+    const pu = v.def.pursuit;
+    const N = { left: false, right: false, up: false, down: false };
     const idle = !v.pursuitOn;
-    v.px = 22; v.py = -19; v.vx = 0; v.vy = 0; // the trigger band
-    const armed = await until(() => v.pursuitOn, 30);
+    const [tx0, ty0, tx1, ty1] = pu.trigger;
+    v.px = (tx0 + tx1 + 1) / 2; v.py = -((ty0 + ty1 + 1) / 2); v.vx = 0; v.vy = 0; v.invuln = 5;
+    v.frame(1 / 60, N, true);
+    const armed = v.pursuitOn;
     const edge0 = v.pursuitEdge;
-    await new Promise(r => setTimeout(r, 900));
-    const advanced = v.pursuitEdge > edge0 + 0.3;
-    // stand above the edge: consumed
+    for (let i = 0; i < 54; i++) v.frame(1 / 60, N, true);
+    const advanced = v.pursuitEdge > edge0 + 0.3 * pu.speed;
+    // stand above the edge, inside the zone: consumed
     const r0 = v.reforms;
-    v.px = 22; v.py = -(v.pursuitEdge - 1.5); v.invuln = 0;
-    const caught = await until(() => v.reforms > r0, 30);
-    const resetOff = await until(() => !v.pursuitOn, 20);
+    v.px = (pu.zone[0] + pu.zone[2] + 1) / 2; v.py = -(v.pursuitEdge - 1.5); v.vx = 0; v.vy = 0; v.invuln = 0;
+    v.frame(1 / 60, N, true);
+    const caught = v.reforms > r0;
+    const resetOff = !v.pursuitOn;
     return { idle, armed, advanced, caught, resetOff };
   });
   ok('the pursuit', pursuit, pursuit.idle && pursuit.armed && pursuit.advanced && pursuit.caught && pursuit.resetOff);
 
-  // --- censers swing through real arcs ---
+  // --- censers swing through real arcs: every one of them ---
   const censer = await page.evaluate(async () => {
-    const { g, until } = window.__H();
-    const v = g.vault; // ember has one censer
-    const xs = [];
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 180));
-      xs.push(v.censerPos(0).x);
+    const v = window.__game.vault;
+    const N = { left: false, right: false, up: false, down: false };
+    v.px = 1.5; v.py = -5.5; v.invuln = 999;
+    const n = v.def.censers.length;
+    const lo = Array(n).fill(1e9), hi = Array(n).fill(-1e9);
+    for (let f = 0; f < 160; f++) {
+      v.frame(1 / 60, N, true);
+      for (let i = 0; i < n; i++) { const x = v.censerPos(i).x; lo[i] = Math.min(lo[i], x); hi[i] = Math.max(hi[i], x); }
     }
-    const swings = Math.max(...xs) - Math.min(...xs) > 2;
-    return { swings, span: +(Math.max(...xs) - Math.min(...xs)).toFixed(1) };
+    const spans = lo.map((l, i) => +(hi[i] - l).toFixed(1));
+    return { n, spans, swings: n > 0 && spans.every(s2 => s2 > 2) };
   });
   ok('censers swing', censer, censer.swings);
+
+  // --- the descent commits. The room's rules, not its coordinates: every
+  // light is paid for ABOVE the first gate, so the chase is one unbroken run;
+  // the trigger sits under that gate, so nothing hunts you before you drop;
+  // every gate refuses the body back up; the shelves regrow (THE EMBER owns
+  // the cycle, THE WEATHER the one-shot); a brazier hangs inside the chase,
+  // and the stone is stood at outside the dark's zone ---
+  const commit = await page.evaluate(async () => {
+    const { g, vaultOf } = window.__H();
+    const v = g.vault;
+    const def = v.def;
+    const p = vaultOf('ember');
+    const N = { left: false, right: false, up: false, down: false };
+    const g0 = Math.min(...def.gates.map(x => x.y0));
+    const lightsAbove = p.sconces.every(s2 => s2.y < g0) && p.entry.y < g0;
+    const triggerBelow = def.pursuit.trigger[1] > g0;
+    const held = def.gates.map(gt => {
+      const plane = -(gt.y1 + 1);
+      v.invuln = 999; v.px = (gt.x0 + gt.x1 + 1) / 2; v.py = plane - 1.6; v.vx = 0; v.vy = 12;
+      let top = -1e9;
+      for (let i = 0; i < 12; i++) { v.frame(1 / 60, N, true); top = Math.max(top, v.py + 0.52); }
+      return top <= plane + 0.02;
+    });
+    const regrows = !def.rimeOnce && p.rime.length > 0;
+    const [zx0, zy0, zx1, zy1] = def.pursuit.zone;
+    const braziersInChase = p.braziers.filter(b => b.y > def.pursuit.trigger[1] && b.y <= zy1).length;
+    const stoneCalm = p.master.y > zy1 + 1;
+    return { lightsAbove, triggerBelow, gates: held.length, held: held.every(Boolean), regrows, braziersInChase, stoneCalm };
+  });
+  ok('the descent commits', commit, commit.lightsAbove && commit.triggerBelow && commit.gates >= 2
+    && commit.held && commit.regrows && commit.braziersInChase >= 2 && commit.stoneCalm);
 });
 
 await stage('debt', ['the debt'], async () => {
