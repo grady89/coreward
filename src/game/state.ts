@@ -48,6 +48,11 @@ export interface WorldSave {
   rime?: number[];
   /** dug tiles a Shellback has sealed back up with nacre (MAELIS-6) */
   nacre?: number[];
+  /**
+   * dug tiles a charge or a carry-quake filled with rubble. Without this a
+   * reload regenerates them from the seed: the ore you mined comes back.
+   */
+  rubble?: number[];
   /** permanent shaft fixtures — placed once, lit forever (SPEC-KEEPING §7) */
   shaftlights?: { x: number; y: number }[];
   /** waystation depots — metered refuel/repair stations at depth */
@@ -161,6 +166,12 @@ export class GameState {
   // ---- Phase 4: the pattern ----
   /** fragment in the hold ('veil3' | 'cryos2' | 'maelis6'), or null */
   carrying: string | null = null;
+  /**
+   * Fragments that went down with the pod. A crash or a tow cannot carry one
+   * up — the climb is the price of taking it — so it lies where the pod
+   * failed, under a beacon, until you fly back down and take it again.
+   */
+  fragmentDrops: { id: string; world: string; x: number; y: number }[] = [];
   /** worlds whose fragment has been removed from its cradle */
   extracted = new Set<string>();
   /** fragments sold to Cindral — these can never go home */
@@ -388,6 +399,7 @@ export class GameState {
     this.native = {};
     this.accl = {};
     this.carrying = null;
+    this.fragmentDrops = [];
     this.extracted.clear();
     this.delivered.clear();
     this.reseated.clear();
@@ -462,10 +474,11 @@ export class GameState {
     depots: { x: number; y: number }[] = [],
   ): void {
     // rime only ever forms on dug tiles, so the dug set is the whole search
-    const rime: number[] = [], nacre: number[] = [];
+    const rime: number[] = [], nacre: number[] = [], rubble: number[] = [];
     for (const i of terrain.dug) {
       if (terrain.data[i] === T.RIME) rime.push(i);
       else if (terrain.data[i] === T.NACRE) nacre.push(i);
+      else if (terrain.data[i] === T.RUBBLE) rubble.push(i);
     }
     this.worlds[this.activeWorld] = {
       seed: terrain.seed,
@@ -476,6 +489,7 @@ export class GameState {
       arrestors: arrestors.map(a => ({ x: a.x, y: a.y })),
       rime,
       nacre,
+      rubble,
       shaftlights: shaftlights.map(s => ({ x: s.x, y: s.y })),
       depots: depots.map(d => ({ x: d.x, y: d.y })),
     };
@@ -527,6 +541,7 @@ export class GameState {
         native: this.native,
         accl: this.accl,
         carrying: this.carrying,
+        fragmentDrops: this.fragmentDrops,
         extracted: [...this.extracted],
         delivered: [...this.delivered],
         reseated: [...this.reseated],
@@ -657,6 +672,7 @@ export class GameState {
         this.native = d.native ?? {};
         this.accl = d.accl ?? {};
         this.carrying = d.carrying ?? null;
+        this.fragmentDrops = d.fragmentDrops ?? [];
         this.extracted = new Set(d.extracted ?? []);
         this.delivered = new Set(d.delivered ?? []);
         this.reseated = new Set(d.reseated ?? []);

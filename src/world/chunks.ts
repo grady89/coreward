@@ -195,7 +195,10 @@ class Chunk {
             wobble: harvestable ? mo.wobble : 0,
             tilt: (cellHash(x, y, 7) - 0.5) * 0.9,
             roll: cellHash(x, y, 29) * Math.PI * 2,
-            z: harvestable ? 0.46 : 0.505,
+            // a fissure rides the face of its own cube, which the jitter
+            // above pushes forward (h > 0.82 puts it at z ≥ 0.529, tilted
+            // ±0.045): at a flat 0.505 every one of them was inside the rock
+            z: harvestable ? 0.46 : built ? 0.505 : 0.5 + (h - 0.5) * 0.09 + 0.04,
             // fissures glow like banked embers; carvings burn brighter
             dim: harvestable ? 1 : t === T.GLYPH ? 1.3 : 0.9,
             flat: !harvestable,
