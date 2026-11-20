@@ -745,41 +745,63 @@ await stage('debt', ['the debt'], async () => {
 });
 
 await stage('return', ['the return'], async () => {
-  // --- the return: the bottom corridor IS sideways-down, the door holds
-  // until the cameo sconce is standing with, and the U is walked in full.
-  //
-  // Addressed by what the room's own def says rather than by coordinates a
-  // rewrite invalidates: the corridor is found from its gravity zone, the
-  // door from its need, so the check follows the room instead of a snapshot
-  // of one.
+  // --- the return: miss once, and you return. The room's whole rule is that
+  // the entry is the ONLY place the body re-forms, so the check is that rule
+  // and not a census of furniture:
+  //   · nothing past the entry can move the checkpoint — no sconce, no door
+  //     that would need one;
+  //   · open sky, so a miss is a fall and never a floor;
+  //   · in the live runtime, a body that walks off the LAST footing before
+  //     the stone, toward it, re-forms exactly where it entered;
+  //   · and the stone is there to be reached — the body, set on its ledge,
+  //     takes it on foot (the golden route itself is scripts/routes/return.js).
+  // The last footing is found from the def rather than from coordinates: the
+  // standable tile nearest the stone that is not the stone's own ledge.
   const ret = await page.evaluate(async () => {
     const { g, until, vaultOf } = window.__H();
     g.devVault('return');
-    await until(() => g.mode === 'vault', 20);
+    await until(() => g.mode === 'vault' && g.vault && g.vault.glyphId === 'return' && g.vault.phase === 'run', 60);
     const v = g.vault;
     const p = vaultOf('return');
-    // find an open tile inside the right-gravity corridor, with room to fall
-    let spot = null;
-    for (let y = 0; y < p.h && !spot; y++) {
-      for (let x = 0; x < p.w - 3; x++) {
-        const i = y * p.w + x;
-        if (p.gravity[i] !== 2 || p.solid[i]) continue;
-        if (p.solid[i + 1] || p.solid[i + 2] || p.solid[i + 3]) continue;
-        spot = { x, y }; break;
-      }
+    const def = window.__VAULTS.find(x => x.glyph === 'return');
+    const N = { left: false, right: false, up: false, down: false };
+    const solid = (x, y) => x >= 0 && y >= 0 && x < p.w && y < p.h && !!p.solid[y * p.w + x];
+    const stand = (x, y) => solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2);
+    const m = p.master;
+    // the stone's ledge: the standable run under it
+    let ly = m.y + 1; while (ly < p.h && !solid(m.x, ly)) ly++;
+    let lx0 = m.x; while (stand(lx0 - 1, ly)) lx0--;
+    let late = null;
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < lx0 - 1; x++) {
+      if (!stand(x, y)) continue;
+      const d = Math.hypot(x - m.x, y - m.y);
+      if (!late || d < late.d) late = { x, y, d };
     }
-    v.px = spot.x + 0.5; v.py = -(spot.y + 0.5); v.vx = 0; v.vy = 0; v.invuln = 5;
-    const swept = await until(() => v.vx > 0.5, 30);
-    const d0 = p.doors[0].tiles[0];
-    const closed = v.solidTile(d0.x, d0.y);
-    const needs = window.__VAULTS.find(x => x.glyph === 'return').doorNeeds;
+    const entry = { x: p.entry.x + 0.5, y: -(p.entry.y + 0.5) - 0.2 };
+    const r0 = v.reforms;
+    v.px = late.x + 0.5; v.py = -late.y + 0.53; v.vx = 0; v.vy = 0; v.invuln = 0;
+    for (let i = 0; i < 20; i++) v.frame(1 / 60, N, true);
+    const stoodLate = v.grounded;
+    // walk off toward the stone without jumping: short of it, into the sky
+    const toward = m.x > late.x ? { right: true } : { left: true };
+    let f = 0;
+    for (; f < 900 && v.reforms === r0; f++) v.frame(1 / 60, { ...N, ...toward }, true);
+    const back = { x: +v.px.toFixed(2), y: +v.py.toFixed(2) };
+    const atEntry = v.reforms === r0 + 1 && Math.hypot(v.px - entry.x, v.py - entry.y) < 0.05;
+    // the stone, on foot, from its own ledge
+    v.px = m.x + 0.5; v.py = -ly + 0.53; v.vx = 0; v.vy = 0; v.invuln = 0;
+    let took = false;
+    for (let i = 0; i < 120 && !took; i++) { v.frame(1 / 60, N, true); took = v.phase === 'complete'; }
     return {
-      swept, closed, spot, figures: p.figures.length,
-      need: needs['1'], sconces: p.sconces.length,
+      open: !!def.openEdges, sconces: p.sconces.length, doors: p.doors.length,
+      late: [late.x, late.y], stoodLate, missFrames: f, back,
+      entry: [+entry.x.toFixed(2), +entry.y.toFixed(2)], atEntry, took,
+      figures: p.figures.length,
     };
   });
   ok('the return', ret,
-    ret.swept && ret.closed && ret.figures >= 1 && ret.need === ret.sconces);
+    ret.open && ret.sconces === 0 && ret.doors === 0 && ret.stoodLate
+    && ret.atEntry && ret.took && ret.figures >= 1);
 });
 
 await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 'the guild voice'], async () => {
