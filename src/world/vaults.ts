@@ -794,7 +794,9 @@ export const VAULTS: VaultDef[] = [
   // Stone at body height is shelter. East into the storm: a calm jump, a
   // lee climb with a crest in the calm, a calm spark leap to a door that
   // wants a light fifteen tiles back WEST — only the gust at your back
-  // carries you there — and back up the lane. Then a one-shot rime bridge
+  // carries you there — and back up the lane, whose hatch wants two lights
+  // and which holds two (G and the lamp under the hatch), so no order of
+  // lights can shut a body in the nook. Then a one-shot rime bridge
   // under a lamp that comes down with the gust, an updraft in the lee of a
   // spine, and the last calm leap onto rime that will not hold you, down
   // into the great wall's lee, where the stone is the first still air.
@@ -805,7 +807,7 @@ export const VAULTS: VaultDef[] = [
     openEdges: true,
     wind: { dir: -1, calm: 3.40, gust: 2.55, force: 30 },
     rimeOnce: true,
-    doorNeeds: { '1': 3, '2': 3 },
+    doorNeeds: { '1': 3, '2': 2 },
     currents: [
       { x0: 67, y0: 6, x1: 68, y1: 20, force: 30 }
     ],
@@ -823,7 +825,7 @@ export const VAULTS: VaultDef[] = [
       '#.........ooo.......##......................##.........##...#.........######################...........RRR..##',
       '#...................##......#...............##..............#.............................................o.##',
       '#...................##22#####...............##..............#........#....................................o.##',
-      '#...................##......................##..............#........#....................................o.##',
+      '#...................##S.....................##..............#........#....................................o.##',
       '#.@...#..........S..##......................##..............#........#....................................o.##',
       '#########....#########......................##..............#........#......................................##',
       '....................##o.....................##............#..........#....................................####',

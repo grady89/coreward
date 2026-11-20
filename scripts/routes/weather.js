@@ -10,6 +10,10 @@
 // gust an idle body slides 2.1 tiles a second. planW lets a step wait
 // leaning into the wind. The wind clock is 7 pulses (357 frames), so every
 // step sweeps a whole calm and gust.
+//
+// v6: the hatch wants two lights, so it opens as F is lit (doors=10 after
+// B1) and the east door with G (doors=11); the climb in B3 lights the lane's
+// lamp under the hatch on the way out. Route unchanged.
 const { v, N, I, row, step, settle, snap, load, standAt } = V;
 const PER = 357;                     // the wind's cycle: 7 pulses at 60 fps
 const feet = () => row() + 0.52;

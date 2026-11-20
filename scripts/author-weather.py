@@ -26,10 +26,17 @@ lee face. Every number below was measured in the real body
       the gust at your back carries 15.8 with the stick let go, and 23
       with a spark. RIDE THE GUST: wait sheltered against the shut door,
       run with the gust, let go. The tower stops you.
-   5  THE LANE. G's light opens both doors — the east one and the hatch in
-      H over the lane. Kick up the tower's east face (in a gust the wind
-      pins you to it), out through the hatch, back to H — and the calm
-      leap again, now to an open door.
+   5  THE LANE. G's light opens the east door; the hatch in H over the
+      lane wants only two lights. Kick up the tower's east face (in a gust
+      the wind pins you to it), out through the hatch, back to H — and the
+      calm leap again, now to an open door. The lane can never shut you
+      in (v6): G is your checkpoint once you light it, so a hatch that
+      wanted three left a body that dropped off H into the nook before
+      lighting F stuck there for good, re-forming on G. Now the hatch
+      wants two, and the lane holds two lights of its own — G, and the
+      lamp L under the hatch that any climber touches — so whatever you
+      lit or skipped, the lane opens. Dropping from H to G first is a
+      wrong order that costs the lane and the calm leap, not the run.
    6  THE LAMP THAT SETS WITH THE GUST. A pocket behind a stub, a one-shot
       rime bridge (6), a ledge, a post. The watch-lamp over the bridge
       turns once a wind-cycle: up through the calm, DOWN with the gust,
@@ -95,6 +102,8 @@ run(22, 23, 9, '2')                     # the hatch over the lane: opens on the 
 put(28, 8, '#')                          # H's stub, at the lip: you leap over it from the pocket
 run(22, 25, 19)                          # G, the nook under H the gust ride lands in
 put(23, 18, 'S')
+put(22, 10, 'S')                         # the lane's lamp, under the hatch: G and it are two lights
+#                                          in the lane, and two open the hatch (v6)
 run(41, 43, 16)                          # F, the far ledge: the door and the second light
 put(42, 15, 'S')
 block(44, 45, 3, 13)                     # the door tower
@@ -172,7 +181,9 @@ defn = """  // 6 · THE WEATHER — the storm crossing, in open sky. The wind is
   // Stone at body height is shelter. East into the storm: a calm jump, a
   // lee climb with a crest in the calm, a calm spark leap to a door that
   // wants a light fifteen tiles back WEST — only the gust at your back
-  // carries you there — and back up the lane. Then a one-shot rime bridge
+  // carries you there — and back up the lane, whose hatch wants two lights
+  // and which holds two (G and the lamp under the hatch), so no order of
+  // lights can shut a body in the nook. Then a one-shot rime bridge
   // under a lamp that comes down with the gust, an updraft in the lee of a
   // spine, and the last calm leap onto rime that will not hold you, down
   // into the great wall's lee, where the stone is the first still air.
@@ -183,7 +194,7 @@ defn = """  // 6 · THE WEATHER — the storm crossing, in open sky. The wind is
     openEdges: true,
     wind: { dir: -1, calm: %.2f, gust: %.2f, force: 30 },
     rimeOnce: true,
-    doorNeeds: { '1': 3, '2': 3 },
+    doorNeeds: { '1': 3, '2': 2 },
     currents: [
 %s
     ],
