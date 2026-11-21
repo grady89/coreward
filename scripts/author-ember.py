@@ -1,200 +1,193 @@
-"""THE EMBER — the descent, chased (2026-11-20). 44 x 97, two chambers.
+"""THE EMBER v7 -- the descent, chased, on one line (2026-11-21). 44 x 34.
 
-The deepest drop in the game and the room about commitment. It is built in
-two halves that the camera cuts between at column 21, and one line of light
-across the whole room: above it you learn every noun in calm, below it you
-spend them all with the dark pouring down behind you.
+v6 was a branchy room with a light hung over it: a 97-course map, mostly
+open air, with drops of fifteen to twenty-five courses whose landings were
+out of frame. The playtest read every one of those drops as a guess. v7 is
+rebuilt as ONE carved line through solid rock, switching back on itself four
+times on the way down:
 
-THE TEACH — no wave. Every element the chase will use, met once, alone:
+  * Everything that is not the path is stone.
+  * Every pit on the path is floored with fangs you can see from where you
+    stand. The fangs sit flush with the footing, or one course under it.
+  * No step down is more than five courses. The camera holds 7.4 courses
+    either side of the body (22-column chamber, 1280 x 800), so from every
+    rest point the next footing is on screen before you commit.
+  * Every cut is crossed on foot, over a stone that straddles it.
 
-   1  THE ICE WALK. Start top-left on a stub of stone and go RIGHT along a
-      walkway of rime over a line of fangs: each shelf holds 0.55 s after
-      you touch it, then drops, then comes back 3.5 s later. Keep moving;
-      hop the two-tile gap in the middle. Stone (L1) across the cut.
-   2  THE LANTERN. From L1's lip, catch the swinging lantern's crown at the
-      slow end of its swing, ride it east over the fangs and step off onto
-      the piston housing's roof (L2).
-   3  THE TRAPDOOR AND THE PISTON. Walk onto the rime lid at L2's east end.
-      It holds, cracks, drops you into a chute, and a piston punches across
-      the chute from the housing. Step on as it slams home and you fall
-      through behind it. L3 catches you under the chute.
-   4  TWO BREATHS. West off L3 over a fanged gap that no single spark
-      crosses: jump, spark, the brazier refills you in mid-air, spark again
-      onto L4 — the commit shelf, with the room's one light (S1). Out over
-      the void to its west hangs an ember: the way on.
+The rows below are standing rows (the tile you stand ON).
 
-THE GATE — a curtain of light across the whole room under L4. You pass it
-falling; it will not pass you back. The trigger is the band just under it:
-the dark wakes then, eight courses above the commit light, and pours
-down at 2.8 tiles a second. There is no light below the gate. From here to
-the stone is one unbroken run, and a gutter anywhere sends you back to S1.
+THE TEACH -- no dark. Every noun, met once, alone:
 
-THE CHASE — each beat waits on a stone, and waiting is what the dark eats:
+   1  THE ICE WALK (row 6, east). From the stub at the top left, right along
+      two rime shelves over a bed of fangs. Each shelf holds 0.55 s after
+      you touch it, so keep moving, and hop the two-tile gap. L1 is stone
+      across the cut.
+   2  THE LANTERN (row 6 -> 8, east). From L1's lip, catch the lantern's
+      crown at the slow end of its swing, ride it east over the fangs and
+      step off onto the piston housing's roof (L2).
+   3  THE TRAPDOOR AND THE PISTON (row 8 -> 14). Walk onto the rime lid. It
+      holds, cracks, and drops you down a chute that a piston punches across.
+      Step on as it slams home and you fall behind it onto L3, six courses
+      down and in frame from L2.
+   4  TWO BREATHS (row 14 -> 13, west). Off L3's west lip over a fang bed
+      that one spark does not cross: jump, spark, the brazier refills you,
+      spark again onto L4, the commit shelf, which straddles the cut. The
+      room's one light (S1) is on it.
 
-   5  THE PLUNGE. Off L4's west lip, through the gate, fourteen tiles west
-      and twenty-two courses down onto P1 — two tiles of stone with a fang at
-      its lip. P1 is fifteen courses below the commit light's frame, so the
-      ember and a line of motes draw the way: spark flat west at the ember,
-      it gives the spark back, and the motes run on down to P1. The legs
-      alone do not reach it; straight down is a fang line over the throat.
-   6  THE RIDE. The same lantern you plunged past: from P1, jump for its
-      crown as it swings in, ride east over the fangs, step off onto the
-      throat's west shoulder (P2). Three courses up — no spark reaches it.
-   7  THE THROAT. A rime lid over a shaft with two pistons punching across
-      it from either wall. Read them from P2, step on the lid so it drops you
-      as both go home, fall through. P3 under the shaft.
-   8  THREE BREATHS. East across the cut over a sixteen-tile fanged gap:
-      spark, brazier, spark, brazier, spark, onto P4 in the last chamber.
-      Climb in the air and the dark takes you; keep the arcs flat.
-   9  THE CASCADE. Off P4 onto two rime shelves stepping down and west under
-      the crossing's fangs. You cannot wait on rime: land, jump, land, jump,
-      onto P5, the last stone.
-  10  THE COLUMN. Through the second gate into the column, past the last
-      piston, which spans it wall to wall (read it from P5, go when it goes
-      home). Under you, fangs; to the east, the seed's chamber, its roof
-      fanged on top. Free-fall and you land on one or the other. Hold the
-      column until you are under the roof's lip, then spark east (or take
-      the brazier hung in its doorway) and land beside the stone.
+THE GATE -- a curtain of light across the plunge hall, one course under L4.
+You pass it falling and it will not pass you back up. The band under it
+wakes the dark. There is no light below the gate.
 
-The chase recombines and never introduces: lantern, rime, piston, brazier,
-gate — every one met above the line first. The last chamber holds no light.
+THE CHASE -- each beat waits on a stone, and waiting is what the dark eats:
 
-Fall-throughs are closed, not trusted: fang lines under the ice, the
-lanterns, both brazier gaps, the teach's east limb and the throat under L4,
-and the last piston's housing, so nothing missed above lands on something
-below.
+   5  THE PLUNGE (row 13 -> 18, west). Jump off L4's west lip, over the fangs
+      and through the gate, onto P1: the throat's east shoulder, five courses
+      down. The ember hangs over P1 and marks it from S1. Walk off the lip
+      and you land in the fangs.
+   6  THE THROAT (row 18 -> 23). A rime lid between two housings. Two pistons
+      close across the shaft under it like jaws. Read them from P1, step on
+      the lid so that it drops you as they open, and fall through onto P3.
+   7  THE RIDE (row 23, east). The lantern hangs from the ceiling over a fang
+      pit. Hop onto its crown at the west end of its swing, ride it east, and
+      step off onto P4, which straddles the cut. The ceiling is too low to
+      jump the pit.
+   8  THREE BREATHS (row 23 -> 25, east). From P4 over a fourteen-tile fang
+      bed: spark, brazier, spark, brazier, spark, onto P5 at the east wall.
+      Climb in the air and you climb into the dark, so keep the arcs flat.
+   9  THE LAST WALK (row 25 -> 30 -> 32, west). Drop down the slot by P5
+      through the second gate, then cross the last rime shelf over fangs,
+      which you cannot stand on, to the island over the cut. Then pass under
+      the last piston as it lifts and step down into the stone's pocket.
+      The dark's zone ends one course above the pocket. You win the race on
+      the last step.
+
+The chase recombines and never introduces. Lantern, rime, piston, brazier,
+gate: you meet every one above the line first.
 """
 import io
-import sys
 
-W, HGT = 44, 97
+W, HGT = 44, 34
 PULSE = 0.85
 
-g = [['.'] * W for _ in range(HGT)]
+g = [['#'] * W for _ in range(HGT)]
 
 
-def put(x, y, ch='#'):
+def put(x, y, ch):
     assert 0 <= x < W and 0 <= y < HGT, (x, y, ch)
     g[y][x] = ch
 
 
-def run(x0, x1, y, ch='#'):
+def run(x0, x1, y, ch):
     for x in range(x0, x1 + 1):
         put(x, y, ch)
 
 
-def block(x0, x1, y0, y1, ch='#'):
+def air(x0, x1, y0, y1):
     for y in range(y0, y1 + 1):
-        run(x0, x1, y, ch)
+        run(x0, x1, y, '.')
 
 
 def motes(pts):
     for x, y in pts:
-        if g[y][x] == '.':
-            put(x, y, 'o')
+        assert g[y][x] == '.', ('mote on', x, y, g[y][x])
+        put(x, y, 'o')
 
 
-# ============================ THE TEACH (no wave) ============================
-# T1 · the ice walk: a floor that goes as you cross it
-run(0, 3, 6)
+# ============================ THE TEACH (no dark) ============================
+# the hall over the first two beats; its ceiling is the room's top course
+air(1, 41, 1, 5)
+put(30, 1, '#')
+put(30, 2, '#')                          # the lantern's mount, hung from the roof
+# T1 . the ice walk: rime over a fang bed, stone either side
 put(1, 5, '@')
 run(4, 9, 6, 'R')
+run(10, 11, 6, '.')
 run(12, 17, 6, 'R')
-run(18, 23, 6)                           # L1, walked across the cut
-run(4, 17, 9, 'X')                       # the fang line under the ice
-motes([(10, 4), (11, 4)])
-
-# T2 · the lantern: ride it across
-put(30, 2)                               # the lantern's mount, out of reach
-run(24, 35, 11, 'X')
-run(35, 38, 8)                           # L2, the top of the piston housing
-
-# T3 · the trapdoor and the piston
-block(35, 38, 9, 17)                     # the housing the piston lives in
+run(4, 17, 7, 'X')
+#   L1 is the stone at (18-23, 6), across the cut
+# T2 . the lantern, over a fang pit two courses deep
+air(24, 34, 6, 7)
+run(24, 34, 8, 'X')
+# T3 . the trapdoor and the piston. L2 is the housing's roof (35-38, 8)
+air(35, 41, 6, 7)
 run(39, 41, 8, 'R')                      # the lid
-block(42, 42, 6, 17)                     # the chute's far wall
-run(34, 41, 21)                          # L3, under the chute
-
-# T4 · the brazier: two breaths, one gap
-put(29, 17, '*')
-put(29, 13)                              # its chain's stone
-run(24, 33, 24, 'X')
-run(19, 23, 18)                          # L4, the gate shelf
-put(20, 17, 'S')                         # the commit light
-# the ember that points the way on: hung out over the plunge, west of the
-# lip, on the line the spark flies, so the one warm thing in the commit
-# light's frame says "out and down that way" -- not "straight down", where
-# the throat's housings wait under a fang line. Its chain runs up to a
-# stone under the ice walk's fangs, out of every reach.
-put(13, 21, '*')
-put(13, 10)                              # its chain's stone
+air(39, 41, 9, 12)                       # the chute
+#   L3 is the floor at (34-41, 13), out under the housing
+# T4 . two breaths: L3 -> brazier -> L4, west across the cut, under a roof
+#   three courses high, so the arcs stay flat
+air(24, 34, 10, 10)
+air(24, 38, 11, 12)
+run(24, 33, 13, 'X')
+air(16, 23, 9, 12)                       # over L4
+#   L4 is the stone at (16-23, 13)
+put(19, 12, 'S')                         # the commit light
 
 # ================================ THE GATE ===================================
-GATE_ROW = 26
+GATE1 = (1, 14, 15, 14)
 
 # ================================ THE CHASE ==================================
-# nothing missed above the gate lands on the chase: a fang line under the
-# teach's east limb, so a fall off L3 never comes down on P4
-run(14, 43, 30, 'X')
-# ...and over the throat too: a drop straight off L4 used to land on the
-# throat's shoulders and skip the plunge and the ride
-# C1 · the plunge, past the lantern, onto the far-west ledge
-run(4, 5, 40)                            # P1
-put(6, 39, 'X')                          # a fang at its lip: come down onto it, not across
-put(11, 35)                              # the lantern's mount...
-put(11, 34, 'X')                         # ...fanged, so nobody lands on it
-run(6, 13, 43, 'X')                      # the fangs under the swing
-# C2 · ride it east, onto the throat's west shoulder
-block(14, 17, 37, 50)                    # the throat's west housing; P2 is its top
-block(21, 24, 35, 50)                    # the throat's east housing
-run(18, 20, 37, 'R')                     # the lid
-# C3 · the throat
-run(15, 21, 54)                          # P3
-# C4 · the brazier crossing, into the last chamber
-put(26, 52, '*')
-put(26, 46)
-put(32, 54, '*')
-put(32, 49)
-run(22, 32, 59, 'X')
-run(38, 42, 57)                          # P4
-# C5 · the cascade, west under the crossing
-run(34, 35, 65, 'R')
-run(29, 30, 67, 'R')
-run(23, 25, 69)                          # P5, the last stone before the drop
-# C6 · the column: the last piston, the brazier, the seed under its roof
-block(14, 21, 71, 80)                    # the last piston's housing
-run(14, 21, 70, 'X')                     # ...fanged, so a fall off P3 cannot skip to it
-put(30, 89, '*')                         # the ember in the seed's doorway
-run(30, 41, 86, 'X')                     # fangs on the roof: free-fall here and burn
-run(30, 41, 87)                          # the roof over the seed
-run(22, 31, 95, 'X')
-run(32, 41, 95)
-put(39, 94, 'M')
-put(36, 94, 'N')
+# C1 . the plunge hall, under the ice walk, west of L4
+air(1, 15, 9, 17)
+run(12, 15, 18, 'X')                     # short of P1: fangs
+#   P1 is the throat's east shoulder (8-11, 18)
+# C2 . the throat
+run(1, 3, 18, 'X')                       # the west shoulder is fanged
+run(4, 7, 18, 'R')                       # the lid
+air(4, 7, 19, 22)                        # the shaft the jaws close across
+air(4, 11, 21, 22)                       # out under the east housing
+#   P3 is the floor at (4-11, 23)
+# C3 . the ride: a lantern hung from L4's underside, over a fang pit, under
+#   a roof too low to jump the pit
+air(10, 20, 20, 20)
+air(12, 20, 21, 24)
+run(12, 20, 25, 'X')
+#   P4 is the stone at (21-23, 23), across the cut
+# C4 . three breaths, east, under a roof as low as the two breaths' roof
+air(21, 42, 20, 22)
+run(24, 37, 23, 'X')
+#   P5 is the stone at (38-40, 23). The slot beside it is the way down
+air(41, 42, 23, 27)
+# C5 . the last walk, west along the bottom
+air(24, 42, 25, 27)
+air(24, 38, 28, 29)                      # the ledge (39-42, 28) steps down to it
+air(5, 23, 27, 29)
+run(25, 28, 30, 'R')                     # the last rime, with the ice walk's gap
+run(31, 34, 30, 'R')
+run(29, 30, 30, '.')
+run(25, 34, 31, 'X')
+air(5, 7, 30, 31)                        # the stone's pocket
+put(6, 31, 'M')
+put(5, 31, 'N')
+
+# the ember: hung over P1 in the plunge hall, the warm mark S1 points at
+put(10, 15, '*')
+# the two breaths' brazier, and the three breaths' two
+put(29, 11, '*')
+put(28, 21, '*')
+put(33, 21, '*')
 
 # --- motes: the arcs the room asks for, traced before you jump them --------
-motes([(26, 4), (28, 3), (32, 3), (34, 5)])               # T2, the ride
-motes([(32, 16), (29, 15), (26, 15)])                     # T4, the two breaths
-motes([(17, 19), (15, 20), (11, 22), (9, 24), (8, 28), (6, 33), (5, 37)])  # C1, the plunge west, through the ember
-motes([(8, 35), (14, 34)])                                # C2, the swing's ends
-motes([(25, 50), (29, 50), (35, 53)])                     # C4, three breaths
-motes([(36, 62), (32, 63), (27, 65)])                     # C5, the cascade
-motes([(28, 84), (29, 86), (31, 90)])                     # C6, round the roof's lip
+motes([(26, 3), (28, 2), (32, 2), (34, 4)])               # T2, the ride
+motes([(32, 11), (25, 11)])                               # T4, two breaths
+motes([(14, 11), (12, 13)])                               # C1, the plunge
+motes([(25, 21), (30, 21), (36, 21)])                     # C4, three breaths
+motes([(30, 28), (16, 28)])                               # C5, the last walk
 
 CENSERS = [
     # (x, y, len, arc, pulses, phase)
     (30, 3, 3.5, 0.95, 3, 0.0),           # T2
-    (11, 36, 3.5, 0.95, 3, 0.0),          # C2
+    (16, 20, 4.0, 0.95, 3, 0.0),          # C3, hung from L4's underside
 ]
 CRUSHERS = [
     # (x, y, w, h, dx, dy, pulses, phase)
-    (35, 13, 3, 2, 4, 0, 4, 0.0),         # T3
-    (14, 41, 3, 2, 4, 0, 4, 0.0),         # C3 upper, from the west
-    (21, 46, 3, 2, -4, 0, 4, 0.875),      # C3 lower, from the east
-    (14, 75, 8, 2, 8, 0, 4, 0.25),        # C6
+    (35, 9, 3, 2, 4, 0, 4, 0.0),          # T3, across the chute
+    (2, 19, 2, 2, 2, 0, 4, 0.0),          # C2, the west jaw
+    (8, 19, 2, 2, -2, 0, 4, 0.0),         # C2, the east jaw
+    (9, 25, 3, 2, 0, 3, 4, 0.0),          # C5, the last piston, down from the roof
 ]
-GATES = [(0, GATE_ROW, W - 1, GATE_ROW), (22, 71, 29, 71)]
-PURSUIT = dict(zone=(0, 9, W - 1, 85), speed=2.8, trigger=(0, GATE_ROW + 1, W - 1, GATE_ROW + 3))
+GATE2 = (41, 24, 42, 24)                  # the slot by P5: one way, down
+GATES = [GATE1, GATE2]
+PURSUIT = dict(zone=(0, 9, W - 1, 29), speed=0.77, trigger=(1, 15, 15, 17))
 
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
@@ -209,20 +202,18 @@ crushers = ',\n'.join(
 gates = ',\n'.join("      { x0: %d, y0: %d, x1: %d, y1: %d }" % gt for gt in GATES)
 z, t = PURSUIT['zone'], PURSUIT['trigger']
 
-defn = """  // 5 · THE EMBER — the descent, chased (scripts/author-ember.py). Above
+defn = """  // 5 · THE EMBER — the descent, chased, on one line (scripts/author-ember.py).
+  // One carved path through solid rock, switching back four times on the way
+  // down. Everything off it is stone, every pit on it is floored with fangs
+  // in plain sight, and no step down is deeper than the frame shows. Above
   // the curtain every noun is met alone and in calm: the ice walk, the
   // lantern, the trapdoor over a piston, two breaths off a brazier, and the
-  // room's one light. Below it the dark pours down at 2.8 tiles a second and
-  // there is no light at all: plunge onto a two-tile ledge, ride the lantern
-  // up to the throat, drop through two pistons, three breaths across the cut,
-  // a rime cascade you cannot stand on, and a wall-to-wall piston over a
-  // column whose floor is fangs. The seed sits under a fanged roof to the
-  // side of the fall line: free-fall and you burn; steer and spark under the
-  // lip and you kneel beside it.
+  // room's one light. Below it the dark pours down and there is no light:
+  // the plunge, the throat's jaws, the lantern ride, three breaths, and the
+  // last walk over rime and under the last piston into the stone's pocket.
   {
     glyph: 'ember',
     chambers: [21],
-    openEdges: true,
     censers: [
 %s
     ],
@@ -235,7 +226,7 @@ defn = """  // 5 · THE EMBER — the descent, chased (scripts/author-ember.py).
     pursuit: {
       zone: [%d, %d, %d, %d],
       dir: 'down',
-      speed: %.1f,
+      speed: %.2f,
       trigger: [%d, %d, %d, %d],
     },
     map: [
@@ -253,5 +244,7 @@ end = s.index('  // 6 · THE WEATHER')
 io.open(p, 'w', encoding='utf-8').write(s[:start] + out + s[end:])
 
 print(f'THE EMBER · {HGT} x {W}')
+print('    ' + ''.join(str(x // 10) for x in range(W)))
+print('    ' + ''.join(str(x % 10) for x in range(W)))
 for i, r in enumerate(rows):
     print(f'{i:3d} {r}')
