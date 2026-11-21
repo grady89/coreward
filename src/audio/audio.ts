@@ -523,6 +523,16 @@ export class AudioEngine {
   }
 
   /**
+   * A gravity seam crossed: a glide the way the body now falls, and a breath
+   * of air under it. Soft, because a seam is crossed often and is not news.
+   */
+  gravityFlip(up: boolean): void {
+    if (up) this.glide(this.jit(240), this.jit(520), 0.2, 0.045, 'triangle');
+    else this.glide(this.jit(520), this.jit(240), 0.2, 0.045, 'triangle');
+    this.noise(0.18, 0.035, up ? 700 : 3000, up ? 3000 : 700);
+  }
+
+  /**
    * The ambience duck. Four moments in the vaults pull the bed down and let
    * one sound own the room: a sconce lit, the master stone touched, first
    * entry to a dark zone, and the gutter-out. Nowhere else (atmosphere §5).

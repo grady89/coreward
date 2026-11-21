@@ -204,9 +204,51 @@ export interface VaultAudio {
   complete(): void;
   /** pull the ambience bed to `to` (linear) for `hold` seconds, then back */
   duck(to: number, hold: number): void;
+  /** the body crossed into a different gravity; `up` when it now falls up */
+  flip?(up: boolean): void;
 }
 
 interface Input { left: boolean; right: boolean; up: boolean; down: boolean; }
+
+/**
+ * GRAVITY YOU CAN SEE BEFORE IT ACTS. Visual and audio only: nothing here is
+ * read by the step, so the physics of a turned field is exactly what it was.
+ *
+ *   the field ... every turned tile is tinted by the way it pulls (up cyan,
+ *                 right violet, left green) and carries chevrons that crawl
+ *                 the way it pulls. Plain down air is left alone except
+ *                 within a couple of tiles of a seam, where gold chevrons
+ *                 point down, so both sides of every boundary say which way.
+ *   the seams ... a bright line on every face where two gravities meet.
+ *   streaks ..... thin lines of light falling the way each side pulls.
+ *   the flip .... crossing a seam flips the body's drawing (feet to the new
+ *                 floor), throws a ring off it, washes the frame in the new
+ *                 colour for a moment, and plays a glide the way you now fall.
+ */
+interface GravityField {
+  mat: THREE.ShaderMaterial;
+  codeTex: THREE.DataTexture;
+  nearTex: THREE.DataTexture;
+  /** the doors' open state the code texture was last written for */
+  doorsKey: string;
+  streaks: THREE.InstancedMesh;
+  sx: Float32Array; sy: Float32Array; sl: Float32Array; sc: Uint8Array;
+  /** tiles a streak may be born in: [x, y, code] */
+  seeds: Int32Array;
+  ring: THREE.Mesh;
+  ringT: number;
+  wash: THREE.MeshBasicMaterial;
+  flashT: number;
+  /** gravity code at the body: last frame's, and the last one cued */
+  prev: number;
+  cued: number;
+  cooldown: number;
+  /** the body's drawn up-axis: 1 upright, -1 hanging, eased between */
+  flipY: number;
+}
+
+/** 0 down, 1 up, 2 right, 3 left; the colour each one is drawn in */
+const GRAV_COLORS = [0xffd27a, 0x55d8ff, 0xc08cff, 0x7dffa0];
 
 type Phase = 'run' | 'complete' | 'leave';
 
@@ -407,6 +449,8 @@ export class VaultRun {
   private motes!: THREE.Points;
   private motePos!: Float32Array;
   private windStreaks: THREE.Points | null = null;
+  /** the gravity field: tint, chevrons and seams, streaks, and the flip cue */
+  private grav: GravityField | null = null;
   private ambient!: THREE.AmbientLight;
   private rimMat!: THREE.MeshBasicMaterial;
   private fog: { mesh: THREE.Mesh; vx: number; x0: number; x1: number }[] = [];
@@ -638,9 +682,17 @@ export class VaultRun {
       }
     }
     this.slabAnchors = anchors;
+    // A course with turned gravity against either face is a floor on both
+    // faces, so it keeps its full mass: a half slab hung from the top of the
+    // tile would leave a body standing on its underside half a tile clear of
+    // the stone it is standing on.
+    const turnedBeside = (x: number, y: number): boolean =>
+      (y > 0 && p.gravity[(y - 1) * p.w + x] !== 0)
+      || (y < p.h - 1 && p.gravity[(y + 1) * p.w + x] !== 0);
     const oneCourse = (x: number, y: number): boolean =>
       !!p.solid[y * p.w + x]
       && !anchors.has(y * p.w + x)
+      && !turnedBeside(x, y)
       && !(y > 0 && p.solid[(y - 1) * p.w + x])
       && !(y < p.h - 1 && p.solid[(y + 1) * p.w + x]);
     let k = 0;
@@ -1238,6 +1290,7 @@ export class VaultRun {
     geo.setAttribute('position', new THREE.BufferAttribute(this.motePos, 3));
     this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xd8d2ff, size: 0.06, transparent: true, opacity: 0.5, depthWrite: false }));
     this.scene.add(this.motes);
+    this.buildGravityField();
 
     if (this.def.wind) {
       const W = 120;
@@ -1626,6 +1679,283 @@ export class VaultRun {
       return;
     }
     this.motePos[i * 3] = -5; this.motePos[i * 3 + 1] = 5;
+  }
+
+  // ---------------- the gravity field (visual and audio only) ----------------
+
+  /**
+   * 0-3 the gravity of an air tile; 4 for stone (a shut door is stone) and
+   * for unlight, which has its own drawing and is never fallen through
+   */
+  private gravCode(x: number, y: number): number {
+    if (x < 0 || y < 0 || x >= this.p.w || y >= this.p.h) return 4;
+    if (this.solidTile(x, y) && !this.thinTile(x, y)) return 4;
+    if (this.p.kill[y * this.p.w + x]) return 4;
+    return this.p.gravity[y * this.p.w + x];
+  }
+
+  private writeGravityCodes(g: GravityField): void {
+    const { w, h } = this.p;
+    const code = g.codeTex.image.data as Uint8Array;
+    const near = g.nearTex.image.data as Uint8Array;
+    const c = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) c[y * w + x] = this.gravCode(x, y);
+    // how close each air tile is to a seam, walked through air of its own
+    // gravity: a seam tile is 0, the stone in between stops the walk, so a
+    // corridor on the far side of a floor is not "near" the field under it
+    const R = 3;
+    const dist = new Float32Array(w * h).fill(99);
+    const queue: number[] = [];
+    const N4: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const me = c[y * w + x];
+      if (me === 4) continue;
+      for (const [dx, dy] of N4) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const o = c[yy * w + xx];
+        if (o !== 4 && o !== me) { dist[y * w + x] = 0; queue.push(x, y); break; }
+      }
+    }
+    for (let qi = 0; qi < queue.length; qi += 2) {
+      const x = queue[qi], y = queue[qi + 1], d = dist[y * w + x];
+      if (d >= R) continue;
+      for (const [dx, dy] of N4) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const j = yy * w + xx;
+        if (c[j] !== c[y * w + x] || dist[j] <= d + 1) continue;
+        dist[j] = d + 1; queue.push(xx, yy);
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        // rows run bottom-up in a texture
+        const ti = ((h - 1 - y) * w + x) * 4;
+        code[ti] = c[y * w + x] * 50; code[ti + 3] = 255;
+        // in the dark the field itself and its seams still show, but plain
+        // down air keeps its black: the dark hides the room's shape (P2)
+        const hush = c[y * w + x] === 0 && this.p.dark[y * w + x];
+        near[ti] = hush ? 0 : Math.round(Math.max(0, 1 - dist[y * w + x] / (R + 0.5)) * 255);
+        near[ti + 3] = 255;
+      }
+    }
+    g.codeTex.needsUpdate = true;
+    g.nearTex.needsUpdate = true;
+    g.doorsKey = this.doorOpen.map(o => (o ? 1 : 0)).join('');
+    // the tiles streaks are born in: every turned air tile, and down air
+    // close enough to a seam to need saying
+    const seeds: number[] = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const me = c[y * w + x];
+      if (me === 4) continue;
+      const nr = near[((h - 1 - y) * w + x) * 4] / 255;
+      if (me !== 0 || nr > 0.45) seeds.push(x, y, me);
+    }
+    g.seeds = Int32Array.from(seeds);
+  }
+
+  private buildGravityField(): void {
+    const { w, h } = this.p;
+    if (!this.p.gravity.some(v => v !== 0)) return;
+    const tex = (filter: THREE.MagnificationTextureFilter): THREE.DataTexture => {
+      const t = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat);
+      t.magFilter = filter;
+      t.minFilter = filter === THREE.NearestFilter ? THREE.NearestFilter : THREE.LinearFilter;
+      t.generateMipmaps = false;
+      return t;
+    };
+    const codeTex = tex(THREE.NearestFilter);
+    const nearTex = tex(THREE.LinearFilter);
+    const cols = GRAV_COLORS.map(c => new THREE.Color(c));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uCode: { value: codeTex }, uNear: { value: nearTex },
+        uSize: { value: new THREE.Vector2(w, h) },
+        uTime: { value: 0 }, uFlash: { value: 0 }, uReveal: { value: 0 },
+        uCol: { value: cols },
+      },
+      vertexShader: `
+        varying vec2 vW;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vW = wp.xy;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: `
+        uniform sampler2D uCode; uniform sampler2D uNear;
+        uniform vec2 uSize; uniform float uTime; uniform float uFlash; uniform float uReveal;
+        uniform vec3 uCol[4];
+        varying vec2 vW;
+        int codeAt(vec2 t) {
+          if (t.x < 0.0 || t.y < 0.0 || t.x >= uSize.x || t.y >= uSize.y) return 4;
+          float r = texture2D(uCode, vec2((t.x + 0.5) / uSize.x, (uSize.y - 1.0 - t.y + 0.5) / uSize.y)).r;
+          return int(floor(r * 255.0 / 50.0 + 0.5));
+        }
+        vec2 dirOf(int c) {
+          if (c == 1) return vec2(0.0, 1.0);
+          if (c == 2) return vec2(1.0, 0.0);
+          if (c == 3) return vec2(-1.0, 0.0);
+          return vec2(0.0, -1.0);
+        }
+        vec3 colOf(int c) {
+          if (c == 1) return uCol[1];
+          if (c == 2) return uCol[2];
+          if (c == 3) return uCol[3];
+          return uCol[0];
+        }
+        float edgeTo(int me, int other, float d) {
+          if (other == me || other == 4) return 0.0;
+          return 1.0 - smoothstep(0.0, 0.075, d);
+        }
+        void main() {
+          float row = -vW.y;
+          vec2 t = vec2(floor(vW.x), floor(row));
+          int c = codeAt(t);
+          if (c == 4) discard;
+          float near = texture2D(uNear, vec2(vW.x / uSize.x, (uSize.y - row) / uSize.y)).r;
+          float zone = c == 0 ? 0.0 : 1.0;
+          vec2 d = dirOf(c);
+          float along = dot(vW, d);
+          float across = dot(vW, vec2(-d.y, d.x));
+          float ac = fract(across) - 0.5;
+          // chevrons, tip leading, crawling the way the tile pulls
+          float s = fract((along + abs(ac) * 0.75 - uTime * 1.1) / 1.5);
+          float chev = smoothstep(0.0, 0.05, s) * (1.0 - smoothstep(0.09, 0.16, s));
+          chev *= 1.0 - smoothstep(0.30, 0.40, abs(ac));
+          float a = zone * (0.11 + 0.09 * near) + chev * (zone * 0.34 + (1.0 - zone) * 0.42 * near);
+          vec2 f = vec2(fract(vW.x), fract(row));
+          float e = 0.0;
+          e = max(e, edgeTo(c, codeAt(t + vec2(-1.0, 0.0)), f.x));
+          e = max(e, edgeTo(c, codeAt(t + vec2(1.0, 0.0)), 1.0 - f.x));
+          e = max(e, edgeTo(c, codeAt(t + vec2(0.0, -1.0)), f.y));
+          e = max(e, edgeTo(c, codeAt(t + vec2(0.0, 1.0)), 1.0 - f.y));
+          a += e * 0.9;
+          a += uFlash * (zone * 0.22 + e * 0.6 + chev * 0.3 * max(zone, near));
+          gl_FragColor = vec4(colOf(c) * a * uReveal, 1.0);
+        }`,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    plane.position.set(w / 2, -h / 2, -0.06);
+    plane.name = 'gravity-field';
+    this.scene.add(plane);
+
+    const N = 320;
+    const streaks = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.04, 0.5),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false,
+        blending: THREE.AdditiveBlending, toneMapped: false,
+      }), N);
+    streaks.name = 'gravity-streaks';
+    streaks.frustumCulled = false;
+    this.scene.add(streaks);
+
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+        blending: THREE.AdditiveBlending, toneMapped: false,
+      }));
+    ring.position.z = 0.4;
+    this.scene.add(ring);
+    const wash = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0, depthTest: false, depthWrite: false,
+      blending: THREE.AdditiveBlending, toneMapped: false,
+    });
+    const washMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 70), wash);
+    washMesh.renderOrder = 199;
+    washMesh.position.z = -2.9;
+    this.cam.camera.add(washMesh);
+
+    this.grav = {
+      mat, codeTex, nearTex, doorsKey: '', streaks,
+      sx: new Float32Array(N), sy: new Float32Array(N), sl: new Float32Array(N), sc: new Uint8Array(N),
+      seeds: new Int32Array(0), ring, ringT: 0, wash, flashT: 0,
+      prev: -1, cued: -1, cooldown: 0, flipY: 1,
+    };
+    this.writeGravityCodes(this.grav);
+    for (let i = 0; i < N; i++) this.seedStreak(i, Math.random());
+  }
+
+  private seedStreak(i: number, life = 0): void {
+    const g = this.grav!;
+    const n = g.seeds.length / 3;
+    if (n === 0) { g.sl[i] = -1; return; }
+    const k = Math.floor(Math.random() * n) * 3;
+    g.sx[i] = g.seeds[k] + 0.15 + Math.random() * 0.7;
+    g.sy[i] = -(g.seeds[k + 1] + Math.random());
+    g.sc[i] = g.seeds[k + 2];
+    g.sl[i] = life;
+  }
+
+  private updateGravityField(dt: number): void {
+    const g = this.grav;
+    if (!g) return;
+    const key = this.doorOpen.map(o => (o ? 1 : 0)).join('');
+    if (key !== g.doorsKey) this.writeGravityCodes(g);
+    const u = g.mat.uniforms;
+    u.uTime.value = this.time;
+    // the field comes up as the veil lifts, and goes down with it on leaving
+    u.uReveal.value = Math.min(1, Math.max(0, 1 - (this.veilMat?.opacity ?? 0) * 1.4));
+    g.flashT = Math.max(0, g.flashT - dt / 0.45);
+    u.uFlash.value = g.flashT * g.flashT;
+    g.wash.opacity = 0.2 * g.flashT * g.flashT;
+
+    // streaks: fall the way their tile pulls, born again where they leave it
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+    const col = new THREE.Color();
+    const LIFE = 1.6, SPEED = 2.4;
+    for (let i = 0; i < g.sx.length; i++) {
+      if (g.sl[i] < 0) continue;
+      const c = g.sc[i];
+      const dx = c === 2 ? 1 : c === 3 ? -1 : 0;
+      const dy = c === 1 ? 1 : c === 0 ? -1 : 0;
+      g.sx[i] += dx * SPEED * dt;
+      g.sy[i] += dy * SPEED * dt;
+      g.sl[i] += dt / LIFE;
+      const tx = Math.floor(g.sx[i]), ty = Math.floor(-g.sy[i]);
+      if (g.sl[i] >= 1 || this.gravCode(tx, ty) !== c) this.seedStreak(i);
+      const env = Math.sin(Math.PI * Math.min(1, Math.max(0, g.sl[i])));
+      q.setFromAxisAngle(zAxis, dx !== 0 ? Math.PI / 2 : 0);
+      pos.set(g.sx[i], g.sy[i], -0.03);
+      scl.set(1, Math.max(0.001, env), 1);
+      m4.compose(pos, q, scl);
+      g.streaks.setMatrixAt(i, m4);
+      col.setHex(GRAV_COLORS[g.sc[i]]).multiplyScalar(u.uReveal.value * (g.sc[i] === 0 ? 0.7 : 1));
+      g.streaks.setColorAt(i, col);
+    }
+    g.streaks.instanceMatrix.needsUpdate = true;
+    if (g.streaks.instanceColor) g.streaks.instanceColor.needsUpdate = true;
+
+    // the flip: which way the body falls, read at its centre like the step does
+    const [gx, gy] = this.gravityAt(this.px, this.py);
+    const code = gx > 0 ? 2 : gx < 0 ? 3 : gy > 0 ? 1 : 0;
+    g.cooldown = Math.max(0, g.cooldown - dt);
+    if (g.prev < 0) { g.prev = code; g.cued = code; }
+    if (this.reformT > 0 || this.phase !== 'run') {
+      g.cued = code;                       // a re-form is not a flip
+    } else if (code !== g.cued && g.cooldown <= 0) {
+      g.cued = code;
+      g.cooldown = 0.4;
+      g.flashT = 1;
+      g.ringT = 1;
+      const cc = GRAV_COLORS[code];
+      (g.ring.material as THREE.MeshBasicMaterial).color.setHex(cc);
+      g.wash.color.setHex(cc);
+      this.audio.flip?.(code === 1);
+    }
+    g.prev = code;
+    g.ringT = Math.max(0, g.ringT - dt / 0.4);
+    const rm = g.ring.material as THREE.MeshBasicMaterial;
+    rm.opacity = 0.85 * g.ringT;
+    g.ring.position.x = this.px; g.ring.position.y = this.py;
+    g.ring.scale.setScalar(1 + (1 - g.ringT) * 2.2);
+    // the body's drawing turns to stand on whichever floor it falls toward
+    g.flipY += ((code === 1 ? -1 : 1) - g.flipY) * Math.min(1, dt * 16);
   }
 
   // ---------------- movement ----------------
@@ -3174,12 +3504,14 @@ export class VaultRun {
       }
     }
     // re-form grow-in, cosmetic only — input already works
+    let bodyScale = 1;
     if (this.reformT > 0) {
       this.reformT = Math.max(0, this.reformT - dt);
-      this.pilotGroup.scale.setScalar(Math.max(0.15, 1 - this.reformT / REFORM_T));
-    } else if (this.pilotGroup.scale.x !== 1) {
-      this.pilotGroup.scale.setScalar(1);
+      bodyScale = Math.max(0.15, 1 - this.reformT / REFORM_T);
     }
+    this.updateGravityField(dt);
+    const flipY = this.grav ? this.grav.flipY : 1;
+    this.pilotGroup.scale.set(bodyScale, bodyScale * flipY, bodyScale);
     // the body is the meter (F12): charged, the suit throws light on the
     // stone around it; spent, the room steps closer. Readable peripherally,
     // and in the dark rooms the meter IS the visibility.
@@ -3383,6 +3715,8 @@ export class VaultRun {
       for (const mat of list) mats.add(mat);
     });
     for (const mat of mats) mat.dispose();
+    this.grav?.codeTex.dispose();
+    this.grav?.nearTex.dispose();
     // ghosts still fading when the run ends live outside the scene traverse
     for (const t of this.trail) {
       t.mesh.geometry.dispose();
