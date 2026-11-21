@@ -667,6 +667,7 @@ class Game {
       gutter: () => this.audio.gutterPhrase(),
       complete: () => this.audio.glyph(),
       duck: (to, hold) => this.audio.duckAmbience(to, hold),
+      flip: up => this.audio.gravityFlip(up),
     }, innerWidth / innerHeight, this.ui);
     this.mode = 'vault';
   }
