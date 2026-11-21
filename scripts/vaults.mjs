@@ -600,9 +600,11 @@ await stage('ember', ['the pursuit', 'censers swing', 'the descent commits'], as
     const edge0 = v.pursuitEdge;
     for (let i = 0; i < 54; i++) v.frame(1 / 60, N, true);
     const advanced = v.pursuitEdge > edge0 + 0.3 * pu.speed;
-    // stand above the edge, inside the zone: consumed
+    // stand above the edge, inside the zone: consumed. Halfway between the
+    // zone's top and the edge, so a slow dark (THE EMBER's is 0.77 t/s, only
+    // 0.7 rows in after 54 frames) is checked inside its zone, not above it
     const r0 = v.reforms;
-    v.px = (pu.zone[0] + pu.zone[2] + 1) / 2; v.py = -(v.pursuitEdge - 1.5); v.vx = 0; v.vy = 0; v.invuln = 0;
+    v.px = (pu.zone[0] + pu.zone[2] + 1) / 2; v.py = -((pu.zone[1] + v.pursuitEdge) / 2); v.vx = 0; v.vy = 0; v.invuln = 0;
     v.frame(1 / 60, N, true);
     const caught = v.reforms > r0;
     const resetOff = !v.pursuitOn;
