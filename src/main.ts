@@ -2606,6 +2606,7 @@ class Game {
       stow: this.ctrl.grounded && this.ctrl.drilling === null
         && !stowInp.down && !stowInp.left && !stowInp.right,
     });
+    this.pod.castLamp((tx, ty) => this.terrain.solidAt(tx, ty));
 
     if (!paused && dt > 0) {
       this.updateCharges(dt);

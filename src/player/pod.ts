@@ -3,10 +3,15 @@ import { hdrEmissive } from '../fx/post';
 import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
 import { ACTIVE, worldById } from '../world/worlds';
 import { softDot } from '../fx/particles';
+import { LAMP_RAYS, lampUniforms } from '../world/chunks';
 
 const BEAM_LEN = 8.5;      // world units the visible beam reaches before it fades
 const BEAM_HALF = 0.42;    // half-angle of the visible wedge (the light's cone is wider)
 const BEAM_DUST = 16;
+const HIT_HALF = 0.6;      // half-angle of the wedge whose stone the beam lights
+const HIT_MAX = 12;        // how far a lamp ray is followed
+const HIT_GAIN = 3;
+const hitO = new THREE.Vector3();
 
 /**
  * The visible beam, apex at the top centre: alpha falls off along its length
@@ -265,6 +270,8 @@ export class Pod {
   private dust: THREE.Points;
   private dustSeed = new Float32Array(BEAM_DUST * 4);
   private lampAim = 0;
+  /** the lamp's reach this frame (0 = off), for castLamp() */
+  private beamK = 0;
   /** set by the host: dust holds still for prefers-reduced-motion */
   reducedMotion = false;
   private fillFor: unknown = null;
@@ -366,7 +373,7 @@ export class Pod {
     // lights
     // a harder penumbra than the old 0.5: stone inside the cone separates
     // from stone outside it instead of fading into one soft disc
-    this.headlamp = new THREE.SpotLight(0xffe6c0, 0, 22, 0.82, 0.3, 1.1);
+    this.headlamp = new THREE.SpotLight(0xffe6c0, 0, 22, 0.82, 0.2, 1.1);
     this.headlamp.position.set(0, 0.3, 0.3);
     this.lampTarget = new THREE.Object3D();
     this.lampTarget.position.set(0, -5, 0.5);
@@ -646,6 +653,34 @@ export class Pod {
     this.beamFor = null;
   }
 
+  /**
+   * Follow the beam through the tile grid (`solid(tx, ty)`, terrain rows
+   * downward) and hand the rock shader where it lands. Call after update().
+   */
+  castLamp(solid: (tx: number, ty: number) => boolean): void {
+    const col = lampUniforms.uLampCol.value;
+    if (this.beamK <= 0.01) { col.setRGB(0, 0, 0); return; }
+    this.beamPivot.updateWorldMatrix(true, false);
+    this.beamPivot.getWorldPosition(hitO);
+    const aim = this.lampAim + this.group.rotation.z;
+    lampUniforms.uLampO.value.set(hitO.x, hitO.y, aim, HIT_HALF);
+    const hits = lampUniforms.uLampHit.value;
+    const tiles = lampUniforms.uLampTile.value;
+    for (let i = 0; i < LAMP_RAYS; i++) {
+      const a = aim + HIT_HALF * (i / (LAMP_RAYS - 1) * 2 - 1);
+      const dx = Math.sin(a), dy = -Math.cos(a);
+      let d = 0.05, tx = 0, ty = 0, hit = false;
+      for (; d < HIT_MAX; d += 0.08) {
+        tx = Math.floor(hitO.x + dx * d); ty = Math.floor(-(hitO.y + dy * d));
+        if (solid(tx, ty)) { hit = true; break; }
+      }
+      hits[i] = d;
+      // tile row ty spans world y -ty-1 .. -ty: its cell is floor(-ty - 0.5)
+      if (hit) tiles[i].set(tx, -ty - 1); else tiles[i].set(-1e4, -1e4);
+    }
+    col.copy(this.headlamp.color).multiplyScalar(this.beamK * HIT_GAIN);
+  }
+
   update(dt: number, opts: {
     vx: number; thrust: number; sideThrust: number;
     drilling: boolean; drillDir: DrillDir; depthRow: number; time: number;
@@ -746,6 +781,7 @@ export class Pod {
     this.beamPivot.position.x = Math.sin(this.lampAim) * 0.3;
     this.beamPivot.position.y = 0.05 - Math.cos(this.lampAim) * 0.3;
     const beamK = lampOn ? lamp : 0;
+    this.beamK = beamK;
     this.beamPivot.visible = beamK > 0.01;
     if (this.beamPivot.visible) {
       this.beamMat.opacity = beamK * 0.34;

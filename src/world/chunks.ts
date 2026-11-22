@@ -83,6 +83,24 @@ const strataUniforms = {
   uVein: { value: new THREE.Color(0) },
 };
 const VEIN_GAIN = 0.24;
+
+/**
+ * Where the headlamp lands: the pod casts LAMP_RAYS rays across the beam's
+ * wedge through the tile grid each frame and stores how far each one gets
+ * before it meets rock. Stone inside the wedge and no deeper than the first
+ * solid tile along it brightens (front faces most, faces turned to the lamp
+ * too), with a hotspot where the beam's axis strikes; everything outside the
+ * wedge or behind that first face is untouched. Zero colour = lamp off.
+ */
+export const LAMP_RAYS = 15;
+export const lampUniforms = {
+  /** origin x, y (world), beam angle (0 = straight down, +x side positive), half-angle */
+  uLampO: { value: new THREE.Vector4() },
+  uLampHit: { value: new Float32Array(LAMP_RAYS) },
+  /** the block each ray stopped in, as the shader's cell (x, floor of world y); far away when none */
+  uLampTile: { value: Array.from({ length: LAMP_RAYS }, () => new THREE.Vector2(-1e4, -1e4)) },
+  uLampCol: { value: new THREE.Color(0) },
+};
 let strataFor: unknown = null;
 function syncStrata(): void {
   if (strataFor === ACTIVE) return;
@@ -111,6 +129,10 @@ rockMat.onBeforeCompile = shader => {
   shader.uniforms.uStrata = strataUniforms.uStrata;
   shader.uniforms.uStone = strataUniforms.uStone;
   shader.uniforms.uVein = strataUniforms.uVein;
+  shader.uniforms.uLampO = lampUniforms.uLampO;
+  shader.uniforms.uLampHit = lampUniforms.uLampHit;
+  shader.uniforms.uLampTile = lampUniforms.uLampTile;
+  shader.uniforms.uLampCol = lampUniforms.uLampCol;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec3 glow;
@@ -149,6 +171,10 @@ varying float vMatte;
 varying vec2 vVein;
 uniform vec3 uStrata[5];
 uniform vec3 uVein;
+uniform vec4 uLampO;
+uniform float uLampHit[${LAMP_RAYS}];
+uniform vec2 uLampTile[${LAMP_RAYS}];
+uniform vec3 uLampCol;
 float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
     .replace('#include <color_fragment>', `#include <color_fragment>
 	// shadow at the block's borders: distance to the nearest edge of the
@@ -209,6 +235,41 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 			float vf = vBoxN.z > 0.5 ? 1.0 : 0.45;
 			totalEmissiveRadiance += uVein * vf * wp * mix(1.0, stShade, 0.5) * (1.0 - exp(-1.5 * vg));
 		}
+	}
+	// the beam lands: stone inside the lamp's wedge, up to the first face it
+	// meets along each ray, catches the lamp; the axis' hit is a hotspot
+	if (uLampCol.r + uLampCol.g + uLampCol.b > 0.0) {
+		vec2 ld = vWXY - uLampO.xy;
+		float ll = max(length(ld), 1e-3);
+		vec2 dir = vec2(sin(uLampO.z), -cos(uLampO.z));
+		float la = atan(dir.x * ld.y - dir.y * ld.x, dot(dir, ld));
+		float inC = 1.0 - smoothstep(uLampO.w * 0.7, uLampO.w, abs(la));
+		if (inC > 0.0) {
+			float lt = clamp((la / uLampO.w * 0.5 + 0.5) * float(${LAMP_RAYS - 1}), 0.0, float(${LAMP_RAYS - 1}));
+			int l0 = int(floor(lt));
+			int l1 = min(l0 + 1, ${LAMP_RAYS - 1});
+			float hd = mix(uLampHit[l0], uLampHit[l1], fract(lt));
+			// the skin the rays reach, and (dimmer) every whole block a ray
+			// stopped in: a grazing ray lights only a sliver of the face it lands on
+			float skin = 1.0 - smoothstep(hd + 0.1, hd + 0.6, ll);
+			float blk = 0.0;
+			for (int i = 0; i < ${LAMP_RAYS}; i++) {
+				vec2 tc = abs(vCell - uLampTile[i]);
+				if (max(tc.x, tc.y) < 0.5) blk = 1.0;
+			}
+			float reach = max(skin, blk);
+			float fall = 1.0 / (1.0 + ll * ll * 0.03);
+			float face = vBoxN.z > 0.5 ? 1.0 : 0.5 * max(0.0, dot(vBoxN.xy, -ld / ll));
+			float ha = uLampHit[${(LAMP_RAYS - 1) / 2}];
+			vec2 hv = vWXY - (uLampO.xy + dir * ha);
+			float hot = exp(-dot(hv, hv) / (0.35 + 0.04 * ha * ha));
+			float lk = inC * face * fall * (0.45 * skin + 0.25 * blk + 1.2 * hot * reach);
+			// lit stone keeps its own hue (a floor under near-black rock so it
+			// can catch the light at all), soft-capped so pale ice or a hotspot
+			// never goes to a flat white square
+			vec3 lE = uLampCol * (stAlbedo + 0.02) * lk * (1.0 - 0.75 * vMatte);
+			totalEmissiveRadiance += lE / (1.0 + 2.0 * dot(lE, vec3(0.2126, 0.7152, 0.0722)));
+		}
 	}`)
     .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 	// stone at and around an ore stays matte and dark so the ore's halo is
@@ -232,7 +293,7 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 	reflectedLight.directDiffuse *= stBury;
 	reflectedLight.directSpecular *= stBury;`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v5';
+rockMat.customProgramCacheKey = () => 'rock-glow-v6';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -344,7 +405,7 @@ hazeMat.customProgramCacheKey = () => 'fluid-haze-v1';
  * skin and dies a few tiles into the rock mass. Off once the fragment is taken.
  */
 const CORE_TX = WORLD_W / 2 - 0.5, CORE_TY = CORE_ROW + 4.5;
-const CORE_REACH = 30, CORE_INNER = 3.5, CORE_KNEE = 7, CORE_GAIN = 0.62;
+const CORE_REACH = 30, CORE_INNER = 3.5, CORE_KNEE = 7, CORE_GAIN = 0.62, CORE_POOL = 0.9;
 const smooth01 = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 let coreLit = true;
 
@@ -755,7 +816,13 @@ class Chunk {
           }
           const occ = Math.exp(-0.55 * solid * 0.5);
           if (occ < 0.02) continue;
-          const w = CORE_GAIN * f * occ;
+          // the floor straight under the fragment runs hotter: a narrow pool
+          // across the few columns below it, on the chamber's floor skin
+          const below = ty - CORE_TY - 4;
+          const pool = below > 0
+            ? CORE_POOL * Math.exp(-((tx - CORE_TX) ** 2) / 14) * Math.exp(-Math.max(0, below - 1.5) * 0.9)
+            : 0;
+          const w = CORE_GAIN * f * occ + pool * occ;
           const i = ly * CHUNK + lx;
           o.r[i] += tmpC.r * w; o.g[i] += tmpC.g * w; o.b[i] += tmpC.b * w;
           // the core outweighs a seam next door in setting which way light comes from

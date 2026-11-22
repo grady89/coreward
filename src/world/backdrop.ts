@@ -429,18 +429,98 @@ function fieldTexture(w: number, h: number, fn: (u: number, v: number) => number
   return new THREE.CanvasTexture(cv);
 }
 
+/**
+ * The fragment's body: a low-poly crystal, not a ball. A detail-2
+ * icosahedron pulled taller than wide and tapered to its tips, every corner
+ * pushed in or out a little (shared corners move together, so it stays
+ * closed), and a fixed value per facet that turns with it.
+ */
+function crystalGeometry(r: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(r, 2);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const h = (a: number, b: number, c: number, k: number): number => {
+    const v = Math.sin(a * 12.9898 + b * 78.233 + c * 37.719 + k * 4.31) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const q = (n: number) => Math.round(n * 100);
+    const j = 1 + (h(q(v.x), q(v.y), q(v.z), 1) - 0.5) * 0.2;
+    const ny = v.y / r;
+    const taper = 1 - 0.32 * ny * ny;
+    v.set(v.x * j * taper * 0.86, v.y * j * 1.12, v.z * j * taper * 0.86);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  // non-indexed: each run of three vertices is one facet
+  const facet = new Float32Array(p.count);
+  for (let f = 0; f < p.count / 3; f++) {
+    const t = h(f, 3.1, 7.7, 2);
+    facet[f * 3] = facet[f * 3 + 1] = facet[f * 3 + 2] = t;
+  }
+  g.setAttribute('facet', new THREE.BufferAttribute(facet, 1));
+  return g;
+}
+
+/**
+ * The crystal's light: facets turned to the viewer burn the core's white-hot
+ * body, facets turning away fall through its light to the shell's hue at the
+ * rim, and each facet keeps its own value on top, so the body reads as cut
+ * stone with an inside rather than a disc. Only the hottest facets cross
+ * the bloom threshold.
+ */
+function crystalMaterial(excite: { value: number }): THREE.MeshBasicMaterial {
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const u = {
+    uBody: { value: new THREE.Color(ACTIVE.core.body) },
+    uShell: { value: new THREE.Color(ACTIVE.core.shell) },
+    uLight: { value: new THREE.Color(ACTIVE.core.light) },
+    uExcite: excite,
+  };
+  m.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, u);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float facet;\nvarying float vFacet;\nvarying vec3 vVP;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvVP = mvPosition.xyz; vFacet = facet;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uBody;
+uniform vec3 uShell;
+uniform vec3 uLight;
+uniform float uExcite;
+varying float vFacet;
+varying vec3 vVP;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+	{
+		vec3 fN = normalize(cross(dFdx(vVP), dFdy(vVP)));
+		float ndv = abs(dot(fN, normalize(-vVP)));
+		vec3 c = mix(uShell * 0.45, uLight, smoothstep(0.15, 0.55, ndv));
+		c = mix(c, uBody, smoothstep(0.8, 0.98, ndv) * (0.3 + 0.7 * vFacet));
+		float fv = mix(0.55, 1.15, vFacet * vFacet) * mix(0.75, 1.0, smoothstep(0.3, 0.9, ndv));
+		// the hottest facets, square to the viewer, go past white and bloom
+		fv += smoothstep(0.84, 0.99, ndv) * step(0.5, vFacet) * 0.45;
+		diffuseColor.rgb = c * fv * (1.0 + uExcite * 0.35);
+	}`);
+  };
+  m.customProgramCacheKey = () => 'core-crystal-v1';
+  return m;
+}
+
 export function createEmber(scene: THREE.Scene): Ember {
   const x = WORLD_W / 2, y = -(CORE_ROW + 5);
   const group = new THREE.Group();
   // the burning heart spins; halo, ring and shaft stay world-oriented
   const spin = new THREE.Group();
-  const coreMat = new THREE.MeshBasicMaterial({ color: ACTIVE.core.body, toneMapped: false });
-  hdrBasic(coreMat, 1.25);
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6, 1), coreMat);
+  const exciteU = { value: 0 };
+  const coreMat = crystalMaterial(exciteU);
+  hdrBasic(coreMat, 1.2);
+  const core = new THREE.Mesh(crystalGeometry(2.6), coreMat);
+  // the shell glows only past the crystal's edge (its back faces, hidden
+  // behind the body), so it rims the silhouette instead of washing the facets
   const shell = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(3.3, 1),
+    crystalGeometry(3.1),
     new THREE.MeshBasicMaterial({
-      color: ACTIVE.core.shell, transparent: true, opacity: 0.3,
+      color: ACTIVE.core.shell, transparent: true, opacity: 0.22, side: THREE.BackSide,
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     })
   );
@@ -550,6 +630,17 @@ export function createEmber(scene: THREE.Scene): Ember {
     );
     floorHaze.position.set(0, -5 + 1.8, -0.05);   // its foot on the floor top
     addAir(floorHaze, 0.3);
+    // the hot pool right under the fragment: a narrow, brighter haze whose
+    // foot sits on the floor, in the core's own light warmed toward its body
+    const poolC = airC.clone().lerp(new THREE.Color(ACTIVE.core.body), 0.35);
+    const poolMat = airMat(fieldTexture(64, 32, (u, v) => {
+      const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+      return across ** 1.6 * (1 - v) ** 1.8;
+    }), 0.55);
+    poolMat.color.copy(poolC);
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(11, 3.2), poolMat);
+    pool.position.set(0, -5 + 1.6, -0.04);
+    addAir(pool, 0.55);
     // the void under the floor ledge: a dim gradient, not dead black
     const under = new THREE.Mesh(
       new THREE.PlaneGeometry(48, 10),
@@ -582,7 +673,8 @@ export function createEmber(scene: THREE.Scene): Ember {
       core.scale.setScalar(1 + pulse * (0.06 + ex * 0.07));
       shell.scale.setScalar(1 + Math.sin(t * 1.3 + 1) * 0.1 + ex * 0.12);
       halo.scale.setScalar(11 + pulse * 1.5 + ex * 6);
-      (halo.material as THREE.SpriteMaterial).opacity = 0.3 + pulse * 0.08 + ex * 0.35;
+      (halo.material as THREE.SpriteMaterial).opacity = 0.22 + pulse * 0.06 + ex * 0.35;
+      exciteU.value = ex;
       (shaft.material as THREE.MeshBasicMaterial).opacity = 0.1 + ex * 0.3;
       (flood.material as THREE.MeshBasicMaterial).opacity = 0.5 + pulse * 0.04 + ex * 0.2;
       for (const a of air) a.mat.opacity = a.base * (1 + pulse * 0.06 + ex * 0.5);
