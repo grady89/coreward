@@ -286,12 +286,14 @@ hazeMat.customProgramCacheKey = () => 'fluid-haze-v1';
 
 /**
  * The fragment floods its chamber: every rock tile within reach of the core
- * takes a wash in the core's own light, strongest beside it and gone by the
- * chamber mouth, turned toward it so floor tops, pillar flanks and the faces
- * looking at the fragment catch it hardest. Off once the fragment is taken.
+ * takes a wash in the core's own light, strongest beside it and still there
+ * at the chamber mouth, turned toward it so floor tops, pillar flanks and the
+ * faces looking at the fragment catch it hardest. It lands on the chamber's
+ * skin and dies a few tiles into the rock mass. Off once the fragment is taken.
  */
 const CORE_TX = WORLD_W / 2 - 0.5, CORE_TY = CORE_ROW + 4.5;
-const CORE_REACH = 19, CORE_INNER = 3.5;
+const CORE_REACH = 30, CORE_INNER = 3.5, CORE_KNEE = 7, CORE_GAIN = 0.62;
+const smooth01 = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 let coreLit = true;
 
 /** a spent world (the husk, or a world whose fragment was taken) throws no light */
@@ -620,19 +622,34 @@ class Chunk {
       o.r[i] = tmpC.r * s; o.g[i] = tmpC.g * s; o.b[i] = tmpC.b * s;
     }
     if (coreLit && y0 + CHUNK > CORE_TY - CORE_REACH && y0 < CORE_TY + CORE_REACH) {
+      // every core at one brightness: a pale cyan heart must not out-wash amber
       tmpC.setHex(ACTIVE.core.light);
+      const lum = 0.2126 * tmpC.r + 0.7152 * tmpC.g + 0.0722 * tmpC.b;
+      tmpC.multiplyScalar(Math.min(1, 0.45 / Math.max(lum, 1e-3)));
       for (let ly = 0; ly < CHUNK; ly++) {
         for (let lx = 0; lx < CHUNK; lx++) {
           const tx = x0 + lx, ty = y0 + ly;
           const d = Math.hypot(tx - CORE_TX, ty - CORE_TY);
           if (d >= CORE_REACH) continue;
-          const u = Math.max(0, (d - CORE_INNER) / (CORE_REACH - CORE_INNER));
-          const f = (1 - u) * (1 - u);              // long soft tail, no edge
-          const w = 0.34 * f;
+          // inverse-square-ish with a soft knee, faded out well before the reach
+          const f = 1 / (1 + (Math.max(0, d - CORE_INNER) / CORE_KNEE) ** 2)
+            * (1 - smooth01((d - CORE_REACH * 0.6) / (CORE_REACH * 0.4)));
+          // the light lands on the chamber's skin and dies into the rock mass:
+          // count solid cells on the way to the fragment (the tile itself excluded)
+          const steps = Math.ceil(d * 2);
+          let solid = 0;
+          for (let s = 1; s < steps; s++) {
+            const q = s / steps;
+            const st = terrain.get(Math.round(tx + (CORE_TX - tx) * q), Math.round(ty + (CORE_TY - ty) * q));
+            if (st !== T.AIR && st !== T.LAVA) solid++;
+          }
+          const occ = Math.exp(-0.55 * solid * 0.5);
+          if (occ < 0.02) continue;
+          const w = CORE_GAIN * f * occ;
           const i = ly * CHUNK + lx;
           o.r[i] += tmpC.r * w; o.g[i] += tmpC.g * w; o.b[i] += tmpC.b * w;
           // the core outweighs a seam next door in setting which way light comes from
-          const k = 4 * f / Math.max(d, 0.5);
+          const k = 4 * f * occ / Math.max(d, 0.5);
           o.dx[i] += (CORE_TX - tx) * k;
           o.dy[i] += (ty - CORE_TY) * k;
         }

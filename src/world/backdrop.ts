@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_W, WORLD_ROWS, CORE_ROW, PAD_X0, PAD_X1 } from '../config';
 import { backwallColor } from './tiles';
-import { ACTIVE } from './worlds';
+import { ACTIVE, worldById } from './worlds';
 import { STRUCTURE_BUILDERS } from './structures';
 import { hdrBasic } from '../fx/post';
 
@@ -327,6 +327,29 @@ function haloTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(cv);
 }
 
+const smooth = (e0: number, e1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+
+/** a soft white alpha field, `fn(u, v)` 0..1 with v = 0 at the bottom */
+function fieldTexture(w: number, h: number, fn: (u: number, v: number) => number): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = Math.min(1, Math.max(0, fn((x + 0.5) / w, 1 - (y + 0.5) / h)));
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(a * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(cv);
+}
+
 export function createEmber(scene: THREE.Scene): Ember {
   const x = WORLD_W / 2, y = -(CORE_ROW + 5);
   const group = new THREE.Group();
@@ -383,16 +406,84 @@ export function createEmber(scene: THREE.Scene): Ember {
   // the chamber's air and back wall washed in the fragment's light: a wide
   // soft gradient just in front of the backwall, so it only shows where the
   // chamber is open and the rock in front of it still reads as rock
+  // (a broad falloff so the whole vault reads as lit space, not a glow
+  // pinned to the fragment; every core at one brightness)
+  const chamber = !ACTIVE.husk && ACTIVE === worldById(ACTIVE.id);
+  const airC = new THREE.Color(ACTIVE.core.light);
+  const airLum = 0.2126 * airC.r + 0.7152 * airC.g + 0.0722 * airC.b;
+  airC.multiplyScalar(Math.min(1, 0.45 / Math.max(airLum, 1e-3)));
+  const airMat = (map: THREE.Texture, opacity: number) => new THREE.MeshBasicMaterial({
+    map, color: chamber ? airC : ACTIVE.core.light, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+  });
   const flood = new THREE.Mesh(
-    new THREE.PlaneGeometry(44, 30),
-    new THREE.MeshBasicMaterial({
-      map: haloTexture(), color: ACTIVE.core.light, transparent: true, opacity: 0.5,
-      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
-    })
+    new THREE.PlaneGeometry(chamber ? 46 : 44, 30),
+    airMat(chamber ? fieldTexture(128, 96, (u, v) => {
+      // the vault: brightest round the fragment, still lit at the walls
+      const r = Math.hypot((u - 0.5) * 2, (v - 0.5) * 2);
+      return Math.max(0, 1 - r) ** 1.5 * 0.75 + Math.max(0, 1 - r * 2.2) ** 2 * 0.25;
+    }) : haloTexture(), 0.5)
   );
   flood.position.set(0, 0.5, -0.58);
-
   group.add(spin, light, halo, shards, shaft, flood);
+
+  // The chamber's air holds the light (G2 lit the stone and the back wall;
+  // this is the volume between): a fan of soft rays from the fragment down
+  // across the floor, a haze lying on the floor, and a dim glow in the void
+  // under the floor ledge. All static additive sheets in the air plane
+  // (depth-tested, so rock in front hides them); nothing moves, they only
+  // breathe in opacity with the pulse. None in a spent world or the husk.
+  const air: { mat: THREE.MeshBasicMaterial; base: number }[] = [];
+  const addAir = (mesh: THREE.Mesh, base: number) => {
+    group.add(mesh);
+    air.push({ mat: mesh.material as THREE.MeshBasicMaterial, base });
+  };
+  if (chamber) {
+    const rayTex = fieldTexture(128, 32, (u, v) => {
+      // bright at the fragment, widening and thinning out along its length
+      const along = smooth(0.0, 0.14, u) * (1 - u) ** 1.7;
+      const half = 0.3 + 0.7 * u;
+      const a = Math.abs(v - 0.5) * 2 / half;
+      return a >= 1 ? 0 : along * Math.cos(a * Math.PI / 2) ** 2;
+    });
+    // [angle° (0 = +x, world up = +y), length, width, opacity]; the floor-
+    // ward rays end in the floor slab (7 below the fragment) so none pokes
+    // into the void under it
+    const RAYS: readonly (readonly [number, number, number, number])[] = [
+      [-160, 17, 4.2, 0.16], [-134, 9, 3.2, 0.2], [-104, 6.8, 2.6, 0.14],
+      [-76, 6.8, 2.6, 0.14], [-46, 9, 3.2, 0.2], [-20, 17, 4.2, 0.16],
+      [168, 15, 5.0, 0.1], [12, 15, 5.0, 0.1],
+    ];
+    for (const [deg, len, wid, op] of RAYS) {
+      const ray = new THREE.Mesh(new THREE.PlaneGeometry(len, wid).translate(len / 2, 0, 0), airMat(rayTex, op));
+      ray.rotation.z = deg * Math.PI / 180;
+      ray.position.set(0, 0, -0.45);
+      addAir(ray, op);
+    }
+    // haze on the floor: thickest at the fragment's foot, out to the walls
+    const floorHaze = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 3.6),
+      airMat(fieldTexture(128, 32, (u, v) => {
+        const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+        return (0.35 + 0.65 * across * across) * smooth(0, 0.12, u) * smooth(1, 0.88, u)
+          * (1 - v) ** 2.2;
+      }), 0.3)
+    );
+    floorHaze.position.set(0, -5 + 1.8, -0.05);   // its foot on the floor top
+    addAir(floorHaze, 0.3);
+    // the void under the floor ledge: a dim gradient, not dead black
+    const under = new THREE.Mesh(
+      new THREE.PlaneGeometry(48, 10),
+      airMat(fieldTexture(128, 32, (u, v) => {
+        const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+        return Math.sqrt(across) * v ** 2.4;
+      }), 0.32)
+    );
+    under.position.set(0, -7 - 5, -0.3);            // top edge at the world's floor
+    addAir(under, 0.32);
+  }
+
+
   group.position.set(x, y, 0);
   scene.add(group);
 
@@ -415,6 +506,7 @@ export function createEmber(scene: THREE.Scene): Ember {
       (halo.material as THREE.SpriteMaterial).opacity = 0.3 + pulse * 0.08 + ex * 0.35;
       (shaft.material as THREE.MeshBasicMaterial).opacity = 0.1 + ex * 0.3;
       (flood.material as THREE.MeshBasicMaterial).opacity = 0.5 + pulse * 0.04 + ex * 0.2;
+      for (const a of air) a.mat.opacity = a.base * (1 + pulse * 0.06 + ex * 0.5);
 
       for (let i = 0; i < SHARDS; i++) {
         const ring = i % 2;                      // two inclined orbits
