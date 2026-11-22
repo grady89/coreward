@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { facetTexture } from './pod';
+import { facetTexture, holdWhite } from './pod';
+import { softDot } from '../fx/particles';
 import { hdrBasic, hdrEmissive } from '../fx/post';
 
 // The pilot's suit — one mesh, built once, worn everywhere the character walks
@@ -12,7 +13,9 @@ import { hdrBasic, hdrEmissive } from '../fx/post';
 // read at gameplay scale. Amber lives in thin bands (visor rim, belt, ear pods,
 // cuffs, boot tops), never in slabs. The visor is lit from inside. Reference: reference-art/astronaut.
 
-const SUIT = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.6, metalness: 0.15 });
+const SUIT = new THREE.MeshStandardMaterial({ color: 0xe8e0cb, roughness: 0.6, metalness: 0.15 });
+// white under warm sconces, and a faint cool edge that lifts him off the wall
+holdWhite(SUIT, 0xbfe4ff, 0.7);
 const SUIT_ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.2 });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 const VISOR = new THREE.MeshStandardMaterial({ color: 0x103a40, roughness: 0.15, metalness: 0.45, emissive: 0x16c4c0, emissiveIntensity: 0.75 });
@@ -20,6 +23,12 @@ const LENS = new THREE.MeshBasicMaterial({ color: 0xffe6c0, toneMapped: false })
 hdrBasic(LENS, 2.0);
 // the visor's inner light crosses white and blooms teal
 hdrEmissive(VISOR, 0.8, 0.2);
+// the visor's light spilling past the helmet: a soft teal halo behind the
+// dome, so the head reads against a dark or busy backdrop
+const VISOR_SPILL = new THREE.SpriteMaterial({
+  map: softDot(), color: 0x16c4c0, transparent: true, opacity: 0.6,
+  blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+});
 
 const R_DOME = 0.108;
 const HELMET_Y = 0.148;
@@ -120,7 +129,8 @@ function buildArm(side: number): { shoulder: THREE.Group; elbow: THREE.Group } {
   return { shoulder, elbow };
 }
 
-export function buildSuit(): Suit {
+/** `visorSpill`: the live pilot's teal halo — off for the vaults' statue copies, which recolour every mesh */
+export function buildSuit(visorSpill = false): Suit {
   const group = new THREE.Group();
   // roll is applied AFTER yaw, so a pose's lean/pitch is a pure screen-plane
   // tilt no matter how far the shoulders are turned — the reference sheets'
@@ -145,6 +155,16 @@ export function buildSuit(): Suit {
     helmet.add(pod);
   }
   helmet.add(shell);
+  // sits at the dome's centre: the dome hides its core, so only the spill
+  // around the helmet's edge shows
+  if (visorSpill) {
+    const spill = new THREE.Sprite(VISOR_SPILL);
+    spill.scale.set(0.62, 0.56, 1);
+    spill.position.set(0, -0.005, 0);
+    // after the vault gate's dark glass, which would otherwise paint over it
+    spill.renderOrder = 3;
+    helmet.add(spill);
+  }
   helmet.position.y = HELMET_Y;
 
   // neck ring — the dark gap under the dome

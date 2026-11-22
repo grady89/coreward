@@ -218,7 +218,7 @@ let spillTex: THREE.CanvasTexture | null = null;
  * out to half the radius and dips a little at the centre, so the stone
  * around a creature brightens more than the creature itself does.
  */
-function spillTexture(): THREE.CanvasTexture {
+export function spillTexture(): THREE.CanvasTexture {
   if (spillTex) return spillTex;
   const cv = document.createElement('canvas');
   cv.width = cv.height = 64;

@@ -3,8 +3,7 @@ import { hdrBasic } from '../../fx/post';
 import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { FlareField } from './flares';
-import { softDot } from '../../fx/particles';
-import { Creature, ThreatCtx, ThreatLevel, air, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2 } from './types';
+import { Creature, ThreatCtx, ThreatLevel, air, spillTexture, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2 } from './types';
 
 // GLIMMERFLIES — VEIL-3's swarm tier. Keyed on LIGHT.
 //
@@ -46,6 +45,26 @@ const TRAIL_GLOW = [0.5, 0.3, 0.16];
 /** furthest a fly's drawn mote may sit from its true (contact) position, tiles */
 const RIB_MAX = 0.6;
 
+let moteTex: THREE.CanvasTexture | null = null;
+/** a glass mote: a hot pinpoint core inside a wide, dim halo of its own light */
+function moteTexture(): THREE.CanvasTexture {
+  if (moteTex) return moteTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.1, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.2, 'rgba(255,255,255,0.32)');
+  grad.addColorStop(0.32, 'rgba(255,255,255,0.12)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.045)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  moteTex = new THREE.CanvasTexture(cv);
+  return moteTex;
+}
+
 interface Swarm {
   alive: boolean;
   ax: number; ay: number;
@@ -76,9 +95,9 @@ export class Glimmerflies implements Creature {
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField) {
     // a mote: a soft round glow facing the camera, drawn out a little along
     // its flight so a pouring swarm reads as a ribbon of light
-    const geo = new THREE.PlaneGeometry(0.6, 0.6);
+    const geo = new THREE.PlaneGeometry(0.85, 0.85);
     const mat = new THREE.MeshBasicMaterial({
-      map: softDot(), toneMapped: false, transparent: true, opacity: 0.95,
+      map: moteTexture(), toneMapped: false, transparent: true, opacity: 0.95,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     hdrBasic(mat, 1.3);
@@ -91,12 +110,13 @@ export class Glimmerflies implements Creature {
     this.glow = new THREE.PointLight(0xffe08a, 0, 9, 1.8);
     scene.add(this.glow);
     this.washMat = new THREE.MeshBasicMaterial({
-      map: softDot(), transparent: true, opacity: 0,
+      map: spillTexture(), fog: false, transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     });
-    // just proud of the block faces, so the spill lands on rock as well as air
+    // proud of every block face (they stand out to ~0.62), so the spill
+    // lands on rock as well as air
     this.wash = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.washMat);
-    this.wash.position.z = 0.56;
+    this.wash.position.z = 0.7;
     this.wash.visible = false;
     scene.add(this.wash);
     for (let i = 0; i < MAX_SWARMS; i++) {
@@ -389,7 +409,7 @@ export class Glimmerflies implements Creature {
       tmpS.set(stretch * flap, flap / Math.sqrt(stretch), 1);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.mesh.setMatrixAt(n, tmpM);
-      const bright = f.stunT > 0 ? 0.14 : s.alerted ? 1.25 : (f.glint > 0 ? 1.1 : 0.32);
+      const bright = f.stunT > 0 ? 0.14 : s.alerted ? 0.85 : (f.glint > 0 ? 1.0 : 0.32);
       tmpC.setHex(s.alerted ? ACTIVE.swarm.hunting : ACTIVE.swarm.color).multiplyScalar(bright);
       this.mesh.setColorAt(n, tmpC);
       n++; shown++;
@@ -436,11 +456,11 @@ export class Glimmerflies implements Creature {
         this.glow.intensity = 7;
         this.glow.color.setHex(ACTIVE.swarm.hunting);
         // the wash follows the swarm and widens as it unfolds
-        const r = 6 + Math.min(4, (spread / c) * 2.2);
+        const r = 7.5 + Math.min(3.5, (spread / c) * 2.2);
         this.wash.position.x = cx; this.wash.position.y = cy;
         this.wash.scale.set(r, r, 1);
         this.washMat.color.setHex(ACTIVE.swarm.hunting);
-        washTo = 0.42;
+        washTo = 0.55;
       }
     } else {
       this.glow.intensity = 0;

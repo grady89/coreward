@@ -64,7 +64,7 @@ const FIN_HOT = new THREE.Color(0xff4d29);
 // catching the lamp facet by facet, not as a glossy ball
 const HULL_SEGS = 12;
 const HULL_RINGS = 8;
-const HULL = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.72, metalness: 0.1, flatShading: true });
+const HULL = new THREE.MeshStandardMaterial({ color: 0xe8e0cb, roughness: 0.72, metalness: 0.1, flatShading: true });
 const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3, flatShading: true });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 // the visor is the pod's eye: lit from inside, so it reads at any distance —
@@ -83,6 +83,35 @@ GLASS.customProgramCacheKey = () => 'pod-visor';
 // the glass's lit centre (after the rim falloff above) crosses white and
 // blooms teal; the deep rim stays under it, so the dome keeps its form
 hdrEmissive(GLASS, 3.0, 0.4);
+
+/**
+ * Keep a pale paint pale. Warm light (sunset, headlamp, magma) multiplied
+ * into a near-white albedo turns it tan; this pulls the LIGHT's hue back
+ * toward neutral on near-white surfaces only — weighted by how unsaturated
+ * the albedo is, so Jadeworks or Gilt keep their colour — and adds a faint
+ * cool fresnel rim so the silhouette separates from a warm or dark backdrop.
+ * Adds no light to faces turned toward the camera. One program shared by
+ * the pod hull and the suit (the rim colour is a per-material uniform).
+ */
+export function holdWhite(mat: THREE.MeshStandardMaterial, rim: number, strength: number): void {
+  const u = { value: new THREE.Color(rim).multiplyScalar(strength) };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWhiteRim = u;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uWhiteRim;')
+      .replace('#include <opaque_fragment>', `{
+  vec3 alb = diffuseColor.rgb;
+  float sat = max(max(alb.r, alb.g), alb.b) - min(min(alb.r, alb.g), alb.b);
+  float pale = (1.0 - smoothstep(0.1, 0.3, sat)) * smoothstep(0.35, 0.7, max(max(alb.r, alb.g), alb.b));
+  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  outgoingLight = mix(outgoingLight, vec3(lum) * vec3(0.97, 1.0, 1.05), pale * 0.5);
+  float ndvW = saturate(abs(dot(normalize(vViewPosition), normal)));
+  outgoingLight += uWhiteRim * pow(1.0 - ndvW, 2.4) * (0.35 + 0.65 * pale);
+}
+#include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'hold-white';
+}
 
 /**
  * Square a sphere off toward a rounded box: every vertex pushed out along
@@ -248,7 +277,7 @@ export class Pod {
   private tiers: RigTiers = { drill: 0, engine: 0, tank: 0, cargo: 0, hull: 0, radiator: 0 };
   private lastFinish: [RigFinish, FlameStyle, LampTint] | null = null;
   // per-pod clones so a finish never bleeds onto another pod in a review scene
-  private hullMat = HULL.clone();
+  private hullMat = (() => { const m = HULL.clone(); holdWhite(m, 0xbfe4ff, 0.55); return m; })();
   private accentMat = ACCENT.clone();
   private steelMat = STEEL.clone();
   // semantic emissives (per pod, persistent across refits): heat, money, work

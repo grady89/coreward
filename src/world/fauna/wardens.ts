@@ -92,10 +92,10 @@ export class Wardens implements Creature {
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
     // a faint banked warmth in the stone and lamplight caught on every
     // edge, so the machine reads against black rock even out of its beam
-    const masonry = new THREE.MeshStandardMaterial({ color: 0x9a94ae, roughness: 0.55, metalness: 0.25, flatShading: true, emissive: 0x4a3220 });
+    const masonry = new THREE.MeshStandardMaterial({ color: 0x9a94ae, roughness: 0.55, metalness: 0.25, flatShading: true, emissive: 0x5c3e26 });
     const verdigris = new THREE.MeshStandardMaterial({ color: 0x6f8f88, roughness: 0.4, metalness: 0.7, flatShading: true, emissive: 0x24382e });
-    rimLight(masonry, 0xffc27a, 1.1);
-    rimLight(verdigris, 0xffc27a, 0.9);
+    rimLight(masonry, 0xffc27a, 1.7);
+    rimLight(verdigris, 0xffc27a, 1.4);
     this.emberMat = new THREE.MeshBasicMaterial({ color: 0xffb04a, toneMapped: false });
     hdrBasic(this.emberMat, 1.8);
     this.group = new THREE.Group();
@@ -298,7 +298,7 @@ export class Wardens implements Creature {
       this.beam.intensity = (1 - f) * 20 * (Math.random() < 0.5 ? 1 : 0.2);
       this.beamMat.opacity = (1 - f) * 0.3 * (Math.random() < 0.5 ? 1 : 0.4);
       this.glow.intensity = (1 - f) * 2;
-      this.spill.set(0, 0.3, 4.8, 4.4, (1 - f) * 0.5 * (Math.random() < 0.5 ? 1 : 0.5), 0xffb04a);
+      this.spill.set(0, -0.1, 5.2, 4.4, (1 - f) * 0.65 * (Math.random() < 0.5 ? 1 : 0.5), 0xffb04a);
       if (Math.random() < dt * 8) this.particles.sparkBurst(this.x + (Math.random() - 0.5), this.y + 1, 0xffe0a0, { count: 3, speed: 2.5, up: 1, life: 0.5, gravity: 8, spread: 0.3 });
       if (this.collapseT <= 0 && this.pendingDown) {
         this.pendingDown = false;
@@ -440,7 +440,7 @@ export class Wardens implements Creature {
     this.beamCone.scale.z = this.beamCone.scale.y;
     this.glow.intensity = blind ? 0.2 : 2.5 + white * 3;
     // the furnace's light lands on the hall around the hip; engaged, it whitens with the beam
-    this.spill.set(0, 0.3, 4.8, 4.4, blind ? 0.1 : 0.62 + white * 0.2, this.engaged ? 0xffd890 : 0xffa040);
+    this.spill.set(0, -0.1, 5.2, 4.4, blind ? 0.13 : 0.8 + white * 0.25, this.engaged ? 0xffd890 : 0xffa040);
     this.beamTarget.position.set(8, 0, 0);
     // a blinded lantern droops
     this.droop = lerp(this.droop, blind ? -0.6 : 0, Math.min(1, dt * 3));

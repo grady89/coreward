@@ -110,7 +110,9 @@ export const WORLDS: WorldDef[] = [
     iceTraction: false,
     swarm: {
       name: 'GLIMMERFLIES', keys: 'light',
-      color: 0x8a7a4a, hunting: 0xffd27a,
+      // pale gold-green glass: off the lamp's warm axis, so the swarm reads
+      // as its own light and not as the headlamp's flare
+      color: 0x5a7a46, hunting: 0xa6f06a,
       alert: 'SOMETHING IN THE DARK',
       counter: 'THEY FOLLOW THE LAMP — F TO RUN DARK',
     },

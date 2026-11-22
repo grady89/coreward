@@ -350,7 +350,7 @@ export class Shellbacks implements Creature {
       // the dorsal line's light on the tunnel: centred on the shell, banked when curled
       const mid = SEGS >> 1;
       this.spills[k].set(lerp(b.chain.x[mid], b.x, b.curl), lerp(b.chain.y[mid], b.y, b.curl), 4.4, 3.8,
-        0.6 * (1 - b.curl * 0.5) * (b.stagger > 0 ? 0.6 + Math.sin(time * 30) * 0.4 : 1));
+        0.9 * (1 - b.curl * 0.5) * (b.stagger > 0 ? 0.6 + Math.sin(time * 30) * 0.4 : 1));
       const iris = time * 0.25;
       for (let i = 0; i < SEGS; i++) {
         let px = b.chain.x[i], py = b.chain.y[i], h = b.chain.heading(i);

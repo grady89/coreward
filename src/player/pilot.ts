@@ -27,7 +27,7 @@ export class Pilot {
   private lamp: THREE.PointLight;
 
   constructor(scene: THREE.Scene, private terrain: Terrain) {
-    this.suit = buildSuit();
+    this.suit = buildSuit(true);
     this.lamp = new THREE.PointLight(0xffe6c0, 6, 6, 1.6);
     this.lamp.position.set(0, 0, 0.35);
     this.group.add(this.suit.group, this.lamp);
