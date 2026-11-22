@@ -211,3 +211,57 @@ export function rimLight(mat: THREE.MeshStandardMaterial, color: number, strengt
   mat.customProgramCacheKey = () => 'fauna-rim';
   return u;
 }
+
+let spillTex: THREE.CanvasTexture | null = null;
+/**
+ * A pool of light, not a dot: a soft shoulder that holds most of its weight
+ * out to half the radius and dips a little at the centre, so the stone
+ * around a creature brightens more than the creature itself does.
+ */
+function spillTexture(): THREE.CanvasTexture {
+  if (spillTex) return spillTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(0.22, 'rgba(255,255,255,0.72)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.36)');
+  grad.addColorStop(0.72, 'rgba(255,255,255,0.09)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  spillTex = new THREE.CanvasTexture(cv);
+  return spillTex;
+}
+
+/**
+ * A creature's own light landing on the rock around it. One additive quad
+ * just proud of the block faces (so it lands on stone as well as the back
+ * wall), depth-write off: a draw call, never a real light. Off is opacity 0
+ * and hidden, so a dark creature costs nothing.
+ */
+export class Spill {
+  readonly mesh: THREE.Mesh;
+  private mat: THREE.MeshBasicMaterial;
+  constructor(parent: THREE.Object3D, color: number) {
+    this.mat = new THREE.MeshBasicMaterial({
+      map: spillTexture(), color, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    });
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.mat);
+    // faces stand proud of 0.5 by up to ~0.12: clear them all
+    this.mesh.position.z = 0.7;
+    this.mesh.visible = false;
+    parent.add(this.mesh);
+  }
+  /** x/y in the parent's space; w/h in tiles; a = 0..1 strength */
+  set(x: number, y: number, w: number, h: number, a: number, color?: number): void {
+    this.mesh.position.x = x; this.mesh.position.y = y;
+    this.mesh.scale.set(w, h, 1);
+    if (color !== undefined) this.mat.color.setHex(color);
+    this.mat.opacity = a;
+    this.mesh.visible = a > 0.004;
+  }
+  off(): void { this.mat.opacity = 0; this.mesh.visible = false; }
+}

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air, lineOfSight, rimLight } from './types';
+import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air, lineOfSight, rimLight, Spill } from './types';
 
 // WARDENS — the constant. Lamplighter machinery, still on post.
 //
@@ -85,6 +85,8 @@ export class Wardens implements Creature {
   private glow: THREE.PointLight;
   /** the lamp's own fire showing through the machine: knee lamps and the hip core */
   private emberMat: THREE.MeshBasicMaterial;
+  /** the hex core's fire on the stone behind the machine */
+  private spill: Spill;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
     // a faint banked warmth in the stone and lamplight caught on every
@@ -180,6 +182,7 @@ export class Wardens implements Creature {
       this.group.add(upper, lower, pad, knee);
       this.legs.push({ footX: 0, footY: 0, fromX: 0, fromY: 0, toX: 0, toY: 0, stepT: 0, upper, lower, pad, knee });
     }
+    this.spill = new Spill(this.group, 0xffb04a);
     this.group.visible = false;
     scene.add(this.group);
   }
@@ -293,6 +296,7 @@ export class Wardens implements Creature {
       this.beam.intensity = (1 - f) * 20 * (Math.random() < 0.5 ? 1 : 0.2);
       this.beamMat.opacity = (1 - f) * 0.3 * (Math.random() < 0.5 ? 1 : 0.4);
       this.glow.intensity = (1 - f) * 2;
+      this.spill.set(0, 0.3, 4.8, 4.4, (1 - f) * 0.5 * (Math.random() < 0.5 ? 1 : 0.5), 0xffb04a);
       if (Math.random() < dt * 8) this.particles.sparkBurst(this.x + (Math.random() - 0.5), this.y + 1, 0xffe0a0, { count: 3, speed: 2.5, up: 1, life: 0.5, gravity: 8, spread: 0.3 });
       if (this.collapseT <= 0 && this.pendingDown) {
         this.pendingDown = false;
@@ -433,6 +437,8 @@ export class Wardens implements Creature {
     this.beamCone.scale.y = lerp(this.beamCone.scale.y, narrow, ks);
     this.beamCone.scale.z = this.beamCone.scale.y;
     this.glow.intensity = blind ? 0.2 : 2.5 + white * 3;
+    // the furnace's light lands on the hall around the hip; engaged, it whitens with the beam
+    this.spill.set(0, 0.3, 4.8, 4.4, blind ? 0.1 : 0.62 + white * 0.2, this.engaged ? 0xffd890 : 0xffa040);
     this.beamTarget.position.set(8, 0, 0);
     // a blinded lantern droops
     this.droop = lerp(this.droop, blind ? -0.6 : 0, Math.min(1, dt * 3));

@@ -66,8 +66,43 @@ const HULL_RINGS = 8;
 const HULL = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.72, metalness: 0.1, flatShading: true });
 const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3, flatShading: true });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
-// the visor is the pod's eye: lit from inside, so it reads at any distance
-const GLASS = new THREE.MeshStandardMaterial({ color: 0x103a40, roughness: 0.1, metalness: 0.5, emissive: 0x16c4c0, emissiveIntensity: 0.8 });
+// the visor is the pod's eye: lit from inside, so it reads at any distance —
+// but as a glass DOME, not a neon disc: the inner light is strongest where
+// the glass faces you and falls to deep teal toward the rim, with a hot
+// lens-spot high on one side
+const GLASS = new THREE.MeshStandardMaterial({ color: 0x0b2a30, roughness: 0.1, metalness: 0.5, emissive: 0x16c4c0, emissiveIntensity: 0.95 });
+GLASS.onBeforeCompile = sh => {
+  sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  float ndv = saturate(dot(normalize(vViewPosition), normal));
+  totalEmissiveRadiance *= 0.12 + 0.95 * smoothstep(0.4, 0.9, ndv);
+}`);
+};
+GLASS.customProgramCacheKey = () => 'pod-visor';
+
+/**
+ * Square a sphere off toward a rounded box: every vertex pushed out along
+ * its own direction by how far that direction sits from the nearest axis.
+ * Flat-shaded, the low-segment ball becomes a few big armour panels with
+ * hard shoulders — the chunky hull of the reference — while every part
+ * mounted on the sphere (band, seams, visor) still meets it, because the
+ * band and seams take the same push.
+ */
+const BOX = 0.85;
+function chunky<G extends THREE.BufferGeometry>(g: G): G {
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const r = Math.hypot(x, y, z);
+    if (r < 1e-6) continue;
+    const ax = Math.abs(x / r), ay = Math.abs(y / r), az = Math.abs(z / r);
+    const box = 1 / Math.cbrt(ax * ax * ax + ay * ay * ay + az * az * az);
+    const f = 1 + (box - 1) * BOX;
+    p.setXYZ(i, x * f, y * f, z * f);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
 /**
  * The Diamondplate quilt (reference-art/cosmetics): rotated-square cells,
@@ -222,7 +257,7 @@ export class Pod {
     if (tiers) this.tiers = { ...tiers };
     const HULL = this.hullMat, STEEL = this.steelMat;
     // body
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, HULL_SEGS, HULL_RINGS), HULL);
+    const body = new THREE.Mesh(chunky(new THREE.SphereGeometry(0.42, HULL_SEGS, HULL_RINGS)), HULL);
     body.scale.set(1, 1.06, 0.92);
     this.group.add(body);
 
@@ -230,15 +265,20 @@ export class Pod {
 
     // visor
     const visor = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 14), GLASS);
-    visor.position.set(0, 0.1, 0.24);
+    visor.position.set(0, 0.1, 0.28);
     visor.scale.set(1, 0.82, 0.7);
     this.group.add(visor);
+    // a dark bezel the dome sits in: the frame that keeps the glow a shape
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 20), STEEL);
+    bezel.position.set(0, 0.1, 0.31);
+    bezel.scale.set(1, 0.82, 0.9);
+    this.group.add(bezel);
     // a soft halo over the visor: the glow spilling past the glass
     const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.85), new THREE.MeshBasicMaterial({
       map: softDot(), color: 0x16c4c0, transparent: true, opacity: 0.2,
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     }));
-    halo.position.set(0, 0.1, 0.47);
+    halo.position.set(0, 0.1, 0.53);
     this.group.add(halo);
 
     // side intakes
@@ -388,12 +428,12 @@ export class Pod {
     // clear the hull's corners: the band sits on the plates as a lip of
     // armour instead of z-fighting through them
     const belly = new THREE.Mesh(
-      new THREE.SphereGeometry(0.445, HULL_SEGS, 5, 0, Math.PI * 2, bandTop, Math.PI - bandTop), ACCENT);
+      chunky(new THREE.SphereGeometry(0.445, HULL_SEGS, 5, 0, Math.PI * 2, bandTop, Math.PI - bandTop)), ACCENT);
     belly.scale.set(1, 1.06, 0.92);
     this.para.add(belly);
     for (let j = 0; j < t.hull; j++) {
       const seam = new THREE.Mesh(
-        new THREE.SphereGeometry(0.452, HULL_SEGS, 1, 0, Math.PI * 2, bandTop + 0.06 + j * 0.085, 0.035), ACCENT);
+        chunky(new THREE.SphereGeometry(0.452, HULL_SEGS, 1, 0, Math.PI * 2, bandTop + 0.06 + j * 0.085, 0.035)), ACCENT);
       seam.scale.set(1, 1.06, 0.92);
       this.para.add(seam);
     }

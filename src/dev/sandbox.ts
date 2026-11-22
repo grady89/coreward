@@ -107,7 +107,7 @@ export const STAGES: FaunaStage[] = [
       if (!r) return;
       const rx = Math.floor(r.x), ry = Math.floor(r.y);
       c.room(rx + 1, rx + 6, ry - 10, ry - 6);
-      c.park(rx + 3.5, ry - 6, 16);
+      c.park(rx + 3.5, ry - 6, 19);
       c.lamp(true);
     },
     pick: t => t.wardens,
@@ -167,7 +167,12 @@ export const STAGES: FaunaStage[] = [
     look: 'A cut-out figure inside the rock. Lit AND faced, not a tremor. Behind you, it walks — through rock.',
     how: 'Light is a leash only while you FACE it. Turn your back and it moves. Watch the dread wash.',
     setup(c) {
-      c.room(12, 52, 332, 346);
+      // a low hall that only runs ahead of the lamp: the one face it can rise
+      // from 11+ tiles out is in front of you, so it walks into the beam and
+      // is held there — in frame, lit — instead of wading up from under the pod
+      // (the step up at x=34 keeps every reachable ceiling out of its range)
+      c.room(26, 52, 340, 346);
+      c.room(34, 52, 334, 340);
       c.park(31.5, 346, 17);
       c.lamp(true);
     },
@@ -223,9 +228,11 @@ export const STAGES: FaunaStage[] = [
     look: 'Fourteen legs in a rolling wave. Every few seconds it lays a plate of pearl across a tile you dug.',
     how: 'Q lures it — it will seal a lit tile before it seals yours. Hold ↓ and it curls into a ball and waits you out.',
     setup(c) {
-      // they only live in tunnels YOU made, 9..16 tiles out: one long corridor
-      c.room(6, 58, 200, 203);
-      c.park(31.5, 203, 15);
+      // they only live in tunnels YOU made, 9..16 tiles out: one corridor
+      // running ahead of the lamp and stopping 10 out, so the one it finds
+      // crawls in the beam and inside the frame
+      c.room(28, 42, 200, 203);
+      c.park(31.5, 203, 18);
     },
     pick: t => t.shellbacks,
     alive: t => !!t.shellbacks?.backs.some(b => b.alive),
