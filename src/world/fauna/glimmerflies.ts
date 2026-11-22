@@ -36,6 +36,8 @@ interface Fly {
   /** render-only: three points easing after the fly, each a beat behind the
    *  last — the ribbon it draws through the air. Never read by the flock. */
   trail: Float32Array;
+  /** render-only: the eased offset from the fly to where its mote is drawn (|o| <= RIB_MAX) */
+  ox: number; oy: number;
 }
 
 /** afterimages drawn behind each fly, and how much of the fly each keeps */
@@ -44,6 +46,16 @@ const TRAIL_SIZE = [0.78, 0.6, 0.44];
 const TRAIL_GLOW = [0.5, 0.3, 0.16];
 /** furthest a fly's drawn mote may sit from its true (contact) position, tiles */
 const RIB_MAX = 0.6;
+/** slot spacing along a hunting swarm's drawn strand, tiles */
+const RIB_SPACING = 0.2;
+/** each afterimage also leans this far back along the strand, tiles */
+const TRAIL_LEAN = 0.1;
+/** the on-target hook: how far round the target it sweeps, and its radius at head and tail, tiles */
+const HOOK_SWEEP = Math.PI * 0.85;
+const HOOK_R0 = 0.8;
+const HOOK_R1 = 1.4;
+/** a fly this close to its target is drawn on the hook, tiles */
+const HOOK_NEAR = 1.6;
 
 let moteTex: THREE.CanvasTexture | null = null;
 /** a glass mote: a hot pinpoint core inside a wide, dim halo of its own light */
@@ -79,6 +91,8 @@ interface Swarm {
   rib: number;
   /** render-only: the ribbon's lie — unit vector from the target back toward the swarm */
   rux: number; ruy: number;
+  /** render-only: the strand's eased axis (ribbon lie bent by the swarm's flight) */
+  bx: number; by: number;
 }
 
 export class Glimmerflies implements Creature {
@@ -91,6 +105,13 @@ export class Glimmerflies implements Creature {
   /** the hunting swarm's light on the rock: one soft additive quad, no extra light */
   private wash: THREE.Mesh;
   private washMat: THREE.MeshBasicMaterial;
+  /** scratch for the drawn strand (render only) */
+  private ribIdx: number[] = [];
+  private ribNear: number[] = [];
+  /** the next fly toward the strand's tail, by fly index; -1 at the tail */
+  private ribNext = new Int16Array(MAX_FLIES);
+  private ribAlong = new Float32Array(MAX_FLIES);
+  private ribDraw = new Float32Array(MAX_FLIES * 2);
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField) {
     // a mote: a soft round glow facing the camera, drawn out a little along
@@ -120,7 +141,7 @@ export class Glimmerflies implements Creature {
     this.wash.visible = false;
     scene.add(this.wash);
     for (let i = 0; i < MAX_SWARMS; i++) {
-      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, dazedT: 0, woke: false, rib: 0, rux: 1, ruy: 0 });
+      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, dazedT: 0, woke: false, rib: 0, rux: 1, ruy: 0, bx: 1, by: 0 });
     }
   }
 
@@ -162,7 +183,7 @@ export class Glimmerflies implements Creature {
         this.flies.push({
           x: fx, y: fy,
           vx: 0, vy: 0, phase: Math.random() * Math.PI * 2, glint: 0, stunT: 0, swarm: slot,
-          trail: new Float32Array([fx, fy, fx, fy, fx, fy]),
+          trail: new Float32Array([fx, fy, fx, fy, fx, fy]), ox: 0, oy: 0,
         });
       }
       return;
@@ -309,7 +330,6 @@ export class Glimmerflies implements Creature {
         }
       }
     }
-    const rank = [0, 0, 0, 0];
     let wx = 0, wy = 0, wn = 0;
 
     // the flock: seek + separation + alignment. Cohesion comes free from the
@@ -382,21 +402,110 @@ export class Glimmerflies implements Creature {
         ctx.hurt(2.6 * dmgMul * dt, 'glimmerflies');
         ctx.drain(0.5 * dmgMul * dt);
       }
+    }
 
-      // where the mote is DRAWN: the fly, pushed back along the ribbon by its
-      // rank in the swarm, swaying across it — the leaders stay on target
-      let rx = f.x, ry = f.y;
-      if (s.rib > 0.01 && f.stunT <= 0) {
-        const r = rank[f.swarm]++;
-        const along = (r + 0.4) * 0.3 * s.rib;
-        const sway = Math.sin(ctx.time * 1.4 - r * 0.6) * (0.12 + along * 0.14) + along * along * 0.05;
-        let ox = s.rux * along - s.ruy * sway, oy = s.ruy * along + s.rux * sway;
-        // the mote never strays far from the fly: contact is where the light
-        // is. The ribbon's length comes from the fainter afterimages.
-        const ol = Math.hypot(ox, oy);
-        if (ol > RIB_MAX) { ox *= RIB_MAX / ol; oy *= RIB_MAX / ol; }
-        rx += ox; ry += oy;
+    // where each mote is DRAWN (render only). A hunting swarm is laid along
+    // one curve whose axis trails back from the target, bent away from the
+    // way the swarm is flying. Flies still in flight are ranked along that
+    // axis and slid toward evenly spaced slots on a swaying strand. Flies on
+    // the target are ranked by angle round it and laid on a widening hook
+    // that comes over the hull and streams away along the axis — clear of
+    // the pod's silhouette instead of knotted behind it. Each mote eases to
+    // its slot, and never sits more than RIB_MAX from its fly: contact is
+    // where the light is.
+    const next = this.ribNext;
+    next.fill(-1);
+    for (let si = 0; si < this.swarms.length; si++) {
+      const s = this.swarms[si];
+      if (!s.alive) continue;
+      const flare = this.flares.brightest(s.ax, s.ay, FLARE_PULL);
+      const tx = flare ? flare.x : podX, ty = flare ? flare.y : podY;
+      const far = this.ribIdx, near = this.ribNear;
+      far.length = 0; near.length = 0;
+      let cx = 0, cy = 0, mvx = 0, mvy = 0;
+      for (let i = 0; i < flies.length; i++) {
+        const f = flies[i];
+        if (f.swarm !== si || f.stunT > 0) continue;
+        if (Math.hypot(f.x - tx, f.y - ty) < HOOK_NEAR) near.push(i);
+        else { far.push(i); cx += f.x; cy += f.y; }
+        mvx += f.vx; mvy += f.vy;
       }
+      const c = far.length + near.length;
+      if (c === 0) continue;
+      mvx /= c; mvy /= c;
+      const mv = Math.hypot(mvx, mvy);
+      let ux = s.rux, uy = s.ruy;
+      if (mv > 0.05) { const w = Math.min(1, mv / 3) * 0.7; ux -= mvx / mv * w; uy -= mvy / mv * w; }
+      const ul = Math.hypot(ux, uy) || 1;
+      ux /= ul; uy /= ul;
+      const ek = Math.min(1, dt * 3);
+      s.bx += (ux - s.bx) * ek; s.by += (uy - s.by) * ek;
+      const bl = Math.hypot(s.bx, s.by) || 1;
+      ux = s.bx / bl; uy = s.by / bl;
+      const px = -uy, py = ux;
+      const key = this.ribAlong;
+      const slot = this.ribDraw;
+
+      // in flight: a strand through the stragglers
+      const nf = far.length;
+      if (nf > 0) {
+        cx /= nf; cy /= nf;
+        for (const i of far) key[i] = (flies[i].x - cx) * ux + (flies[i].y - cy) * uy;
+        far.sort((a, b) => key[a] - key[b]);
+        for (let k = 0; k < nf; k++) {
+          const i = far[k];
+          const A = (k - (nf - 1) / 2) * RIB_SPACING + RIB_SPACING * nf * 0.12;
+          // a slow S along the strand, bowed so it reads as a curve, not a rod
+          const P = Math.sin(ctx.time * 1.3 - A * 2.1) * 0.16 + A * A * 0.07;
+          slot[i * 2] = cx + ux * A + px * P;
+          slot[i * 2 + 1] = cy + uy * A + py * P;
+          if (k + 1 < nf) next[i] = far[k + 1];
+        }
+      }
+      // on target: the hook. The tail leaves along the axis, the head sits on
+      // the far side, and the arc between goes over the top (whichever side
+      // of the axis faces up), widening as it goes
+      const nn = near.length;
+      if (nn > 0) {
+        const tailA = Math.atan2(uy, ux);
+        const turn = py >= 0 ? -1 : 1;
+        const headA = tailA - turn * HOOK_SWEEP;
+        for (const i of near) {
+          let d = (Math.atan2(flies[i].y - ty, flies[i].x - tx) - headA) * turn;
+          d = ((d % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+          // flies under the target count from the head, not past the tail
+          key[i] = d > HOOK_SWEEP + (Math.PI * 2 - HOOK_SWEEP) / 2 ? d - Math.PI * 2 : d;
+        }
+        near.sort((a, b) => key[a] - key[b]);
+        for (let k = 0; k < nn; k++) {
+          const i = near[k];
+          const t = nn > 1 ? k / (nn - 1) : 0.5;
+          const a = headA + turn * HOOK_SWEEP * t;
+          const r = HOOK_R0 + (HOOK_R1 - HOOK_R0) * t * t + Math.sin(ctx.time * 1.5 - k * 0.7) * 0.06;
+          slot[i * 2] = tx + Math.cos(a) * r;
+          slot[i * 2 + 1] = ty + Math.sin(a) * r;
+          next[i] = k + 1 < nn ? near[k + 1] : nf > 0 ? far[0] : -1;
+        }
+      }
+      const ok = Math.min(1, dt * 6);
+      for (const list of [far, near]) {
+        for (const i of list) {
+          const f = flies[i];
+          // ease the offset, so a fly changing slot glides rather than pops
+          f.ox += ((slot[i * 2] - f.x) * s.rib - f.ox) * ok;
+          f.oy += ((slot[i * 2 + 1] - f.y) * s.rib - f.oy) * ok;
+          const ol = Math.hypot(f.ox, f.oy);
+          if (ol > RIB_MAX) { f.ox *= RIB_MAX / ol; f.oy *= RIB_MAX / ol; }
+        }
+      }
+    }
+
+    for (let i = 0; i < flies.length; i++) {
+      const f = flies[i];
+      const s = this.swarms[f.swarm];
+      if (!s || !s.alive) continue;
+      if (f.stunT > 0) { f.ox = 0; f.oy = 0; }
+      const rx = f.x + f.ox, ry = f.y + f.oy;
 
       if (s.alerted) { wx += rx; wy += ry; wn++; }
 
@@ -421,17 +530,30 @@ export class Glimmerflies implements Creature {
       let lx = rx, ly = ry;
       const sp = Math.hypot(f.vx, f.vy);
       const tk = Math.min(1, Math.max(0, (sp - 0.6) / 2.4));
+      // on a hunting strand the afterimages instead string out toward the
+      // next mote down the strand (or lean off its tail), so the drawn swarm
+      // is one joined line of light rather than a dotted knot
+      const strand = s.rib > 0.01 && f.stunT <= 0 && i < MAX_FLIES;
+      const ni = strand ? this.ribNext[i] : -1;
+      let gx = 0, gy = 0;
+      if (ni >= 0) { gx = flies[ni].x + flies[ni].ox - rx; gy = flies[ni].y + flies[ni].oy - ry; }
+      // a tail, or a gap too wide to bridge: lean off along the strand's axis
+      if (ni < 0 || gx * gx + gy * gy > 1) { gx = s.bx * TRAIL_LEAN * (TRAIL + 1); gy = s.by * TRAIL_LEAN * (TRAIL + 1); }
+      const join = strand ? s.rib : 0;
+      const tj = Math.max(tk, join * 0.8);
       for (let k = 0; k < TRAIL; k++) {
-        const tx = f.trail[k * 2] += (lx - f.trail[k * 2]) * ek;
-        const ty = f.trail[k * 2 + 1] += (ly - f.trail[k * 2 + 1]) * ek;
+        const fk = (k + 1) / (TRAIL + 1);
+        const jx = rx + gx * fk, jy = ry + gy * fk;
+        const tx = f.trail[k * 2] += (lx + (jx - lx) * join - f.trail[k * 2]) * ek;
+        const ty = f.trail[k * 2 + 1] += (ly + (jy - ly) * join - f.trail[k * 2 + 1]) * ek;
         lx = tx; ly = ty;
-        if (tk <= 0.02) continue;
-        const sc = TRAIL_SIZE[k] * flap;
+        if (tj <= 0.02) continue;
+        const sc = (TRAIL_SIZE[k] + (0.6 - TRAIL_SIZE[k]) * join) * flap;
         tmpP.set(tx, ty, 0.24 - k * 0.01);
         tmpS.set(sc, sc, 1);
         tmpM.compose(tmpP, tmpQ, tmpS);
         this.mesh.setMatrixAt(n, tmpM);
-        this.mesh.setColorAt(n, tmpC2.copy(tmpC).multiplyScalar(TRAIL_GLOW[k] * tk));
+        this.mesh.setColorAt(n, tmpC2.copy(tmpC).multiplyScalar((TRAIL_GLOW[k] + (0.3 - TRAIL_GLOW[k]) * join) * tj));
         n++;
       }
     }
