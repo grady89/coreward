@@ -60,39 +60,59 @@ const rockMat = new THREE.MeshStandardMaterial({
 // teal, with no extra light and no extra draw call. The disc fades out
 // before the corners so an ore tile never reads as a lit square.
 // The world's hue in its stone: each band's strataGlow colour, blended
-// across band edges by world row, laid down as faint horizontal streaks
-// (stretched value noise) over a dimmer floor. An unlit wall reads as a
-// dark shade of its world rather than neutral black, and the lamp still
-// does all the real lighting. Zero in a spent world.
+// across band edges by world row, laid per block (a hash of the cube's cell)
+// and per three-row bed, so it reads as sediment courses of cut stone rather
+// than a smeared texture. An unlit wall reads as a dark shade of its world
+// rather than neutral black, and the lamp still does all the real lighting.
+// Zero in a spent world.
+// Chunky stone: every cube's front face takes its own small tilt (so the
+// lamp catches each block differently), a chamfer within ~0.08 of every
+// face edge that turns its normal outward, and a dark crevice line on the
+// very border, so blocks read as faceted stone with clear seams rather
+// than a quilt of flat squares (and no lit hairline shows between them).
+// A top-exposed cube gets a lighter lip; a face beside open cavity takes a
+// faint world-hue edge so mass separates from void without lifting the dark.
+// MAELIS only: a faint view-angle nacre sheen (pink / teal / violet) on lit
+// faces, a tint of the albedo so it can never outshine an ore.
 const strataUniforms = {
   uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
+  uNacre: { value: 0 },
 };
 let strataFor: unknown = null;
 function syncStrata(): void {
   if (strataFor === ACTIVE) return;
   strataFor = ACTIVE;
-  const g = spentWorld() ? undefined : ACTIVE.strataGlow;
+  const spent = spentWorld();
+  const g = spent ? undefined : ACTIVE.strataGlow;
   strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
+  strataUniforms.uNacre.value = !spent && ACTIVE.id === 'maelis6' ? 1 : 0;
 }
+// which sides of a rock cube border open cavity (bits: left, right, up, down)
+const EDGE_L = 1, EDGE_R = 2, EDGE_U = 4, EDGE_D = 8;
 rockMat.onBeforeCompile = shader => {
   shader.uniforms.uFluidTime = fluidUniforms.uFluidTime;
   shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
   shader.uniforms.uStrata = strataUniforms.uStrata;
+  shader.uniforms.uNacre = strataUniforms.uNacre;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec3 glow;
 attribute vec3 wash;
 attribute vec2 washDir;
+attribute float rockEdge;
 varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
 varying vec3 vBox;
 varying vec3 vBoxN;
-varying vec2 vWXY;`)
+varying vec2 vWXY;
+varying vec2 vCell;
+varying float vEdge;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-	vGlow = glow; vWash = wash; vWashDir = washDir;
+	vGlow = glow; vWash = wash; vWashDir = washDir; vEdge = rockEdge;
 	vBox = position; vBoxN = normal;
-	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
+	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;
+	vCell = floor((modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xy);`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
 uniform float uFluidTime;
@@ -103,14 +123,56 @@ varying vec2 vWashDir;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec2 vWXY;
+varying vec2 vCell;
+varying float vEdge;
 uniform vec3 uStrata[5];
+uniform float uNacre;
 float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float stNoise(vec2 p) {
-	vec2 i = floor(p), f = fract(p);
-	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(stHash(i), stHash(i + vec2(1.0, 0.0)), f.x),
-		mix(stHash(i + vec2(0.0, 1.0)), stHash(i + vec2(1.0, 1.0)), f.x), f.y);
-}`)
+float edgeBit(float bit) { return mod(floor(vEdge / bit), 2.0); }`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	// face-plane coords of this fragment; distance to the nearest face edge
+	vec3 rkQ = vBox * (1.0 - step(0.5, abs(vBoxN)));
+	vec3 rkA = abs(rkQ);
+	float rkM = max(rkA.x, max(rkA.y, rkA.z));
+	float rkE = 0.5 - rkM;
+	vec3 rkDir = step(rkM - 1e-3, rkA) * sign(rkQ);
+	float rkCrev = 1.0 - smoothstep(0.0, 0.03, rkE);
+	// snap: the interpolated cell drifts by ulps and the hash would turn that into noise
+	vec2 rkC = floor(vCell + 0.5);
+	float rkH = stHash(rkC + 0.37);
+	float rkH2 = stHash(rkC.yx * 1.31 + 5.1);
+	float rkH3 = stHash(rkC * 0.71 + 9.7);
+	float rkBev = 1.0 - smoothstep(0.025, 0.05 + 0.06 * rkH3, rkE);
+	float rkFront = vBoxN.z > 0.5 ? 1.0 : 0.0;
+	// per-block value: a skewed spread so a few cubes sit clearly darker
+	diffuseColor.rgb *= 0.8 + 0.34 * rkH * rkH + 0.08 * rkH2;
+	diffuseColor.rgb *= 1.0 - 0.6 * rkCrev;
+	// lighter lip along the top of a cube that meets air above
+	float rkUp = edgeBit(${EDGE_U}.0);
+	float rkLip = rkUp * (rkFront * smoothstep(0.38, 0.47, vBox.y) + (vBoxN.y > 0.5 ? 0.45 : 0.0));
+	diffuseColor.rgb *= 1.0 + 0.32 * rkLip * (1.0 - rkCrev);`)
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+	{
+		// front face broken into two facets along a per-block diagonal, each
+		// with its own tilt, plus an outward chamfer at every edge
+		float rkS = (rkH3 > 0.5 ? vBox.x + vBox.y : vBox.x - vBox.y) + (rkH - 0.5) * 0.5;
+		vec2 rkT = vec2(rkH - 0.5, rkH2 - 0.5) * 0.3;
+		if (rkS > 0.0) rkT += vec2(rkH2 - 0.5, 0.5 - rkH3) * 0.28;
+		vec3 rkN = vec3(rkT * rkFront, 0.0) + rkDir * rkBev * 0.55;
+		normal = normalize(normal + mat3(viewMatrix) * rkN);
+		// nacre: hue drifts with view angle and across the wall, on the albedo
+		if (uNacre > 0.5) {
+			float ndv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+			float ph = fract((1.0 - ndv) * 7.0 + vWXY.x * 0.05 + vWXY.y * 0.035 + rkH2);
+			vec3 pink = vec3(1.0, 0.72, 0.86), teal = vec3(0.6, 1.0, 0.92), violet = vec3(0.8, 0.7, 1.05);
+			vec3 pearl = ph < 0.333 ? mix(pink, teal, ph * 3.0)
+				: ph < 0.667 ? mix(teal, violet, ph * 3.0 - 1.0) : mix(violet, pink, ph * 3.0 - 2.0);
+			// toward a pearl of the stone's own value, so the hue actually shifts
+			float lum = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
+			diffuseColor.rgb = mix(diffuseColor.rgb, lum * pearl * 1.4, 0.55 * (1.0 - rkCrev));
+			roughnessFactor = mix(roughnessFactor, 0.6, 0.5);
+		}
+	}`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	{
 		float row = -vWXY.y;
@@ -119,11 +181,15 @@ float stNoise(vec2 p) {
 		acc = mix(acc, uStrata[2], smoothstep(50.0, 70.0, row));
 		acc = mix(acc, uStrata[3], smoothstep(145.0, 175.0, row));
 		acc = mix(acc, uStrata[4], smoothstep(280.0, 320.0, row));
-		vec2 sp = vec2(vWXY.x * 0.32, vWXY.y * 2.4);
-		float n = stNoise(sp) * 0.6 + stNoise(sp * vec2(2.7, 1.9) + 17.0) * 0.4;
-		float streak = smoothstep(0.58, 0.8, n);
+		float bed = stHash(vec2(floor(rkC.y / 3.0), 7.3));
 		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
-		totalEmissiveRadiance += acc * face * (0.12 + 0.6 * streak);
+		float k = 0.07 + 0.2 * rkH * rkH + 0.16 * bed * bed;
+		// faint world-hue edge where the face meets open cavity
+		float rim = rkFront * max(max(edgeBit(${EDGE_L}.0) * smoothstep(-0.36, -0.5, vBox.x),
+			edgeBit(${EDGE_R}.0) * smoothstep(0.36, 0.5, vBox.x)),
+			max(edgeBit(${EDGE_U}.0) * smoothstep(0.36, 0.5, vBox.y),
+			edgeBit(${EDGE_D}.0) * smoothstep(-0.36, -0.5, vBox.y)));
+		totalEmissiveRadiance += acc * (face * k + 0.55 * rim) * (1.0 - 0.7 * rkCrev);
 	}
 	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
 	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
@@ -136,7 +202,7 @@ float stNoise(vec2 p) {
 	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
 	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(diffuseColor.rgb, vec3(0.333)));`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v3';
+rockMat.customProgramCacheKey = () => 'rock-glow-v4';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -246,6 +312,7 @@ class Chunk {
   glow: THREE.InstancedBufferAttribute;              // per rock instance: halo colour from its ore
   wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
   washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
+  edge: THREE.InstancedBufferAttribute;              // per rock instance: EDGE_* bits for open sides
   fl: THREE.InstancedBufferAttribute;                // per fluid instance: depth, surface, world x
   gems: THREE.InstancedMesh[];
   lava: THREE.InstancedMesh;
@@ -265,6 +332,8 @@ class Chunk {
     this.washDir = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
     rockGeo.setAttribute('wash', this.wash);
     rockGeo.setAttribute('washDir', this.washDir);
+    this.edge = new THREE.InstancedBufferAttribute(new Float32Array(CAP), 1);
+    rockGeo.setAttribute('rockEdge', this.edge);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     const fluidGeo = lavaGeo.clone();
     this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
@@ -330,9 +399,11 @@ class Chunk {
         tmpM.compose(tmpP, tmpQ, tmpS);
         this.rock.setMatrixAt(nr, tmpM);
         // carved edges catch the light
-        const exposed =
-          terrain.get(x - 1, y) === T.AIR || terrain.get(x + 1, y) === T.AIR ||
-          terrain.get(x, y - 1) === T.AIR || terrain.get(x, y + 1) === T.AIR;
+        const edge =
+          (terrain.get(x - 1, y) === T.AIR ? EDGE_L : 0) | (terrain.get(x + 1, y) === T.AIR ? EDGE_R : 0) |
+          (terrain.get(x, y - 1) === T.AIR ? EDGE_U : 0) | (terrain.get(x, y + 1) === T.AIR ? EDGE_D : 0);
+        const exposed = edge !== 0;
+        this.edge.setX(nr, edge);
         tmpC.setHex(rockColor(t, x, y));
         if (exposed) tmpC.multiplyScalar(1.22);
         this.rock.setColorAt(nr, tmpC);
@@ -406,6 +477,7 @@ class Chunk {
     this.glow.needsUpdate = true;
     this.wash.needsUpdate = true;
     this.washDir.needsUpdate = true;
+    this.edge.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
