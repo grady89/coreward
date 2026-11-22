@@ -1,0 +1,422 @@
+{
+ "title": {
+  "calls": 469,
+  "triangles": 64660,
+  "lights": 55,
+  "lightsOn": 17,
+  "programs": 16
+ },
+ "veil3-surface": {
+  "calls": 348,
+  "triangles": 59434,
+  "lights": 55,
+  "lightsOn": 17,
+  "programs": 18
+ },
+ "pod-pilot-eva": {
+  "calls": 254,
+  "triangles": 58578,
+  "lights": 55,
+  "lightsOn": 15,
+  "programs": 18
+ },
+ "hud-play": {
+  "calls": 65,
+  "triangles": 78672,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 18
+ },
+ "shop-trade": {
+  "calls": 365,
+  "triangles": 61580,
+  "lights": 55,
+  "lightsOn": 17,
+  "programs": 18
+ },
+ "veil3-core": {
+  "calls": 118,
+  "triangles": 50764,
+  "lights": 55,
+  "lightsOn": 12,
+  "programs": 17
+ },
+ "veil3-shallow": {
+  "calls": 69,
+  "triangles": 72956,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 18
+ },
+ "veil3-mid": {
+  "calls": 89,
+  "triangles": 83732,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 18
+ },
+ "veil3-deep": {
+  "calls": 197,
+  "triangles": 94746,
+  "lights": 55,
+  "lightsOn": 8,
+  "programs": 19
+ },
+ "veil3-fissures": {
+  "calls": 155,
+  "triangles": 75556,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-copper": {
+  "calls": 78,
+  "triangles": 69530,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-copper-close": {
+  "calls": 60,
+  "triangles": 67364,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-iron": {
+  "calls": 77,
+  "triangles": 68922,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-iron-close": {
+  "calls": 59,
+  "triangles": 66756,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-silver": {
+  "calls": 77,
+  "triangles": 68922,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-silver-close": {
+  "calls": 59,
+  "triangles": 66756,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-gold": {
+  "calls": 78,
+  "triangles": 69450,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-gold-close": {
+  "calls": 60,
+  "triangles": 67284,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-ruby": {
+  "calls": 78,
+  "triangles": 68890,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-ruby-close": {
+  "calls": 60,
+  "triangles": 66724,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-voidopal": {
+  "calls": 78,
+  "triangles": 69050,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-voidopal-close": {
+  "calls": 60,
+  "triangles": 66884,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-diamond": {
+  "calls": 78,
+  "triangles": 68970,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-diamond-close": {
+  "calls": 60,
+  "triangles": 66804,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-embershard": {
+  "calls": 78,
+  "triangles": 69018,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-embershard-close": {
+  "calls": 60,
+  "triangles": 66852,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-veinlight": {
+  "calls": 78,
+  "triangles": 69906,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-veinlight-close": {
+  "calls": 60,
+  "triangles": 67740,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-mimic": {
+  "calls": 78,
+  "triangles": 70746,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-mimic-close": {
+  "calls": 60,
+  "triangles": 68580,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "ore-lineup": {
+  "calls": 78,
+  "triangles": 61828,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "cryos2-core": {
+  "calls": 117,
+  "triangles": 49792,
+  "lights": 54,
+  "lightsOn": 12,
+  "programs": 18
+ },
+ "cryos2-shallow": {
+  "calls": 89,
+  "triangles": 77564,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "cryos2-mid": {
+  "calls": 96,
+  "triangles": 82246,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "cryos2-deep": {
+  "calls": 188,
+  "triangles": 87312,
+  "lights": 54,
+  "lightsOn": 8,
+  "programs": 20
+ },
+ "ore-frostbloom": {
+  "calls": 94,
+  "triangles": 70132,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 20
+ },
+ "ore-frostbloom-close": {
+  "calls": 76,
+  "triangles": 67966,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 20
+ },
+ "ore-rime-salt": {
+  "calls": 93,
+  "triangles": 69812,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 20
+ },
+ "ore-rime-salt-close": {
+  "calls": 75,
+  "triangles": 67646,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 20
+ },
+ "maelis6-core": {
+  "calls": 121,
+  "triangles": 49420,
+  "lights": 54,
+  "lightsOn": 12,
+  "programs": 18
+ },
+ "maelis6-shallow": {
+  "calls": 89,
+  "triangles": 88316,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "maelis6-mid": {
+  "calls": 91,
+  "triangles": 86774,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 19
+ },
+ "maelis6-deep": {
+  "calls": 186,
+  "triangles": 85780,
+  "lights": 54,
+  "lightsOn": 8,
+  "programs": 20
+ },
+ "ore-nacre": {
+  "calls": 89,
+  "triangles": 76098,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 20
+ },
+ "ore-nacre-close": {
+  "calls": 71,
+  "triangles": 73932,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 20
+ },
+ "creature-glimmerflies": {
+  "calls": 95,
+  "triangles": 78184,
+  "lights": 55,
+  "lightsOn": 8,
+  "programs": 12
+ },
+ "creature-warden": {
+  "calls": 172,
+  "triangles": 74434,
+  "lights": 55,
+  "lightsOn": 7,
+  "programs": 14
+ },
+ "creature-stillwalkers": {
+  "calls": 233,
+  "triangles": 81932,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 17
+ },
+ "creature-shellbacks": {
+  "calls": 91,
+  "triangles": 88135,
+  "lights": 54,
+  "lightsOn": 8,
+  "programs": 12
+ },
+ "vault-vault-spawn": {
+  "calls": 309,
+  "triangles": 15226,
+  "lights": 9,
+  "lightsOn": 5,
+  "programs": 16
+ },
+ "vault-vault-room": {
+  "calls": 846,
+  "triangles": 34992,
+  "lights": 9,
+  "lightsOn": 5,
+  "programs": 18
+ },
+ "vault-ember-spawn": {
+  "calls": 451,
+  "triangles": 22242,
+  "lights": 15,
+  "lightsOn": 14,
+  "programs": 17
+ },
+ "vault-ember-room": {
+  "calls": 1660,
+  "triangles": 55476,
+  "lights": 15,
+  "lightsOn": 14,
+  "programs": 19
+ },
+ "vault-debt-spawn": {
+  "calls": 358,
+  "triangles": 37152,
+  "lights": 8,
+  "lightsOn": 4,
+  "programs": 18
+ },
+ "vault-debt-room": {
+  "calls": 772,
+  "triangles": 45606,
+  "lights": 8,
+  "lightsOn": 4,
+  "programs": 19
+ },
+ "vault-return-spawn": {
+  "calls": 120,
+  "triangles": 16154,
+  "lights": 6,
+  "lightsOn": 6,
+  "programs": 13
+ },
+ "vault-return-room": {
+  "calls": 595,
+  "triangles": 31904,
+  "lights": 6,
+  "lightsOn": 6,
+  "programs": 17
+ },
+ "vault-kindled-spawn": {
+  "calls": 384,
+  "triangles": 36226,
+  "lights": 14,
+  "lightsOn": 11,
+  "programs": 17
+ },
+ "vault-kindled-room": {
+  "calls": 2470,
+  "triangles": 126376,
+  "lights": 14,
+  "lightsOn": 11,
+  "programs": 21
+ },
+ "ending-page": {
+  "calls": 364,
+  "triangles": 61568,
+  "lights": 55,
+  "lightsOn": 17,
+  "programs": 18
+ }
+}
