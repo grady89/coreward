@@ -19,47 +19,7 @@ const GEM_CAP = 48; // per shape class, per chunk
 const HAZE_CAP = 32; // pool surface runs per chunk
 const VIEW_ROWS = 30; // rows above/below camera kept alive
 
-// Rock is a chamfered block, not a box: a front face inset from a bevel on
-// every edge, four side faces, no back (the camera never sees it). The
-// template here is the nominal shape; each instance reshapes it in the
-// vertex shader from its own `bev` (bevel width per side) and `tilt` (how
-// far each front corner falls back). The front then folds along its higher
-// diagonal, so every block is a ridge of two flat facets at its own angle
-// and a different crease, and the chamfers cut dark grooves between
-// neighbours. Lighting is flat-shaded from the real geometry (flatShading),
-// so a facet turned to the lamp lights and one turned away goes black: the
-// faceting is in the stone, not painted on it. 20 triangles a block.
-const RB = 0.1; // template bevel: inset ring at ±(0.5-RB), side ring at z 0.5-RB
-function buildRockGeo(): THREE.BufferGeometry {
-  const C = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;      // corner k: (sx, sy), counter-clockwise
-  const I = C.map(([x, y]) => [x * (0.5 - RB), y * (0.5 - RB), 0.5]);
-  const O = C.map(([x, y]) => [x * 0.5, y * 0.5, 0.5 - RB]);
-  const B = C.map(([x, y]) => [x * 0.5, y * 0.5, -0.5]);
-  const M = [0, 0, 0.5];
-  const tris: number[][][] = [];
-  for (let k = 0; k < 4; k++) {
-    const j = (k + 1) % 4;
-    tris.push([M, I[k], I[j]]);                         // front fan
-    tris.push([I[k], O[k], O[j]], [I[k], O[j], I[j]]);  // bevel strip
-    tris.push([O[k], B[k], B[j]], [O[k], B[j], O[j]]);  // side
-  }
-  const pos: number[] = [], nrm: number[] = [];
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  const n = new THREE.Vector3(), mid = new THREE.Vector3();
-  for (let [p0, p1, p2] of tris) {
-    a.fromArray(p0); b.fromArray(p1); c.fromArray(p2);
-    n.subVectors(c, b).cross(a.clone().sub(b)).normalize();
-    mid.copy(a).add(b).add(c);
-    if (n.dot(mid) < 0) { [p1, p2] = [p2, p1]; n.negate(); }  // wind outward
-    pos.push(...p0, ...p1, ...p2);
-    for (let i = 0; i < 3; i++) nrm.push(n.x, n.y, n.z);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  return g;
-}
-const rockTemplate = buildRockGeo();
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 // full-width so a pool reads as one body of liquid, not a row of boxes; it
 // sits a little behind the rock face, and the surface tile is lowered below
 // the rim, so the basin edge stays crisp
@@ -72,6 +32,8 @@ const lavaGeo = new THREE.BoxGeometry(1, 1, 0.94);
 // colour, so strata palettes, the ±14% cell variance and the carved-edge
 // ×1.22 all still land on top of it. Faces are keyed off the normal rather
 // than BoxGeometry's vertex order so the table survives any geometry change.
+// The back face is never seen (the camera looks down +z); it matches the
+// underside so a tumbling fold brick never flashes a bright rear.
 function bakeFaceShade(g: THREE.BufferGeometry): void {
   const nrm = g.getAttribute('normal');
   const col = new Float32Array(nrm.count * 3);
@@ -84,7 +46,7 @@ function bakeFaceShade(g: THREE.BufferGeometry): void {
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
 }
-bakeFaceShade(rockTemplate);
+bakeFaceShade(boxGeo);
 
 // vertexColors picks up the face shade above. It is a pure multiplier on the
 // instance colour (three.js builds vColor as 1 × color × instanceColor in the
@@ -92,7 +54,7 @@ bakeFaceShade(rockTemplate);
 // material opts in — lava's MeshBasicMaterial leaves vertexColors false and
 // carries its own geometry, so it is untouched.
 const rockMat = new THREE.MeshStandardMaterial({
-  roughness: 0.93, metalness: 0.04, vertexColors: true, flatShading: true,
+  roughness: 0.93, metalness: 0.04, vertexColors: true,
 });
 // Ore light that lands: every chunk's rock carries a per-instance `glow`
 // colour (zero for plain rock), drawn as a soft emissive disc centred on the
@@ -100,11 +62,10 @@ const rockMat = new THREE.MeshStandardMaterial({
 // teal, with no extra light and no extra draw call. The disc fades out
 // before the corners so an ore tile never reads as a lit square.
 // The world's hue in its stone: each band's strataGlow colour, blended
-// across band edges by world row, laid down per block at a strength set by
-// the block's three-row bed and its own hash (`rkS`), so it follows the
-// blocks instead of smearing across them. An unlit wall reads as a dark
-// shade of its world rather than neutral black, and the lamp still does all
-// the real lighting. Zero in a spent world.
+// across band edges by world row, laid down as faint horizontal streaks
+// (stretched value noise) over a dimmer floor. An unlit wall reads as a
+// dark shade of its world rather than neutral black, and the lamp still
+// does all the real lighting. Zero in a spent world.
 const strataUniforms = {
   uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
 };
@@ -134,10 +95,6 @@ rockMat.onBeforeCompile = shader => {
 attribute vec3 glow;
 attribute vec3 wash;
 attribute vec2 washDir;
-attribute vec4 bev;
-attribute vec4 tilt;
-attribute float rkS;
-varying float vRkS;
 varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
@@ -146,32 +103,7 @@ varying vec3 vBoxN;
 varying vec2 vWXY;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
 	vGlow = glow; vWash = wash; vWashDir = washDir;
-	vBoxN = normal; vRkS = rkS;
-	{
-		// reshape the template block (see buildRockGeo); back corners stay put
-		vec2 sg = sign(position.xy);
-		float cx = sg.x < 0.0 ? bev.x : bev.y;
-		float cy = sg.y < 0.0 ? bev.z : bev.w;
-		if (position.z > 0.45) {
-			if (abs(position.x) < 0.01) {
-				// on the higher diagonal (both diagonals share this midpoint),
-				// so the face is exactly two flat facets meeting at a ridge
-				transformed = vec3(0.5 * (bev.x - bev.y), 0.5 * (bev.z - bev.w),
-					0.5 + 0.5 * max(tilt.x + tilt.z, tilt.y + tilt.w));
-			} else {
-				float tz = sg.y < 0.0 ? (sg.x < 0.0 ? tilt.x : tilt.y) : (sg.x > 0.0 ? tilt.z : tilt.w);
-				transformed = vec3(sg.x * (0.5 - cx), sg.y * (0.5 - cy), 0.5 + tz);
-			}
-		} else if (position.z > 0.0) {
-			// side ring: back by a little over half the corner's bevel (a ~30°
-			// chamfer: a 45° one faced the lamp head-on and framed every block
-			// in a bright line), and always behind the face corner
-			float tz = sg.y < 0.0 ? (sg.x < 0.0 ? tilt.x : tilt.y) : (sg.x > 0.0 ? tilt.z : tilt.w);
-			transformed.z = 0.5 - max(0.3 * (cx + cy), 0.02 - tz);
-		}
-	}
-	// the halo and wash read the block's real face, so the ore disc stays round
-	vBox = transformed;
+	vBox = position; vBoxN = normal;
 	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
@@ -183,10 +115,14 @@ varying vec2 vWashDir;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec2 vWXY;
-varying float vRkS;
 uniform vec3 uStrata[5];
-#define HUE_SAT 1.5
-#define HUE_KEEP 0.7`)
+float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float stNoise(vec2 p) {
+	vec2 i = floor(p), f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(stHash(i), stHash(i + vec2(1.0, 0.0)), f.x),
+		mix(stHash(i + vec2(0.0, 1.0)), stHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	{
 		float row = -vWXY.y;
@@ -195,11 +131,13 @@ uniform vec3 uStrata[5];
 		acc = mix(acc, uStrata[2], smoothstep(50.0, 70.0, row));
 		acc = mix(acc, uStrata[3], smoothstep(145.0, 175.0, row));
 		acc = mix(acc, uStrata[4], smoothstep(280.0, 320.0, row));
+		vec2 sp = vec2(vWXY.x * 0.32, vWXY.y * 2.4);
+		float n = stNoise(sp) * 0.6 + stNoise(sp * vec2(2.7, 1.9) + 17.0) * 0.4;
+		float streak = smoothstep(0.58, 0.8, n);
 		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
-		totalEmissiveRadiance += acc * face * vRkS;
+		totalEmissiveRadiance += acc * face * (0.12 + 0.6 * streak);
 	}
-	// the bevel counts as front face: together they span the old face exactly
-	float haloFace = vBoxN.z > 0.5 ? 1.0 : 0.4;
+	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
 	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
 	// light from a nearby pool or fissure: the front face shades toward the
 	// source, a side face turned to it catches it whole; the stone's own
@@ -208,27 +146,9 @@ uniform vec3 uStrata[5];
 	vec2 wd = wl > 1e-3 ? vWashDir / wl : vec2(0.0);
 	float wf = vBoxN.z > 0.5 ? 0.6 + 0.8 * dot(vBox.xy, wd) : 0.15 + max(0.0, dot(vBoxN.xy, wd));
 	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
-	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(diffuseColor.rgb, vec3(0.333)));`)
-    .replace('#include <aomap_fragment>', `#include <aomap_fragment>
-	{
-		// The lamp is cream-white; on pale stone its light went to bone/grey
-		// and the world hue was lost exactly where the player looks. Keep the
-		// lamp's brightness but carry it in the stone's own (slightly
-		// strengthened) hue, and tint the little specular the same way.
-		// Direct light only: ambient and the dark are untouched.
-		const vec3 LW = vec3(0.2126, 0.7152, 0.0722);
-		vec3 alb = diffuseColor.rgb;
-		vec3 hue = max(mix(vec3(1.0), alb / max(dot(alb, LW), 1e-4), HUE_SAT), vec3(0.0));
-		float ld = dot(reflectedLight.directDiffuse, LW);
-		// a soft shoulder above 0.5 so a face right under the lamp keeps its
-		// hue instead of clipping to cream in the tone map
-		float lk = ld < 0.5 ? ld : 0.5 + (ld - 0.5) / (1.0 + 1.5 * (ld - 0.5));
-		reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, ld * hue, HUE_KEEP) * (lk / max(ld, 1e-4));
-		float ls = dot(reflectedLight.directSpecular, LW);
-		reflectedLight.directSpecular = ls * mix(vec3(1.0), hue, 0.6) * 0.6;
-	}`);
+	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(diffuseColor.rgb, vec3(0.333)));`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v4';
+rockMat.customProgramCacheKey = () => 'rock-glow-v3';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -355,10 +275,6 @@ const tmpS = new THREE.Vector3();
 const DIRTY_RING: readonly (readonly [number, number])[] = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
-const tmpH = new THREE.Color();
-const tmpV = new THREE.Color();
-/** plain strata solids: the only tiles whose colour takes the bed tint */
-const BEDDED = new Set<number>([T.DIRT, T.ROCK, T.SLATE, T.VOIDROCK, T.EMBERROCK]);
 
 interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array }
 const SPILL: Spill = {
@@ -390,9 +306,6 @@ class Chunk {
   glow: THREE.InstancedBufferAttribute;              // per rock instance: halo colour from its ore
   wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
   washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
-  bev: THREE.InstancedBufferAttribute;               // per rock instance: bevel width per side (L, R, B, T)
-  tilt: THREE.InstancedBufferAttribute;              // ...how far each front corner falls back
-  rkS: THREE.InstancedBufferAttribute;               // ...strength of the world hue in this block
   fl: THREE.InstancedBufferAttribute;                // per fluid instance: corner depths, surface, world x
   hz: THREE.InstancedBufferAttribute;                // per haze sheet: run ends, surface y
   gems: THREE.InstancedMesh[];
@@ -414,20 +327,14 @@ class Chunk {
   bounds = new THREE.Sphere(new THREE.Vector3(), Math.SQRT2 * CHUNK / 2 + 1.5);
 
   constructor() {
-    // own copy of the shared block so it can carry this chunk's columns
-    const rockGeo = rockTemplate.clone();
+    // own copy of the shared box so it can carry this chunk's glow column
+    const rockGeo = boxGeo.clone();
     this.glow = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
     rockGeo.setAttribute('glow', this.glow);
     this.wash = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
     this.washDir = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
     rockGeo.setAttribute('wash', this.wash);
     rockGeo.setAttribute('washDir', this.washDir);
-    this.bev = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
-    this.tilt = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
-    this.rkS = new THREE.InstancedBufferAttribute(new Float32Array(CAP), 1);
-    rockGeo.setAttribute('bev', this.bev);
-    rockGeo.setAttribute('tilt', this.tilt);
-    rockGeo.setAttribute('rkS', this.rkS);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     const fluidGeo = lavaGeo.clone();
     this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
@@ -472,11 +379,6 @@ class Chunk {
       while (r < 6 && isFl(x, y - r - 1)) r++;
       return r;
     };
-    // the world's own hue at unit luminance, for the per-bed tint below
-    const wg = spent ? 0 : ACTIVE.strataGlow?.[3] ?? 0;
-    tmpH.setHex(wg);
-    const wl = 0.2126 * tmpH.r + 0.7152 * tmpH.g + 0.0722 * tmpH.b;
-    if (wl > 1e-4) tmpH.multiplyScalar(1 / wl);
 
     for (let ly = 0; ly < CHUNK; ly++) {
       for (let lx = 0; lx < CHUNK; lx++) {
@@ -516,19 +418,13 @@ class Chunk {
           continue;
         }
 
-        // rock body — deterministic jitter so lighting varies per cube.
-        // Plain stone stands proud or sits back by up to ±0.12, so a wall
-        // shows lit and black block sides like broken rock; ore hosts and
-        // fissures keep the old ±0.045 their gems and seams are placed for.
+        // rock body — subtle deterministic jitter so lighting varies per cube.
         // Masonry is exempt: dressed stone sits flush and square, and that
         // wrongness is how the player reads "somebody built this".
         const h = cellHash(x, y, 3);
         const built = t === T.CUSTODIAN || t === T.GLYPH;
-        const d = def(t);
-        const hosted = d.ore || t === T.MIMIC || t === T.FROSTBLOOM;
-        const seam = isFissure(t, x, y);
         const scale = t === T.BOULDER ? 0.965 : built ? 0.995 : 1;
-        tmpP.set(wx, wy, built ? 0 : (h - 0.5) * (hosted || seam ? 0.09 : 0.24));
+        tmpP.set(wx, wy, built ? 0 : (h - 0.5) * 0.09);
         if (built) tmpE.set(0, 0, 0);
         else tmpE.set((cellHash(x, y, 11) - 0.5) * 0.09, 0, (cellHash(x, y, 13) - 0.5) * 0.09);
         tmpQ.setFromEuler(tmpE);
@@ -540,35 +436,26 @@ class Chunk {
           terrain.get(x - 1, y) === T.AIR || terrain.get(x + 1, y) === T.AIR ||
           terrain.get(x, y - 1) === T.AIR || terrain.get(x, y + 1) === T.AIR;
         tmpC.setHex(rockColor(t, x, y));
-        // strata beds: every three rows carry their own share of the world
-        // hue, so the stone bands in whole blocks (plain strata only — gas,
-        // ore and masonry keep their exact colours and tells)
-        const bed = cellHash(7, Math.floor(y / 3), 61);
-        if (wl > 1e-4 && BEDDED.has(t)) {
-          const l = 0.2126 * tmpC.r + 0.7152 * tmpC.g + 0.0722 * tmpC.b;
-          tmpC.lerp(tmpV.copy(tmpH).multiplyScalar(l), 0.08 + 0.3 * bed);
-        }
         if (exposed) tmpC.multiplyScalar(1.22);
         this.rock.setColorAt(nr, tmpC);
         this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
         this.washDir.setXY(nr, lit.dx[local], lit.dy[local]);
-        this.rkS.setX(nr, 0.08 + 0.16 * bed + 0.08 * cellHash(x, y, 67));
-        this.shapeBlock(nr, x, y, built || hosted || seam);
         this.rockIds.set(local, nr);
         nr++;
 
         // gem overlay: per-ore shape class, size variance, spin phase
+        const d = def(t);
         let gemColor = 0;
         let gemScale = 1;
         let cls = 0;
         let harvestable = true;
-        if (hosted) {
+        if (d.ore || t === T.MIMIC || t === T.FROSTBLOOM) {
           cls = gemClassOf(t);
           gemColor = gemTintOf(t);
           haloOf(t, tmpC);
           this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
-        } else if (seam) {
+        } else if (isFissure(t, x, y)) {
           // heat fissure in the rock face: a seam running edge to edge with
           // branches, lying flush — never mistakable for a pickup. It turns
           // to meet a fissure next door so neighbouring seams join up.
@@ -624,48 +511,11 @@ class Chunk {
     this.glow.needsUpdate = true;
     this.wash.needsUpdate = true;
     this.washDir.needsUpdate = true;
-    this.bev.needsUpdate = true;
-    this.tilt.needsUpdate = true;
-    this.rkS.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     });
-  }
-
-  /**
-   * One block's shape (see buildRockGeo): a bevel width per side, and front
-   * corners falling back so the face folds along one diagonal — which one,
-   * how deep and how lopsided all come from the cell hash, so no two
-   * neighbours repeat. Masonry, ore hosts (the mimic's too, so it gains no
-   * new tell) and fissures get a thin even arris and a flat face: dressed
-   * stone stays square, an ore's halo is never framed by a lamp-lit
-   * chamfer, and a seam lies on its face and runs on into the next one.
-   */
-  private shapeBlock(i: number, x: number, y: number, dressed: boolean): void {
-    if (dressed) {
-      this.bev.setXYZW(i, 0.03, 0.03, 0.03, 0.03);
-      this.tilt.setXYZW(i, 0, 0, 0, 0);
-      return;
-    }
-    // mostly a tight arris; about one side in four is a deep chip
-    const b = [0, 1, 2, 3].map(k => {
-      const r = cellHash(x, y, 71 + k);
-      return r < 0.74 ? 0.022 + 0.045 * r / 0.74 : 0.09 + 0.11 * (r - 0.74) / 0.26;
-    });
-    this.bev.setXYZW(i, b[0], b[1], b[2], b[3]);
-    // corner k = (−,−) (+,−) (+,+) (−,+). About a third of blocks keep a
-    // near-flat face; the rest fold, a few of them steeply.
-    const q = cellHash(x, y, 79);
-    const m = q < 0.35 ? 0.01 : 0.025 + 0.06 * ((q - 0.35) / 0.65) ** 1.3;
-    const ridge02 = cellHash(x, y, 83) < 0.5;
-    const z = [0, 0, 0, 0];
-    for (let k = 0; k < 4; k++) {
-      const onRidge = (k % 2 === 0) === ridge02;
-      z[k] = onRidge ? -0.015 * cellHash(x, y, 89 + k) : -m * (0.45 + 0.55 * cellHash(x, y, 89 + k));
-    }
-    this.tilt.setXYZW(i, z[0], z[1], z[2], z[3]);
   }
 
   /**
