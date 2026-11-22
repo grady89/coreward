@@ -16,7 +16,7 @@ import {
   buildCrusher, buildRime, RimeParts,
   buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts, smokePuff,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
-  buildMote, buildStud, buildPursuit, PursuitParts, buildMasterDressing,
+  buildMote, buildStud, buildPursuit, PursuitParts, buildMasterDressing, ashlar,
 } from './vaultkit';
 
 // A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
@@ -454,6 +454,8 @@ export class VaultRun {
   private ambient!: THREE.AmbientLight;
   private rimMat!: THREE.MeshBasicMaterial;
   private fog: { mesh: THREE.Mesh; vx: number; x0: number; x1: number }[] = [];
+  /** the back wall: its shader carries the warm pools the lights throw on it */
+  private wallMat: THREE.ShaderMaterial | null = null;
   /** the dead's lamps and chest embers: still warm, and they breathe */
   private figureGlows: { mat: THREE.MeshBasicMaterial; base: number }[] = [];
   private hud: HTMLDivElement;
@@ -784,6 +786,7 @@ export class VaultRun {
 
     this.buildRimLattice();
     this.buildDarkFog();
+    this.buildBackWall(distDark);
 
     // unlight — the only instant-kill terrain in the game: a stand of rust
     // spikes off a scorched bed (the spikes sheet), pointing away from the
@@ -1633,6 +1636,161 @@ export class VaultRun {
         });
       }
     }
+  }
+
+  /**
+   * THE BACK WALL. The rooms used to hang in a black void; the guild built
+   * them against masonry. One plane of dressed stone behind everything,
+   * cooler and hazier than the footing and only a few steps above black, so
+   * the platforms separate from it by value and temperature both.
+   *
+   * It is drawn FIRST and writes no depth, so it is pure backdrop: every
+   * hazard, tint, chevron, fog bank and fitting paints over it, whatever its
+   * z. Its z is only parallax — it slides a little behind the play plane as
+   * the frame travels, which is the depth the void could never give.
+   *
+   * Black stays black where black is the mechanic: no wall in a `d` tile and
+   * a ramp up out of it (dark hides floors — a lit wall behind would
+   * silhouette them), none behind a void `_`, none outside the room. A
+   * turned-gravity tile gets a dimmer wall so its tint keeps its contrast.
+   *
+   * The lights do not light it for real (no new lights, no per-light cost on
+   * a full-screen plane). Instead the shader carries a short list of warm
+   * POOLS — lit sconces, censers, braziers and the lamp — each a soft disc
+   * that brightens the stone under it, multiplied by the stone, so the pool
+   * shows masonry rather than a glow pasted on top.
+   */
+  private buildBackWall(distDark: Int16Array | null): void {
+    const { p } = this;
+    const W = p.w + 2, H = p.h + 2;   // a tile of nothing all round: the wall fades out at the room's edge
+    const data = new Uint8Array(W * H * 4);
+    // slow value noise for the haze — seeded per room, like its seams
+    let seed = 2166136261;
+    for (const c of this.glyph.id) seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0;
+    const rng = (): number => {
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const CELL = 6;
+    const gw = Math.ceil(p.w / CELL) + 2, gh = Math.ceil(p.h / CELL) + 2;
+    const lattice = Array.from({ length: gw * gh }, rng);
+    const sm = (t: number): number => t * t * (3 - 2 * t);
+    const noise = (x: number, y: number): number => {
+      const fx = x / CELL, fy = y / CELL;
+      const ix = Math.floor(fx), iy = Math.floor(fy);
+      const tx = sm(fx - ix), ty = sm(fy - iy);
+      const at = (a: number, b: number): number => lattice[b * gw + a];
+      return (at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx) * (1 - ty)
+        + (at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx) * ty;
+    };
+    for (let y = 0; y < p.h; y++) {
+      for (let x = 0; x < p.w; x++) {
+        const i = y * p.w + x;
+        let m = 1;
+        if (p.voidTile[i]) m = 0;
+        else if (distDark) {
+          const d = distDark[i];
+          m = d === 0 ? 0 : d === 1 ? 0.2 : d === 2 ? 0.55 : 1;
+        }
+        if (p.gravity[i]) m *= 0.55;
+        const j = ((H - 2 - y) * W + (x + 1)) * 4;
+        data[j] = Math.round(m * 255);
+        data[j + 1] = Math.round(noise(x + 0.5, y + 0.5) * 255);
+        data[j + 3] = 255;
+      }
+    }
+    const mask = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+    mask.magFilter = THREE.LinearFilter;
+    mask.minFilter = THREE.LinearFilter;
+    mask.generateMipmaps = false;
+    mask.needsUpdate = true;
+
+    // cool blue-grey, tinted a little toward the world's own note — by
+    // multiplying, so a vivid hue shifts the temperature, not the value
+    const note = new THREE.Color(this.rimHue);
+    note.multiplyScalar(1 / Math.max(note.r, note.g, note.b, 1e-3));
+    const base = new THREE.Color(0x1f2633).multiply(new THREE.Color(1, 1, 1).lerp(note, 0.16));
+    const MAXP = 32;
+    this.wallMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uStone: { value: ashlar() }, uMask: { value: mask },
+        uSize: { value: new THREE.Vector2(W, H) },
+        uBase: { value: base }, uBg: { value: new THREE.Color(0x05060c) },
+        uPool: { value: Array.from({ length: MAXP }, () => new THREE.Vector4()) },
+        uPoolCol: { value: Array.from({ length: MAXP }, () => new THREE.Color()) },
+      },
+      defines: { MAXP },
+      vertexShader: `
+        varying vec2 vW;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vW = wp.xy;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: `
+        uniform sampler2D uStone; uniform sampler2D uMask;
+        uniform vec2 uSize; uniform vec3 uBase; uniform vec3 uBg;
+        uniform vec4 uPool[MAXP]; uniform vec3 uPoolCol[MAXP];
+        varying vec2 vW;
+        void main() {
+          float row = -vW.y;
+          vec2 mk = texture2D(uMask, vec2((vW.x + 1.0) / uSize.x, (uSize.y - 1.0 - row) / uSize.y)).rg;
+          vec3 st = texture2D(uStone, vW * 0.25).rgb;
+          // haze: the far wall breathes in slow banks, never flat
+          vec3 c = st * uBase * (0.55 + 0.7 * mk.g);
+          vec3 warm = vec3(0.0);
+          for (int i = 0; i < MAXP; i++) {
+            vec4 P = uPool[i];
+            if (P.w <= 0.0) continue;
+            vec2 d = (vW - P.xy) / P.z;
+            float f = max(0.0, 1.0 - dot(d, d));
+            warm += uPoolCol[i] * P.w * f * f;
+          }
+          c += st * warm;
+          gl_FragColor = vec4(mix(uBg, c, mk.r), 1.0);
+          #include <colorspace_fragment>
+        }`,
+      depthWrite: false, toneMapped: false,
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(W, H), this.wallMat);
+    plane.position.set(p.w / 2, -p.h / 2, -1.1);
+    plane.renderOrder = -10;
+    plane.name = 'back-wall';
+    this.scene.add(plane);
+  }
+
+  /** the warm pools on the back wall, read off the lights that throw them */
+  private updateWallPools(): void {
+    if (!this.wallMat) return;
+    const pools = this.wallMat.uniforms.uPool.value as THREE.Vector4[];
+    const cols = this.wallMat.uniforms.uPoolCol.value as THREE.Color[];
+    let n = 0;
+    const v = new THREE.Vector3();
+    const add = (x: number, y: number, r: number, k: number, col: THREE.Color): void => {
+      if (n >= pools.length || k <= 0) return;
+      pools[n].set(x, y, r, k);
+      cols[n].copy(col);
+      n++;
+    };
+    // the lamp first, so it is never the one crowded out
+    this.lamp.getWorldPosition(v);
+    add(v.x, v.y, 3.2, (this.lamp.intensity / 6) * 0.1, this.lamp.color);
+    for (const sm of this.sconceMeshes) {
+      if (sm.light.intensity <= 0) continue;
+      sm.light.getWorldPosition(v);
+      add(v.x, v.y, 3.8, (sm.light.intensity / 2.4) * 0.42, sm.light.color);
+    }
+    for (const cm of this.censerMeshes) {
+      cm.light.getWorldPosition(v);
+      add(v.x, v.y, 3.4, (cm.light.intensity / 2.2) * 0.36, cm.light.color);
+    }
+    for (const b of this.brazierFx) {
+      add(b.light.position.x, b.light.position.y, 2.8, (b.light.intensity / 1.1) * 0.26, b.light.color);
+    }
+    for (let i = n; i < pools.length; i++) pools[i].w = 0;
   }
 
   /**
@@ -3240,6 +3398,7 @@ export class VaultRun {
         sm.flame.scale.set(0.9 * f, lit ? f * f : 0.7, 0.9 * f);
       }
     }
+    this.updateWallPools();
     for (let d = 0; d < this.doorMeshes.length; d++) {
       for (const m of this.doorMeshes[d]) {
         const mm = m.material as THREE.MeshStandardMaterial;
