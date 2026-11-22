@@ -461,19 +461,32 @@ export function gemMaterial(params: THREE.MeshStandardMaterialParameters = {}): 
   return m;
 }
 
-// ---- heat cracks: four branching fissure patterns, flush in the rock face ----
-function crack(segs: [number, number, number, number, number][]): THREE.BufferGeometry {
-  // each seg: x, y, length, angle, thickness
-  return merge(segs.map(([x, y, len, ang, th]) => ({
-    geo: new THREE.BoxGeometry(len, th, 0.03),
-    m: mat(x, y, 0, ang),
-  })));
+// ---- heat cracks: glowing seams, flush in the rock face ----
+// Each is a trunk zigzagging along local x from one tile edge to the other
+// (so two seams turned to meet join into one vein) with a few branches off
+// it. The core burns hot; a wider, dimmer band behind it is the seam's glow.
+// Both are flat quads lying on the face (it is only ever seen from the front),
+// which keeps a five-stroke seam cheaper than the old three-box crack.
+// Emission is white × the instance colour (the world's fluid hue) × emit.
+function crack(trunk: [number, number][], branches: [number, number, number, number, number][]): THREE.BufferGeometry {
+  const parts: Part[] = [];
+  const seg = (x0: number, y0: number, x1: number, y1: number, th: number) => {
+    const len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    // overlap the joints a touch so the zigzag never shows a gap
+    parts.push({ geo: paint(new THREE.PlaneGeometry(len + th, th), 0xffffff, 2.6, 0.6, 0), m: mat(mx, my, 0.02, ang) });
+    parts.push({ geo: paint(new THREE.PlaneGeometry(len + th * 2, th * 2.3), 0xffffff, 0.5, 0.8, 0), m: mat(mx, my, 0.012, ang) });
+  };
+  for (let i = 0; i + 1 < trunk.length; i++) seg(trunk[i][0], trunk[i][1], trunk[i + 1][0], trunk[i + 1][1], 0.04);
+  // each branch: from (x, y), length, angle, thickness
+  for (const [x, y, len, ang, th] of branches) seg(x, y, x + Math.cos(ang) * len, y + Math.sin(ang) * len, th);
+  return merge(parts);
 }
 const CRACKS = [
-  crack([[0, 0, 0.62, 0.25, 0.035], [0.16, 0.1, 0.3, -0.9, 0.028], [-0.18, -0.08, 0.24, 1.2, 0.025]]),
-  crack([[0, 0, 0.5, -1.15, 0.04], [0.06, 0.16, 0.26, 0.35, 0.026], [-0.05, -0.2, 0.22, 0.5, 0.022]]),
-  crack([[0, 0.05, 0.44, 0.75, 0.03], [-0.12, -0.1, 0.4, -0.35, 0.032], [0.2, -0.14, 0.2, 1.4, 0.022]]),
-  crack([[0, 0, 0.7, -0.12, 0.03], [-0.2, 0.12, 0.28, 1.05, 0.024]]),
+  crack([[-0.5, 0], [-0.18, 0.07], [0.12, -0.06], [0.5, 0]], [[-0.18, 0.07, 0.3, 1.15, 0.026], [0.12, -0.06, 0.26, -1.0, 0.024]]),
+  crack([[-0.5, 0], [-0.1, -0.09], [0.2, 0.05], [0.5, 0]], [[-0.1, -0.09, 0.32, -1.9, 0.026], [0.2, 0.05, 0.22, 0.9, 0.022], [0.2, 0.05, 0.16, 2.4, 0.018]]),
+  crack([[-0.5, 0], [-0.25, -0.04], [0.04, 0.1], [0.5, 0]], [[0.04, 0.1, 0.36, 1.7, 0.028], [-0.25, -0.04, 0.2, -2.2, 0.02]]),
+  crack([[-0.5, 0], [0.0, 0.04], [0.5, 0]], [[0.0, 0.04, 0.3, -1.3, 0.026]]),
 ];
 
 export const GEM_GEOS: THREE.BufferGeometry[] = [

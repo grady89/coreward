@@ -92,7 +92,7 @@ export const WORLDS: WorldDef[] = [
     ],
     hazard: { label: 'HEAT', cold: false, cause: 'core heat' },
     hazardStartRow: 290,   // radiators are the acclimation here
-    fluid: { name: 'Magma', base: 0xff5a2a, pulseA: 0xff6a2e, pulseB: 0xff5222, dmg: 24, fuelDrain: 0, threshold: 0.74 },
+    fluid: { name: 'Magma', base: 0xff5a1e, pulseA: 0xff7a2e, pulseB: 0xff4a18, dmg: 24, fuelDrain: 0, threshold: 0.74 },
     gasImpulse: 0,
     iceTraction: false,
     swarm: {
@@ -147,7 +147,7 @@ export const WORLDS: WorldDef[] = [
         { need: 60, resist: 1.3, label: 'Deep Winter Rig' },
       ],
     },
-    fluid: { name: 'Cryobrine', base: 0x5ad8e6, pulseA: 0x62e0ee, pulseB: 0x4ac8da, dmg: 16, fuelDrain: 2.5, threshold: 0.74 },
+    fluid: { name: 'Cryobrine', base: 0x4fe0ff, pulseA: 0x7aeaff, pulseB: 0x38c4ec, dmg: 16, fuelDrain: 2.5, threshold: 0.74 },
     gasImpulse: 0,
     iceTraction: true,
     swarm: {
@@ -201,7 +201,7 @@ export const WORLDS: WorldDef[] = [
         { need: 68, resist: 1.3, label: 'Pearl Carapace' },
       ],
     },
-    fluid: { name: 'Brine', base: 0x2ea86a, pulseA: 0x34b874, pulseB: 0x28985e, dmg: 12, fuelDrain: 4, threshold: 0.7 },
+    fluid: { name: 'Brine', base: 0x2a9a8e, pulseA: 0x3ab4a6, pulseB: 0x227e74, dmg: 12, fuelDrain: 4, threshold: 0.7 },
     gasImpulse: 16,
     iceTraction: false,
     swarm: {

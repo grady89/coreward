@@ -13,7 +13,7 @@ import {
 import { T, def, oreValue, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
 import { Terrain } from './world/terrain';
-import { ChunkField, lavaMat } from './world/chunks';
+import { ChunkField, lavaMat, fluidUniforms } from './world/chunks';
 import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock, DOCKS } from './world/backdrop';
 import { WreckField } from './world/wrecks';
 import { ThreatField, FaunaEvent } from './world/entities';
@@ -2246,8 +2246,12 @@ class Game {
       dt = 0;
     }
 
-    // fluid pulse (shared material)
-    lavaMat.color.setHex(Math.sin(this.time * 2.6) > 0 ? ACTIVE.fluid.pulseA : ACTIVE.fluid.pulseB);
+    // fluid shimmer (shared material): a slow travelling sheen, still when
+    // the player prefers reduced motion
+    lavaMat.color.setHex(ACTIVE.fluid.base);
+    fluidUniforms.uFluidTime.value = this.time;
+    fluidUniforms.uFluidAmp.value = this.reducedMotion ? 0 : 1;
+    fluidUniforms.uFluidLive.value = ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id) ? 0 : 1;
 
     const waking = this.mode === 'eva' && !this.finale.isCommunion
       ? this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1) : null;

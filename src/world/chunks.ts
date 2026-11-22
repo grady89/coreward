@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CHUNK, WORLD_W, WORLD_ROWS } from '../config';
 import { Terrain } from './terrain';
 import { T, def, rockColor, cellHash } from './tiles';
-import { ACTIVE } from './worlds';
+import { ACTIVE, worldById } from './worlds';
 import {
   GEM_GEOS, CRACK_CLASS_0, CRACK_VARIANTS, gemClassOf, gemScaleOf, motionOf,
   gemMaterial, gemTintOf, haloOf,
@@ -18,7 +18,10 @@ const GEM_CAP = 48; // per shape class, per chunk
 const VIEW_ROWS = 30; // rows above/below camera kept alive
 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const lavaGeo = new THREE.BoxGeometry(0.94, 0.9, 0.94);
+// full-width so a pool reads as one body of liquid, not a row of boxes; it
+// sits a little behind the rock face, and the surface tile is lowered below
+// the rim, so the basin edge stays crisp
+const lavaGeo = new THREE.BoxGeometry(1, 1, 0.94);
 
 // Per-face shade baked ONCE into the shared rock box. Every cube used to be
 // flat on all six sides, so a wall of them read as a quilt of tinted squares
@@ -57,22 +60,103 @@ const rockMat = new THREE.MeshStandardMaterial({
 // teal, with no extra light and no extra draw call. The disc fades out
 // before the corners so an ore tile never reads as a lit square.
 rockMat.onBeforeCompile = shader => {
+  shader.uniforms.uFluidTime = fluidUniforms.uFluidTime;
+  shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute vec3 glow;\nvarying vec3 vGlow;\nvarying vec3 vBox;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvGlow = glow;\n\tvBox = position;');
+    .replace('#include <common>', `#include <common>
+attribute vec3 glow;
+attribute vec3 wash;
+attribute vec2 washDir;
+varying vec3 vGlow;
+varying vec3 vWash;
+varying vec2 vWashDir;
+varying vec3 vBox;
+varying vec3 vBoxN;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vGlow = glow; vWash = wash; vWashDir = washDir;
+	vBox = position; vBoxN = normal;`);
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vGlow;\nvarying vec3 vBox;')
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+varying vec3 vGlow;
+varying vec3 vWash;
+varying vec2 vWashDir;
+varying vec3 vBox;
+varying vec3 vBoxN;`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
-	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));`);
+	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
+	// light from a nearby pool or fissure: the front face shades toward the
+	// source, a side face turned to it catches it whole; the stone's own
+	// albedo still shows through so it reads as lit rock, not paint
+	float wl = length(vWashDir);
+	vec2 wd = wl > 1e-3 ? vWashDir / wl : vec2(0.0);
+	float wf = vBoxN.z > 0.5 ? 0.6 + 0.8 * dot(vBox.xy, wd) : 0.15 + max(0.0, dot(vBoxN.xy, wd));
+	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
+	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(diffuseColor.rgb, vec3(0.333)));`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v1';
+rockMat.customProgramCacheKey = () => 'rock-glow-v2';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
 // burning seam share this one material and this one draw call per class.
 const gemMat = gemMaterial();
+
+/** shared clock for the fluid shimmer and the light it throws; amp 0 = still */
+export const fluidUniforms = {
+  uFluidTime: { value: 0 },
+  uFluidAmp: { value: 1 },
+  uFluidLive: { value: 1 },
+};
+/**
+ * Pools glow: an emissive body that darkens with depth below the surface,
+ * a hot meniscus band on the tile that meets air, and a slow shimmer that
+ * runs along the pool in world x so neighbouring tiles read as one liquid.
+ * Per instance `fl` = (rows below the surface, 1 if this tile meets air,
+ * world x). A spent (husk) world gets the old flat colour back.
+ */
 export const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false });
+lavaMat.onBeforeCompile = shader => {
+  Object.assign(shader.uniforms, fluidUniforms);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+attribute vec3 fl;
+varying vec3 vFl;
+varying vec3 vFP;
+varying float vFTop;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vFl = fl; vFP = position; vFTop = normal.y;`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+uniform float uFluidLive;
+varying vec3 vFl;
+varying vec3 vFP;
+varying float vFTop;`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	{
+		vec3 base = diffuseColor.rgb;
+		float depth = vFl.x + (0.5 - vFP.y);
+		float wx = vFl.z + vFP.x;
+		float body = mix(0.95, 0.26, smoothstep(0.0, 2.2, depth));
+		float sh = uFluidAmp * (0.09 * sin(wx * 1.9 + uFluidTime * 1.1 - depth * 2.3)
+			+ 0.05 * sin(wx * 0.7 - uFluidTime * 0.6) + 0.04 * sin(uFluidTime * 1.6));
+		vec3 c = base * (body + sh);
+		float menis = vFl.y * max(1.0 - smoothstep(0.0, 0.17, 0.5 - vFP.y), step(0.5, vFTop));
+		vec3 hot = base * (1.5 + sh * 1.5) + vec3(0.16, 0.16, 0.12);
+		c = mix(c, hot, menis * 0.9);
+		diffuseColor.rgb = mix(base, c, uFluidLive);
+	}`);
+};
+lavaMat.customProgramCacheKey = () => 'fluid-glow-v1';
+
+/** a spent world (the husk, or a world whose fragment was taken) throws no light */
+const spentWorld = (): boolean => !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
+/** heat fissure in a deep-band face: a fixed share of emberrock cells */
+const isFissure = (t: number, x: number, y: number): boolean =>
+  t === T.EMBERROCK && cellHash(x, y, 3) > 0.82;
 
 const tmpM = new THREE.Matrix4();
 const tmpP = new THREE.Vector3();
@@ -81,6 +165,25 @@ const tmpS = new THREE.Vector3();
 const DIRTY_RING: readonly (readonly [number, number])[] = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
+
+interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array }
+const SPILL: Spill = {
+  r: new Float32Array(CAP), g: new Float32Array(CAP), b: new Float32Array(CAP),
+  dx: new Float32Array(CAP), dy: new Float32Array(CAP), w: new Float32Array(CAP),
+};
+
+/**
+ * A seam's trunk runs along its local x from edge to edge, so turning it
+ * square to a fissure next door joins the two into one vein; a lone seam
+ * takes any eighth turn.
+ */
+function seamRoll(terrain: Terrain, x: number, y: number): number {
+  const at = (dx: number, dy: number) => isFissure(terrain.get(x + dx, y + dy), x + dx, y + dy);
+  const flip = cellHash(x, y, 29) > 0.5 ? Math.PI : 0;
+  if (at(-1, 0) || at(1, 0)) return flip;
+  if (at(0, -1) || at(0, 1)) return Math.PI / 2 + flip;
+  return Math.floor(cellHash(x, y, 29) * 8) * (Math.PI / 4);
+}
 
 interface GemAnim {
   id: number; wx: number; wy: number; s: number; phase: number;
@@ -91,6 +194,9 @@ interface GemAnim {
 class Chunk {
   rock: THREE.InstancedMesh;
   glow: THREE.InstancedBufferAttribute;              // per rock instance: halo colour from its ore
+  wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
+  washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
+  fl: THREE.InstancedBufferAttribute;                // per fluid instance: depth, surface, world x
   gems: THREE.InstancedMesh[];
   lava: THREE.InstancedMesh;
   group = new THREE.Group();
@@ -105,8 +211,15 @@ class Chunk {
     const rockGeo = boxGeo.clone();
     this.glow = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
     rockGeo.setAttribute('glow', this.glow);
+    this.wash = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    this.washDir = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
+    rockGeo.setAttribute('wash', this.wash);
+    rockGeo.setAttribute('washDir', this.washDir);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
-    this.lava = new THREE.InstancedMesh(lavaGeo, lavaMat, CAP);
+    const fluidGeo = lavaGeo.clone();
+    this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    fluidGeo.setAttribute('fl', this.fl);
+    this.lava = new THREE.InstancedMesh(fluidGeo, lavaMat, CAP);
     this.gems = GEM_GEOS.map(geo => new THREE.InstancedMesh(geo, gemMat, GEM_CAP));
     for (const m of [this.rock, this.lava, ...this.gems]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -115,7 +228,6 @@ class Chunk {
     }
     // allocate color buffers up front
     this.rock.setColorAt(0, tmpC.setHex(0xffffff));
-    this.lava.setColorAt(0, tmpC.setHex(0xffffff));
     for (const m of this.gems) m.setColorAt(0, tmpC.setHex(0xffffff));
   }
 
@@ -128,6 +240,8 @@ class Chunk {
     (this.glow.array as Float32Array).fill(0);
     const ng = GEM_GEOS.map(() => 0);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
+    const spent = spentWorld();
+    const lit = this.spill(terrain, x0, y0, spent);
 
     for (let ly = 0; ly < CHUNK; ly++) {
       for (let lx = 0; lx < CHUNK; lx++) {
@@ -138,11 +252,15 @@ class Chunk {
         const local = ly * CHUNK + lx;
 
         if (t === T.LAVA) {
-          tmpM.makeTranslation(wx, wy, 0);
+          // rows of liquid above this one; the tile that meets air carries
+          // the meniscus and sits a little below the rim
+          let rows = 0;
+          while (rows < 4 && terrain.get(x, y - rows - 1) === T.LAVA) rows++;
+          const top = rows === 0 && terrain.get(x, y - 1) === T.AIR;
+          if (top) tmpM.makeScale(1, 0.86, 1).setPosition(wx, wy - 0.07, 0);
+          else tmpM.makeTranslation(wx, wy, 0);
           this.lava.setMatrixAt(nl, tmpM);
-          // vary from deep red to hot orange so pools read as molten, not flat
-          const lh = 0.55 + cellHash(x, y, 9) * 0.55;
-          this.lava.setColorAt(nl, tmpC.setRGB(lh, lh * 0.42, lh * 0.16));
+          this.fl.setXYZ(nl, rows, top ? 1 : 0, wx);
           nl++;
           continue;
         }
@@ -167,6 +285,8 @@ class Chunk {
         tmpC.setHex(rockColor(t, x, y));
         if (exposed) tmpC.multiplyScalar(1.22);
         this.rock.setColorAt(nr, tmpC);
+        this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
+        this.washDir.setXY(nr, lit.dx[local], lit.dy[local]);
         this.rockIds.set(local, nr);
         nr++;
 
@@ -182,13 +302,19 @@ class Chunk {
           haloOf(t, tmpC);
           this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
-        } else if (t === T.EMBERROCK && h > 0.82) {
-          // heat fissure in the rock face: one of four branching patterns,
-          // rotated per cell, lying flush — never mistakable for a pickup
+        } else if (isFissure(t, x, y)) {
+          // heat fissure in the rock face: a seam running edge to edge with
+          // branches, lying flush — never mistakable for a pickup. It turns
+          // to meet a fissure next door so neighbouring seams join up.
           cls = CRACK_CLASS_0 + Math.floor(cellHash(x, y, 23) * CRACK_VARIANTS) % CRACK_VARIANTS;
-          gemColor = ACTIVE.core.shell;
-          gemScale = 0.8 + cellHash(x, y, 17) * 0.5;
+          gemColor = ACTIVE.fluid.base;
+          gemScale = 1;
           harvestable = false;
+          if (!spent) {
+            // the seam's own stone burns softly behind it
+            tmpC.setHex(ACTIVE.fluid.base).multiplyScalar(0.12);
+            this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
+          }
         }
         if (gemColor && ng[cls] < GEM_CAP) {
           const i = ng[cls]++;
@@ -201,13 +327,15 @@ class Chunk {
             pulse: harvestable ? mo.pulse : 0.04,
             wobble: harvestable ? mo.wobble : 0,
             tilt: (cellHash(x, y, 7) - 0.5) * 0.9,
-            roll: mo.sway ? (cellHash(x, y, 29) - 0.5) * 0.8 : cellHash(x, y, 29) * Math.PI * 2,
+            roll: !harvestable ? seamRoll(terrain, x, y)
+              : mo.sway ? (cellHash(x, y, 29) - 0.5) * 0.8 : cellHash(x, y, 29) * Math.PI * 2,
             // a fissure rides the face of its own cube, which the jitter
             // above pushes forward (h > 0.82 puts it at z ≥ 0.529, tilted
             // ±0.045): at a flat 0.505 every one of them was inside the rock
             z: harvestable ? 0.46 : built ? 0.505 : 0.5 + (h - 0.5) * 0.09 + 0.04,
-            // fissures glow like banked embers; carvings burn brighter
-            dim: harvestable ? 1 : t === T.GLYPH ? 1.3 : 0.9,
+            // fissures burn hot (the seam's emit is baked high); a spent
+            // world's stay as dim as they always were
+            dim: harvestable ? 1 : spent ? 0.22 : 1,
             flat: !harvestable,
             sway: !!mo.sway,
           };
@@ -223,13 +351,63 @@ class Chunk {
     this.rock.instanceMatrix.needsUpdate = true;
     this.lava.instanceMatrix.needsUpdate = true;
     if (this.rock.instanceColor) this.rock.instanceColor.needsUpdate = true;
-    if (this.lava.instanceColor) this.lava.instanceColor.needsUpdate = true;
+    this.fl.needsUpdate = true;
     this.glow.needsUpdate = true;
+    this.wash.needsUpdate = true;
+    this.washDir.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     });
+  }
+
+  /**
+   * Light that lands: every pool tile and heat fissure within reach of this
+   * chunk throws its hue onto the rock around it (about two tiles for a
+   * pool, one and a half for a seam), baked per rock instance at build. No
+   * light, no draw call; darkness away from them is untouched.
+   */
+  private spill(terrain: Terrain, x0: number, y0: number, spent: boolean): Spill {
+    const o = SPILL;
+    o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0);
+    if (spent) return o;
+    const R = 3;
+    for (let sy = y0 - R; sy < y0 + CHUNK + R; sy++) {
+      for (let sx = x0 - R; sx < x0 + CHUNK + R; sx++) {
+        const st = terrain.get(sx, sy);
+        const pool = st === T.LAVA;
+        if (!pool && !isFissure(st, sx, sy)) continue;
+        const reach = pool ? 2.6 : 1.8, inner = pool ? 0.6 : 0.5;
+        const k = pool ? 1 : 0.1;
+        for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + R); ty++) {
+          for (let tx = Math.max(x0, sx - R); tx <= Math.min(x0 + CHUNK - 1, sx + R); tx++) {
+            if (tx === sx && ty === sy) continue;
+            const d = Math.hypot(tx - sx, ty - sy);
+            if (d >= reach) continue;
+            const u = (d - inner) / (reach - inner);
+            const w = k * (1 - (u <= 0 ? 0 : u * u * (3 - 2 * u)));
+            const i = (ty - y0) * CHUNK + (tx - x0);
+            o.w[i] += w;
+            // world y runs up while rows run down
+            o.dx[i] += (sx - tx) * w / d;
+            o.dy[i] += (ty - sy) * w / d;
+          }
+        }
+      }
+    }
+    // even out the hues: cyan is three times as bright as molten orange,
+    // and a pale wash beside a pale pool would blur the hazard's edge
+    tmpC.setHex(ACTIVE.fluid.base);
+    const lum = 0.2126 * tmpC.r + 0.7152 * tmpC.g + 0.0722 * tmpC.b;
+    tmpC.multiplyScalar(Math.min(1, 0.26 / Math.max(lum, 1e-3)));
+    for (let i = 0; i < CAP; i++) {
+      if (o.w[i] <= 0) continue;
+      // saturating: a whole basin next door is brighter than one cell, not 8×
+      const s = 0.2 * (1 - Math.exp(-o.w[i]));
+      o.r[i] = tmpC.r * s; o.g[i] = tmpC.g * s; o.b[i] = tmpC.b * s;
+    }
+    return o;
   }
 
   private poseGem(cls: number, a: GemAnim, time: number): void {
