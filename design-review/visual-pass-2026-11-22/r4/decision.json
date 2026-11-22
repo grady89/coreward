@@ -1,0 +1,17 @@
+{
+ "round": 4,
+ "best_before": "9c8efe4 (r4/best, GPU; core shots re-framed)",
+ "candidate": "d684aff (I1 47bc02a, I2 81f7a45, I3 9b45cc0, I4 5f0cb63, I5 d684aff)",
+ "deltas": {"rock": 0.4, "lighting": 0.5, "identity": 0.6, "fluids": 0.4, "characters": 0.6, "vaults": 0.2, "ui": 0.0, "minerals": 0.0},
+ "fixes": {
+  "I1 rock crisp dark stone": {"commit": "47bc02a", "target": "rock", "delta": 0.4, "decision": "keep"},
+  "I2 core floods chamber": {"commit": "81f7a45", "target": "fluids+lighting", "delta": "0.4 / 0.5", "decision": "keep"},
+  "I3 backdrop tint + fissure light": {"commit": "9b45cc0", "target": "lighting (+identity)", "delta": "0.5 / 0.6", "decision": "keep"},
+  "I4 characters": {"commit": "5f0cb63", "target": "characters", "delta": 0.6, "decision": "keep"},
+  "I5 vaults": {"commit": "d684aff", "target": "vaults", "delta": 0.2, "decision": "revert (93dddfe): within noise"}
+ },
+ "other_drops_over_0.3": [],
+ "new_best": "93dddfe; shots r5/best (GPU)",
+ "best_scores": {"rock": 6.4, "lighting": 6.5, "identity": 7.0, "fluids": 6.4, "characters": 6.4, "vaults": 6.6, "ui": 7.2, "minerals": 7.2},
+ "goal_met": false
+}

@@ -23,3 +23,9 @@
 - Why it lost: the minerals reviewer: "B's bright orange/blue rock facets compete with same-hue ores (gold, embershard, copper, rime salt) and dilute their tells"; the brief wants matte dark host rock so the ore is the light. Also: the facet split still reads as a repeated pattern; bright bevels frame ore tiles into squares.
 - Kept from it: the per-chunk frustum culling follow-up (6499678) — a pure perf change.
 - Next time, differently: any rock relief must stay dark and low-saturation where lit — value contrast from shadow, not from bright world-hued lit faces; and rock within ~1 tile of an ore stays matte-dark so the ore is the light. Two shader/geometry attempts at "faceted rock" have now cost minerals; consider leaving rock relief alone.
+
+## r4 I5 — vaults: light-falloff wall haze, gravity-zone punch (wall ×0.26 behind zones, stronger chevrons), 2×2 dressed footing patches, lights moved in front of the play plane, wider pools (d684aff) — reverted
+- Gate passed (vaults.mjs 47/47 ×2, all routes).
+- Scores (paired, r4): vaults 5.9 → 6.1 (+0.2) — within noise. The reviewer saw the two builds as "nearly identical"; it preferred the candidate's broader warmer sconce washes in EMBER but nothing else changed its read.
+- Why it lost: below the 0.3 bar. The remaining vault complaints (wall as bright as footing in VAULT/RETURN, footing tops unlit in RETURN/KINDLED, sparse warm light in RETURN, black spawn-gate box, faint fangs in dark rooms) weren't moved enough.
+- Next time, differently: target the specific frames the reviewer marks lowest (RETURN spawn/room at 5) — lit walkable top faces independent of nearby lights, a tinted spawn-gate interior instead of a black box, emissive fang tips in unlit rooms — rather than global wall/haze retuning.
