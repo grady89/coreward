@@ -1460,7 +1460,7 @@ export class Panels {
           <span class="r-val" id="v-${key}">${Math.round(s[key] * 100)}</span>
         </span>
       </div>`;
-    const toggle = (key: 'shake' | 'hitstop' | 'rumble' | 'showFps' | 'vaultAssist' | 'bloom', label: string, sub: string) => `
+    const toggle = (key: 'shake' | 'hitstop' | 'rumble' | 'showFps' | 'vaultAssist', label: string, sub: string) => `
       <div class="row">
         <span><span class="r-name">${label}</span><div class="r-sub">${sub}</div></span>
         <button class="btn" data-toggle="${key}">${s[key] ? 'ON' : 'OFF'}</button>
@@ -1488,7 +1488,6 @@ export class Panels {
       </div>
       ${toggle('vaultAssist', 'Vault assist', 'The Nine Stones, gentler: hazards at six-tenths speed')}
       <div class="forge-head">DISPLAY</div>
-      ${toggle('bloom', 'Bloom', 'Soft glow around lava, ore and lights. Turn off on slower machines')}
       ${toggle('showFps', 'Performance counter', 'Show frames per second')}
       <button class="btn wide" id="s-close">BACK</button>
     `;
@@ -1511,7 +1510,7 @@ export class Panels {
     });
     this.body().querySelectorAll('button[data-toggle]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const key = (btn as HTMLElement).dataset.toggle as 'shake' | 'hitstop' | 'rumble' | 'showFps' | 'vaultAssist' | 'bloom';
+        const key = (btn as HTMLElement).dataset.toggle as 'shake' | 'hitstop' | 'rumble' | 'showFps' | 'vaultAssist';
         s[key] = !s[key];
         btn.textContent = s[key] ? 'ON' : 'OFF';
         this.ctx.audio.click();

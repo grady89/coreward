@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { SPILL_TTL, SPILL_WARN } from '../config';
 import { GEM_GEOS, gemClassOf, gemScaleOf, gemMaterial, gemTintOf, DISPLAY_CUT } from './gemshapes';
 import { def } from './tiles';
-import { hdrEmissive } from '../fx/post';
 
 // The spill: what is left where a pod burst. The crew tows the hull and files
 // a claim over the ore — a skip dropped beside the pile and a beacon on a
@@ -79,9 +78,7 @@ export class SpillSite {
     // ore heaped in the bin, with the last two spilled over the lip
     for (let i = 0; i < MAX_SHARDS; i++) {
       // the in-world ore material: colours and glow are baked into each geometry
-      const mat = gemMaterial();
-      hdrEmissive(mat, 0.3, 0.5);
-      const m = new THREE.Mesh(GEM_GEOS[0], mat);
+      const m = new THREE.Mesh(GEM_GEOS[0], gemMaterial());
       m.visible = false;
       this.group.add(m);
       this.shards.push(m);

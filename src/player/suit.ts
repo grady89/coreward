@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { facetTexture } from './pod';
-import { hdrBasic } from '../fx/post';
 
 // The pilot's suit — one mesh, built once, worn everywhere the character walks
 // on foot: the EVA (src/player/pilot.ts) and a vault run (src/game/vault.ts).
@@ -17,7 +16,6 @@ const SUIT_ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness:
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 const VISOR = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.15, metalness: 0.5, emissive: 0x0d3a40, emissiveIntensity: 0.6 });
 const LENS = new THREE.MeshBasicMaterial({ color: 0xffe6c0, toneMapped: false });
-hdrBasic(LENS, 2.0);
 
 const R_DOME = 0.108;
 const HELMET_Y = 0.148;
