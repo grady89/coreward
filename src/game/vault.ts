@@ -16,7 +16,7 @@ import {
   buildCrusher, buildRime, RimeParts,
   buildDeck, DeckParts, buildDoorway, buildDoorRune, DoorRuneParts, smokePuff,
   buildCurtain, CurtainParts, buildCurrent, CurrentParts,
-  buildMote, buildStud, buildPursuit, PursuitParts, buildMasterDressing, ashlar,
+  buildMote, buildStud, buildPursuit, PursuitParts, buildMasterDressing, ashlar, dressedFace,
 } from './vaultkit';
 
 // A VAULT RUN — one attempt at one of the Nine Stones (SPEC-GLYPHS.md §3,
@@ -144,6 +144,8 @@ const VOID_PAD = 8;
 const WALL_Z = -1.1;
 /** the most warm pools the back wall carries at once */
 const POOL_MAX = 48;
+/** the colour an unlit sconce's coal throws on the wall behind it */
+const EMBER_POOL = new THREE.Color(0xffa045);
 const REFORM_T = 0.35;
 const INVULN_T = 0.6;
 
@@ -642,8 +644,30 @@ export class VaultRun {
     let count = 0;
     for (let i = 0; i < p.w * p.h; i++) if (p.solid[i]) count++;
     const box = new THREE.BoxGeometry(1, 1, 1);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.2, flatShading: true });
-    const inst = new THREE.InstancedMesh(box, mat, count);
+    // the footing is DRESSED: each face a pair of courses in a running bond,
+    // and a walkable top (open air over it) carries a lit arris along the
+    // front face's upper edge — a constant, like the rim lattice, so a floor
+    // reads against the back wall at any zoom. aLip is that edge's strength,
+    // per tile, already scaled down the dark ramp so a dark room stays dark.
+    const masonryGeo = box.clone();
+    const lipAt = new Float32Array(count);
+    masonryGeo.setAttribute('aLip', new THREE.InstancedBufferAttribute(lipAt, 1));
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.6, metalness: 0.2, flatShading: true, map: dressedFace(),
+    });
+    mat.onBeforeCompile = (sh): void => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aLip;\nvarying float vLip;\nvarying float vLipY;')
+        .replace('#include <begin_vertex>',
+          '#include <begin_vertex>\nvLip = aLip * step(0.5, normal.z);\nvLipY = uv.y;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vLip;\nvarying float vLipY;')
+        .replace('#include <emissivemap_fragment>',
+          '#include <emissivemap_fragment>\n'
+          + 'totalEmissiveRadiance += vec3(0.34, 0.27, 0.18) * vLip\n'
+          + '  * (smoothstep(0.84, 0.97, vLipY) * 0.55 + smoothstep(0.955, 0.985, vLipY));');
+    };
+    const inst = new THREE.InstancedMesh(masonryGeo, mat, count);
     const m4 = new THREE.Matrix4();
     const col = new THREE.Color();
     // A ONE-COURSE floor — no stone above it, none below — is drawn as a
@@ -726,9 +750,15 @@ export class VaultRun {
         // Live stone is WARM grey-basalt (the masonry sheet): blue-cool
         // rock under the sodium key mudded to olive, and the drank stone's
         // coldness only reads against warmth it can lack.
+        const b = band(i);
         col.setHex(p.dry[i] ? 0x6c7386 : 0x9a8a78)
-          .multiplyScalar(band(i) * (p.dry[i] ? 0.8 : 1));
+          .multiplyScalar(b * (p.dry[i] ? 0.8 : 1));
         inst.setColorAt(k, col);
+        // the lit arris: only over open air (a fang bed on top is a hole in
+        // the light, as it is in the lattice), dimmed with the stone's band
+        const above = y > 0 ? (y - 1) * p.w + x : -1;
+        const walk = above >= 0 && !p.solid[above] && !p.kill[above];
+        lipAt[k] = walk ? Math.min(1, b / 0.9) * (p.dry[i] ? 0.55 : 1) : 0;
         k++;
       }
     }
@@ -831,7 +861,7 @@ export class VaultRun {
       // whole fixture BEHIND the play plane, walked in front of like the
       // sanctum — never a floating head with its post sunk in another depth
       parts.group.position.set(gx, gy, mount.kind === 'wall' ? 0.3 : -0.35);
-      const light = new THREE.PointLight(dead ? 0x9db8ff : 0xffd9a0, 0, 7, 1.7);
+      const light = new THREE.PointLight(dead ? 0x9db8ff : 0xffd9a0, 0, 8, 1.7);
       light.position.set(gx + parts.cupX, gy + SCONCE_FLAME_Y, 0.35);
       this.scene.add(parts.group, light);
       this.sconceMeshes.push({
@@ -1061,7 +1091,7 @@ export class VaultRun {
       const chain = buildChain(c.len);
       chain.position.set(c.x, -c.y, 0.2);
       const parts = buildCenser(CENSER_TOP);
-      const light = new THREE.PointLight(0xffd9a0, 2.2, 7, 1.7);
+      const light = new THREE.PointLight(0xffd9a0, 2.8, 7, 1.7);
       light.position.y = CENSER_TOP - 0.4;
       parts.bob.add(light);
       const puffs: THREE.Mesh[] = [];
@@ -1085,7 +1115,7 @@ export class VaultRun {
       while (cy > 0 && !p.solid[(cy - 1) * p.w + b.x]) cy--;
       const parts = buildBrazier(-(cy - b.y) + 0.1);
       parts.group.position.set(b.x + 0.5, -(b.y + 0.5), 0.3);
-      const light = new THREE.PointLight(0xffb060, 1.1, 5, 1.7);
+      const light = new THREE.PointLight(0xffb060, 1.6, 5, 1.7);
       light.position.set(b.x + 0.5, -(b.y + 0.5) + 0.2, 0.5);
       const embers: THREE.Mesh[] = [];
       for (let k = 0; k < 5; k++) {
@@ -1473,7 +1503,10 @@ export class VaultRun {
     // painted rope, not light escaping under pressure
     const hot = (k: number): [number, number, number] => {
       const t = Math.max(0, Math.min(1, (k - 0.95) * 0.9));
-      return [(hue.r + (1 - hue.r) * t) * k, (hue.g + (1 - hue.g) * t) * k, (hue.b + (1 - hue.b) * t) * k];
+      // the crack line itself is held a quarter down: the lit arris on the
+      // footing now says "floor", so the crack only has to say "light inside"
+      const q = k * 0.75;
+      return [(hue.r + (1 - hue.r) * t) * q, (hue.g + (1 - hue.g) * t) * q, (hue.b + (1 - hue.b) * t) * q];
     };
     const strip = (pts: { x: number; y: number; k: number }[], w: number): void => {
       for (let i = 1; i < pts.length; i++) {
@@ -1500,7 +1533,7 @@ export class VaultRun {
         const t = i / steps;
         // the crack lives IN the rock: it dives into the block and barely
         // grazes back out, never floating in the air
-        const into = i === 0 || i === steps ? 0.02 : 0.03 + rng() * (0.14 + crooked * 2);
+        const into = i === 0 || i === steps ? 0.02 : 0.03 + rng() * (0.1 + crooked * 2);
         const graze = rng() < 0.18 ? 0.025 : 0;
         const o = graze - into;
         const flick = 0.7 + rng() * 0.6;
@@ -1512,7 +1545,8 @@ export class VaultRun {
       }
       strip(pts, 0.028);
       // forks: dead-end branches running deeper into the stone, going dark
-      const nForks = Math.floor(len * 0.35 * rng() + (rng() < 0.5 ? 1 : 0));
+      // forks are fewer than they were: they were the busy part
+      const nForks = Math.floor(len * 0.2 * rng() + (rng() < 0.3 ? 1 : 0));
       for (let f = 0; f < nForks; f++) {
         const at = pts[1 + Math.floor(rng() * (pts.length - 2))];
         if (!at) continue;
@@ -1645,7 +1679,7 @@ export class VaultRun {
   /**
    * THE BACK WALL. The rooms used to hang in a black void; the guild built
    * them against masonry. One plane of dressed stone behind everything,
-   * cooler and hazier than the footing and only a few steps above black, so
+   * cooler, hazier and a clear step lighter than the footing (never near white), so
    * the platforms separate from it by value and temperature both.
    *
    * It writes no depth and is drawn LAST of the opaque pass (so the stone in
@@ -1700,8 +1734,14 @@ export class VaultRun {
     // multiplying, so a vivid hue shifts the temperature, not the value
     const note = new THREE.Color(this.rimHue);
     note.multiplyScalar(1 / Math.max(note.r, note.g, note.b, 1e-3));
-    const base = new THREE.Color(0x1f2633).multiply(new THREE.Color(1, 1, 1).lerp(note, 0.16));
+    const base = new THREE.Color(0x2b3139).multiply(new THREE.Color(1, 1, 1).lerp(note, 0.16));
     const bg = new THREE.Color(0x05060c);
+    // the haze between the footing and the far wall: a cool veil laid OVER
+    // the stone (added, so it lifts the value and flattens the joints the way
+    // distance does), thickest high in the room where the air holds the
+    // light and thinning toward the floor. It is what puts the wall a clear
+    // step lighter and cooler than the footing in front of it.
+    const haze = new THREE.Color(0x2e343c).multiply(new THREE.Color(1, 1, 1).lerp(note, 0.08));
 
     // per tile: how much wall (m) and its tint. The canvas multiplies in
     // sRGB, which away from black is close to multiplying in linear, so the
@@ -1727,13 +1767,18 @@ export class VaultRun {
           const d = distDark[i];
           m = d === 0 ? 0 : d === 1 ? 0.2 : d === 2 ? 0.55 : 1;
         }
-        if (p.gravity[i]) m *= 0.55;
+        if (p.gravity[i]) m *= 0.45;
         mAt[i] = m;
         // haze: the far wall breathes in slow banks, never flat
-        const k = (0.55 + 0.7 * noise(x + 0.5, y + 0.5)) * m;
+        const nz = noise(x + 0.5, y + 0.5);
+        const k = (0.6 + 0.6 * nz) * m;
+        const up = 1 - y / Math.max(1, p.h - 1);
+        const hz = (0.12 + 0.88 * up * Math.sqrt(up)) * (0.55 + 0.9 * nz) * m;
         const j = ((y + 1) * W + (x + 1)) * 4;
         ti.data[j] = enc(base.r * k); ti.data[j + 1] = enc(base.g * k); ti.data[j + 2] = enc(base.b * k);
-        bi.data[j] = enc(bg.r * (1 - m)); bi.data[j + 1] = enc(bg.g * (1 - m)); bi.data[j + 2] = enc(bg.b * (1 - m));
+        bi.data[j] = enc(bg.r * (1 - m)) + enc(haze.r * hz);
+        bi.data[j + 1] = enc(bg.g * (1 - m)) + enc(haze.g * hz);
+        bi.data[j + 2] = enc(bg.b * (1 - m)) + enc(haze.b * hz);
       }
     }
     // the margin ring is outside the room: no wall, just the void's colour
@@ -1754,7 +1799,9 @@ export class VaultRun {
     const g = bake.getContext('2d')!;
     const stone = ashlar().image as HTMLCanvasElement;
     const pat = g.createPattern(stone, 'repeat')!;
-    pat.setTransform(new DOMMatrix().scale((4 * ppt) / stone.width));
+    // big dressed blocks: the far wall's courses run nearly a tile tall and
+    // two or three long, a scale up from the footing's so the two never merge
+    pat.setTransform(new DOMMatrix().scale((6 * ppt) / stone.width));
     g.fillStyle = pat;
     g.fillRect(0, 0, bake.width, bake.height);
     g.imageSmoothingEnabled = true;
@@ -1818,7 +1865,7 @@ export class VaultRun {
     const poolMat = new THREE.ShaderMaterial({
       uniforms: {
         uMap: { value: map }, uSize: { value: new THREE.Vector2(W, H) }, uBg: { value: bg },
-        uBaseInv: { value: new THREE.Vector3(1 / (base.r * 0.9), 1 / (base.g * 0.9), 1 / (base.b * 0.9)) },
+        uBaseInv: { value: 1 / (0.9 * (base.r * 0.3 + base.g * 0.59 + base.b * 0.11)) },
       },
       vertexShader: `
         attribute vec4 aPool; attribute vec3 aCol;
@@ -1829,13 +1876,16 @@ export class VaultRun {
           gl_Position = projectionMatrix * viewMatrix * wp;
         }`,
       fragmentShader: `
-        uniform sampler2D uMap; uniform vec2 uSize; uniform vec3 uBg; uniform vec3 uBaseInv;
+        uniform sampler2D uMap; uniform vec2 uSize; uniform vec3 uBg; uniform float uBaseInv;
         varying vec2 vW; varying vec2 vD; varying vec3 vC;
         void main() {
           float f = max(0.0, 1.0 - dot(vD, vD));
           if (f <= 0.0) discard;
           vec3 c = texture2D(uMap, vec2((vW.x + 1.0) / uSize.x, 1.0 - (1.0 - vW.y) / uSize.y)).rgb;
-          vec3 lit = c + max(c - uBg, 0.0) * uBaseInv * vC * f * f;
+          // the light lands as its OWN colour, scaled by how much stone is
+          // there to catch it — a warm pool on a cool wall stays warm
+          float stone = dot(max(c - uBg, 0.0), vec3(0.3, 0.59, 0.11));
+          vec3 lit = c + stone * uBaseInv * vC * f * f;
           gl_FragColor = vec4(linearToOutputTexel(vec4(lit, 1.0)).rgb - linearToOutputTexel(vec4(c, 1.0)).rgb, 1.0);
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
@@ -1866,17 +1916,19 @@ export class VaultRun {
     // the lamp first, so it is never the one crowded out
     this.lamp.getWorldPosition(v);
     add(v.x, v.y, 3.2, (this.lamp.intensity / 6) * 0.1, this.lamp.color);
-    for (const sm of this.sconceMeshes) {
-      if (sm.light.intensity <= 0) continue;
+    for (let i = 0; i < this.sconceMeshes.length; i++) {
+      const sm = this.sconceMeshes[i];
       sm.light.getWorldPosition(v);
-      add(v.x, v.y, 3.8, (sm.light.intensity / 2.4) * 0.42, sm.light.color);
+      if (sm.light.intensity > 0) add(v.x, v.y, 3.8, (sm.light.intensity / 3.6) * 0.34, sm.light.color);
+      // an unlit cup's coal: a hand-span of warmth on the stone behind it
+      else if (!this.sconceLit[i] && !this.def.deadLight) add(v.x, v.y, 1.1, 0.16, EMBER_POOL);
     }
     for (const cm of this.censerMeshes) {
       cm.light.getWorldPosition(v);
-      add(v.x, v.y, 3.4, (cm.light.intensity / 2.2) * 0.36, cm.light.color);
+      add(v.x, v.y, 3.4, (cm.light.intensity / 3.1) * 0.3, cm.light.color);
     }
     for (const b of this.brazierFx) {
-      add(b.light.position.x, b.light.position.y, 2.8, (b.light.intensity / 1.1) * 0.26, b.light.color);
+      add(b.light.position.x, b.light.position.y, 2.8, (b.light.intensity / 1.6) * 0.26, b.light.color);
     }
     geo.instanceCount = n;
     pool.needsUpdate = true;
@@ -3479,13 +3531,21 @@ export class VaultRun {
             (lit ? 0.4 : 0.16) * Math.sin(u * Math.PI);
         }
       } else {
-        sm.light.intensity = lit ? 2.4 + Math.sin(this.time * 7 + i) * 0.4 : 0;
-        sm.mat.color.setHex(lit ? 0xffd9a0 : 0x342e22);
+        // a lit cup throws enough to wash the platform faces around it, not
+        // only the disc on the wall behind
+        sm.light.intensity = lit ? 3.6 + Math.sin(this.time * 7 + i) * 0.6 : 0;
+        // an unlit cup still holds a coal: a low dull ember, no flame and no
+        // throw — a warm point that asks, never one that has answered
+        sm.mat.color.setHex(lit ? 0xffd9a0 : 0x7a3410);
+        if (!lit) {
+          sm.mat.opacity = 0.55 + Math.sin(this.time * 1.7 + i * 1.9) * 0.1;
+          sm.fireMats[2].opacity = 0.14;          // the bowl warmed from inside
+        }
         const f = lit ? 1 + Math.sin(this.time * 9 + i) * 0.15 : 0.8;
         // the flame is already a teardrop in geometry, so it only breathes:
         // the old 1.5 stretch belonged to the sphere it replaced and turned
         // the cone into a spike a tile long
-        sm.flame.scale.set(0.9 * f, lit ? f * f : 0.7, 0.9 * f);
+        sm.flame.scale.set(0.9 * f, lit ? f * f : 0.4, 0.9 * f);   // unlit: a low coal, not a flame
       }
     }
     this.updateWallPools();
@@ -3587,7 +3647,7 @@ export class VaultRun {
       const swing = Math.atan2(pos.x - c.x, -(pos.y + c.y));
       cm.chain.rotation.z = swing;
       cm.parts.hanger.rotation.z = swing;
-      cm.light.intensity = 2 + Math.sin(this.time * 8 + i) * 0.4;
+      cm.light.intensity = 2.8 + Math.sin(this.time * 8 + i) * 0.5;
       cm.parts.flame.scale.set(0.8, 1.5 + Math.sin(this.time * 11 + i) * 0.2, 0.8);
 
       // the smoke off the crown, so travel has a direction at a glance
@@ -3620,7 +3680,7 @@ export class VaultRun {
     // and die a tile up
     for (const bf of this.brazierFx) {
       const breath = Math.sin(this.time * 6 + bf.x);
-      bf.light.intensity = 1.1 + breath * 0.25;
+      bf.light.intensity = 1.6 + breath * 0.35;
       bf.bedMat.opacity = 0.7 + breath * 0.18;
       for (let k = 0; k < bf.coals.length; k++) {
         (bf.coals[k].material as THREE.MeshBasicMaterial).opacity =
