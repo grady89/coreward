@@ -4,7 +4,7 @@ import { rockColor } from '../tiles';
 import { Particles } from '../../fx/particles';
 import {
   Creature, ThreatCtx, ThreatLevel, Chain, wide, lerp, clamp01,
-  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC,
+  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, rimLight,
 } from './types';
 
 // THE LONG ONES — VEIL-3's hunter tier. They hunt by VIBRATION.
@@ -66,6 +66,8 @@ export class LongOne implements Creature {
       flatShading: true, roughness: 0.42, metalness: 0.45,
       emissive: 0x1a0806, emissiveIntensity: 1,
     });
+    // ember caught on the plate edges: out of the wall it reads as a body
+    rimLight(segMat, 0xff7a3a, 0.55);
     this.body = new THREE.InstancedMesh(segGeo, segMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.body.frustumCulled = false;
@@ -88,6 +90,7 @@ export class LongOne implements Creature {
     const skullMat = new THREE.MeshStandardMaterial({
       color: 0x5a2a22, flatShading: true, roughness: 0.4, metalness: 0.5, emissive: 0x200806,
     });
+    rimLight(skullMat, 0xff7a3a, 0.55);
     const skull = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.0, 7), skullMat);
     skull.rotation.z = -Math.PI / 2;
     skull.position.x = 0.2;

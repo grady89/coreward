@@ -8,13 +8,13 @@ import { facetTexture } from './pod';
 //
 // Silhouette is helmet-dominant: the dome is 40% of the height and wider than
 // the shoulders, gapped from them by a dark neck ring. That notch is the whole
-// read at gameplay scale. Amber lives in thin bands (visor rim, belt, ear pods),
-// never in slabs. Reference: reference-art/astronaut.
+// read at gameplay scale. Amber lives in thin bands (visor rim, belt, ear pods,
+// cuffs, boot tops), never in slabs. The visor is lit from inside. Reference: reference-art/astronaut.
 
 const SUIT = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.6, metalness: 0.15 });
 const SUIT_ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.2 });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
-const VISOR = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.15, metalness: 0.5, emissive: 0x0d3a40, emissiveIntensity: 0.6 });
+const VISOR = new THREE.MeshStandardMaterial({ color: 0x103a40, roughness: 0.15, metalness: 0.45, emissive: 0x16c4c0, emissiveIntensity: 0.75 });
 const LENS = new THREE.MeshBasicMaterial({ color: 0xffe6c0, toneMapped: false });
 
 const R_DOME = 0.108;
@@ -91,7 +91,10 @@ function buildLeg(x: number): { hip: THREE.Group; knee: THREE.Group } {
   const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.052, 0.04, 10), STEEL);
   boot.position.y = -0.075;
   boot.scale.z = 1.2;
-  knee.add(calf, boot);
+  const bootTop = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.046, 0.014, 10), SUIT_ACCENT);
+  bootTop.position.y = -0.05;
+  bootTop.scale.z = 1.2;
+  knee.add(calf, boot, bootTop);
   hip.add(thigh, knee);
   return { hip, knee };
 }
@@ -106,7 +109,9 @@ function buildArm(side: number): { shoulder: THREE.Group; elbow: THREE.Group } {
   elbow.position.y = -0.055;
   const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.026, 3, 8), SUIT);
   forearm.position.y = -0.024;
-  elbow.add(forearm);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.014, 10), SUIT_ACCENT);
+  cuff.position.y = -0.05;
+  elbow.add(forearm, cuff);
   shoulder.add(upper, elbow);
   return { shoulder, elbow };
 }

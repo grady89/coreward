@@ -3,6 +3,25 @@ import * as THREE from 'three';
 // Two pooled particle systems: matte dust (normal blending) and glow sparks
 // (additive). Fixed-size buffers, zero allocation per frame.
 
+let dotTex: THREE.CanvasTexture | null = null;
+/** a soft round glow: hot core, quick falloff — sparks, motes, halos */
+export function softDot(): THREE.CanvasTexture {
+  if (dotTex) return dotTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.18, 'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.42, 'rgba(255,255,255,0.28)');
+  grad.addColorStop(0.7, 'rgba(255,255,255,0.07)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  dotTex = new THREE.CanvasTexture(cv);
+  return dotTex;
+}
+
 interface SpawnOpts {
   count?: number;
   speed?: number;
@@ -34,8 +53,9 @@ class Pool {
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
+    // glow sparks are soft round motes, not square confetti
     const mat = new THREE.PointsMaterial({
-      size, vertexColors: true, transparent: true, opacity: additive ? 0.9 : 0.85,
+      size: additive ? size * 1.9 : size, map: additive ? softDot() : null, vertexColors: true, transparent: true, opacity: additive ? 0.9 : 0.85,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       depthWrite: false, toneMapped: false,
     });

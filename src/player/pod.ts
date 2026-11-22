@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
 import { ACTIVE, worldById } from '../world/worlds';
+import { softDot } from '../fx/particles';
 
 // The mining pod: hero object built from primitives, two-tone dusty cream +
 // amber accents, teal visor, animated drill and thruster flames, headlamp.
@@ -25,10 +26,15 @@ export interface RigTiers {
 const FIN_WARM = new THREE.Color(0xff9a3c);
 const FIN_HOT = new THREE.Color(0xff4d29);
 
-const HULL = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.55, metalness: 0.25 });
-const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3 });
+// flat-shaded, low-segment shells: the hull reads as rows of armour plates
+// catching the lamp facet by facet, not as a glossy ball
+const HULL_SEGS = 12;
+const HULL_RINGS = 8;
+const HULL = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.72, metalness: 0.1, flatShading: true });
+const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3, flatShading: true });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
-const GLASS = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.1, metalness: 0.6, emissive: 0x0d3a40, emissiveIntensity: 0.5 });
+// the visor is the pod's eye: lit from inside, so it reads at any distance
+const GLASS = new THREE.MeshStandardMaterial({ color: 0x103a40, roughness: 0.1, metalness: 0.5, emissive: 0x16c4c0, emissiveIntensity: 0.8 });
 
 /**
  * The Diamondplate quilt (reference-art/cosmetics): rotated-square cells,
@@ -174,7 +180,7 @@ export class Pod {
     if (tiers) this.tiers = { ...tiers };
     const HULL = this.hullMat, STEEL = this.steelMat;
     // body
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 24, 18), HULL);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, HULL_SEGS, HULL_RINGS), HULL);
     body.scale.set(1, 1.06, 0.92);
     this.group.add(body);
 
@@ -185,6 +191,13 @@ export class Pod {
     visor.position.set(0, 0.1, 0.24);
     visor.scale.set(1, 0.82, 0.7);
     this.group.add(visor);
+    // a soft halo over the visor: the glow spilling past the glass
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.85), new THREE.MeshBasicMaterial({
+      map: softDot(), color: 0x16c4c0, transparent: true, opacity: 0.2,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }));
+    halo.position.set(0, 0.1, 0.47);
+    this.group.add(halo);
 
     // side intakes
     for (const s of [-1, 1]) {
@@ -291,13 +304,16 @@ export class Pod {
 
     // ---- HULL: the accent belly band widens per tier, gains plate seams ----
     const bandTop = Math.PI * (0.62 - t.hull * 0.03);
+    // wide enough that even its own facet planes (0.445·cos(π/12) ≈ 0.43)
+    // clear the hull's corners: the band sits on the plates as a lip of
+    // armour instead of z-fighting through them
     const belly = new THREE.Mesh(
-      new THREE.SphereGeometry(0.43, 24, 12, 0, Math.PI * 2, bandTop, Math.PI - bandTop), ACCENT);
+      new THREE.SphereGeometry(0.445, HULL_SEGS, 5, 0, Math.PI * 2, bandTop, Math.PI - bandTop), ACCENT);
     belly.scale.set(1, 1.06, 0.92);
     this.para.add(belly);
     for (let j = 0; j < t.hull; j++) {
       const seam = new THREE.Mesh(
-        new THREE.SphereGeometry(0.442, 24, 1, 0, Math.PI * 2, bandTop + 0.06 + j * 0.085, 0.035), ACCENT);
+        new THREE.SphereGeometry(0.452, HULL_SEGS, 1, 0, Math.PI * 2, bandTop + 0.06 + j * 0.085, 0.035), ACCENT);
       seam.scale.set(1, 1.06, 0.92);
       this.para.add(seam);
     }
@@ -435,8 +451,8 @@ export class Pod {
     this.hullMat.map = rig.facet ? this.facetTex : this.camoTex;
     this.hullMat.color.setHex(rig.camo || rig.facet ? 0xffffff : rig.hull);
     // the quilt is chrome; everything else is painted steel
-    this.hullMat.metalness = rig.facet ? 0.85 : 0.25;
-    this.hullMat.roughness = rig.facet ? 0.22 : 0.55;
+    this.hullMat.metalness = rig.facet ? 0.85 : 0.1;
+    this.hullMat.roughness = rig.facet ? 0.22 : 0.72;
     if (!this.glints.length) {
       const gtex = glintTexture();
       for (const [ox, oy, sc] of [

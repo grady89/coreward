@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { FlareField } from './flares';
+import { softDot } from '../../fx/particles';
 import { Creature, ThreatCtx, ThreatLevel, air, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC } from './types';
 
 // GLIMMERFLIES — VEIL-3's swarm tier. Keyed on LIGHT.
 //
-// Not a cloud of dots: a murmuration. Each fly is a sliver of glass that only
-// shows itself when it turns edge-on to your lamp, so a resting swarm reads as
-// stray sparks in the dark. Lit, the ring collapses inward, then unfolds into
+// Not a cloud of dots: a murmuration. Each fly is a soft mote of light that
+// only flares when it catches your lamp, so a resting swarm reads as stray
+// sparks in the dark. Lit, the ring collapses inward, then unfolds into
 // a ribbon that pours toward the lamp. Go dark and they lose you within two
 // seconds — but they do not go home. They hang where they lost you, dim,
 // and wait for the light to come back.
@@ -52,13 +53,16 @@ export class Glimmerflies implements Creature {
   readonly swarms: Swarm[] = [];
   private mesh: THREE.InstancedMesh;
   private glow: THREE.PointLight;
+  /** the hunting swarm's light on the rock: one soft additive quad, no extra light */
+  private wash: THREE.Mesh;
+  private washMat: THREE.MeshBasicMaterial;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField) {
-    // a sliver: long, thin, nearly flat — a wing seen from the side
-    const geo = new THREE.OctahedronGeometry(0.16, 0);
-    geo.scale(1, 0.38, 0.12);
+    // a mote: a soft round glow facing the camera, drawn out a little along
+    // its flight so a pouring swarm reads as a ribbon of light
+    const geo = new THREE.PlaneGeometry(0.6, 0.6);
     const mat = new THREE.MeshBasicMaterial({
-      toneMapped: false, transparent: true, opacity: 0.95,
+      map: softDot(), toneMapped: false, transparent: true, opacity: 0.95,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_FLIES);
@@ -69,6 +73,15 @@ export class Glimmerflies implements Creature {
     scene.add(this.mesh);
     this.glow = new THREE.PointLight(0xffe08a, 0, 9, 1.8);
     scene.add(this.glow);
+    this.washMat = new THREE.MeshBasicMaterial({
+      map: softDot(), transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
+    // just proud of the block faces, so the spill lands on rock as well as air
+    this.wash = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.washMat);
+    this.wash.position.z = 0.56;
+    this.wash.visible = false;
+    scene.add(this.wash);
     for (let i = 0; i < MAX_SWARMS; i++) {
       this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, dazedT: 0, woke: false });
     }
@@ -81,6 +94,8 @@ export class Glimmerflies implements Creature {
     for (const s of this.swarms) s.alive = false;
     this.mesh.count = 0;
     this.glow.intensity = 0;
+    this.washMat.opacity = 0;
+    this.wash.visible = false;
     this.menace = 0;
   }
 
@@ -298,12 +313,13 @@ export class Glimmerflies implements Creature {
         ctx.drain(0.5 * dmgMul * dt);
       }
 
-      // the sliver flies along its velocity; a resting fly barely shows
+      // the mote stretches along its velocity; a resting fly barely shows
       tmpP.set(f.x, f.y, 0.25);
       tmpE.set(0, 0, Math.atan2(f.vy, f.vx));
       tmpQ.setFromEuler(tmpE);
-      const flap = 0.85 + Math.abs(Math.sin(f.phase * 9)) * 0.35;
-      tmpS.set(1, flap, 1);
+      const flap = 0.85 + Math.abs(Math.sin(f.phase * 9)) * 0.3;
+      const stretch = 1 + Math.min(0.7, Math.hypot(f.vx, f.vy) * 0.12);
+      tmpS.set(stretch * flap, flap / Math.sqrt(stretch), 1);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.mesh.setMatrixAt(n, tmpM);
       const bright = f.stunT > 0 ? 0.14 : s.alerted ? 1.25 : (f.glint > 0 ? 1.1 : 0.32);
@@ -317,17 +333,28 @@ export class Glimmerflies implements Creature {
       if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     }
 
+    let washTo = 0;
     if (anyAlert && n > 0) {
-      let cx = 0, cy = 0, c = 0;
+      let cx = 0, cy = 0, c = 0, spread = 0;
       for (const f of this.flies) if (this.swarms[f.swarm]?.alerted) { cx += f.x; cy += f.y; c++; }
       if (c > 0) {
-        this.glow.position.set(cx / c, cy / c, 0.4);
+        cx /= c; cy /= c;
+        for (const f of this.flies) if (this.swarms[f.swarm]?.alerted) spread += Math.hypot(f.x - cx, f.y - cy);
+        this.glow.position.set(cx, cy, 0.4);
         this.glow.intensity = 7;
         this.glow.color.setHex(ACTIVE.swarm.hunting);
+        // the wash follows the swarm and widens as it unfolds
+        const r = 6 + Math.min(4, (spread / c) * 2.2);
+        this.wash.position.x = cx; this.wash.position.y = cy;
+        this.wash.scale.set(r, r, 1);
+        this.washMat.color.setHex(ACTIVE.swarm.hunting);
+        washTo = 0.42;
       }
     } else {
       this.glow.intensity = 0;
     }
+    this.washMat.opacity += (washTo - this.washMat.opacity) * Math.min(1, dt * 4);
+    this.wash.visible = this.washMat.opacity > 0.005;
     const target = anyAlert ? Math.max(0, 1 - closest / NOTICE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);
   }

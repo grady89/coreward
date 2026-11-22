@@ -3,7 +3,7 @@ import { Terrain } from '../terrain';
 import { T } from '../tiles';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, Chain, air, limb, lerp, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC } from './types';
+import { Creature, ThreatCtx, ThreatLevel, Chain, air, limb, lerp, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, rimLight } from './types';
 
 // SHELLBACKS — MAELIS-6's builder tier. Keyed on SPACE, from the other side.
 //
@@ -51,6 +51,8 @@ export class Shellbacks implements Creature {
   private plates: THREE.InstancedMesh;
   private legs: THREE.InstancedMesh;
   private feelers: THREE.InstancedMesh;
+  /** a bead of sea-light on every plate's crown: the dorsal line that says "alive" */
+  private beads: THREE.InstancedMesh;
   private lights: THREE.PointLight[] = [];
   private tmpO = new THREE.Object3D();
 
@@ -60,6 +62,8 @@ export class Shellbacks implements Creature {
     plateGeo.rotateX(-Math.PI / 2);
     plateGeo.scale(1, 0.72, 0.55);
     const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.28, metalness: 0.55, flatShading: true });
+    // MAELIS sea-glow on the shell's edges: an isopod, not a crate in the dark
+    rimLight(plateMat, 0x5af0d8, 0.85);
     this.plates = new THREE.InstancedMesh(plateGeo, plateMat, MAX * SEGS);
     this.plates.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.plates.frustumCulled = false;
@@ -69,6 +73,7 @@ export class Shellbacks implements Creature {
 
     const legGeo = new THREE.BoxGeometry(1, 1, 1);
     const legMat = new THREE.MeshStandardMaterial({ color: 0xcfc2dc, roughness: 0.5, metalness: 0.3 });
+    rimLight(legMat, 0x5af0d8, 0.5);
     this.legs = new THREE.InstancedMesh(legGeo, legMat, MAX * LEGS);
     this.legs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.legs.frustumCulled = false;
@@ -80,6 +85,15 @@ export class Shellbacks implements Creature {
     this.feelers.frustumCulled = false;
     this.feelers.count = 0;
     scene.add(this.feelers);
+
+    const beadGeo = new THREE.OctahedronGeometry(0.075, 0);
+    const beadMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+    this.beads = new THREE.InstancedMesh(beadGeo, beadMat, MAX * SEGS);
+    this.beads.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.beads.frustumCulled = false;
+    this.beads.count = 0;
+    this.beads.setColorAt(0, tmpC.setHex(0xffffff));
+    scene.add(this.beads);
 
     for (let i = 0; i < MAX; i++) {
       const l = new THREE.PointLight(0xe8dcff, 0, 4.5, 1.8);
@@ -96,7 +110,7 @@ export class Shellbacks implements Creature {
   reset(): void {
     this.pendingKill = 0;
     for (const b of this.backs) b.alive = false;
-    this.plates.count = 0; this.legs.count = 0; this.feelers.count = 0;
+    this.plates.count = 0; this.legs.count = 0; this.feelers.count = 0; this.beads.count = 0;
     for (const l of this.lights) l.intensity = 0;
     this.sealed = 0;
   }
@@ -343,6 +357,15 @@ export class Shellbacks implements Creature {
         // mother-of-pearl: hue slides along the body and with time
         tmpC.setHSL((0.72 + t * 0.14 + iris) % 1, 0.32, 0.86);
         this.plates.setColorAt(nP, tmpC);
+        // the bead rides the plate's crown; a pulse runs head to tail, and a
+        // curled ball banks its light
+        tmpP.z = 0.2 + 0.2 * w + 0.02;
+        tmpS.set(1, 1, 1);
+        tmpM.compose(tmpP, tmpQ, tmpS);
+        this.beads.setMatrixAt(nP, tmpM);
+        const pulse = 0.55 + 0.45 * Math.max(0, Math.sin(time * 3 - i * 0.9));
+        tmpC.setHex(0x3ce6c8).multiplyScalar((0.45 + pulse * 0.75) * (1 - b.curl * 0.6));
+        this.beads.setColorAt(nP, tmpC);
         nP++;
 
         // legs: one pair per plate, a wave running head→tail
@@ -373,8 +396,10 @@ export class Shellbacks implements Creature {
         }
       }
     }
-    this.plates.count = nP; this.legs.count = nL; this.feelers.count = nF;
+    this.plates.count = nP; this.legs.count = nL; this.feelers.count = nF; this.beads.count = nP;
     if (nP > 0) {
+      this.beads.instanceMatrix.needsUpdate = true;
+      if (this.beads.instanceColor) this.beads.instanceColor.needsUpdate = true;
       this.plates.instanceMatrix.needsUpdate = true;
       if (this.plates.instanceColor) this.plates.instanceColor.needsUpdate = true;
       this.legs.instanceMatrix.needsUpdate = true;

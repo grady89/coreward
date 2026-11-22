@@ -188,3 +188,26 @@ export function limb(mesh: THREE.Object3D, ax: number, ay: number, az: number, b
 export const lerp = (a: number, b: number, f: number): number => a + (b - a) * f;
 export const clamp01 = (v: number): number => v < 0 ? 0 : v > 1 ? 1 : v;
 export const ease = (v: number): number => v * v * (3 - 2 * v);
+
+/**
+ * A fresnel rim folded into a lit material's emissive: faces turning away
+ * from the camera glow in `color`, so a creature's silhouette separates from
+ * dark rock without lifting its lit faces. One shared program for every
+ * creature (the colour is a per-material uniform); the meshes sit in the
+ * scene from construction, so the boot prewarm compiles it.
+ */
+export function rimLight(mat: THREE.MeshStandardMaterial, color: number, strength: number): { value: THREE.Color } {
+  const u = { value: new THREE.Color(color).multiplyScalar(strength) };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uRim = u;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  float rimNdv = saturate(abs(dot(normalize(vViewPosition), normal)));
+  totalEmissiveRadiance += uRim * pow(1.0 - rimNdv, 2.2);
+}`);
+  };
+  mat.customProgramCacheKey = () => 'fauna-rim';
+  return u;
+}
