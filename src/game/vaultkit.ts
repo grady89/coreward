@@ -201,15 +201,18 @@ export function ashlar(): THREE.Texture {
 
 let _dressed: THREE.Texture | null = null;
 /**
- * The face of one footing tile: two courses in a running bond. Only the LEFT
- * and TOP joints are cut, so neighbouring tiles share one joint instead of
- * doubling it, and the lower course's joint sits half a tile over — a run of
- * tiles reads as laid blocks, not a grid. Near-white, so the per-instance
- * colour (and the dark ramp in it) still sets the value.
+ * The face of a 2x2-tile patch of footing: big dressed blocks of mixed size —
+ * a squat square, a tall quoin, a lintel and two short stones — so the
+ * footing's coursing is chunky and irregular where the back wall's is long
+ * and level, and the two never read as one plane. Each tile samples its
+ * quarter of the patch (the instance's aCell); a patch may be mirrored.
+ * Joints run half-width round the patch's edge so a mirrored neighbour still
+ * meets in one joint. Near-white with a few steps of value per block, so the
+ * per-instance colour (and the dark ramp in it) still sets the value.
  */
 export function dressedFace(): THREE.Texture {
   if (_dressed) return _dressed;
-  const S = 128, J = 3, half = S / 2;
+  const S = 256, J = 3;
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const g = c.getContext('2d')!;
@@ -221,24 +224,33 @@ export function dressedFace(): THREE.Texture {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  // the two courses, each a shade apart so the bond shows without the joint
-  g.fillStyle = 'rgb(236,234,230)'; g.fillRect(0, 0, S, half);
-  g.fillStyle = 'rgb(222,220,217)'; g.fillRect(0, half, S, half);
-  // tooling and wear
-  for (let s = 0; s < 22; s++) {
-    g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
-    g.fillRect(rnd() * S, rnd() * S, 4 + rnd() * 18, 2 + rnd() * 4);
-  }
-  // each course's arris: light just under its top joint, shade over the next
-  for (const y of [0, half]) {
-    g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(0, y + J, S, 3);
-    g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(0, y + half - 6, S, 6);
-  }
-  // the joints: top of each course, and a head joint per course, staggered
-  g.fillStyle = 'rgb(150,146,140)';
-  g.fillRect(0, 0, S, J); g.fillRect(0, half - 1, S, J);
-  g.fillRect(0, 0, J, half);
-  g.fillRect(half, half, J, half);
+  // the mortar first; the blocks are laid over it
+  g.fillStyle = 'rgb(128,124,118)';
+  g.fillRect(0, 0, S, S);
+  const blocks: [number, number, number, number][] = [
+    [0, 0, 150, 92], [150, 0, 256, 92],
+    [0, 92, 98, 256], [98, 92, 256, 168],
+    [98, 168, 186, 256], [186, 168, 256, 256],
+  ];
+  const vals = [236, 214, 224, 244, 208, 230];
+  blocks.forEach(([x0, y0, x1, y1], n) => {
+    const a = x0 + (x0 === 0 ? J / 2 : J), b = x1 - (x1 === S ? J / 2 : J);
+    const t = y0 + (y0 === 0 ? J / 2 : J), u = y1 - (y1 === S ? J / 2 : J);
+    const v = vals[n];
+    g.fillStyle = `rgb(${v},${v - 2},${v - 5})`;
+    g.fillRect(a, t, b - a, u - t);
+    // the dressed arris: a lit top edge and left edge, a shaded foot and
+    // right side — each block a solid with a face, not a painted panel
+    g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(a, t, b - a, 4);
+    g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(a, t, 3, u - t);
+    g.fillStyle = 'rgba(0,0,0,0.20)'; g.fillRect(a, u - 7, b - a, 7);
+    g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(b - 5, t, 5, u - t);
+    // tooling and wear, sparse: big stones, few marks
+    for (let s = 0; s < 5; s++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
+      g.fillRect(a + rnd() * (b - a - 20), t + 6 + rnd() * (u - t - 16), 6 + rnd() * 18, 2 + rnd() * 4);
+    }
+  });
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   _dressed = t;

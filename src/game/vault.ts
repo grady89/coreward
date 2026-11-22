@@ -652,14 +652,21 @@ export class VaultRun {
     const masonryGeo = box.clone();
     const lipAt = new Float32Array(count);
     masonryGeo.setAttribute('aLip', new THREE.InstancedBufferAttribute(lipAt, 1));
+    // which quarter of the 2x2 dressed patch this tile shows, and whether
+    // its patch is mirrored (x, y, flip)
+    const cellAt = new Float32Array(count * 3);
+    masonryGeo.setAttribute('aCell', new THREE.InstancedBufferAttribute(cellAt, 3));
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.6, metalness: 0.2, flatShading: true, map: dressedFace(),
     });
     mat.onBeforeCompile = (sh): void => {
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute float aLip;\nvarying float vLip;\nvarying float vLipY;')
+        .replace('#include <common>',
+          '#include <common>\nattribute float aLip;\nattribute vec3 aCell;\nvarying float vLip;\nvarying float vLipY;')
         .replace('#include <begin_vertex>',
-          '#include <begin_vertex>\nvLip = aLip * step(0.5, normal.z);\nvLipY = uv.y;');
+          '#include <begin_vertex>\nvLip = aLip * step(0.5, normal.z);\nvLipY = uv.y;')
+        .replace('#include <uv_vertex>',
+          '#include <uv_vertex>\nvMapUv = vec2((mix(uv.x, 1.0 - uv.x, aCell.z) + aCell.x) * 0.5, (uv.y + 1.0 - aCell.y) * 0.5);');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vLip;\nvarying float vLipY;')
         .replace('#include <emissivemap_fragment>',
@@ -759,6 +766,13 @@ export class VaultRun {
         const above = y > 0 ? (y - 1) * p.w + x : -1;
         const walk = above >= 0 && !p.solid[above] && !p.kill[above];
         lipAt[k] = walk ? Math.min(1, b / 0.9) * (p.dry[i] ? 0.55 : 1) : 0;
+        // the patches themselves are laid in a running bond, a tile over
+        // every second pair of rows, so their joints never line up in a grid
+        const py = y >> 1, sx = x + (py & 1), px = sx >> 1;
+        const flip = ((Math.imul(px, 73856093) ^ Math.imul(py, 19349663)) >>> 0) % 3 === 0 ? 1 : 0;
+        cellAt[k * 3] = flip ? 1 - (sx & 1) : sx & 1;
+        cellAt[k * 3 + 1] = y & 1;
+        cellAt[k * 3 + 2] = flip;
         k++;
       }
     }
@@ -862,7 +876,9 @@ export class VaultRun {
       // sanctum — never a floating head with its post sunk in another depth
       parts.group.position.set(gx, gy, mount.kind === 'wall' ? 0.3 : -0.35);
       const light = new THREE.PointLight(dead ? 0x9db8ff : 0xffd9a0, 0, 8, 1.7);
-      light.position.set(gx + parts.cupX, gy + SCONCE_FLAME_Y, 0.35);
+      // stood out in front of the play plane, so the light falls ON the faces of
+      // the blocks round the cup and not only across them
+      light.position.set(gx + parts.cupX, gy + SCONCE_FLAME_Y, 1.05);
       this.scene.add(parts.group, light);
       this.sconceMeshes.push({
         flame: parts.flame, light, mat: parts.flameMat,
@@ -1092,7 +1108,7 @@ export class VaultRun {
       chain.position.set(c.x, -c.y, 0.2);
       const parts = buildCenser(CENSER_TOP);
       const light = new THREE.PointLight(0xffd9a0, 2.8, 7, 1.7);
-      light.position.y = CENSER_TOP - 0.4;
+      light.position.set(0, CENSER_TOP - 0.4, 0.7);
       parts.bob.add(light);
       const puffs: THREE.Mesh[] = [];
       for (let i = 0; i < 5; i++) {
@@ -1116,7 +1132,7 @@ export class VaultRun {
       const parts = buildBrazier(-(cy - b.y) + 0.1);
       parts.group.position.set(b.x + 0.5, -(b.y + 0.5), 0.3);
       const light = new THREE.PointLight(0xffb060, 1.6, 5, 1.7);
-      light.position.set(b.x + 0.5, -(b.y + 0.5) + 0.2, 0.5);
+      light.position.set(b.x + 0.5, -(b.y + 0.5) + 0.2, 1.0);
       const embers: THREE.Mesh[] = [];
       for (let k = 0; k < 5; k++) {
         const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), glowMat(0xffc078, 0.7));
@@ -1758,6 +1774,32 @@ export class VaultRun {
       const c = Math.max(0, Math.min(1, v));
       return Math.round((c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055) * 255);
     };
+    // WHERE THE AIR IS LIT. The haze is light hanging in the air, so it is
+    // thickest round the things that burn and thins away from them: every
+    // fixture throws a soft bank (a sconce a weaker one: it is a promise of
+    // light until it is lit), the room's middle holds a little of all of
+    // them, and the corners and the far edges fall off toward the dark.
+    const fix: { x: number; y: number; w: number; r: number }[] = [];
+    for (const s of p.sconces) fix.push({ x: s.x + 0.5, y: s.y + 0.5, w: 0.6, r: 5 });
+    for (const c of this.def.censers ?? []) fix.push({ x: c.x, y: c.y + c.len * 0.85, w: 1, r: 5.5 });
+    for (const b of p.braziers) fix.push({ x: b.x + 0.5, y: b.y + 0.5, w: 0.85, r: 4.6 });
+    for (const b of this.def.beams ?? []) fix.push({ x: b.x, y: b.y, w: 0.7, r: 4.6 });
+    fix.push({ x: p.entry.x + 0.5, y: p.entry.y, w: 0.75, r: 4.6 });
+    fix.push({ x: p.master.x + 0.5, y: p.master.y, w: 0.7, r: 5.5 });
+    // a gravity zone keeps the wall behind it DARK, and the air just round
+    // it a shade dark too, so the tint and its chevrons are the light there
+    const zoneNear = new Uint8Array(p.w * p.h);
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+      if (!p.gravity[y * p.w + x]) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx >= 0 && yy >= 0 && xx < p.w && yy < p.h) zoneNear[yy * p.w + xx] = 1;
+      }
+    }
+    const ss = (a: number, b: number, t: number): number => {
+      const u = Math.max(0, Math.min(1, (t - a) / (b - a)));
+      return u * u * (3 - 2 * u);
+    };
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         const i = y * p.w + x;
@@ -1767,13 +1809,26 @@ export class VaultRun {
           const d = distDark[i];
           m = d === 0 ? 0 : d === 1 ? 0.2 : d === 2 ? 0.55 : 1;
         }
-        if (p.gravity[i]) m *= 0.45;
+        if (p.gravity[i]) m *= 0.26;
+        else if (zoneNear[i]) m *= 0.72;
         mAt[i] = m;
+        // the light in the air here: the fixtures' banks, the middle's share,
+        // the room's rim and corners falling away
+        const cx = x + 0.5, cy = y + 0.5;
+        let lit = 0;
+        for (const f of fix) {
+          const dx = cx - f.x, dy = cy - f.y;
+          lit += f.w * Math.exp(-(dx * dx + dy * dy) / (2 * f.r * f.r));
+        }
+        lit = 1 - Math.exp(-lit * 1.3);
+        const mx = 1 - Math.abs((2 * cx) / p.w - 1), my = 1 - Math.abs((2 * cy) / p.h - 1);
+        const rim = ss(0, 0.32, mx) * ss(0, 0.3, my);
+        const air = (0.26 + 0.3 * Math.min(1, Math.min(mx, my) * 1.6)) * (0.5 + 0.5 * rim) + 0.78 * lit;
         // haze: the far wall breathes in slow banks, never flat
         const nz = noise(x + 0.5, y + 0.5);
-        const k = (0.6 + 0.6 * nz) * m;
+        const k = (0.6 + 0.6 * nz) * m * (0.56 + 0.44 * Math.min(1.2, air));
         const up = 1 - y / Math.max(1, p.h - 1);
-        const hz = (0.12 + 0.88 * up * Math.sqrt(up)) * (0.55 + 0.9 * nz) * m;
+        const hz = (0.3 + 0.7 * up * Math.sqrt(up)) * (0.6 + 0.8 * nz) * m * air;
         const j = ((y + 1) * W + (x + 1)) * 4;
         ti.data[j] = enc(base.r * k); ti.data[j + 1] = enc(base.g * k); ti.data[j + 2] = enc(base.b * k);
         bi.data[j] = enc(bg.r * (1 - m)) + enc(haze.r * hz);
@@ -1881,11 +1936,13 @@ export class VaultRun {
         void main() {
           float f = max(0.0, 1.0 - dot(vD, vD));
           if (f <= 0.0) discard;
+          // a hot core and a long soft shoulder: a wash on the stone, not a disc
+          float w = f * f * f * 0.75 + f * 0.22;
           vec3 c = texture2D(uMap, vec2((vW.x + 1.0) / uSize.x, 1.0 - (1.0 - vW.y) / uSize.y)).rgb;
           // the light lands as its OWN colour, scaled by how much stone is
           // there to catch it — a warm pool on a cool wall stays warm
           float stone = dot(max(c - uBg, 0.0), vec3(0.3, 0.59, 0.11));
-          vec3 lit = c + stone * uBaseInv * vC * f * f;
+          vec3 lit = c + stone * uBaseInv * vC * w;
           gl_FragColor = vec4(linearToOutputTexel(vec4(lit, 1.0)).rgb - linearToOutputTexel(vec4(c, 1.0)).rgb, 1.0);
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
@@ -1915,20 +1972,20 @@ export class VaultRun {
     };
     // the lamp first, so it is never the one crowded out
     this.lamp.getWorldPosition(v);
-    add(v.x, v.y, 3.2, (this.lamp.intensity / 6) * 0.1, this.lamp.color);
+    add(v.x, v.y, 3.6, (this.lamp.intensity / 6) * 0.1, this.lamp.color);
     for (let i = 0; i < this.sconceMeshes.length; i++) {
       const sm = this.sconceMeshes[i];
       sm.light.getWorldPosition(v);
-      if (sm.light.intensity > 0) add(v.x, v.y, 3.8, (sm.light.intensity / 3.6) * 0.34, sm.light.color);
+      if (sm.light.intensity > 0) add(v.x, v.y, 5.4, (sm.light.intensity / 3.6) * 0.4, sm.light.color);
       // an unlit cup's coal: a hand-span of warmth on the stone behind it
-      else if (!this.sconceLit[i] && !this.def.deadLight) add(v.x, v.y, 1.1, 0.16, EMBER_POOL);
+      else if (!this.sconceLit[i] && !this.def.deadLight) add(v.x, v.y, 1.3, 0.16, EMBER_POOL);
     }
     for (const cm of this.censerMeshes) {
       cm.light.getWorldPosition(v);
-      add(v.x, v.y, 3.4, (cm.light.intensity / 3.1) * 0.3, cm.light.color);
+      add(v.x, v.y, 4.6, (cm.light.intensity / 3.1) * 0.3, cm.light.color);
     }
     for (const b of this.brazierFx) {
-      add(b.light.position.x, b.light.position.y, 2.8, (b.light.intensity / 1.6) * 0.26, b.light.color);
+      add(b.light.position.x, b.light.position.y, 3.8, (b.light.intensity / 1.6) * 0.3, b.light.color);
     }
     geo.instanceCount = n;
     pool.needsUpdate = true;
@@ -2123,7 +2180,7 @@ export class VaultRun {
           float s = fract((along + abs(ac) * 0.75 - uTime * 1.1) / 1.5);
           float chev = smoothstep(0.0, 0.05, s) * (1.0 - smoothstep(0.09, 0.16, s));
           chev *= 1.0 - smoothstep(0.30, 0.40, abs(ac));
-          float a = zone * (0.11 + 0.09 * near) + chev * (zone * 0.34 + (1.0 - zone) * 0.42 * near);
+          float a = zone * (0.17 + 0.1 * near) + chev * (zone * 0.5 + (1.0 - zone) * 0.62 * near);
           vec2 f = vec2(fract(vW.x), fract(row));
           float e = 0.0;
           e = max(e, edgeTo(c, codeAt(t + vec2(-1.0, 0.0)), f.x));
