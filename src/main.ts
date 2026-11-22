@@ -869,7 +869,10 @@ class Game {
     // a world you have never dug is unsurveyed, no matter how deep you have
     // been elsewhere — the fog is per site, not per driller
     this.state.worldBestRow = ws?.bestRow ?? 0;
-    this.buildWorld(ws?.seed ?? ((Math.random() * 0xffffffff) >>> 0));
+    // dev harness: ?seed=N pins a never-dug world's seed, so screenshot
+    // passes (scripts/visualshots.mjs) see the same rock build after build
+    const devSeed = Number(new URLSearchParams(location.search).get('seed'));
+    this.buildWorld(ws?.seed ?? (devSeed > 0 ? devSeed >>> 0 : (Math.random() * 0xffffffff) >>> 0));
     if (ws) {
       this.terrain.applyDug(ws.dug);
       // shafts that had skinned over stay skinned over — and stay rammable

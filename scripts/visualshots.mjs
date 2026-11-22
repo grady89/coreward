@@ -18,6 +18,7 @@ const OUT = args.find(a => !a.startsWith('--')) ?? 'shots';
 const PORT = opt('port', '4190');
 const ONLY = opt('only', '');
 const URL = `http://localhost:${PORT}`;
+const SEED = 'seed=12345'; // pins the world seed (src/main.ts dev harness)
 mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -74,7 +75,7 @@ async function shot(page, name, { vault = false, settle = 0.4 } = {}) {
 }
 
 async function bootPlay(page, query = '') {
-  await page.goto(URL + '/' + query);
+  await page.goto(URL + '/' + (query ? query + '&' : '?') + SEED);
   await page.waitForFunction(() => !!window.__game, null, { timeout: 60000 });
   if (!query) {
     await page.evaluate(() => localStorage.clear());
@@ -124,7 +125,7 @@ const want = (...names) => !ONLY || names.some(n => n.includes(ONLY));
 // ------------------------------------------------------------ title / surface / HUD / shop / EVA
 if (want('title', 'veil3-surface', 'hud-play', 'shop-trade', 'pod-pilot-eva')) {
   const page = await newPage();
-  await page.goto(URL);
+  await page.goto(`${URL}/?${SEED}`);
   await page.waitForFunction(() => !!window.__game && !!document.querySelector('#t-new'), null, { timeout: 60000 });
   await page.evaluate(() => localStorage.clear());
   await page.reload();
@@ -243,7 +244,7 @@ for (const w of WORLDS) {
 for (const f of ['glimmerflies', 'warden', 'stillwalkers', 'shellbacks']) {
   if (!want(`creature-${f}`)) continue;
   const page = await newPage();
-  await page.goto(`${URL}/?fauna=${f}`);
+  await page.goto(`${URL}/?fauna=${f}&${SEED}`);
   await page.waitForFunction(() => window.__game?.mode === 'play', null, { timeout: 90000 });
   // the sandbox stages beside magma and live hazards: keep the pod topped up while it primes
   await page.evaluate(async () => {
