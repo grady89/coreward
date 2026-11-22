@@ -8,7 +8,7 @@ Never touch the main checkout, never merge, never push, never stop servers on po
 - `C:\Users\grady\Claude Projects\Mining\reference-art\visual-pass\ART-DIRECTION.md` (the rubric) and the reference images it names in that folder.
 - For ore work also `design-review/visual-pass-2026-11-22/MINERALS-DIRECTION.md` and `C:\Users\grady\Claude Projects\Mining\reference-art\minerals\<ore>\`.
 - Prior findings: `C:\Users\grady\Claude Projects\Mining\design-review\review-2026-11-20\visuals-findings.md` (read the parts relevant to your fix; note the fissure-burial bug #1 is already fixed).
-- Reviewer notes for this pass: `design-review/visual-pass-2026-11-22/r0/reviews.json` (and later rounds' reviews), category key named in your task.
+- Reviewer notes for this pass: `design-review/visual-pass-2026-11-22/r0/reviews.json` and the latest paired round `rN/reviews.json` + `rN/blind-key.json` (the key says which of A/B was the candidate — the candidate is the current best). Category key named in your task.
 - `design-review/visual-pass-2026-11-22/REJECTED.md` if it exists: never retry an approach listed there.
 
 ## Hard limits
@@ -24,9 +24,9 @@ Never touch the main checkout, never merge, never push, never stop servers on po
 ## How to check your work
 - `npx tsc --noEmit -p .` and `npm run build` must pass.
 - A preview server is already running on port 4190 serving `dist/` (rebuild and it serves the new build). Do not start another on 4190.
-- Shots: `node scripts/visualshots.mjs <your scratch dir> --port=4190 --only=<substring>` (e.g. `--only=ore-`, `--only=veil3-`, `--only=vault-debt`). Look at them with the Read tool and compare to `design-review/visual-pass-2026-11-22/<best round>/<same shot>.png`. Each run of the whole list takes ~18 min, so use `--only`.
+- Shots: `node scripts/visualshots.mjs <your scratch dir> --port=4190 --only=<substring>` (e.g. `--only=ore-`, `--only=veil3-`, `--only=vault-debt`). Look at them with the Read tool and compare to the current best shots (named in your task). Shots run on the hardware GPU (D3D11) and take seconds per subset; a whole-list run is a few minutes. Still prefer `--only`. Never compare against shots from a different renderer: best shots taken on SwiftShader differ slightly; re-shoot the best build's subset if you need an exact comparison.
 - Perf: `<dir>/stats.json` has draw calls and triangles per shot; compare with the baseline in `design-review/visual-pass-2026-11-22/r0/stats.json`.
-- Do NOT run the vault route suites; the coordinator runs the full gate.
+- Do NOT run the vault route suites; the coordinator runs the gate. If you touch src/game/vault*.ts, say so: the coordinator then runs the vault play-throughs.
 
 ## Finish
 - Commit your fix as ONE commit on `visuals` containing only your source changes (not shots): `git add <files>; git commit -m "<what>\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`.

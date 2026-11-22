@@ -21,13 +21,19 @@ const URL = `http://localhost:${PORT}`;
 const SEED = 'seed=12345'; // pins the world seed (src/main.ts dev harness)
 mkdirSync(OUT, { recursive: true });
 
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+// Shots run on the hardware GPU (D3D11 via ANGLE): ~6x faster than SwiftShader.
+// Never compare shots from different renderers. Do NOT use channel:'chromium'
+// (it picks the integrated GPU). The gate suites still run on SwiftShader.
+const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const stats = {};
 const errors = [];
 const T = { ROCK: 2, LAVA: 7, FUNGUS: 9, COPPER: 10, IRON: 11, SILVER: 12, GOLD: 13, RUBY: 14, VOIDOPAL: 15, DIAMOND: 16, EMBERSHARD: 17, NATIVE: 21, MIMIC: 23, FROSTBLOOM: 24, NACRE: 25 };
 
 async function newPage() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // opt in to bloom explicitly: builds without the setting ignore the key; the
+  // hardware GPU we shoot on would default it on anyway, but say so
+  await ctx.addInitScript(() => { try { localStorage.setItem('coreward_settings_v1', JSON.stringify({ bloom: true })); } catch {} });
   await ctx.addInitScript(() => {
     let a = 0x2545f491;
     Math.random = () => {
