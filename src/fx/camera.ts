@@ -11,6 +11,11 @@ import { WORLD_W } from '../config';
  */
 const SHAKE_AMPLITUDE = 0.8;
 
+/** the title frame: low and wide, surface along the top edge */
+const TITLE_X = 22;
+const TITLE_Y = -5;
+const TITLE_Z = 24;
+
 export class FollowCam {
   camera: THREE.PerspectiveCamera;
   private shake = 0;
@@ -123,15 +128,20 @@ export class FollowCam {
     this.camera.lookAt(this.cx, this.cy, 0);
   }
 
-  /** cinematic pose used by the title screen; drift + mouse parallax */
+  /**
+   * Cinematic pose used by the title screen; drift + mouse parallax. The
+   * frame sits low and wide: the station is a thin lit strip along the top,
+   * and the wordmark lands on the dark ground under it (the scrim in
+   * style.css finishes the dark), so the title reads as a descent.
+   */
   titlePose(time: number, mouseX: number, mouseY: number): void {
-    const ox = Math.sin(time * 0.11) * 1.6 + mouseX * 1.2;
-    const oy = Math.cos(time * 0.09) * 0.7 + mouseY * 0.7;
-    this.cx = 22 + ox;
-    this.cy = 3.4 + oy;
-    this.cz = 18;
+    const ox = Math.sin(time * 0.11) * 1.2 + mouseX * 1.0;
+    const oy = Math.cos(time * 0.09) * 0.4 + mouseY * 0.4;
+    this.cx = TITLE_X + ox;
+    this.cy = TITLE_Y + oy;
+    this.cz = TITLE_Z;
     this.camera.position.set(this.cx, this.cy, this.cz);
-    this.camera.lookAt(22, 2.4, 0);
+    this.camera.lookAt(TITLE_X, TITLE_Y - 1, 0);
   }
 
   /** blend from title pose toward gameplay framing during the intro dive */
@@ -139,9 +149,11 @@ export class FollowCam {
     const e = 1 - Math.pow(1 - t, 3);
     const x = this.cx + (podX - this.cx) * e;
     const y = this.cy + (podY + 1.8 - this.cy) * e;
-    const z = 18 + (15.5 - 18) * e;
+    const z = TITLE_Z + (15.5 - TITLE_Z) * e;
+    const lx = TITLE_X + (x - TITLE_X) * e;
+    const ly = TITLE_Y - 1 + (y - 0.6 - (TITLE_Y - 1)) * e;
     this.camera.position.set(x, y, z);
-    this.camera.lookAt(x, y - 0.6, 0);
+    this.camera.lookAt(lx, ly, 0);
     if (t >= 1) { this.cx = x; this.cy = y; this.cz = z; }
   }
 

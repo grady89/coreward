@@ -2,8 +2,12 @@
 :root {
   --ink: #e8e2d5;
   --ink-dim: #9a95a8;
-  --glass: rgba(11, 16, 32, 0.78);
-  --glass-hard: rgba(8, 12, 26, 0.92);
+  /* warm near-black: lamp-lit hardware, not slate */
+  --glass: rgba(18, 14, 12, 0.8);
+  --glass-hard: rgba(15, 11, 10, 0.94);
+  /* the active world's light (hud.ts applyWorld sets body[data-world]);
+     panels take their edge light from it */
+  --world: #ff9a3c;
   --line: rgba(232, 226, 213, 0.14);
   --amber: #ff9a3c;
   --teal: #3ce6c8;
@@ -15,6 +19,8 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+body[data-world="cryos2"] { --world: #8ac8ff; }
+body[data-world="maelis6"] { --world: #4fe0b8; }
 
 html, body {
   width: 100%; height: 100%;
@@ -90,14 +96,14 @@ html, body {
 }
 
 .bar {
-  position: relative; height: 14px; border-radius: 7px;
-  background: rgba(8, 12, 26, 0.66);
+  position: relative; height: 14px; border-radius: 3px;
+  background: rgba(14, 10, 9, 0.66);
   border: 1px solid var(--line);
   overflow: hidden;
   backdrop-filter: blur(6px);
 }
 .bar-fill {
-  position: absolute; inset: 1px; border-radius: 6px;
+  position: absolute; inset: 1px; border-radius: 2px;
   transform-origin: left center;
   transition: transform 0.25s var(--ease-out), background 0.4s;
 }
@@ -108,7 +114,7 @@ html, body {
 .bar-fill.o2 { background: linear-gradient(90deg, #4a7a9a, #cfeaff); }
 .bar-label {
   position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
-  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.22em;
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.18em;
   color: rgba(8, 12, 22, 0.9); mix-blend-mode: normal; z-index: 2;
   text-shadow: 0 0 4px rgba(232,226,213,0.35);
   color: var(--ink);
@@ -130,20 +136,29 @@ html, body {
   color: var(--amber); letter-spacing: 0.04em;
   text-shadow: 0 2px 12px rgba(255, 154, 60, 0.35);
 }
-.hud-sub { font-size: 10px; letter-spacing: 0.28em; color: var(--ink-dim); font-family: var(--font-display); }
+.hud-sub {
+  font-size: 11.5px; letter-spacing: 0.2em; color: rgba(232, 226, 213, 0.72); font-family: var(--font-display);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
 
 #hud-depth {
   font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 0.08em;
   text-shadow: 0 2px 10px rgba(0,0,0,0.7);
 }
-#hud-stratum { font-size: 10px; letter-spacing: 0.34em; color: var(--ink-dim); font-family: var(--font-display); margin-top: 2px; }
+#hud-stratum {
+  font-size: 11.5px; letter-spacing: 0.24em; color: rgba(232, 226, 213, 0.72); font-family: var(--font-display); margin-top: 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
 
-#hud-cargo-count { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+#hud-cargo-count { font-family: var(--font-display); font-size: 18px; font-weight: 700; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
 #hud-cargo-count.full { color: var(--amber); animation: bar-pulse 1s infinite; }
-#hud-cargo-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
-#hud-cargo-list .c-row b { color: var(--ink); font-weight: 500; }
+#hud-cargo-list {
+  display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 12.5px;
+  color: rgba(232, 226, 213, 0.74); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+#hud-cargo-list .c-row b { color: var(--ink); font-weight: 600; }
 #hud-cargo-list .c-row { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.c-ico { width: 16px; height: 16px; }
+.c-ico { width: 18px; height: 18px; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9)); }
 
 /* interact prompt */
 #prompt {
@@ -228,7 +243,7 @@ input[type="range"].nav-focus {
 /* ---------- panels ---------- */
 .panel-scrim {
   position: fixed; inset: 0; z-index: 20;
-  background: rgba(4, 6, 14, 0.45);
+  background: rgba(8, 6, 5, 0.5);
   backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center;
   animation: scrim-in 0.25s var(--ease-out) both;
@@ -238,7 +253,26 @@ input[type="range"].nav-focus {
   width: min(560px, calc(100vw - 40px));
   max-height: min(640px, calc(100vh - 60px));
   overflow-y: auto;
-  background: var(--glass-hard); border: 1px solid var(--line); border-radius: 16px;
+  /* lamp-lit hardware: a warm near-black plate, squared off, its top edge
+     and corner brackets catching the world's light */
+  --edge: color-mix(in srgb, var(--world) 62%, transparent);
+  background:
+    linear-gradient(var(--edge), var(--edge)) left top / 16px 2px,
+    linear-gradient(var(--edge), var(--edge)) left top / 2px 16px,
+    linear-gradient(var(--edge), var(--edge)) right top / 16px 2px,
+    linear-gradient(var(--edge), var(--edge)) right top / 2px 16px,
+    linear-gradient(var(--edge), var(--edge)) left bottom / 16px 2px,
+    linear-gradient(var(--edge), var(--edge)) left bottom / 2px 16px,
+    linear-gradient(var(--edge), var(--edge)) right bottom / 16px 2px,
+    linear-gradient(var(--edge), var(--edge)) right bottom / 2px 16px,
+    radial-gradient(90% 60% at 50% -12%, color-mix(in srgb, var(--world) 9%, transparent), transparent 70%),
+    var(--glass-hard);
+  background-repeat: no-repeat;
+  border: 1px solid color-mix(in srgb, var(--world) 20%, rgba(232, 226, 213, 0.06)); border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--world) 42%, transparent),
+    0 0 46px -12px color-mix(in srgb, var(--world) 26%, transparent),
+    0 22px 60px rgba(0, 0, 0, 0.55);
   padding: 26px 28px;
   animation: panel-in 0.32s var(--ease-out) both;
   scrollbar-width: thin; scrollbar-color: rgba(232,226,213,0.2) transparent;
@@ -246,7 +280,7 @@ input[type="range"].nav-focus {
 @keyframes panel-in { from { opacity: 0; transform: translateY(16px) scale(0.985); } }
 /* the garage stages the pod: world stays lit on the left, panel steps aside */
 .panel-scrim.stage {
-  background: linear-gradient(90deg, rgba(4, 6, 14, 0) 34%, rgba(4, 6, 14, 0.5) 62%);
+  background: linear-gradient(90deg, rgba(8, 6, 5, 0) 34%, rgba(8, 6, 5, 0.5) 62%);
   backdrop-filter: none;
   justify-content: flex-end;
   padding-right: max(4vw, 24px);
@@ -293,7 +327,7 @@ input[type="range"].nav-focus {
 button.btn {
   font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.14em;
   color: var(--ink); background: rgba(232, 226, 213, 0.07);
-  border: 1px solid var(--line); border-radius: 9px;
+  border: 1px solid var(--line); border-radius: 3px;
   padding: 9px 18px; cursor: pointer;
   transition: transform 0.16s var(--ease-out), background 0.16s, border-color 0.16s, box-shadow 0.16s;
   white-space: nowrap;
@@ -383,7 +417,7 @@ button.btn.wide { width: 100%; margin-top: 12px; padding: 13px; font-size: 13px;
 .c-warn { color: var(--magma); }
 .c-bar {
   height: 6px; border-radius: 3px; overflow: hidden;
-  background: rgba(8, 12, 26, 0.7); border: 1px solid var(--line); margin-bottom: 8px;
+  background: rgba(14, 10, 9, 0.7); border: 1px solid var(--line); margin-bottom: 8px;
 }
 .c-bar-fill { height: 100%; background: linear-gradient(90deg, #b86a20, var(--amber)); transition: width 0.3s var(--ease-out); }
 .c-sub { font-size: 11px; letter-spacing: 0.18em; color: var(--ink-dim); }
@@ -615,11 +649,18 @@ body.sm-open #survey {
 #title {
   position: fixed; inset: 0; z-index: 30;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  transition: opacity 0.9s var(--ease-out); background: transparent;
+  transition: opacity 0.9s var(--ease-out);
+  /* the title frame puts the surface along the top quarter (camera.ts
+     titlePose); below it the ground goes to dark, and the one light is the
+     core's glow rising from under the frame */
+  background:
+    radial-gradient(70% 46% at 50% 112%, rgba(255, 128, 40, 0.34) 0%, rgba(200, 70, 20, 0.12) 45%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, transparent 23%, rgba(10, 6, 7, 0.6) 29%,
+      rgba(9, 5, 6, 0.86) 42%, rgba(8, 5, 6, 0.9) 70%, rgba(14, 7, 5, 0.8) 100%);
 }
 #title.leaving { opacity: 0; pointer-events: none !important; }
 #title .tagline {
-  font-size: 13px; letter-spacing: 0.3em; color: var(--ink-dim);
+  font-size: 13px; letter-spacing: 0.3em; color: rgba(232, 226, 213, 0.74);
   margin-top: 18px; text-transform: uppercase; font-family: var(--font-display);
   animation: fade-up 1s var(--ease-out) 1.1s both;
 }
@@ -649,7 +690,7 @@ body.sm-open #survey {
 #title .advance-line {
   margin-top: 26px; font-family: var(--font-display);
   font-size: 10px; letter-spacing: 0.26em; color: var(--ink-dim);
-  border: 1px solid var(--line); border-radius: 6px; padding: 6px 14px;
+  border: 1px solid var(--line); border-radius: 3px; padding: 6px 14px;
   animation: fade-up 0.9s var(--ease-out) 1.7s both;
 }
 #title .ghost-link {
@@ -841,11 +882,16 @@ body.sm-open #survey {
 
 /* ending pages: the same rite typography, three different skies */
 #finale.page-dark #f-white {
-  background: radial-gradient(120% 95% at 50% 56%, #14141a 0%, #08080c 60%, #000 140%);
+  /* one faint warm source left behind the title: the last of the light */
+  background:
+    radial-gradient(34% 30% at 50% 38%, rgba(255, 140, 60, 0.13) 0%, rgba(255, 120, 50, 0.05) 50%, transparent 100%),
+    radial-gradient(120% 95% at 50% 56%, #15120f 0%, #09080a 60%, #000 140%);
 }
 #finale.page-dark #f-text { color: #e8e2d5; }
-#finale.page-dark #f-eyebrow { color: rgba(232, 226, 213, 0.45); }
-#finale.page-dark .f-line { color: rgba(232, 226, 213, 0.8); }
+#finale.page-dark #f-title { text-shadow: 0 0 36px rgba(255, 150, 70, 0.28); }
+#finale.page-dark #f-eyebrow { color: rgba(232, 226, 213, 0.55); }
+#finale.page-dark #f-lines { max-width: 520px; }
+#finale.page-dark .f-line { color: rgba(232, 226, 213, 0.9); }
 #finale.page-dark #f-hint { color: rgba(232, 226, 213, 0.4); }
 #finale.page-dark #f-hint .key {
   border-color: rgba(232, 226, 213, 0.35); color: rgba(232, 226, 213, 0.65);
@@ -861,7 +907,9 @@ body.sm-open #survey {
 
 /* the EXTRACT epilogue is the one dark panel in the set */
 .panel-scrim.rite.rite-dark {
-  background: radial-gradient(120% 95% at 50% 45%, #14141a 0%, #08080c 60%, #000 140%);
+  background:
+    radial-gradient(34% 30% at 50% 32%, rgba(255, 140, 60, 0.12) 0%, rgba(255, 120, 50, 0.05) 50%, transparent 100%),
+    radial-gradient(120% 95% at 50% 45%, #15120f 0%, #09080a 60%, #000 140%);
 }
 .panel-scrim.rite.rite-dark .panel { color: #e8e2d5; }
 .panel-scrim.rite.rite-dark .end-eyebrow,
