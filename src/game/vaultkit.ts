@@ -1996,6 +1996,8 @@ export interface StudParts {
   group: THREE.Group;
   /** the torn edge and the throat: self-luminous, because this one kills (P2) */
   mats: THREE.Material[];
+  /** each spike's point, group-local — the caller hangs one shared ember glint on each */
+  tips: THREE.Vector3[];
 }
 
 /**
@@ -2030,6 +2032,7 @@ export function buildStud(seed: number, down = false): StudParts {
   const spikeMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
   const root = new THREE.Color(0x3a1a12), tip = new THREE.Color(0xff8a3a);
   const n = 5 + Math.floor(rnd(1) * 2);
+  const tips: THREE.Vector3[] = [];
   for (let i = 0; i < n; i++) {
     const h = 0.2 + rnd(i * 3 + 2) * 0.32;
     const r = 0.028 + rnd(i * 5 + 3) * 0.03;
@@ -2051,6 +2054,8 @@ export function buildStud(seed: number, down = false): StudParts {
     if (down) spike.rotation.x = Math.PI;
     spike.rotation.z = (rnd(i * 13 + 6) - 0.5) * 0.24;
     g.add(spike);
+    spike.updateMatrix();
+    tips.push(new THREE.Vector3(0, h / 2, 0).applyMatrix4(spike.matrix));
   }
 
   // the ember seam where the bed meets the stone — the light the wound
@@ -2072,7 +2077,7 @@ export function buildStud(seed: number, down = false): StudParts {
   g.add(haze);
   mats.push(hazeMat);
 
-  return { group: g, mats };
+  return { group: g, mats, tips };
 }
 
 // ---------------------------------------------------------------------------
