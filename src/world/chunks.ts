@@ -62,12 +62,16 @@ const rockMat = new THREE.MeshStandardMaterial({
 // teal, with no extra light and no extra draw call. The disc fades out
 // before the corners so an ore tile never reads as a lit square.
 // The world's hue in its stone: each band's strataGlow colour, blended
-// across band edges by world row, laid down as faint horizontal streaks
-// (stretched value noise) over a dimmer floor. An unlit wall reads as a
-// dark shade of its world rather than neutral black, and the lamp still
-// does all the real lighting. Zero in a spent world.
+// across band edges by world row and pulled most of the way to grey, laid
+// down as crisp per-block value steps over per-three-row beds. An unlit
+// wall reads as dark world-tinted stone rather than neutral black, and the
+// lamp still does all the real lighting. Zero in a spent world.
+// The blocks read chunky from shadow, not light: a thin dark crevice at
+// every face border and a slight darkening toward the edges. Off (uStone 0)
+// in a spent world, which keeps its old flat look.
 const strataUniforms = {
   uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
+  uStone: { value: 1 },
 };
 let strataFor: unknown = null;
 function syncStrata(): void {
@@ -75,6 +79,7 @@ function syncStrata(): void {
   strataFor = ACTIVE;
   const g = spentWorld() ? undefined : ACTIVE.strataGlow;
   strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
+  strataUniforms.uStone.value = spentWorld() ? 0 : 1;
 }
 /** the haze carries the world's fluid hue at the wash's even brightness */
 let hazeFor: unknown = null;
@@ -90,39 +95,53 @@ rockMat.onBeforeCompile = shader => {
   shader.uniforms.uFluidTime = fluidUniforms.uFluidTime;
   shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
   shader.uniforms.uStrata = strataUniforms.uStrata;
+  shader.uniforms.uStone = strataUniforms.uStone;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec3 glow;
 attribute vec3 wash;
 attribute vec2 washDir;
-varying vec3 vGlow;
-varying vec3 vWash;
-varying vec2 vWashDir;
-varying vec3 vBox;
-varying vec3 vBoxN;
-varying vec2 vWXY;`)
-    .replace('#include <begin_vertex>', `#include <begin_vertex>
-	vGlow = glow; vWash = wash; vWashDir = washDir;
-	vBox = position; vBoxN = normal;
-	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
-  shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', `#include <common>
-uniform float uFluidTime;
-uniform float uFluidAmp;
+attribute float matte;
 varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec2 vWXY;
+varying vec2 vCell;
+varying float vMatte;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vGlow = glow; vWash = wash; vWashDir = washDir; vMatte = matte;
+	vBox = position; vBoxN = normal;
+	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;
+	// block centres sit at k + 0.5, so floor() never straddles an integer
+	vCell = floor((modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xy);`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+uniform float uStone;
+varying vec3 vGlow;
+varying vec3 vWash;
+varying vec2 vWashDir;
+varying vec3 vBox;
+varying vec3 vBoxN;
+varying vec2 vWXY;
+varying vec2 vCell;
+varying float vMatte;
 uniform vec3 uStrata[5];
-float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float stNoise(vec2 p) {
-	vec2 i = floor(p), f = fract(p);
-	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(stHash(i), stHash(i + vec2(1.0, 0.0)), f.x),
-		mix(stHash(i + vec2(0.0, 1.0)), stHash(i + vec2(1.0, 1.0)), f.x), f.y);
-}`)
+float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	// shadow at the block's borders: distance to the nearest edge of the
+	// face this fragment lies on, a thin dark crevice right at the border
+	// and a slight falloff toward it
+	vec3 stE = abs(vBox) * (1.0 - abs(vBoxN));
+	float stD = 0.5 - max(max(stE.x, stE.y), stE.z);
+	float stShade = mix(0.4, 1.0, smoothstep(0.012, 0.045, stD))
+		* mix(0.84, 1.0, smoothstep(0.045, 0.3, stD));
+	stShade = mix(1.0, stShade, uStone);
+	vec3 stAlbedo = diffuseColor.rgb;
+	diffuseColor.rgb *= stShade;`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	{
 		float row = -vWXY.y;
@@ -131,11 +150,13 @@ float stNoise(vec2 p) {
 		acc = mix(acc, uStrata[2], smoothstep(50.0, 70.0, row));
 		acc = mix(acc, uStrata[3], smoothstep(145.0, 175.0, row));
 		acc = mix(acc, uStrata[4], smoothstep(280.0, 320.0, row));
-		vec2 sp = vec2(vWXY.x * 0.32, vWXY.y * 2.4);
-		float n = stNoise(sp) * 0.6 + stNoise(sp * vec2(2.7, 1.9) + 17.0) * 0.4;
-		float streak = smoothstep(0.58, 0.8, n);
+		// low saturation: dark world-tinted stone, not glowing stone
+		acc = mix(vec3(dot(acc, vec3(0.2126, 0.7152, 0.0722))), acc, 0.5);
+		// crisp per-block value over per-bed (three-row) bands
+		float blk = floor(stHash(vCell) * 4.0) / 3.0;
+		float bed = stHash(vec2(41.0, floor(vCell.y / 3.0)));
 		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
-		totalEmissiveRadiance += acc * face * (0.12 + 0.6 * streak);
+		totalEmissiveRadiance += acc * face * stShade * (0.14 + 0.12 * blk + 0.1 * bed);
 	}
 	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
 	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
@@ -146,9 +167,20 @@ float stNoise(vec2 p) {
 	vec2 wd = wl > 1e-3 ? vWashDir / wl : vec2(0.0);
 	float wf = vBoxN.z > 0.5 ? 0.6 + 0.8 * dot(vBox.xy, wd) : 0.15 + max(0.0, dot(vBoxN.xy, wd));
 	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
-	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(diffuseColor.rgb, vec3(0.333)));`);
+	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(stAlbedo, vec3(0.333)));`)
+    .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+	// stone at and around an ore stays matte and dark so the ore's halo is
+	// the brightest thing there: lamp light on it is soft-capped and greyed
+	// (a top face is footing, so it keeps more of its light)
+	if (vMatte > 0.0) {
+		float mm = vMatte * (vBoxN.y > 0.5 ? 0.4 : 1.0);
+		float ml = dot(reflectedLight.directDiffuse, vec3(0.2126, 0.7152, 0.0722));
+		float mk = 1.0 / (1.0 + mm * ml / 0.05);
+		reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, vec3(ml), 0.5 * mm) * mk;
+		reflectedLight.directSpecular *= 1.0 - 0.8 * mm;
+	}`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v3';
+rockMat.customProgramCacheKey = () => 'rock-glow-v4';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -295,6 +327,20 @@ function seamRoll(terrain: Terrain, x: number, y: number): number {
   return Math.floor(cellHash(x, y, 29) * 8) * (Math.PI / 4);
 }
 
+const glows = (t: number) => def(t).ore || t === T.MIMIC || t === T.FROSTBLOOM;
+/** 1 on an ore (or a tile beside one), 0.7 diagonal to one, else 0 */
+function nearOre(terrain: Terrain, x: number, y: number): number {
+  let m = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!glows(terrain.get(x + dx, y + dy))) continue;
+      if (dx === 0 || dy === 0) return 1;
+      m = 0.7;
+    }
+  }
+  return m;
+}
+
 interface GemAnim {
   id: number; wx: number; wy: number; s: number; phase: number;
   spin: number; pulse: number; wobble: number; tilt: number; roll: number;
@@ -306,6 +352,7 @@ class Chunk {
   glow: THREE.InstancedBufferAttribute;              // per rock instance: halo colour from its ore
   wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
   washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
+  matte: THREE.InstancedBufferAttribute;             // per rock instance: 1 at/next to an ore (lit value capped)
   fl: THREE.InstancedBufferAttribute;                // per fluid instance: corner depths, surface, world x
   hz: THREE.InstancedBufferAttribute;                // per haze sheet: run ends, surface y
   gems: THREE.InstancedMesh[];
@@ -335,6 +382,8 @@ class Chunk {
     this.washDir = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
     rockGeo.setAttribute('wash', this.wash);
     rockGeo.setAttribute('washDir', this.washDir);
+    this.matte = new THREE.InstancedBufferAttribute(new Float32Array(CAP), 1);
+    rockGeo.setAttribute('matte', this.matte);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     const fluidGeo = lavaGeo.clone();
     this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
@@ -440,6 +489,7 @@ class Chunk {
         this.rock.setColorAt(nr, tmpC);
         this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
         this.washDir.setXY(nr, lit.dx[local], lit.dy[local]);
+        this.matte.setX(nr, spent ? 0 : nearOre(terrain, x, y));
         this.rockIds.set(local, nr);
         nr++;
 
@@ -511,6 +561,7 @@ class Chunk {
     this.glow.needsUpdate = true;
     this.wash.needsUpdate = true;
     this.washDir.needsUpdate = true;
+    this.matte.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
