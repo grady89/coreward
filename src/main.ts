@@ -939,7 +939,7 @@ class Game {
     this.terrain = new Terrain(seed);
     this.chunks = new ChunkField(this.scene, this.terrain);
     this.chunks.animated = !this.reducedMotion;
-    createBackwall(this.scene);
+    createBackwall(this.scene, this.terrain);
     createSky(this.scene);
     createSurface(this.scene);
     this.ember = createEmber(this.scene);

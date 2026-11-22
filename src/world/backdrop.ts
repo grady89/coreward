@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_W, WORLD_ROWS, CORE_ROW, PAD_X0, PAD_X1 } from '../config';
-import { backwallColor } from './tiles';
+import { backwallColor, T } from './tiles';
+import type { Terrain } from './terrain';
 import { ACTIVE, worldById } from './worlds';
 import { STRUCTURE_BUILDERS } from './structures';
 import { hdrBasic } from '../fx/post';
@@ -8,12 +9,32 @@ import { hdrBasic } from '../fx/post';
 // Backwall, sky, surface rig set-dressing, the Ember, and depth-graded atmosphere.
 
 // ---------- backwall: carved-cave interior behind the tile field ----------
-export function createBackwall(scene: THREE.Scene): void {
+/**
+ * The cave's far wall sits a value step behind the rock and in front of true
+ * void: the light that lands on it takes the world's own hue (a cold world's
+ * cavity never goes beige under the warm lamp), and the open cavity's air
+ * hazes it in that hue, thickest deep in a cavern and thinning toward its rim,
+ * so the space reads as depth rather than a flat plane. Kept dark: the lamp
+ * still does the work. Atmosphere drives the hue with depth.
+ */
+const backwallU = {
+  uCavity: { value: new THREE.Color(0, 0, 0) },
+  uCool: { value: 0 },
+  /** v (uv) where the core's chamber starts: its light keeps its own hue */
+  uCoreV: { value: 0 },
+  uDepth: { value: null as THREE.Texture | null },
+};
+/** linear luminance the cavity's haze is held to, deep in an open cavern */
+const CAVITY_LUM = 0.024;
+const LUMW = [0.2126, 0.7152, 0.0722] as const;
+
+export function createBackwall(scene: THREE.Scene, terrain: Terrain): void {
   const EXTRA = 30; // rows past the world bottom so the camera never sees void
+  const H = WORLD_ROWS + EXTRA;
   const cv = document.createElement('canvas');
-  cv.width = WORLD_W; cv.height = WORLD_ROWS + EXTRA;
+  cv.width = WORLD_W; cv.height = H;
   const g = cv.getContext('2d')!;
-  for (let y = 0; y < WORLD_ROWS + EXTRA; y++) {
+  for (let y = 0; y < H; y++) {
     for (let x = 0; x < WORLD_W; x++) {
       g.fillStyle = backwallColor(x, Math.min(y, WORLD_ROWS - 1));
       g.fillRect(x, y, 1, 1);
@@ -22,12 +43,70 @@ export function createBackwall(scene: THREE.Scene): void {
   const tex = new THREE.CanvasTexture(cv);
   tex.magFilter = THREE.NearestFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD_W, WORLD_ROWS + 30),
-    new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })
-  );
+
+  // how far each open cell lies from the cavity's rim (rock), in tiles, 0..1
+  // over four tiles; rows are stored bottom-up to match the plane's uvs
+  const REACH = 4;
+  const dist = new Float32Array(WORLD_W * H).fill(REACH);
+  const open = (x: number, y: number) => y >= 0 && y < WORLD_ROWS && terrain.get(x, y) === T.AIR;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
+      if (!open(x, y)) { dist[y * WORLD_W + x] = 0; continue; }
+      let d = REACH;
+      for (let dy = -REACH; dy <= REACH; dy++) {
+        for (let dx = -REACH; dx <= REACH; dx++) {
+          const e = Math.hypot(dx, dy);
+          if (e >= d) continue;
+          const sx = x + dx, sy = y + dy;
+          // the sky above the field is open air, the world's sides are rock
+          if (sy < 0) continue;
+          if (sx < 0 || sx >= WORLD_W || !open(sx, sy)) d = e;
+        }
+      }
+      dist[y * WORLD_W + x] = d;
+    }
+  }
+  const depth = new Uint8Array(WORLD_W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
+      const t = Math.max(0, dist[y * WORLD_W + x] - 0.5) / (REACH - 0.5);
+      depth[(H - 1 - y) * WORLD_W + x] = Math.round(255 * t * t * (3 - 2 * t));
+    }
+  }
+  const dtex = new THREE.DataTexture(depth, WORLD_W, H, THREE.RedFormat, THREE.UnsignedByteType);
+  dtex.magFilter = THREE.LinearFilter;
+  dtex.minFilter = THREE.LinearFilter;
+  dtex.needsUpdate = true;
+  backwallU.uDepth.value = dtex;
+  // a cold world re-hues more of the warm lamp's light on its far wall
+  backwallU.uCool.value = ACTIVE.hazard.cold ? 0.6 : 0.3;
+  backwallU.uCoreV.value = 1 - (CORE_ROW - 12) / H;
+
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
+  mat.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, backwallU);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uCavity;
+uniform float uCool;
+uniform float uCoreV;
+uniform sampler2D uDepth;`)
+      .replace('#include <opaque_fragment>', `{
+		const vec3 LW = vec3(0.2126, 0.7152, 0.0722);
+		float dep = texture2D(uDepth, vMapUv).r;
+		// the light landing here takes the world's hue (luminance kept)
+		vec3 hue = uCavity / max(dot(uCavity, LW), 1e-5);
+		float cool = uCool * smoothstep(uCoreV - 0.02, uCoreV + 0.01, vMapUv.y);
+		outgoingLight = mix(outgoingLight, dot(outgoingLight, LW) * hue, cool);
+		// farther back reads hazier: less of the lamp's contrast, more of the air
+		outgoingLight = outgoingLight * (1.0 - 0.35 * dep) + uCavity * (0.35 + 0.65 * dep);
+	}
+	#include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'backwall-cavity-v1';
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W, H), mat);
   // extra height so the camera never sees past the world's bottom edge
-  mesh.position.set(WORLD_W / 2, -(WORLD_ROWS + 30) / 2, -0.62);
+  mesh.position.set(WORLD_W / 2, -H / 2, -0.62);
   scene.add(mesh);
 }
 
@@ -578,5 +657,10 @@ export class Atmosphere {
       this.fog.color.lerp(this.ash, this.drain);
       this.amb.color.lerp(this.ash, this.drain * 0.7);
     }
+
+    // the cavity's air: the ambient's hue, most of its saturation, held dark
+    const cav = backwallU.uCavity.value.copy(this.amb.color);
+    const l = cav.r * LUMW[0] + cav.g * LUMW[1] + cav.b * LUMW[2];
+    cav.lerp(this.a.setRGB(l, l, l), 0.2).multiplyScalar(CAVITY_LUM / Math.max(l, 1e-4));
   }
 }

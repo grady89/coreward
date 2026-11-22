@@ -301,6 +301,8 @@ const spentWorld = (): boolean => !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.i
 /** heat fissure in a deep-band face: a fixed share of emberrock cells */
 const isFissure = (t: number, x: number, y: number): boolean =>
   t === T.EMBERROCK && cellHash(x, y, 3) > 0.82;
+/** a seam burns in its world's own hue (the fluid's unless the world names one) */
+const fissureHue = (): number => (spentWorld() ? undefined : ACTIVE.fissure) ?? ACTIVE.fluid.base;
 
 const tmpM = new THREE.Matrix4();
 const tmpP = new THREE.Vector3();
@@ -310,10 +312,11 @@ const DIRTY_RING: readonly (readonly [number, number])[] = [[0, 0], [-1, 0], [1,
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
 
-interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array }
+interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array; wf: Float32Array }
 const SPILL: Spill = {
   r: new Float32Array(CAP), g: new Float32Array(CAP), b: new Float32Array(CAP),
   dx: new Float32Array(CAP), dy: new Float32Array(CAP), w: new Float32Array(CAP),
+  wf: new Float32Array(CAP),
 };
 
 /**
@@ -512,12 +515,12 @@ class Chunk {
           // branches, lying flush — never mistakable for a pickup. It turns
           // to meet a fissure next door so neighbouring seams join up.
           cls = CRACK_CLASS_0 + Math.floor(cellHash(x, y, 23) * CRACK_VARIANTS) % CRACK_VARIANTS;
-          gemColor = ACTIVE.fluid.base;
+          gemColor = fissureHue();
           gemScale = 1;
           harvestable = false;
           if (!spent) {
-            // the seam's own stone burns softly behind it
-            tmpC.setHex(ACTIVE.fluid.base).multiplyScalar(0.15);
+            // the seam's own stone burns behind it, out to the block's edges
+            tmpC.setHex(gemColor).multiplyScalar(0.3);
             this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           }
         }
@@ -574,14 +577,14 @@ class Chunk {
   /**
    * Light that lands: every pool tile and heat fissure within reach of this
    * chunk throws its hue onto the rock around it (about two and a half tiles
-   * for a pool, two for a seam), baked per rock instance at build. A pool's
+   * for a pool, under two for a seam), baked per rock instance at build. A pool's
    * surface also throws its light up the cavity: the walls and ceiling over
    * it catch it to about four tiles above the meniscus. No light, no draw
    * call; darkness away from them is untouched.
    */
   private spill(terrain: Terrain, x0: number, y0: number, spent: boolean): Spill {
     const o = SPILL;
-    o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0);
+    o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0); o.wf.fill(0);
     if (spent) return o;
     const R = 5;
     for (let sy = y0 - 3; sy < y0 + CHUNK + R; sy++) {
@@ -591,8 +594,11 @@ class Chunk {
         if (!pool && !isFissure(st, sx, sy)) continue;
         // a surface cell lights upward much further than sideways or down
         const surf = pool && terrain.get(sx, sy - 1) === T.AIR;
-        const reach = pool ? 2.6 : 2.1, inner = pool ? 0.6 : 0.5;
-        const k = pool ? 1 : 0.16;
+        // a seam lights its stone: the blocks touching it take its hue hard,
+        // gone two tiles off so the rock between clusters stays dark
+        const reach = pool ? 2.6 : 1.9, inner = pool ? 0.6 : 0.4;
+        const k = pool ? 1 : 0.6;
+        const acc = pool ? o.w : o.wf;
         for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
           for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 3); tx++) {
             if (tx === sx && ty === sy) continue;
@@ -602,7 +608,7 @@ class Chunk {
             const u = (de - inner) / (reach - inner);
             const w = k * (1 - (u <= 0 ? 0 : u * u * (3 - 2 * u)));
             const i = (ty - y0) * CHUNK + (tx - x0);
-            o.w[i] += w;
+            acc[i] += w;
             // world y runs up while rows run down
             o.dx[i] += (sx - tx) * w / d;
             o.dy[i] += (ty - sy) * w / d;
@@ -612,14 +618,19 @@ class Chunk {
     }
     // even out the hues: cyan is three times as bright as molten orange,
     // and a pale wash beside a pale pool would blur the hazard's edge
-    tmpC.setHex(ACTIVE.fluid.base);
-    const lum = 0.2126 * tmpC.r + 0.7152 * tmpC.g + 0.0722 * tmpC.b;
-    tmpC.multiplyScalar(Math.min(1, 0.26 / Math.max(lum, 1e-3)));
+    const pc = tmpC.setHex(ACTIVE.fluid.base);
+    const lum = 0.2126 * pc.r + 0.7152 * pc.g + 0.0722 * pc.b;
+    pc.multiplyScalar(Math.min(1, 0.26 / Math.max(lum, 1e-3)));
+    const pr = pc.r, pg = pc.g, pb = pc.b;
+    const fc = tmpC.setHex(fissureHue());
+    const fl = 0.2126 * fc.r + 0.7152 * fc.g + 0.0722 * fc.b;
+    fc.multiplyScalar(Math.min(1, 0.26 / Math.max(fl, 1e-3)));
     for (let i = 0; i < CAP; i++) {
-      if (o.w[i] <= 0) continue;
       // saturating: a whole basin next door is brighter than one cell, not 8×
-      const s = 0.3 * (1 - Math.exp(-o.w[i]));
-      o.r[i] = tmpC.r * s; o.g[i] = tmpC.g * s; o.b[i] = tmpC.b * s;
+      const s = o.w[i] > 0 ? 0.3 * (1 - Math.exp(-o.w[i])) : 0;
+      const f = o.wf[i] > 0 ? 0.32 * (1 - Math.exp(-o.wf[i])) : 0;
+      o.r[i] = pr * s + fc.r * f; o.g[i] = pg * s + fc.g * f; o.b[i] = pb * s + fc.b * f;
+      o.w[i] += o.wf[i];
     }
     if (coreLit && y0 + CHUNK > CORE_TY - CORE_REACH && y0 < CORE_TY + CORE_REACH) {
       // every core at one brightness: a pale cyan heart must not out-wash amber

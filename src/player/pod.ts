@@ -239,6 +239,9 @@ export class Pod {
   /** set by the host: dust holds still for prefers-reduced-motion */
   reducedMotion = false;
   private fillFor: unknown = null;
+  /** the world the visible beam was last tinted for (null: re-tint) */
+  private beamFor: unknown = null;
+  private beamAir = new THREE.Color();
   private drillSpin = 0;
   private drillStow = 0;
   private facetOn = false;
@@ -611,6 +614,7 @@ export class Pod {
     (this.flameR.material as THREE.MeshBasicMaterial).color.setHex(flame.outer);
     this.headlamp.color.setHex(lamp.color);
     this.beamMat.color.setHex(lamp.color);
+    this.beamFor = null;
   }
 
   update(dt: number, opts: {
@@ -716,6 +720,19 @@ export class Pod {
     this.beamPivot.visible = beamK > 0.01;
     if (this.beamPivot.visible) {
       this.beamMat.opacity = beamK * 0.34;
+      // a cold world's air takes some of the lamp's warmth out of the beam you
+      // see (the light it throws is untouched), so its cavity never goes beige
+      if (this.beamFor !== ACTIVE) {
+        this.beamFor = ACTIVE;
+        const lampHex = this.lastFinish ? this.lastFinish[2].color : 0xffe6c0;
+        this.beamMat.color.setHex(lampHex);
+        const spent = !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
+        if (ACTIVE.hazard.cold && !spent) {
+          const air = this.beamAir.setHex(ACTIVE.fogStops[Math.min(2, ACTIVE.fogStops.length - 1)].amb);
+          air.multiplyScalar(1 / Math.max(air.r, air.g, air.b, 1e-4));
+          this.beamMat.color.lerp(air, 0.35);
+        }
+      }
       // dust: a few slow motes adrift in the beam, brightest near the lamp
       const tt = this.reducedMotion ? 0 : time;
       const pos = this.dust.geometry.getAttribute('position') as THREE.BufferAttribute;

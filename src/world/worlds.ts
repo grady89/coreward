@@ -48,6 +48,8 @@ export interface WorldDef {
   };
   /** the molten/corrosive fluid replacing lava */
   fluid: { name: string; base: number; pulseA: number; pulseB: number; dmg: number; fuelDrain: number; threshold: number };
+  /** heat-fissure glow when it should not be the fluid's hue (a spent world ignores it) */
+  fissure?: number;
   /** pressure worlds fling the pod when a gas pocket bursts */
   gasImpulse: number;
   /** glazed ice: halved grounded traction */
@@ -217,6 +219,8 @@ export const WORLDS: WorldDef[] = [
       ],
     },
     fluid: { name: 'Brine', base: 0x33d49c, pulseA: 0x5ce8b4, pulseB: 0x26b080, dmg: 12, fuelDrain: 4, threshold: 0.7 },
+    // sea-green, a step yellower than the brine: hot seams must not read as Cryos ice-cyan
+    fissure: 0x34e070,
     gasImpulse: 16,
     iceTraction: false,
     swarm: {
