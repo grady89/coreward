@@ -462,13 +462,17 @@ export function gemMaterial(params: THREE.MeshStandardMaterialParameters = {}): 
 }
 
 // ---- heat cracks: glowing seams, flush in the rock face ----
-// Each is a trunk zigzagging along local x from one tile edge to the other
-// (so two seams turned to meet join into one vein) with a few branches off
-// it. The core burns hot; a wider, dimmer band behind it is the seam's glow.
-// Both are flat quads lying on the face (it is only ever seen from the front),
-// which keeps a five-stroke seam cheaper than the old three-box crack.
+// A seam's strokes reach the tile edge only at an edge midpoint, and only
+// toward a fissure next door, whose own stroke leaves from the same point:
+// the two read as one vein running on through the joint. A seam with no
+// fissure beside it tapers out inside its tile. The shapes are drawn for one
+// set of joints (local -x is "left"); chunks turns them in quarter steps to
+// fit the neighbours (stub: one, straight/corner: two, tee: three or four).
+// The core burns hot; a wider, dimmer band behind it is the seam's glow.
+// Both are flat quads lying on the face (it is only ever seen from the front).
 // Emission is white × the instance colour (the world's fluid hue) × emit.
-function crack(trunk: [number, number][], branches: [number, number, number, number, number][]): THREE.BufferGeometry {
+type Stroke = [number, number, number][];   // polyline of (x, y, thickness)
+function crack(paths: Stroke[], branches: [number, number, number, number, number][]): THREE.BufferGeometry {
   const parts: Part[] = [];
   const seg = (x0: number, y0: number, x1: number, y1: number, th: number) => {
     const len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
@@ -477,16 +481,30 @@ function crack(trunk: [number, number][], branches: [number, number, number, num
     parts.push({ geo: paint(new THREE.PlaneGeometry(len + th, th), 0xffffff, 2.6, 0.6, 0), m: mat(mx, my, 0.02, ang) });
     parts.push({ geo: paint(new THREE.PlaneGeometry(len + th * 2, th * 2.3), 0xffffff, 0.5, 0.8, 0), m: mat(mx, my, 0.012, ang) });
   };
-  for (let i = 0; i + 1 < trunk.length; i++) seg(trunk[i][0], trunk[i][1], trunk[i + 1][0], trunk[i + 1][1], 0.04);
+  for (const p of paths) {
+    for (let i = 0; i + 1 < p.length; i++) seg(p[i][0], p[i][1], p[i + 1][0], p[i + 1][1], (p[i][2] + p[i + 1][2]) / 2);
+  }
   // each branch: from (x, y), length, angle, thickness
   for (const [x, y, len, ang, th] of branches) seg(x, y, x + Math.cos(ang) * len, y + Math.sin(ang) * len, th);
   return merge(parts);
 }
 const CRACKS = [
-  crack([[-0.5, 0], [-0.18, 0.07], [0.12, -0.06], [0.5, 0]], [[-0.18, 0.07, 0.3, 1.15, 0.026], [0.12, -0.06, 0.26, -1.0, 0.024]]),
-  crack([[-0.5, 0], [-0.1, -0.09], [0.2, 0.05], [0.5, 0]], [[-0.1, -0.09, 0.32, -1.9, 0.026], [0.2, 0.05, 0.22, 0.9, 0.022], [0.2, 0.05, 0.16, 2.4, 0.018]]),
-  crack([[-0.5, 0], [-0.25, -0.04], [0.04, 0.1], [0.5, 0]], [[0.04, 0.1, 0.36, 1.7, 0.028], [-0.25, -0.04, 0.2, -2.2, 0.02]]),
-  crack([[-0.5, 0], [0.0, 0.04], [0.5, 0]], [[0.0, 0.04, 0.3, -1.3, 0.026]]),
+  // lone seam: both ends taper out short of the edges
+  crack([[[-0.4, 0.03, 0.02], [-0.18, 0.07, 0.04], [0.12, -0.06, 0.04], [0.4, -0.02, 0.018]]],
+    [[-0.18, 0.07, 0.26, 1.15, 0.024], [0.12, -0.06, 0.22, -1.0, 0.022]]),
+  // stub: in from the left joint, dying out past the middle
+  crack([[[-0.5, 0, 0.042], [-0.22, 0.06, 0.04], [0.05, -0.05, 0.032], [0.3, 0.02, 0.016]]],
+    [[-0.22, 0.06, 0.26, 1.2, 0.024], [0.05, -0.05, 0.2, -0.9, 0.02]]),
+  // straight through: left joint to right joint
+  crack([[[-0.5, 0, 0.042], [-0.25, -0.04, 0.04], [0.04, 0.1, 0.04], [0.5, 0, 0.042]]],
+    [[0.04, 0.1, 0.3, 1.7, 0.026], [-0.25, -0.04, 0.2, -2.2, 0.02]]),
+  // corner: left joint to top joint
+  crack([[[-0.5, 0, 0.042], [-0.22, 0.04, 0.04], [-0.06, 0.2, 0.04], [0, 0.5, 0.042]]],
+    [[-0.22, 0.04, 0.28, -0.6, 0.024], [-0.06, 0.2, 0.16, 0.2, 0.018]]),
+  // tee: left to right with an arm up to the top joint
+  crack([[[-0.5, 0, 0.042], [-0.15, 0.05, 0.04], [0.15, -0.03, 0.04], [0.5, 0, 0.042]],
+    [[-0.15, 0.05, 0.036], [-0.05, 0.25, 0.036], [0, 0.5, 0.04]]],
+    [[0.15, -0.03, 0.18, -1.4, 0.02]]),
 ];
 
 export const GEM_GEOS: THREE.BufferGeometry[] = [
@@ -497,7 +515,9 @@ export const GEM_GEOS: THREE.BufferGeometry[] = [
 ];
 
 export const CRACK_CLASS_0 = 13;
-export const CRACK_VARIANTS = CRACKS.length;
+/** offsets from CRACK_CLASS_0, with each shape's joints at roll 0 (bits: 1 left, 2 right, 4 up, 8 down) */
+export const CRACK_LONE = 0, CRACK_STUB = 1, CRACK_STRAIGHT = 2, CRACK_CORNER = 3, CRACK_TEE = 4;
+export const CRACK_JOINTS = [0, 1, 1 | 2, 1 | 4, 1 | 2 | 4];
 /** the display cut the Quarters' trophy shelf carves everything into */
 export const DISPLAY_CUT = 6;
 
