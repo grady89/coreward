@@ -342,6 +342,14 @@ class Chunk {
   gemAnim: GemAnim[][] = GEM_GEOS.map(() => []);
   cx = -1; cy = -1;
   chewLocal = -1;                                    // tile being drilled; animate skips it
+  /**
+   * The whole chunk in one sphere, shared by all its meshes: the 16×16
+   * block's half-diagonal plus a margin for jitter, protruding gems and a
+   * chewed tile's shake. About ±30 rows of chunks stay live but only the
+   * ones on screen are drawn. The fold throws bricks far outside it, so a
+   * chunk it touches stops culling until its rebuild puts them home.
+   */
+  bounds = new THREE.Sphere(new THREE.Vector3(), Math.SQRT2 * CHUNK / 2 + 1.5);
 
   constructor() {
     // own copy of the shared block so it can carry this chunk's columns
@@ -366,7 +374,8 @@ class Chunk {
     this.gems = GEM_GEOS.map(geo => new THREE.InstancedMesh(geo, gemMat, GEM_CAP));
     for (const m of [this.rock, this.lava, ...this.gems]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;
+      // culled against one fixed sphere per chunk, set in build()
+      m.boundingSphere = this.bounds;
       this.group.add(m);
     }
     // allocate color buffers up front
@@ -376,6 +385,8 @@ class Chunk {
 
   build(terrain: Terrain, cx: number, cy: number): void {
     this.cx = cx; this.cy = cy;
+    this.bounds.center.set(cx * CHUNK + CHUNK / 2, -(cy * CHUNK + CHUNK / 2), 0);
+    this.setCulled(true);
     this.rockIds.clear(); this.gemIds.clear();
     for (const a of this.gemAnim) a.length = 0;
     this.chewLocal = -1;
@@ -702,10 +713,17 @@ class Chunk {
       if (gid) this.gems[gid.c].setMatrixAt(gid.i, tmpM);
     }
     if (touched) {
+      this.setCulled(false);
       this.rock.instanceMatrix.needsUpdate = true;
       for (const m of this.gems) m.instanceMatrix.needsUpdate = true;
     }
     return touched;
+  }
+
+  private setCulled(on: boolean): void {
+    this.rock.frustumCulled = on;
+    this.lava.frustumCulled = on;
+    for (const m of this.gems) m.frustumCulled = on;
   }
 
   /** shrink + jitter the tile being drilled */
