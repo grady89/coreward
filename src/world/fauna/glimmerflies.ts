@@ -41,7 +41,9 @@ interface Fly {
 /** afterimages drawn behind each fly, and how much of the fly each keeps */
 const TRAIL = 3;
 const TRAIL_SIZE = [0.78, 0.6, 0.44];
-const TRAIL_GLOW = [0.6, 0.38, 0.2];
+const TRAIL_GLOW = [0.5, 0.3, 0.16];
+/** furthest a fly's drawn mote may sit from its true (contact) position, tiles */
+const RIB_MAX = 0.6;
 
 interface Swarm {
   alive: boolean;
@@ -264,7 +266,8 @@ export class Glimmerflies implements Creature {
     // the ribbon (render only): a hunting swarm is DRAWN strung out from its
     // target back toward where it came from, in a slow sway, so the eye
     // reads a stream of living lights pouring at the lamp. The flock itself
-    // — positions, contact, damage — is untouched; only the motes move.
+    // — positions, contact, damage — is untouched; each mote stays within
+    // RIB_MAX of its fly, and the fainter afterimages carry the length.
     for (const s of this.swarms) {
       if (!s.alive) continue;
       const want = s.alerted && s.lash <= 0.5 ? 1 : 0;
@@ -365,8 +368,12 @@ export class Glimmerflies implements Creature {
         const r = rank[f.swarm]++;
         const along = (r + 0.4) * 0.3 * s.rib;
         const sway = Math.sin(ctx.time * 1.4 - r * 0.6) * (0.12 + along * 0.14) + along * along * 0.05;
-        rx += s.rux * along - s.ruy * sway;
-        ry += s.ruy * along + s.rux * sway;
+        let ox = s.rux * along - s.ruy * sway, oy = s.ruy * along + s.rux * sway;
+        // the mote never strays far from the fly: contact is where the light
+        // is. The ribbon's length comes from the fainter afterimages.
+        const ol = Math.hypot(ox, oy);
+        if (ol > RIB_MAX) { ox *= RIB_MAX / ol; oy *= RIB_MAX / ol; }
+        rx += ox; ry += oy;
       }
 
       if (s.alerted) { wx += rx; wy += ry; wn++; }
@@ -388,7 +395,7 @@ export class Glimmerflies implements Creature {
       // the ribbon: afterimages easing along the path just flown, so a
       // pouring swarm draws streams through the air instead of a knot of
       // dots on the hull. Only a moving fly leaves one.
-      const ek = Math.min(1, dt * 7);
+      const ek = Math.min(1, dt * 5);
       let lx = rx, ly = ry;
       const sp = Math.hypot(f.vx, f.vy);
       const tk = Math.min(1, Math.max(0, (sp - 0.6) / 2.4));

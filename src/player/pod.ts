@@ -89,15 +89,24 @@ GLASS.customProgramCacheKey = () => 'pod-visor';
  * band and seams take the same push.
  */
 const BOX = 0.85;
+/** how far the squared hull stands out along the direction (x, y, z) */
+function boxPush(x: number, y: number, z: number): number {
+  const r = Math.hypot(x, y, z);
+  if (r < 1e-6) return 1;
+  const ax = Math.abs(x / r), ay = Math.abs(y / r), az = Math.abs(z / r);
+  const box = 1 / Math.cbrt(ax * ax * ax + ay * ay * ay + az * az * az);
+  return 1 + (box - 1) * BOX;
+}
+/** a part mounted on the hull at (x, y, z) rides out with the squared hull */
+function onHull(o: THREE.Object3D, x: number, y: number, z: number): void {
+  const f = boxPush(x, y, z);
+  o.position.set(x * f, y * f, z * f);
+}
 function chunky<G extends THREE.BufferGeometry>(g: G): G {
   const p = g.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const r = Math.hypot(x, y, z);
-    if (r < 1e-6) continue;
-    const ax = Math.abs(x / r), ay = Math.abs(y / r), az = Math.abs(z / r);
-    const box = 1 / Math.cbrt(ax * ax * ax + ay * ay * ay + az * az * az);
-    const f = 1 + (box - 1) * BOX;
+    const f = boxPush(x, y, z);
     p.setXYZ(i, x * f, y * f, z * f);
   }
   g.computeVertexNormals();
@@ -284,7 +293,7 @@ export class Pod {
     // side intakes
     for (const s of [-1, 1]) {
       const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.26), STEEL);
-      fin.position.set(s * 0.42, 0.05, 0);
+      onHull(fin, s * 0.42, 0.05, 0);
       fin.rotation.z = s * -0.2;
       this.group.add(fin);
     }
@@ -505,11 +514,11 @@ export class Pod {
       const th = (i - (t.radiator - 1) / 2) * 0.3;
       const dx = Math.sin(th), dy = Math.cos(th);
       const fin = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.19, 0.11), STEEL);
-      fin.position.set(dx * 0.47, dy * 0.47, 0);
+      onHull(fin, dx * 0.47, dy * 0.47, 0);
       fin.rotation.z = -th;
       this.para.add(fin);
       const face = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.12, 0.118), this.finGlowMat);
-      face.position.set(dx * 0.5, dy * 0.5, 0);
+      onHull(face, dx * 0.5, dy * 0.5, 0);
       face.rotation.z = -th;
       this.para.add(face);
     }
@@ -519,19 +528,19 @@ export class Pod {
       const r = 0.1 + t.tank * 0.016;
       for (const s of [-1, 1] as const) {
         const cell = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), STEEL);
-        cell.position.set(s * 0.35, -0.245, 0.03);
+        onHull(cell, s * 0.35, -0.245, 0.03);
         cell.scale.set(1.15, 0.72, 1.25);
         this.para.add(cell);
         if (t.tank >= 2) {
           const strap = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.015, r + 0.015, 0.05, 14), ACCENT);
-          strap.position.set(s * 0.35, -0.245, 0.03);
+          onHull(strap, s * 0.35, -0.245, 0.03);
           strap.rotation.x = Math.PI / 2;
           strap.scale.set(1.15, 1, 0.72);
           this.para.add(strap);
         }
         if (t.tank >= 4) {
           const fore = new THREE.Mesh(new THREE.SphereGeometry(r * 0.66, 14, 10), STEEL);
-          fore.position.set(s * 0.33, -0.26, 0.03 + r * 1.05);
+          onHull(fore, s * 0.33, -0.26, 0.03 + r * 1.05);
           fore.scale.set(1.1, 0.72, 1.1);
           this.para.add(fore);
         }
@@ -541,7 +550,7 @@ export class Pod {
     // ---- CARGO: flank panniers, amber fill strips (opacity = cargoFrac) ----
     const pannier = (w: number, h: number, d: number, x: number, y: number, z: number, rz: number): void => {
       const g = new THREE.Group();
-      g.position.set(x, y, z);
+      onHull(g, x, y, z);
       g.rotation.z = rz;
       const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), STEEL);
       const lid = new THREE.Mesh(new THREE.BoxGeometry(w + 0.016, h * 0.24, d + 0.016), ACCENT);
