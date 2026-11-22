@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 5.0,
+  "candidate": 6.3,
+  "delta": 1.3,
+  "preferred": "candidate",
+  "why": "A's faceted cubes, lit-vs-black faces and beam-raked walls match the brief's rock read (ref 03) much better. B's one real gain is fissures lighting their stone, and that should be ported into A."
+ },
+ "lighting": {
+  "best": 4.4,
+  "candidate": 6.4,
+  "delta": 2.0,
+  "preferred": "candidate",
+  "why": "B adds the visible dusty beam and lamp-lit facets that reference 03 is built on, and visible glowing visors; A's caves are a flat ambient murk where light never visibly lands. B's main regression risk is the lamp washing out the world hues in CRYOS and MAELIS."
+ },
+ "identity": {
+  "best": 6.3,
+  "candidate": 6.8,
+  "delta": 0.5,
+  "preferred": "candidate",
+  "why": "B carries each world's hue across the whole frame through faceted lit rock and core light that lands. VEIL and CRYOS gain clearly. MAELIS loses some green to the neutral warm beam, and its violet core is off-palette in both builds."
+ },
+ "fluids": {
+  "best": 5.6,
+  "candidate": 6.0,
+  "delta": 0.4,
+  "preferred": "candidate",
+  "why": "B's fissure halos are the right idea and beat A on cracks that light their stone, but B gives back more than it gains: the core chambers go dark and the pools lose their particles. A's core chambers and pools are closer to the brief."
+ },
+ "characters": {
+  "best": 4.8,
+  "candidate": 5.9,
+  "delta": 1.1,
+  "preferred": "candidate",
+  "why": "B adds the glowing teal visors and the visible headlamp, which are core to the pod/pilot reference, and gives creatures some emissive accents. Its creature shots lose framing and the glimmerfly scene is flooded with haze, so B is better but still short of the references."
+ },
+ "vaults": {
+  "best": 5.0,
+  "candidate": 5.0,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "A and B look the same in every shot apart from animation phase and a slightly dimmer visor in B; neither changes how well the vaults read or their mood."
+ },
+ "ui": {
+  "best": 6.0,
+  "candidate": 7.2,
+  "delta": 1.2,
+  "preferred": "candidate",
+  "why": "B's title framing reads as descent, with a fully legible wordmark over dark rock, and its warm bronze modals and glowing ending page fit the amber/light theme. HUD-only shots are effectively the same."
+ },
+ "minerals": {
+  "best": 7.0,
+  "candidate": 6.3,
+  "delta": -0.7,
+  "preferred": "best",
+  "why": "B's radial halos and controlled exposure preserve each ore's colour identity (copper teal, voidopal facets, mimic opal) and bloom into the dark as briefed, where A clips glow to square tiles and blows gems out to white. B's only regression is iron getting lost on the darker rock."
+ }
+}
