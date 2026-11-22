@@ -5,6 +5,7 @@ import { T, def, rockColor, cellHash } from './tiles';
 import { ACTIVE } from './worlds';
 import {
   GEM_GEOS, CRACK_CLASS_0, CRACK_VARIANTS, gemClassOf, gemScaleOf, motionOf,
+  gemMaterial, gemTintOf, haloOf,
 } from './gemshapes';
 
 // Terrain renderer: one 16×16 chunk = one InstancedMesh per material class.
@@ -50,28 +51,27 @@ bakeFaceShade(boxGeo);
 const rockMat = new THREE.MeshStandardMaterial({
   roughness: 0.93, metalness: 0.04, vertexColors: true,
 });
-
-// Ore is lit AND self-glowing: flat shading makes every facet read, while the
-// emissive term is patched to follow each instance's colour so a gem still
-// shines in a pitch-dark tunnel instead of flattening into a silhouette.
-const gemMat = new THREE.MeshStandardMaterial({
-  // vertexColors multiplies the tint every gem geometry now bakes in (crusts
-  // dark, fissures bright) with the per-instance ore colour — and because the
-  // emissive patch below rides vColor, a dark crust also glows less. Every
-  // GEM_GEOS entry ships a color attribute; one without would render black.
-  vertexColors: true,
-  flatShading: true,
-  roughness: 0.16,
-  metalness: 0.55,
-  emissive: 0xffffff,
-  emissiveIntensity: 0.55,
-});
-gemMat.onBeforeCompile = shader => {
-  shader.fragmentShader = shader.fragmentShader.replace(
-    '#include <emissivemap_fragment>',
-    '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;'
-  );
+// Ore light that lands: every chunk's rock carries a per-instance `glow`
+// colour (zero for plain rock), drawn as a soft emissive disc centred on the
+// tile's front face. The stone around a ruby goes pink, around veinlight
+// teal, with no extra light and no extra draw call. The disc fades out
+// before the corners so an ore tile never reads as a lit square.
+rockMat.onBeforeCompile = shader => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec3 glow;\nvarying vec3 vGlow;\nvarying vec3 vBox;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvGlow = glow;\n\tvBox = position;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vGlow;\nvarying vec3 vBox;')
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
+	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));`);
 };
+rockMat.customProgramCacheKey = () => 'rock-glow-v1';
+
+// Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
+// metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
+// burning seam share this one material and this one draw call per class.
+const gemMat = gemMaterial();
 export const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false });
 
 const tmpM = new THREE.Matrix4();
@@ -85,11 +85,12 @@ const tmpC = new THREE.Color();
 interface GemAnim {
   id: number; wx: number; wy: number; s: number; phase: number;
   spin: number; pulse: number; wobble: number; tilt: number; roll: number;
-  z: number; dim: number; flat: boolean;
+  z: number; dim: number; flat: boolean; sway: boolean;
 }
 
 class Chunk {
   rock: THREE.InstancedMesh;
+  glow: THREE.InstancedBufferAttribute;              // per rock instance: halo colour from its ore
   gems: THREE.InstancedMesh[];
   lava: THREE.InstancedMesh;
   group = new THREE.Group();
@@ -100,7 +101,11 @@ class Chunk {
   chewLocal = -1;                                    // tile being drilled; animate skips it
 
   constructor() {
-    this.rock = new THREE.InstancedMesh(boxGeo, rockMat, CAP);
+    // own copy of the shared box so it can carry this chunk's glow column
+    const rockGeo = boxGeo.clone();
+    this.glow = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    rockGeo.setAttribute('glow', this.glow);
+    this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     this.lava = new THREE.InstancedMesh(lavaGeo, lavaMat, CAP);
     this.gems = GEM_GEOS.map(geo => new THREE.InstancedMesh(geo, gemMat, GEM_CAP));
     for (const m of [this.rock, this.lava, ...this.gems]) {
@@ -120,6 +125,7 @@ class Chunk {
     for (const a of this.gemAnim) a.length = 0;
     this.chewLocal = -1;
     let nr = 0, nl = 0;
+    (this.glow.array as Float32Array).fill(0);
     const ng = GEM_GEOS.map(() => 0);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
 
@@ -172,8 +178,9 @@ class Chunk {
         let harvestable = true;
         if (d.ore || t === T.MIMIC || t === T.FROSTBLOOM) {
           cls = gemClassOf(t);
-          gemColor = t === T.FUNGUS ? ACTIVE.gemTint
-            : t === T.NATIVE ? (ACTIVE.native?.color ?? d.gem) : d.gem;
+          gemColor = gemTintOf(t);
+          haloOf(t, tmpC);
+          this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
         } else if (t === T.EMBERROCK && h > 0.82) {
           // heat fissure in the rock face: one of four branching patterns,
@@ -194,7 +201,7 @@ class Chunk {
             pulse: harvestable ? mo.pulse : 0.04,
             wobble: harvestable ? mo.wobble : 0,
             tilt: (cellHash(x, y, 7) - 0.5) * 0.9,
-            roll: cellHash(x, y, 29) * Math.PI * 2,
+            roll: mo.sway ? (cellHash(x, y, 29) - 0.5) * 0.8 : cellHash(x, y, 29) * Math.PI * 2,
             // a fissure rides the face of its own cube, which the jitter
             // above pushes forward (h > 0.82 puts it at z ≥ 0.529, tilted
             // ±0.045): at a flat 0.505 every one of them was inside the rock
@@ -202,6 +209,7 @@ class Chunk {
             // fissures glow like banked embers; carvings burn brighter
             dim: harvestable ? 1 : t === T.GLYPH ? 1.3 : 0.9,
             flat: !harvestable,
+            sway: !!mo.sway,
           };
           this.gemAnim[cls].push(anim);
           this.poseGem(cls, anim, 0);
@@ -216,6 +224,7 @@ class Chunk {
     this.lava.instanceMatrix.needsUpdate = true;
     if (this.rock.instanceColor) this.rock.instanceColor.needsUpdate = true;
     if (this.lava.instanceColor) this.lava.instanceColor.needsUpdate = true;
+    this.glow.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
@@ -231,7 +240,7 @@ class Chunk {
     } else {
       tmpE.set(
         a.tilt + Math.sin(time * 0.9 + a.phase) * a.wobble,
-        a.roll + time * a.spin,
+        a.sway ? a.roll + Math.sin(time * a.spin + a.phase) * 0.45 : a.roll + time * a.spin,
         Math.cos(time * 0.7 + a.phase) * a.wobble
       );
     }
