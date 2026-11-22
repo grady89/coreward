@@ -280,9 +280,16 @@ for (const id of ['vault', 'ember', 'debt', 'return', 'kindled']) {
     v.invuln = 9999;
     const zw = c.distanceForWidth(p.w + 2), zh = (p.h + 2) / 2 / Math.tan(c.camera.fov * Math.PI / 360);
     c.followChamber = () => {}; c.follow = () => {};
-    c.snap(p.w / 2, -p.h / 2, Math.max(zw, zh));
+    // capped so footing and hazards stay readable (a whole big room at once is a debug view)
+    const z = Math.min(26, Math.max(zw, zh));
+    // when the cap crops the room, centre on the pilot's part of it
+    const hw = c.halfW(z), hh = c.halfH(z);
+    const cx = p.w + 2 <= 2 * hw ? p.w / 2 : Math.min(Math.max(v.px, hw - 1), p.w + 1 - hw);
+    const cy = p.h + 2 <= 2 * hh ? -p.h / 2 : Math.max(Math.min(v.py, -(hh - 1)), -(p.h + 1 - hh));
+    c.snap(cx, cy, z);
   });
-  await shot(page, `vault-${id}-room`, { vault: true, settle: 0.5 });
+  // the room's far stone flies in on arrival: let it land before the frame
+  await shot(page, `vault-${id}-room`, { vault: true, settle: 6 });
   await page.context().close();
 }
 
