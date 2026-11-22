@@ -1,0 +1,68 @@
+{
+ "round": 3,
+ "best_before": "1913420 + shot fixes (r3/best, GPU)",
+ "candidate": "cd8e8d8 (H1 d8baeb1+6499678, H2 a092aef, H3 8a9c15a+d43e07b, H4 6df9673, H5 cd8e8d8)",
+ "deltas": {
+  "rock": 1.0,
+  "lighting": 0.3,
+  "identity": 0.4,
+  "fluids": 0.6,
+  "characters": 0.8,
+  "vaults": 0.8,
+  "ui": -0.1,
+  "minerals": -0.5
+ },
+ "fixes": {
+  "H1 rock geometry facets": {
+   "commit": "d8baeb1",
+   "target": "rock",
+   "delta": 1.0,
+   "decision": "revert (surgical, keeps 6499678 culling): minerals -0.5 attributed by the reviewer to bright lit rock facets"
+  },
+  "H1b chunk culling": {
+   "commit": "6499678",
+   "target": "perf",
+   "decision": "keep"
+  },
+  "H2 fluids": {
+   "commit": "a092aef",
+   "target": "fluids",
+   "delta": 0.6,
+   "decision": "keep"
+  },
+  "H3 characters": {
+   "commit": "8a9c15a + d43e07b",
+   "target": "characters",
+   "delta": 0.8,
+   "decision": "keep"
+  },
+  "H4 vaults": {
+   "commit": "6df9673",
+   "target": "vaults",
+   "delta": 0.8,
+   "decision": "keep"
+  },
+  "H5 bloom v3": {
+   "commit": "cd8e8d8",
+   "target": "lighting",
+   "delta": 0.3,
+   "decision": "keep (meets the 0.3 bar; no other category dropped by it)"
+  }
+ },
+ "other_drops_over_0.3": [
+  "minerals -0.5 (attributed to H1)"
+ ],
+ "best_scores": {
+  "rock": 6.0,
+  "lighting": 6.3,
+  "identity": 7.0,
+  "fluids": 6.2,
+  "characters": 6.0,
+  "vaults": 6.6,
+  "ui": 7.2,
+  "minerals": 7.2
+ },
+ "note": "Kept categories take the candidate's paired score (fluids 6.2, characters 6.0, vaults 6.6, lighting 6.3); rock/identity/ui/minerals keep the old best's.",
+ "goal_met": false,
+ "new_best": "9c8efe4 (surgical revert of H1); shots r4/best (GPU)"
+}

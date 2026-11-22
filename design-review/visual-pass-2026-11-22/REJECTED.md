@@ -17,3 +17,9 @@
 - Scores: lighting rose overall (4.4 → 6.4, shared with G1/G2/G3); minerals fell 7.0 → 6.3. Bisect shots: the bloom build blows voidopal/mimic facets out to white-pink and copper's teal crust to mint ("overexposed gem surfaces wash out colour identity").
 - Why it lost: dropped minerals by > 0.3; its own gain can't be separated from G2's beam.
 - Next time, differently: no HDR gain on ore/gem materials at all (let the existing halo carry ore glow), cap emissive so facet hue survives; bloom only on fluids, fissure cores, sconces/censers, visors, core, windows/beacons.
+
+## r3 H1 — rock faceting through geometry: chamfered template block, per-instance bevel/tilt, per-bed hue, world hue carried in lamp-lit diffuse (d8baeb1) — reverted
+- Scores (paired, r3): rock 5.4 → 6.4 (+1.0), identity +0.4, but minerals 6.8 → 6.3 (−0.5).
+- Why it lost: the minerals reviewer: "B's bright orange/blue rock facets compete with same-hue ores (gold, embershard, copper, rime salt) and dilute their tells"; the brief wants matte dark host rock so the ore is the light. Also: the facet split still reads as a repeated pattern; bright bevels frame ore tiles into squares.
+- Kept from it: the per-chunk frustum culling follow-up (6499678) — a pure perf change.
+- Next time, differently: any rock relief must stay dark and low-saturation where lit — value contrast from shadow, not from bright world-hued lit faces; and rock within ~1 tile of an ore stays matte-dark so the ore is the light. Two shader/geometry attempts at "faceted rock" have now cost minerals; consider leaving rock relief alone.
