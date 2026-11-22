@@ -59,9 +59,25 @@ const rockMat = new THREE.MeshStandardMaterial({
 // tile's front face. The stone around a ruby goes pink, around veinlight
 // teal, with no extra light and no extra draw call. The disc fades out
 // before the corners so an ore tile never reads as a lit square.
+// The world's hue in its stone: each band's strataGlow colour, blended
+// across band edges by world row, laid down as faint horizontal streaks
+// (stretched value noise) over a dimmer floor. An unlit wall reads as a
+// dark shade of its world rather than neutral black, and the lamp still
+// does all the real lighting. Zero in a spent world.
+const strataUniforms = {
+  uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
+};
+let strataFor: unknown = null;
+function syncStrata(): void {
+  if (strataFor === ACTIVE) return;
+  strataFor = ACTIVE;
+  const g = spentWorld() ? undefined : ACTIVE.strataGlow;
+  strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
+}
 rockMat.onBeforeCompile = shader => {
   shader.uniforms.uFluidTime = fluidUniforms.uFluidTime;
   shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
+  shader.uniforms.uStrata = strataUniforms.uStrata;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec3 glow;
@@ -71,10 +87,12 @@ varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
 varying vec3 vBox;
-varying vec3 vBoxN;`)
+varying vec3 vBoxN;
+varying vec2 vWXY;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
 	vGlow = glow; vWash = wash; vWashDir = washDir;
-	vBox = position; vBoxN = normal;`);
+	vBox = position; vBoxN = normal;
+	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
 uniform float uFluidTime;
@@ -83,8 +101,30 @@ varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
 varying vec3 vBox;
-varying vec3 vBoxN;`)
+varying vec3 vBoxN;
+varying vec2 vWXY;
+uniform vec3 uStrata[5];
+float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float stNoise(vec2 p) {
+	vec2 i = floor(p), f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(stHash(i), stHash(i + vec2(1.0, 0.0)), f.x),
+		mix(stHash(i + vec2(0.0, 1.0)), stHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+	{
+		float row = -vWXY.y;
+		vec3 acc = uStrata[0];
+		acc = mix(acc, uStrata[1], smoothstep(10.0, 22.0, row));
+		acc = mix(acc, uStrata[2], smoothstep(50.0, 70.0, row));
+		acc = mix(acc, uStrata[3], smoothstep(145.0, 175.0, row));
+		acc = mix(acc, uStrata[4], smoothstep(280.0, 320.0, row));
+		vec2 sp = vec2(vWXY.x * 0.32, vWXY.y * 2.4);
+		float n = stNoise(sp) * 0.6 + stNoise(sp * vec2(2.7, 1.9) + 17.0) * 0.4;
+		float streak = smoothstep(0.58, 0.8, n);
+		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
+		totalEmissiveRadiance += acc * face * (0.12 + 0.6 * streak);
+	}
 	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
 	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
 	// light from a nearby pool or fissure: the front face shades toward the
@@ -96,7 +136,7 @@ varying vec3 vBoxN;`)
 	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
 	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(diffuseColor.rgb, vec3(0.333)));`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v2';
+rockMat.customProgramCacheKey = () => 'rock-glow-v3';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -241,6 +281,7 @@ class Chunk {
     const ng = GEM_GEOS.map(() => 0);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
     const spent = spentWorld();
+    syncStrata();
     const lit = this.spill(terrain, x0, y0, spent);
 
     for (let ly = 0; ly < CHUNK; ly++) {

@@ -16,6 +16,15 @@ export interface WorldDef {
   strata: [string, string, string, string, string, string];
   /** solid colors for bands: topsoil, regolith, mid, deep, core-reach */
   rockColors: [number, number, number, number, number];
+  /**
+   * The world's hue carried in the stone itself, per band (same order as
+   * rockColors): a faint emissive the rock shader lays down in horizontal
+   * strata streaks, so an unlit wall at any depth is a dark shade of its
+   * world's colour rather than neutral black. Brightness encodes strength.
+   */
+  strataGlow?: [number, number, number, number, number];
+  /** the pod's close fill light here (the headlamp beam itself is the player's lampTint) */
+  podFill?: number;
   /** sky gradient top→horizon + sun + hemisphere */
   sky: { top: string; mid: string; low: string; horizon: string; sun: number; halo: number; hemi: number; hemiGround: number };
   fogStops: FogStop[];
@@ -79,13 +88,15 @@ export const WORLDS: WorldDef[] = [
     unlockAfter: null,
     valueMul: 1,
     strata: ['TOPSOIL', 'REGOLITH', 'SLATEBED', 'THE VOID VEINS', 'EMBERREACH', 'THE CORE'],
-    rockColors: [0x9a6a38, 0x8a4c2c, 0x5e708a, 0x3a3a56, 0x5a323c],
+    rockColors: [0x9a6a38, 0x8a4c2c, 0x7e5a44, 0x5c3a2c, 0x6e3a24],
+    strataGlow: [0x000000, 0x000000, 0x2a1406, 0x381c06, 0x402206],
+    podFill: 0xffd9a0,
     sky: { top: '#0b1020', mid: '#2a1a3e', low: '#a04a34', horizon: '#ffb066', sun: 0xffc98a, halo: 0xff9a3c, hemi: 0xffb066, hemiGround: 0x3a2a1e },
     fogStops: [
       { row: -6, fog: 0x221430, density: 0.005, hemi: 0.9, amb: 0x2a2338, ambI: 0.35 },
       { row: 24, fog: 0x181120, density: 0.016, hemi: 0.34, amb: 0x40342e, ambI: 0.65 },
-      { row: 100, fog: 0x0c1018, density: 0.022, hemi: 0.1, amb: 0x46587a, ambI: 1.05 },
-      { row: 220, fog: 0x05070c, density: 0.028, hemi: 0.05, amb: 0x2c4e58, ambI: 0.95 },
+      { row: 100, fog: 0x120c0a, density: 0.022, hemi: 0.1, amb: 0x6a4a36, ambI: 1.05 },
+      { row: 220, fog: 0x0a0604, density: 0.028, hemi: 0.05, amb: 0x5a3422, ambI: 0.95 },
       { row: 330, fog: 0x190a06, density: 0.026, hemi: 0.05, amb: 0x58302a, ambI: 1.0 },
       { row: 450, fog: 0x30100a, density: 0.022, hemi: 0.04, amb: 0x66381c, ambI: 1.2 },
       { row: 505, fog: 0x481a0c, density: 0.018, hemi: 0.02, amb: 0x74381a, ambI: 1.35 },
@@ -124,16 +135,18 @@ export const WORLDS: WorldDef[] = [
     unlockAfter: 'veil3',
     valueMul: 1.5,
     strata: ['FIRNFIELD', 'PACKICE', 'THE BLUE DEEP', 'THE HUSH', 'HEARTREACH', 'THE HEART'],
-    rockColors: [0xc8cdd6, 0x8fa6c0, 0x4a6a96, 0x2a3050, 0x2e5a56],
+    rockColors: [0xc8cdd6, 0x8fa6c0, 0x4a6a96, 0x284878, 0x2c5e8a],
+    strataGlow: [0x000000, 0x000000, 0x081a30, 0x0a2440, 0x0a2a44],
+    podFill: 0xd0e6ff,
     sky: { top: '#060a16', mid: '#12244a', low: '#3a6a8a', horizon: '#bfe8ff', sun: 0xd8f0ff, halo: 0x8ac8ff, hemi: 0xbfe0ff, hemiGround: 0x24303e },
     fogStops: [
       { row: -6, fog: 0x101c2e, density: 0.005, hemi: 0.9, amb: 0x28313e, ambI: 0.4 },
       { row: 24, fog: 0x0e1826, density: 0.016, hemi: 0.34, amb: 0x2e3a4c, ambI: 0.7 },
       { row: 100, fog: 0x0a121e, density: 0.022, hemi: 0.1, amb: 0x3c5a80, ambI: 1.05 },
-      { row: 220, fog: 0x04060c, density: 0.028, hemi: 0.05, amb: 0x223050, ambI: 0.9 },
-      { row: 330, fog: 0x061410, density: 0.026, hemi: 0.05, amb: 0x1e4a3c, ambI: 1.0 },
-      { row: 450, fog: 0x0a2418, density: 0.022, hemi: 0.04, amb: 0x2a6448, ambI: 1.2 },
-      { row: 505, fog: 0x0e3020, density: 0.018, hemi: 0.02, amb: 0x38785a, ambI: 1.35 },
+      { row: 220, fog: 0x040810, density: 0.028, hemi: 0.05, amb: 0x223a5e, ambI: 0.9 },
+      { row: 330, fog: 0x060e18, density: 0.026, hemi: 0.05, amb: 0x1e3e5a, ambI: 1.0 },
+      { row: 450, fog: 0x0a1a2c, density: 0.022, hemi: 0.04, amb: 0x2a5a7a, ambI: 1.2 },
+      { row: 505, fog: 0x0e2638, density: 0.018, hemi: 0.02, amb: 0x3a7698, ambI: 1.35 },
     ],
     hazard: { label: 'FROST', cold: true, cause: 'deep frost' },
     hazardStartRow: 200,
@@ -179,16 +192,18 @@ export const WORLDS: WorldDef[] = [
     unlockAfter: 'cryos2',
     valueMul: 2.25,
     strata: ['SALTCRUST', 'THE SHALLOWS', 'GREENREEF', 'THE ABYSSAL', 'PEARLREACH', 'THE PEARL'],
-    rockColors: [0x7a8a6a, 0x4c7a6e, 0x2e6058, 0x1c2a34, 0x4a5a72],
+    rockColors: [0x7a8a6a, 0x4c7a6e, 0x2e6058, 0x1e4a40, 0x2a5e52],
+    strataGlow: [0x000000, 0x000000, 0x06281c, 0x082e22, 0x0a3a2c],
+    podFill: 0xccf2e0,
     sky: { top: '#04121a', mid: '#0a3040', low: '#1a6a62', horizon: '#8ae8c8', sun: 0xc8ffe8, halo: 0x3ce6c8, hemi: 0x8ae8c8, hemiGround: 0x1c2e2a },
     fogStops: [
       { row: -6, fog: 0x0a2028, density: 0.006, hemi: 0.9, amb: 0x1e3230, ambI: 0.4 },
       { row: 24, fog: 0x081a20, density: 0.017, hemi: 0.34, amb: 0x243e38, ambI: 0.7 },
       { row: 100, fog: 0x061418, density: 0.023, hemi: 0.1, amb: 0x2a5a4c, ambI: 1.05 },
-      { row: 220, fog: 0x030608, density: 0.03, hemi: 0.05, amb: 0x16323e, ambI: 0.9 },
-      { row: 330, fog: 0x0a0e16, density: 0.026, hemi: 0.05, amb: 0x2e3a56, ambI: 1.0 },
-      { row: 450, fog: 0x161c2e, density: 0.02, hemi: 0.04, amb: 0x4a5678, ambI: 1.25 },
-      { row: 505, fog: 0x222c44, density: 0.016, hemi: 0.02, amb: 0x60709a, ambI: 1.45 },
+      { row: 220, fog: 0x030806, density: 0.03, hemi: 0.05, amb: 0x163a32, ambI: 0.9 },
+      { row: 330, fog: 0x06120e, density: 0.026, hemi: 0.05, amb: 0x1e4a40, ambI: 1.0 },
+      { row: 450, fog: 0x0a1c18, density: 0.02, hemi: 0.04, amb: 0x2e6a5a, ambI: 1.25 },
+      { row: 505, fog: 0x102822, density: 0.016, hemi: 0.02, amb: 0x3e7c6c, ambI: 1.45 },
     ],
     hazard: { label: 'PRESSURE', cold: true, cause: 'crush pressure' },
     hazardStartRow: 150,

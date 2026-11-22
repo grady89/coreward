@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
+import { ACTIVE, worldById } from '../world/worlds';
 
 // The mining pod: hero object built from primitives, two-tone dusty cream +
 // amber accents, teal visor, animated drill and thruster flames, headlamp.
@@ -141,6 +142,7 @@ export class Pod {
   private flameLen = 1;
   private headlamp: THREE.SpotLight;
   private glow: THREE.PointLight;
+  private fillFor: unknown = null;
   private drillSpin = 0;
   private drillStow = 0;
   private facetOn = false;
@@ -543,5 +545,11 @@ export class Pod {
     // running dark: the lamp dies, only the instrument glow remains
     this.headlamp.intensity = lampOn ? lamp * 260 : 0;
     this.glow.intensity = lampOn ? lamp * 20 + 2 : 1.6;
+    // the close fill takes the world's air (a spent world's is the stock warm)
+    if (this.fillFor !== ACTIVE) {
+      this.fillFor = ACTIVE;
+      const spent = !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
+      this.glow.color.setHex(!spent && ACTIVE.podFill !== undefined ? ACTIVE.podFill : 0xffd9a0);
+    }
   }
 }
