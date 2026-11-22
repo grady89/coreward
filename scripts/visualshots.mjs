@@ -201,8 +201,9 @@ for (const w of WORLDS) {
   await bootPlay(page, `?core=${w.id}`);
 
   // the core chamber, as the dev jump frames it at the chamber mouth
-  const c = await page.evaluate(() => ({ x: window.__game.ctrl.px, y: window.__game.ctrl.py }));
-  await freezeCam(page, c.x, c.y + 1, 12.5);
+  // framed between the pod and the core so the whole fragment is in frame (from round 4)
+  const c = await page.evaluate(() => { const g = window.__game; return { x: (g.ctrl.px + g.ember.x) / 2, y: (g.ctrl.py + g.ember.y) / 2 }; });
+  await freezeCam(page, c.x, c.y + 0.5, 15);
   await shot(page, `${w.id}-core`, { settle: 1.5 });
 
   for (const [dn, r] of DEPTHS) {

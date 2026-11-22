@@ -68,3 +68,5 @@ Perf proxies from `renderer.info` at the frame shot (calls, triangles) and the s
 | ending-page | EXTRACT ending page (deliver the third fragment), 4 s after the page opens. | ui | 364 | 61568 | 55/17 |
 
 **Change from round 3:** `vault-*-room` now waits 6 s of vault time (the room's far stone flies in on arrival and read as debris) and caps the camera distance at 26, centred on the pilot's part of the room when the cap crops it. Best and candidate are always shot with the same script; round 3's best was re-shot (`r3/best`).
+
+**Change from round 4:** `*-core` is framed between the pod and the core (camera at their midpoint, distance 15) so the whole fragment is in frame; round 4's best was re-shot with it.
