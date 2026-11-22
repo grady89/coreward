@@ -194,7 +194,6 @@ export function ashlar(): THREE.Texture {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
   _ashlar = t;
   return t;
 }
