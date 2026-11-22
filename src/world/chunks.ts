@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bloomOn } from '../fx/post';
 import { CHUNK, WORLD_W, WORLD_ROWS, CORE_ROW } from '../config';
 import { Terrain } from './terrain';
 import { T, def, rockColor, cellHash } from './tiles';
@@ -250,8 +251,12 @@ export const fluidUniforms = {
  * of column by column. A spent (husk) world gets the old flat colour back.
  */
 export const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false });
+/** with bloom on, the hot meniscus (only) is pushed past white so it blooms;
+ * the body below it stays under the threshold */
+const MENIS_HDR = 1.6;
 lavaMat.onBeforeCompile = shader => {
   Object.assign(shader.uniforms, fluidUniforms);
+  shader.uniforms.uBloomOn = bloomOn;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec4 fl;
@@ -265,6 +270,7 @@ varying float vFTop;`)
 uniform float uFluidTime;
 uniform float uFluidAmp;
 uniform float uFluidLive;
+uniform float uBloomOn;
 varying vec4 vFl;
 varying vec3 vFP;
 varying float vFTop;`)
@@ -279,11 +285,12 @@ varying float vFTop;`)
 		vec3 c = base * (body + sh);
 		float menis = vFl.z * max(1.0 - smoothstep(0.0, 0.17, 0.5 - vFP.y), step(0.5, vFTop));
 		vec3 hot = base * (1.5 + sh * 1.5) + vec3(0.16, 0.16, 0.12);
+		hot *= mix(1.0, ${MENIS_HDR.toFixed(2)}, uBloomOn);
 		c = mix(c, hot, menis * 0.9);
 		diffuseColor.rgb = mix(base, c, uFluidLive);
 	}`);
 };
-lavaMat.customProgramCacheKey = () => 'fluid-glow-v2';
+lavaMat.customProgramCacheKey = () => 'fluid-glow-v3';
 
 /**
  * The air over a pool holds its light: one additive sheet per surface run,

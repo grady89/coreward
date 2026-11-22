@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrEmissive } from '../fx/post';
 import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
 import { ACTIVE, worldById } from '../world/worlds';
 import { softDot } from '../fx/particles';
@@ -79,6 +80,9 @@ GLASS.onBeforeCompile = sh => {
 }`);
 };
 GLASS.customProgramCacheKey = () => 'pod-visor';
+// the glass's lit centre (after the rim falloff above) crosses white and
+// blooms teal; the deep rim stays under it, so the dome keeps its form
+hdrEmissive(GLASS, 3.0, 0.4);
 
 /**
  * Square a sphere off toward a rounded box: every vertex pushed out along

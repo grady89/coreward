@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrBasic } from '../fx/post';
 
 // THE VAULT KIT'S DRESS (SPEC-VAULTS-2 §VI, phase V3.5).
 //
@@ -524,6 +525,7 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.24, 10), flameMat);
   flame.position.set(cx, SCONCE_FLAME_Y, 0);
   const coreMat = glowMat(dead ? 0xdce8ff : 0xfff0c8, 0.9);
+  hdrBasic(coreMat, 1.8);
   const core = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.13, 8), coreMat);
   core.position.y = -0.045;
   const halo = bloom(0.85, dead ? 0x9db8ff : 0xffc98a, 0.5);
@@ -1096,7 +1098,9 @@ export function buildCenser(topY: number): CenserParts {
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.34, 12), glassMat);
   glass.position.y = topY - 0.4;
   bob.add(glass);              // direct child, MeshBasic — the lint's handle
-  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), glowMat(0xfff2d0, 0.95));
+  const flameMat = glowMat(0xfff2d0, 0.95);
+  hdrBasic(flameMat, 1.8);
+  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), flameMat);
   flame.scale.set(0.8, 1.5, 0.8);
   flame.position.y = topY - 0.42;
   bob.add(flame);

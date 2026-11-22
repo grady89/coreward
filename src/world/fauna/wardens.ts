@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrBasic } from '../../fx/post';
 import { Terrain } from '../terrain';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
@@ -96,6 +97,7 @@ export class Wardens implements Creature {
     rimLight(masonry, 0xffc27a, 1.1);
     rimLight(verdigris, 0xffc27a, 0.9);
     this.emberMat = new THREE.MeshBasicMaterial({ color: 0xffb04a, toneMapped: false });
+    hdrBasic(this.emberMat, 1.8);
     this.group = new THREE.Group();
 
     this.hip = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.5, 0.5, 6), masonry);
