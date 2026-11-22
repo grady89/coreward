@@ -15,6 +15,7 @@ import {
 const CHUNKS_X = WORLD_W / CHUNK;
 const CAP = CHUNK * CHUNK;
 const GEM_CAP = 48; // per shape class, per chunk
+const HAZE_CAP = 32; // pool surface runs per chunk
 const VIEW_ROWS = 30; // rows above/below camera kept alive
 
 // Rock is a chamfered block, not a box: a front face inset from a bevel on
@@ -112,6 +113,16 @@ function syncStrata(): void {
   strataFor = ACTIVE;
   const g = spentWorld() ? undefined : ACTIVE.strataGlow;
   strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
+}
+/** the haze carries the world's fluid hue at the wash's even brightness */
+let hazeFor: unknown = null;
+function syncHaze(): void {
+  if (hazeFor === ACTIVE) return;
+  hazeFor = ACTIVE;
+  hazeMat.color.setHex(ACTIVE.fluid.base);
+  const c = hazeMat.color;
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  c.multiplyScalar(HAZE_GAIN * Math.min(1, 0.26 / Math.max(lum, 1e-3)));
 }
 rockMat.onBeforeCompile = shader => {
   shader.uniforms.uFluidTime = fluidUniforms.uFluidTime;
@@ -233,16 +244,18 @@ export const fluidUniforms = {
  * Pools glow: an emissive body that darkens with depth below the surface,
  * a hot meniscus band on the tile that meets air, and a slow shimmer that
  * runs along the pool in world x so neighbouring tiles read as one liquid.
- * Per instance `fl` = (rows below the surface, 1 if this tile meets air,
- * world x). A spent (husk) world gets the old flat colour back.
+ * Per instance `fl` = (depth at the tile's top-left and top-right corners,
+ * 1 if this tile meets air, world x). The corner depths are shared with the
+ * fluid tile beside, so a fall or a ragged blob darkens as one body instead
+ * of column by column. A spent (husk) world gets the old flat colour back.
  */
 export const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false });
 lavaMat.onBeforeCompile = shader => {
   Object.assign(shader.uniforms, fluidUniforms);
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
-attribute vec3 fl;
-varying vec3 vFl;
+attribute vec4 fl;
+varying vec4 vFl;
 varying vec3 vFP;
 varying float vFTop;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -252,25 +265,65 @@ varying float vFTop;`)
 uniform float uFluidTime;
 uniform float uFluidAmp;
 uniform float uFluidLive;
-varying vec3 vFl;
+varying vec4 vFl;
 varying vec3 vFP;
 varying float vFTop;`)
     .replace('#include <color_fragment>', `#include <color_fragment>
 	{
 		vec3 base = diffuseColor.rgb;
-		float depth = vFl.x + (0.5 - vFP.y);
-		float wx = vFl.z + vFP.x;
+		float depth = mix(vFl.x, vFl.y, clamp(vFP.x + 0.5, 0.0, 1.0)) + (0.5 - vFP.y);
+		float wx = vFl.w + vFP.x;
 		float body = mix(0.95, 0.26, smoothstep(0.0, 2.2, depth));
 		float sh = uFluidAmp * (0.09 * sin(wx * 1.9 + uFluidTime * 1.1 - depth * 2.3)
 			+ 0.05 * sin(wx * 0.7 - uFluidTime * 0.6) + 0.04 * sin(uFluidTime * 1.6));
 		vec3 c = base * (body + sh);
-		float menis = vFl.y * max(1.0 - smoothstep(0.0, 0.17, 0.5 - vFP.y), step(0.5, vFTop));
+		float menis = vFl.z * max(1.0 - smoothstep(0.0, 0.17, 0.5 - vFP.y), step(0.5, vFTop));
 		vec3 hot = base * (1.5 + sh * 1.5) + vec3(0.16, 0.16, 0.12);
 		c = mix(c, hot, menis * 0.9);
 		diffuseColor.rgb = mix(base, c, uFluidLive);
 	}`);
 };
-lavaMat.customProgramCacheKey = () => 'fluid-glow-v1';
+lavaMat.customProgramCacheKey = () => 'fluid-glow-v2';
+
+/**
+ * The air over a pool holds its light: one additive sheet per surface run,
+ * standing in the cavity just behind the pod, brightest at the meniscus and
+ * gone about three tiles up, faded in from both ends of the run. It sits
+ * inside the rock's depth, so a low ceiling or the rim simply hides it.
+ * Per instance `hz` = (run's first x, run's last x + 1, surface y), world.
+ */
+const HAZE_H = 3.2, HAZE_Z = -0.3, HAZE_GAIN = 0.6;
+const hazeGeo = new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, 0);
+const hazeMat = new THREE.MeshBasicMaterial({
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  toneMapped: false, fog: false,
+});
+hazeMat.onBeforeCompile = shader => {
+  Object.assign(shader.uniforms, fluidUniforms);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+attribute vec3 hz;
+varying vec3 vHz;
+varying vec2 vHW;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vHz = hz;
+	vHW = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+varying vec3 vHz;
+varying vec2 vHW;`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	{
+		float up = max(0.0, vHW.y - vHz.z) / ${HAZE_H.toFixed(2)};
+		float fy = exp(-3.2 * up) * (1.0 - smoothstep(0.7, 1.0, up));
+		float fx = smoothstep(vHz.x - 0.4, vHz.x + 1.1, vHW.x) * (1.0 - smoothstep(vHz.y - 1.1, vHz.y + 0.4, vHW.x));
+		float sh = 1.0 + uFluidAmp * 0.12 * sin(vHW.x * 1.3 - uFluidTime * 0.7 + up * 2.0);
+		diffuseColor.rgb *= fx * fy * sh;
+	}`);
+};
+hazeMat.customProgramCacheKey = () => 'fluid-haze-v1';
 
 /**
  * The fragment floods its chamber: every rock tile within reach of the core
@@ -333,9 +386,11 @@ class Chunk {
   bev: THREE.InstancedBufferAttribute;               // per rock instance: bevel width per side (L, R, B, T)
   tilt: THREE.InstancedBufferAttribute;              // ...how far each front corner falls back
   rkS: THREE.InstancedBufferAttribute;               // ...strength of the world hue in this block
-  fl: THREE.InstancedBufferAttribute;                // per fluid instance: depth, surface, world x
+  fl: THREE.InstancedBufferAttribute;                // per fluid instance: corner depths, surface, world x
+  hz: THREE.InstancedBufferAttribute;                // per haze sheet: run ends, surface y
   gems: THREE.InstancedMesh[];
   lava: THREE.InstancedMesh;
+  haze: THREE.InstancedMesh;
   group = new THREE.Group();
   rockIds = new Map<number, number>();              // local tile idx -> rock instance id
   gemIds = new Map<number, { c: number; i: number }>(); // local tile idx -> class + instance id
@@ -368,11 +423,16 @@ class Chunk {
     rockGeo.setAttribute('rkS', this.rkS);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     const fluidGeo = lavaGeo.clone();
-    this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
     fluidGeo.setAttribute('fl', this.fl);
     this.lava = new THREE.InstancedMesh(fluidGeo, lavaMat, CAP);
+    const hazeG = hazeGeo.clone();
+    this.hz = new THREE.InstancedBufferAttribute(new Float32Array(HAZE_CAP * 3), 3);
+    hazeG.setAttribute('hz', this.hz);
+    this.haze = new THREE.InstancedMesh(hazeG, hazeMat, HAZE_CAP);
+    this.haze.renderOrder = 1;
     this.gems = GEM_GEOS.map(geo => new THREE.InstancedMesh(geo, gemMat, GEM_CAP));
-    for (const m of [this.rock, this.lava, ...this.gems]) {
+    for (const m of [this.rock, this.lava, this.haze, ...this.gems]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       // culled against one fixed sphere per chunk, set in build()
       m.boundingSphere = this.bounds;
@@ -390,13 +450,21 @@ class Chunk {
     this.rockIds.clear(); this.gemIds.clear();
     for (const a of this.gemAnim) a.length = 0;
     this.chewLocal = -1;
-    let nr = 0, nl = 0;
+    let nr = 0, nl = 0, nh = 0;
     (this.glow.array as Float32Array).fill(0);
     const ng = GEM_GEOS.map(() => 0);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
     const spent = spentWorld();
     syncStrata();
     const lit = this.spill(terrain, x0, y0, spent);
+    if (!spent) syncHaze();
+    const isFl = (x: number, y: number) => terrain.get(x, y) === T.LAVA;
+    // unbroken rows of liquid above this cell (to 6)
+    const colDepth = (x: number, y: number) => {
+      let r = 0;
+      while (r < 6 && isFl(x, y - r - 1)) r++;
+      return r;
+    };
     // the world's own hue at unit luminance, for the per-bed tint below
     const wg = spent ? 0 : ACTIVE.strataGlow?.[3] ?? 0;
     tmpH.setHex(wg);
@@ -414,14 +482,30 @@ class Chunk {
         if (t === T.LAVA) {
           // rows of liquid above this one; the tile that meets air carries
           // the meniscus and sits a little below the rim
-          let rows = 0;
-          while (rows < 4 && terrain.get(x, y - rows - 1) === T.LAVA) rows++;
+          const rows = colDepth(x, y);
           const top = rows === 0 && terrain.get(x, y - 1) === T.AIR;
           if (top) tmpM.makeScale(1, 0.86, 1).setPosition(wx, wy - 0.07, 0);
           else tmpM.makeTranslation(wx, wy, 0);
           this.lava.setMatrixAt(nl, tmpM);
-          this.fl.setXYZ(nl, rows, top ? 1 : 0, wx);
+          // each top corner meets the liquid beside at the same depth
+          const dl = isFl(x - 1, y) ? (rows + colDepth(x - 1, y)) / 2 : rows;
+          const dr = isFl(x + 1, y) ? (rows + colDepth(x + 1, y)) / 2 : rows;
+          this.fl.setXYZW(nl, dl, dr, top ? 1 : 0, wx);
           nl++;
+          // the first surface cell of a run in this chunk lays the run's haze
+          const surf = (sx: number) => isFl(sx, y) && terrain.get(sx, y - 1) === T.AIR;
+          if (top && !spent && nh < HAZE_CAP && (lx === 0 || !surf(x - 1))) {
+            let a = x, b = x + 1;
+            while (surf(a - 1)) a--;
+            while (surf(b)) b++;
+            const sy = wy + 0.36;
+            const h0 = lx === 0 && a < x ? x : x - 0.6;
+            const h1 = Math.min(x0 + CHUNK, b + 0.6);
+            tmpM.makeScale(h1 - h0, HAZE_H, 1).setPosition(h0, sy, HAZE_Z);
+            this.haze.setMatrixAt(nh, tmpM);
+            this.hz.setXYZ(nh, a, b, sy);
+            nh++;
+          }
           continue;
         }
 
@@ -487,7 +571,7 @@ class Chunk {
           harvestable = false;
           if (!spent) {
             // the seam's own stone burns softly behind it
-            tmpC.setHex(ACTIVE.fluid.base).multiplyScalar(0.12);
+            tmpC.setHex(ACTIVE.fluid.base).multiplyScalar(0.15);
             this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           }
         }
@@ -522,9 +606,12 @@ class Chunk {
       }
     }
 
-    this.rock.count = nr; this.lava.count = nl;
+    this.rock.count = nr; this.lava.count = nl; this.haze.count = nh;
+    this.haze.visible = nh > 0;
     this.rock.instanceMatrix.needsUpdate = true;
     this.lava.instanceMatrix.needsUpdate = true;
+    this.haze.instanceMatrix.needsUpdate = true;
+    this.hz.needsUpdate = true;
     if (this.rock.instanceColor) this.rock.instanceColor.needsUpdate = true;
     this.fl.needsUpdate = true;
     this.glow.needsUpdate = true;
@@ -576,28 +663,33 @@ class Chunk {
 
   /**
    * Light that lands: every pool tile and heat fissure within reach of this
-   * chunk throws its hue onto the rock around it (about two tiles for a
-   * pool, one and a half for a seam), baked per rock instance at build. No
-   * light, no draw call; darkness away from them is untouched.
+   * chunk throws its hue onto the rock around it (about two and a half tiles
+   * for a pool, two for a seam), baked per rock instance at build. A pool's
+   * surface also throws its light up the cavity: the walls and ceiling over
+   * it catch it to about four tiles above the meniscus. No light, no draw
+   * call; darkness away from them is untouched.
    */
   private spill(terrain: Terrain, x0: number, y0: number, spent: boolean): Spill {
     const o = SPILL;
     o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0);
     if (spent) return o;
-    const R = 3;
-    for (let sy = y0 - R; sy < y0 + CHUNK + R; sy++) {
-      for (let sx = x0 - R; sx < x0 + CHUNK + R; sx++) {
+    const R = 5;
+    for (let sy = y0 - 3; sy < y0 + CHUNK + R; sy++) {
+      for (let sx = x0 - 3; sx < x0 + CHUNK + 3; sx++) {
         const st = terrain.get(sx, sy);
         const pool = st === T.LAVA;
         if (!pool && !isFissure(st, sx, sy)) continue;
-        const reach = pool ? 2.6 : 1.8, inner = pool ? 0.6 : 0.5;
-        const k = pool ? 1 : 0.1;
-        for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + R); ty++) {
-          for (let tx = Math.max(x0, sx - R); tx <= Math.min(x0 + CHUNK - 1, sx + R); tx++) {
+        // a surface cell lights upward much further than sideways or down
+        const surf = pool && terrain.get(sx, sy - 1) === T.AIR;
+        const reach = pool ? 2.6 : 2.1, inner = pool ? 0.6 : 0.5;
+        const k = pool ? 1 : 0.16;
+        for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
+          for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 3); tx++) {
             if (tx === sx && ty === sy) continue;
             const d = Math.hypot(tx - sx, ty - sy);
-            if (d >= reach) continue;
-            const u = (d - inner) / (reach - inner);
+            const de = surf && ty < sy ? Math.hypot((tx - sx) * 0.85, (ty - sy) * 0.62) : d;
+            if (de >= reach) continue;
+            const u = (de - inner) / (reach - inner);
             const w = k * (1 - (u <= 0 ? 0 : u * u * (3 - 2 * u)));
             const i = (ty - y0) * CHUNK + (tx - x0);
             o.w[i] += w;
@@ -616,7 +708,7 @@ class Chunk {
     for (let i = 0; i < CAP; i++) {
       if (o.w[i] <= 0) continue;
       // saturating: a whole basin next door is brighter than one cell, not 8×
-      const s = 0.2 * (1 - Math.exp(-o.w[i]));
+      const s = 0.3 * (1 - Math.exp(-o.w[i]));
       o.r[i] = tmpC.r * s; o.g[i] = tmpC.g * s; o.b[i] = tmpC.b * s;
     }
     if (coreLit && y0 + CHUNK > CORE_TY - CORE_REACH && y0 < CORE_TY + CORE_REACH) {
@@ -723,6 +815,7 @@ class Chunk {
   private setCulled(on: boolean): void {
     this.rock.frustumCulled = on;
     this.lava.frustumCulled = on;
+    this.haze.frustumCulled = on;
     for (const m of this.gems) m.frustumCulled = on;
   }
 

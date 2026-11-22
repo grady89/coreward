@@ -216,7 +216,7 @@ export const WORLDS: WorldDef[] = [
         { need: 68, resist: 1.3, label: 'Pearl Carapace' },
       ],
     },
-    fluid: { name: 'Brine', base: 0x2a9a8e, pulseA: 0x3ab4a6, pulseB: 0x227e74, dmg: 12, fuelDrain: 4, threshold: 0.7 },
+    fluid: { name: 'Brine', base: 0x33d49c, pulseA: 0x5ce8b4, pulseB: 0x26b080, dmg: 12, fuelDrain: 4, threshold: 0.7 },
     gasImpulse: 16,
     iceTraction: false,
     swarm: {
