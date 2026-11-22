@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 4.0,
+  "candidate": 6.0,
+  "delta": 2.0,
+  "preferred": "candidate",
+  "why": "A keeps glowing fissures that light their stone, glowing world-tinted pools and a clear hue per world. B removes the glow and light spill, turns pools into flat off-palette cubes, and blurs CRYOS into MAELIS."
+ },
+ "lighting": {
+  "best": 4.3,
+  "candidate": 6.4,
+  "delta": 2.1,
+  "preferred": "candidate",
+  "why": "A keeps glowing emissives, light that spills from lava and fissures onto stone, and a distinct hue per world. B flattens all of that into unlit decals and matte tiles, and mixes up the world palettes (green Cryos, violet Maelis)."
+ },
+ "identity": {
+  "best": 4.2,
+  "candidate": 7.0,
+  "delta": 2.8,
+  "preferred": "candidate",
+  "why": "B keeps each world's hue at every depth and in every core. A goes neutral at mid depth and swaps the CRYOS and MAELIS palettes (green CRYOS, violet MAELIS), so its deeper frames misidentify the world."
+ },
+ "fluids": {
+  "best": 3.6,
+  "candidate": 6.2,
+  "delta": 2.6,
+  "preferred": "candidate",
+  "why": "B turns fluids into cohesive, world-hued glowing pools and makes fissures light their stone as in 04. A's flat green/orange tiles and unlit hairline fissures miss every reference. Both still fail to make the core flood its chamber."
+ },
+ "characters": {
+  "best": 4.7,
+  "candidate": 5.0,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "The pod and pilot are identical in A and B. A edges ahead because the pilot sits in warm, lit vault masonry and the scenes around the creatures carry more light. B only wins on a more readable stillwalker silhouette."
+ },
+ "vaults": {
+  "best": 4.8,
+  "candidate": 6.3,
+  "delta": 1.5,
+  "preferred": "candidate",
+  "why": "B adds a cool masonry backdrop with warm lantern pools, and its lit fangs make the hazards far more legible. That moves it clearly toward the 08-vault references, at a small cost: dark footing contrasts less against the wall in Return and Kindled."
+ },
+ "ui": {
+  "best": 6.4,
+  "candidate": 6.2,
+  "delta": -0.2,
+  "preferred": "best",
+  "why": "The only UI difference is the ore icons: B's are cleaner, more distinct silhouettes that sit in the amber VEIL palette, while A's are muddy (the gold has a dark overlay) and its teal copper clashes. Everything else is identical, so the margin is small."
+ },
+ "minerals": {
+  "best": 3.4,
+  "candidate": 7.2,
+  "delta": 3.8,
+  "preferred": "candidate",
+  "why": "B delivers glow, colour identity and the brief's silhouettes for almost every ore, and gives the mimic a fair tell. A is flat, unlit and mis-coloured, and several pairs are confusable. B's remaining problems are square-clipped halos, converging pale halos and iron's low visibility."
+ }
+}
