@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { hdrEmissive } from '../fx/post';
 import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
 import { ACTIVE, worldById } from '../world/worlds';
 import { softDot } from '../fx/particles';
@@ -69,7 +68,6 @@ const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5,
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 // the visor is the pod's eye: lit from inside, so it reads at any distance
 const GLASS = new THREE.MeshStandardMaterial({ color: 0x103a40, roughness: 0.1, metalness: 0.5, emissive: 0x16c4c0, emissiveIntensity: 0.8 });
-hdrEmissive(GLASS, 0.8, 0.2);
 
 /**
  * The Diamondplate quilt (reference-art/cosmetics): rotated-square cells,

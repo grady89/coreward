@@ -3948,9 +3948,8 @@ export class VaultRun {
     this.cam.camera.updateProjectionMatrix();
   }
 
-  /** `draw` is the game's frame renderer (bloom or plain) */
-  render(draw: (scene: THREE.Scene, camera: THREE.Camera) => void): void {
-    draw(this.scene, this.cam.camera);
+  render(renderer: THREE.WebGLRenderer): void {
+    renderer.render(this.scene, this.cam.camera);
   }
 
   dispose(): void {

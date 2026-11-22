@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { hdrBasic, hdrEmissive } from '../fx/post';
 import { CHUNK, WORLD_W, WORLD_ROWS, CORE_ROW } from '../config';
 import { Terrain } from './terrain';
 import { T, def, rockColor, cellHash } from './tiles';
@@ -209,8 +208,6 @@ rockMat.customProgramCacheKey = () => 'rock-glow-v4';
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
 // burning seam share this one material and this one draw call per class.
 const gemMat = gemMaterial();
-// glow facets and fissure cores push past white so they bloom
-hdrEmissive(gemMat, 0.45, 0.5);
 
 /** shared clock for the fluid shimmer and the light it throws; amp 0 = still */
 export const fluidUniforms = {
@@ -260,7 +257,6 @@ varying float vFTop;`)
 	}`);
 };
 lavaMat.customProgramCacheKey = () => 'fluid-glow-v1';
-hdrBasic(lavaMat, 1.4);
 
 /**
  * The fragment floods its chamber: every rock tile within reach of the core

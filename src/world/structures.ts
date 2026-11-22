@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { hdrBasic } from '../fx/post';
 
 /**
  * The five colony structures — quarters, fuel depot, trade post, garage,
@@ -59,11 +58,6 @@ const WARM_GLOW = new THREE.MeshBasicMaterial({ color: 0xffc06a, toneMapped: fal
 const WARM_BRIGHT = new THREE.MeshBasicMaterial({ color: 0xffdfae, toneMapped: false });
 const RED_GLOW = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
 const TEAL_GLOW = new THREE.MeshBasicMaterial({ color: 0x3ce6c8, toneMapped: false });
-// practicals and portholes bloom into the dusk
-hdrBasic(WARM_GLOW, 1.5);
-hdrBasic(WARM_BRIGHT, 1.5);
-hdrBasic(RED_GLOW, 2.0);
-hdrBasic(TEAL_GLOW, 1.6);
 
 // ---------- small-part helpers ----------
 function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh {

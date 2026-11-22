@@ -3,7 +3,6 @@ import { WORLD_W, WORLD_ROWS, CORE_ROW, PAD_X0, PAD_X1 } from '../config';
 import { backwallColor } from './tiles';
 import { ACTIVE } from './worlds';
 import { STRUCTURE_BUILDERS } from './structures';
-import { hdrBasic } from '../fx/post';
 
 // Backwall, sky, surface rig set-dressing, the Ember, and depth-graded atmosphere.
 
@@ -77,16 +76,11 @@ export function createSky(scene: THREE.Scene): void {
   createSkyline(scene);
 }
 
-/** skyline mast beacons: hot enough to bloom */
-const BEACON = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
-hdrBasic(BEACON, 2.2);
-
 function createSkyline(scene: THREE.Scene): void {
   // flat painterly silhouettes: unlit, hazed toward the sky by distance
   const near = new THREE.MeshBasicMaterial({ color: 0x342647, toneMapped: false });
   const far = new THREE.MeshBasicMaterial({ color: 0x453454, toneMapped: false });
   const winMat = new THREE.MeshBasicMaterial({ color: 0xffb066, toneMapped: false });
-  hdrBasic(winMat, 1.7);
   const g = new THREE.Group();
 
   interface S { kind: 'dome' | 'tank' | 'slab' | 'mast'; x: number; s: number; z: number; win?: number; }
@@ -121,7 +115,8 @@ function createSkyline(scene: THREE.Scene): void {
     bigDish.position.set(relayX, 7.2, relayZ);
     bigDish.rotation.x = -2.35;
     g.add(bigDish);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6), BEACON);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false }));
     beacon.position.set(relayX, 8.4, relayZ);
     g.add(beacon);
   }
@@ -141,7 +136,8 @@ function createSkyline(scene: THREE.Scene): void {
     } else {
       m = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, it.s, 6), mat);
       m.position.set(it.x, it.s / 2, it.z);
-      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), BEACON);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false }));
       beacon.position.set(it.x, it.s + 0.1, it.z);
       g.add(beacon);
     }
@@ -286,7 +282,10 @@ export function createSurface(scene: THREE.Scene): void {
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, mh, 6), mastMat);
     mast.position.set(mx, mh / 2, -2.5);
     g.add(mast);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), BEACON);
+    const beacon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false })
+    );
     beacon.position.set(mx, mh + 0.1, -2.5);
     g.add(beacon);
   }
@@ -332,9 +331,10 @@ export function createEmber(scene: THREE.Scene): Ember {
   const group = new THREE.Group();
   // the burning heart spins; halo, ring and shaft stay world-oriented
   const spin = new THREE.Group();
-  const coreMat = new THREE.MeshBasicMaterial({ color: ACTIVE.core.body, toneMapped: false });
-  hdrBasic(coreMat, 1.25);
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6, 1), coreMat);
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(2.6, 1),
+    new THREE.MeshBasicMaterial({ color: ACTIVE.core.body, toneMapped: false })
+  );
   const shell = new THREE.Mesh(
     new THREE.IcosahedronGeometry(3.3, 1),
     new THREE.MeshBasicMaterial({

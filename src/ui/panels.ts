@@ -19,7 +19,7 @@ import { T, def, oreValue } from '../world/tiles';
 import { blurbOf, facts, rarityLabel } from '../game/minerals';
 import { ACTIVE, WORLDS, nextWorld, worldById } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
-import { Settings, bloomEnabled } from '../game/settings';
+import { Settings } from '../game/settings';
 import {
   Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
 } from '../game/contracts';
@@ -1488,10 +1488,6 @@ export class Panels {
       </div>
       ${toggle('vaultAssist', 'Vault assist', 'The Nine Stones, gentler: hazards at six-tenths speed')}
       <div class="forge-head">DISPLAY</div>
-      <div class="row">
-        <span><span class="r-name">Bloom</span><div class="r-sub">Soft glow around lava, ore and lights. Turn off on slower machines</div></span>
-        <button class="btn" id="s-bloom">${bloomEnabled(s) ? 'ON' : 'OFF'}</button>
-      </div>
       ${toggle('showFps', 'Performance counter', 'Show frames per second')}
       <button class="btn wide" id="s-close">BACK</button>
     `;
@@ -1501,12 +1497,6 @@ export class Panels {
       this.ctx.audio.click();
       this.ctx.onSettingsChanged();
       this.renderSettings();
-    });
-    this.body().querySelector('#s-bloom')?.addEventListener('click', e => {
-      s.bloom = !bloomEnabled(s);
-      (e.currentTarget as HTMLElement).textContent = s.bloom ? 'ON' : 'OFF';
-      this.ctx.audio.click();
-      this.ctx.onSettingsChanged();
     });
     this.body().querySelectorAll('input[data-vol]').forEach(el => {
       const input = el as HTMLInputElement;

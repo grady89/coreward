@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { hdrBasic } from '../../fx/post';
 import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { FlareField } from './flares';
@@ -66,7 +65,6 @@ export class Glimmerflies implements Creature {
       map: softDot(), toneMapped: false, transparent: true, opacity: 0.95,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    hdrBasic(mat, 2.0);
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_FLIES);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
