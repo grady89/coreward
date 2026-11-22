@@ -938,6 +938,7 @@ class Game {
     createSurface(this.scene);
     this.ember = createEmber(this.scene);
     this.ember.taken = this.state.extracted.has(ACTIVE.id);
+    this.chunks.setCoreLit(!this.ember.taken);
     this.finale = new Finale(this.scene, this.ember, this.audio, this.ui,
       this.reducedMotion,
       this.state.endedWorlds.has(ACTIVE.id) && !this.state.extracted.has(ACTIVE.id));
@@ -945,6 +946,7 @@ class Game {
     this.atmosphere = new Atmosphere(this.scene);
     this.particles = new Particles(this.scene);
     this.pod = new Pod(this.scene);
+    this.pod.reducedMotion = this.reducedMotion;
     this.pilot = new Pilot(this.scene, this.terrain);
     this.threats = new ThreatField(this.scene, this.terrain, this.particles);
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
@@ -2332,6 +2334,7 @@ class Game {
     this.wrecks.update(this.time, dt, (x, y) => this.bodyOccupies(x, y));
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
+    this.chunks.setCoreLit(!this.ember.taken);
     this.finale.frame(dt, this.time, camRow);
     if (this.staging) this.tickSandbox(dt);
     this.cullLights();
@@ -2588,6 +2591,7 @@ class Game {
       depthRow: this.ctrl.row,
       time: this.time,
       lampOn: this.lampOn,
+      facing: this.ctrl.facing,
       heatFrac: this.ctrl.heatFrac,
       cargoFrac: this.state.cargoCap > 0 ? this.state.cargoCount / this.state.cargoCap : 0,
       // parked with no drill intent, the arm tucks away — airborne it is

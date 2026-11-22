@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHUNK, WORLD_W, WORLD_ROWS } from '../config';
+import { CHUNK, WORLD_W, WORLD_ROWS, CORE_ROW } from '../config';
 import { Terrain } from './terrain';
 import { T, def, rockColor, cellHash } from './tiles';
 import { ACTIVE, worldById } from './worlds';
@@ -191,6 +191,16 @@ varying float vFTop;`)
 	}`);
 };
 lavaMat.customProgramCacheKey = () => 'fluid-glow-v1';
+
+/**
+ * The fragment floods its chamber: every rock tile within reach of the core
+ * takes a wash in the core's own light, strongest beside it and gone by the
+ * chamber mouth, turned toward it so floor tops, pillar flanks and the faces
+ * looking at the fragment catch it hardest. Off once the fragment is taken.
+ */
+const CORE_TX = WORLD_W / 2 - 0.5, CORE_TY = CORE_ROW + 4.5;
+const CORE_REACH = 19, CORE_INNER = 3.5;
+let coreLit = true;
 
 /** a spent world (the husk, or a world whose fragment was taken) throws no light */
 const spentWorld = (): boolean => !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
@@ -448,6 +458,25 @@ class Chunk {
       const s = 0.2 * (1 - Math.exp(-o.w[i]));
       o.r[i] = tmpC.r * s; o.g[i] = tmpC.g * s; o.b[i] = tmpC.b * s;
     }
+    if (coreLit && y0 + CHUNK > CORE_TY - CORE_REACH && y0 < CORE_TY + CORE_REACH) {
+      tmpC.setHex(ACTIVE.core.light);
+      for (let ly = 0; ly < CHUNK; ly++) {
+        for (let lx = 0; lx < CHUNK; lx++) {
+          const tx = x0 + lx, ty = y0 + ly;
+          const d = Math.hypot(tx - CORE_TX, ty - CORE_TY);
+          if (d >= CORE_REACH) continue;
+          const u = Math.max(0, (d - CORE_INNER) / (CORE_REACH - CORE_INNER));
+          const f = (1 - u) * (1 - u);              // long soft tail, no edge
+          const w = 0.34 * f;
+          const i = ly * CHUNK + lx;
+          o.r[i] += tmpC.r * w; o.g[i] += tmpC.g * w; o.b[i] += tmpC.b * w;
+          // the core outweighs a seam next door in setting which way light comes from
+          const k = 4 * f / Math.max(d, 0.5);
+          o.dx[i] += (CORE_TX - tx) * k;
+          o.dy[i] += (ty - CORE_TY) * k;
+        }
+      }
+    }
     return o;
   }
 
@@ -571,6 +600,13 @@ export class ChunkField {
   }
 
   private key(cx: number, cy: number): number { return cy * CHUNKS_X + cx; }
+
+  /** the fragment's chamber wash: off once it is taken, rebuilt on change */
+  setCoreLit(on: boolean): void {
+    if (coreLit === on) return;
+    coreLit = on;
+    this.invalidateAll();
+  }
 
   markDirty(x: number, y: number): void {
     // neighbors too: edge-highlighting of adjacent tiles can cross chunk seams

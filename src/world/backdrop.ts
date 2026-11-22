@@ -380,7 +380,19 @@ export function createEmber(scene: THREE.Scene): Ember {
   );
   shaft.position.set(0, 11.5, -0.3);
 
-  group.add(spin, light, halo, shards, shaft);
+  // the chamber's air and back wall washed in the fragment's light: a wide
+  // soft gradient just in front of the backwall, so it only shows where the
+  // chamber is open and the rock in front of it still reads as rock
+  const flood = new THREE.Mesh(
+    new THREE.PlaneGeometry(44, 30),
+    new THREE.MeshBasicMaterial({
+      map: haloTexture(), color: ACTIVE.core.light, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    })
+  );
+  flood.position.set(0, 0.5, -0.58);
+
+  group.add(spin, light, halo, shards, shaft, flood);
   group.position.set(x, y, 0);
   scene.add(group);
 
@@ -402,6 +414,7 @@ export function createEmber(scene: THREE.Scene): Ember {
       halo.scale.setScalar(11 + pulse * 1.5 + ex * 6);
       (halo.material as THREE.SpriteMaterial).opacity = 0.3 + pulse * 0.08 + ex * 0.35;
       (shaft.material as THREE.MeshBasicMaterial).opacity = 0.1 + ex * 0.3;
+      (flood.material as THREE.MeshBasicMaterial).opacity = 0.5 + pulse * 0.04 + ex * 0.2;
 
       for (let i = 0; i < SHARDS; i++) {
         const ring = i % 2;                      // two inclined orbits

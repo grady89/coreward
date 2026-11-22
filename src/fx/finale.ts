@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CORE_ROW, WORLD_W } from '../config';
-import { ACTIVE, WORLDS } from '../world/worlds';
+import { ACTIVE, WORLDS, worldById } from '../world/worlds';
 import { Ember } from '../world/backdrop';
 import { AudioEngine } from '../audio/audio';
 import { glyphs } from '../input/prompts';
@@ -75,6 +75,11 @@ export class Finale {
     const slabMat = new THREE.MeshStandardMaterial({
       color: 0x241a20, roughness: 0.85, metalness: 0.2, flatShading: true,
     });
+    // the fragment's light on their faces: dark stone, not black cut-outs
+    // (a spent world's monoliths stay as dark as they were)
+    if (!ACTIVE.husk && ACTIVE === worldById(ACTIVE.id)) {
+      slabMat.emissive.setHex(ACTIVE.core.light).multiplyScalar(0.09);
+    }
     const g = new THREE.Group();
     for (const sx of [21.5, 24.5, 27.5, 36.5, 39.5, 42.5]) {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.7, 0.5), slabMat);

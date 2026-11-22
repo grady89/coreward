@@ -3,6 +3,39 @@ import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
 import { ACTIVE, worldById } from '../world/worlds';
 import { softDot } from '../fx/particles';
 
+const BEAM_LEN = 8.5;      // world units the visible beam reaches before it fades
+const BEAM_HALF = 0.42;    // half-angle of the visible wedge (the light's cone is wider)
+const BEAM_DUST = 16;
+
+/**
+ * The visible beam, apex at the top centre: alpha falls off along its length
+ * and across it, with a brighter core, so the wedge has no hard edge.
+ */
+function beamTexture(): THREE.CanvasTexture {
+  const W = 64, H = 128;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(W, H);
+  for (let py = 0; py < H; py++) {
+    const v = (py + 0.5) / H;                       // 0 at the lamp
+    for (let px = 0; px < W; px++) {
+      const u = ((px + 0.5) / W) * 2 - 1;           // -1..1 across the plane
+      const e = Math.abs(u) / Math.max(v, 0.02);    // 1 at the cone's edge
+      const across = Math.max(0, 1 - e);
+      const soft = across * across * (3 - 2 * across);
+      const core = Math.exp(-e * e * 6) * 0.6;
+      const along = Math.min(1, v / 0.14) * Math.pow(1 - v, 1.6);
+      const a = Math.min(1, (soft * 0.7 + core) * along);
+      const k = (py * W + px) * 4;
+      img.data[k] = 255; img.data[k + 1] = 255; img.data[k + 2] = 255;
+      img.data[k + 3] = Math.round(a * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(cv);
+}
+
 // The mining pod: hero object built from primitives, two-tone dusty cream +
 // amber accents, teal visor, animated drill and thruster flames, headlamp.
 // Finishes (the paint locker) recolor a pod's own cloned materials, so a
@@ -147,7 +180,16 @@ export class Pod {
   private nozzles: THREE.Mesh[] = [];
   private flameLen = 1;
   private headlamp: THREE.SpotLight;
+  private lampTarget: THREE.Object3D;
   private glow: THREE.PointLight;
+  /** the beam in the air: a soft additive wedge plus the dust drifting in it */
+  private beamPivot = new THREE.Group();
+  private beamMat: THREE.MeshBasicMaterial;
+  private dust: THREE.Points;
+  private dustSeed = new Float32Array(BEAM_DUST * 4);
+  private lampAim = 0;
+  /** set by the host: dust holds still for prefers-reduced-motion */
+  reducedMotion = false;
   private fillFor: unknown = null;
   private drillSpin = 0;
   private drillStow = 0;
@@ -237,15 +279,53 @@ export class Pod {
     this.group.add(this.para);
 
     // lights
-    this.headlamp = new THREE.SpotLight(0xffe6c0, 0, 22, 0.82, 0.5, 1.1);
+    // a harder penumbra than the old 0.5: stone inside the cone separates
+    // from stone outside it instead of fading into one soft disc
+    this.headlamp = new THREE.SpotLight(0xffe6c0, 0, 22, 0.82, 0.3, 1.1);
     this.headlamp.position.set(0, 0.3, 0.3);
-    const target = new THREE.Object3D();
-    target.position.set(0, -5, 0.5);
-    this.group.add(target);
-    this.headlamp.target = target;
+    this.lampTarget = new THREE.Object3D();
+    this.lampTarget.position.set(0, -5, 0.5);
+    this.group.add(this.lampTarget);
+    this.headlamp.target = this.lampTarget;
     this.glow = new THREE.PointLight(0xffd9a0, 0, 10, 1.5);
     this.glow.position.set(0, 0, 0.6);
     this.group.add(this.headlamp, this.glow);
+
+    // the beam itself, visible in the air: apex at the lamp, pointing down
+    // its local -y; it sits just proud of the rock face so it reads as light
+    // landing on the stone it crosses. Additive and faint: it only ever
+    // brightens what is under it, never hides an ore or a hazard.
+    this.beamMat = new THREE.MeshBasicMaterial({
+      map: beamTexture(), color: 0xffe6c0, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    });
+    const bw = BEAM_LEN * Math.tan(BEAM_HALF) * 2;
+    const beamGeo = new THREE.PlaneGeometry(bw, BEAM_LEN);
+    beamGeo.translate(0, -BEAM_LEN / 2, 0);
+    const beam = new THREE.Mesh(beamGeo, this.beamMat);
+    beam.renderOrder = 2;
+    const dpos = new Float32Array(BEAM_DUST * 3);
+    const dcol = new Float32Array(BEAM_DUST * 3);
+    for (let i = 0; i < BEAM_DUST; i++) {
+      const h = (k: number) => { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
+      this.dustSeed[i * 4] = 0.12 + h(1) * 0.8;        // along the beam
+      this.dustSeed[i * 4 + 1] = h(2) * 1.6 - 0.8;     // across it
+      this.dustSeed[i * 4 + 2] = 0.5 + h(3);           // drift speed
+      this.dustSeed[i * 4 + 3] = h(4) * Math.PI * 2;   // phase
+    }
+    const dgeo = new THREE.BufferGeometry();
+    dgeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3).setUsage(THREE.DynamicDrawUsage));
+    dgeo.setAttribute('color', new THREE.BufferAttribute(dcol, 3).setUsage(THREE.DynamicDrawUsage));
+    this.dust = new THREE.Points(dgeo, new THREE.PointsMaterial({
+      map: softDot(), size: 0.2, vertexColors: true, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    }));
+    this.dust.frustumCulled = false;
+    this.dust.renderOrder = 2;
+    this.beamPivot.position.set(0, 0.05, 0.62);
+    this.beamPivot.add(beam, this.dust);
+    this.beamPivot.visible = false;
+    this.group.add(this.beamPivot);
 
     // landing skids at the collision base
     for (const s of [-1, 1]) {
@@ -477,6 +557,7 @@ export class Pod {
     (this.flameL.material as THREE.MeshBasicMaterial).color.setHex(flame.inner);
     (this.flameR.material as THREE.MeshBasicMaterial).color.setHex(flame.outer);
     this.headlamp.color.setHex(lamp.color);
+    this.beamMat.color.setHex(lamp.color);
   }
 
   update(dt: number, opts: {
@@ -489,6 +570,8 @@ export class Pod {
     cargoFrac?: number;
     /** parked and idle: the drill retracts into the hull until asked for */
     stow?: boolean;
+    /** -1 / 1: which way the pilot last faced — the lamp leans that way */
+    facing?: number;
   }): void {
     const { vx, thrust, sideThrust, drilling, drillDir, depthRow, time } = opts;
     const lampOn = opts.lampOn !== false;
@@ -561,6 +644,48 @@ export class Pod {
     // running dark: the lamp dies, only the instrument glow remains
     this.headlamp.intensity = lampOn ? lamp * 260 : 0;
     this.glow.intensity = lampOn ? lamp * 20 + 2 : 1.6;
+
+    // the lamp leans the way the pilot faces: parked, it looks out across
+    // the cave ahead; in flight it leans down the way you are going; a cut
+    // pulls it onto the face being cut (drilling down swings it to plumb).
+    // The instrument glow still lights the ground right under the skids.
+    const face = (opts.facing ?? 1) < 0 ? -1 : 1;
+    const wantAim = drilling && drillDir === 'left' ? -1.2 : drilling && drillDir === 'right' ? 1.2
+      : drilling && drillDir === 'down' ? face * 0.1
+      : opts.stow ? face * 1.36 : face * 0.34;
+    this.lampAim += (wantAim - this.lampAim) * Math.min(1, dt * 4);
+    this.lampTarget.position.set(Math.sin(this.lampAim) * 5, 0.3 - Math.cos(this.lampAim) * 5, 0.5);
+    this.beamPivot.rotation.z = this.lampAim;
+    // the beam leaves from the hull's edge on the side it points to
+    this.beamPivot.position.x = Math.sin(this.lampAim) * 0.3;
+    this.beamPivot.position.y = 0.05 - Math.cos(this.lampAim) * 0.3;
+    const beamK = lampOn ? lamp : 0;
+    this.beamPivot.visible = beamK > 0.01;
+    if (this.beamPivot.visible) {
+      this.beamMat.opacity = beamK * 0.34;
+      // dust: a few slow motes adrift in the beam, brightest near the lamp
+      const tt = this.reducedMotion ? 0 : time;
+      const pos = this.dust.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const col = this.dust.geometry.getAttribute('color') as THREE.BufferAttribute;
+      const c = this.beamMat.color;
+      const tanH = Math.tan(BEAM_HALF);
+      for (let i = 0; i < BEAM_DUST; i++) {
+        const a0 = this.dustSeed[i * 4], s0 = this.dustSeed[i * 4 + 1];
+        const sp = this.dustSeed[i * 4 + 2], ph = this.dustSeed[i * 4 + 3];
+        let a = a0 + tt * 0.018 * sp;
+        a -= Math.floor(a);
+        const y = a * BEAM_LEN * 0.9;
+        const x = (s0 + Math.sin(tt * 0.31 * sp + ph) * 0.12) * y * tanH * 0.85
+          + Math.sin(tt * 0.5 + ph * 2) * 0.06;
+        pos.setXYZ(i, x, -y + Math.sin(tt * 0.23 + ph) * 0.1, 0.02);
+        const fadeIn = Math.min(1, a / 0.12), fadeOut = 1 - a;
+        const tw = 0.65 + 0.35 * Math.sin(tt * 0.9 * sp + ph);
+        const b = beamK * fadeIn * fadeOut * tw * 1.1;
+        col.setXYZ(i, c.r * b, c.g * b, c.b * b);
+      }
+      pos.needsUpdate = true;
+      col.needsUpdate = true;
+    }
     // the close fill takes the world's air (a spent world's is the stock warm)
     if (this.fillFor !== ACTIVE) {
       this.fillFor = ACTIVE;
