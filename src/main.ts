@@ -32,6 +32,7 @@ import {
 import { Particles } from './fx/particles';
 import { FollowCam } from './fx/camera';
 import { Finale } from './fx/finale';
+import { Post } from './fx/post';
 import { buildFoldThroat, FoldThroat } from './fx/fold';
 import { Hud } from './ui/hud';
 import { Comms } from './ui/comms';
@@ -114,6 +115,8 @@ function disposeSceneDeep(scene: THREE.Scene): void {
 
 class Game {
   renderer: THREE.WebGLRenderer;
+  /** the mine and vault frames go through this: bloom, or the plain render */
+  post: Post;
   scene = new THREE.Scene();
   cam: FollowCam;
   state = new GameState();
@@ -248,6 +251,8 @@ class Game {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // the husk keeps its old, unbloomed look
+    this.post = new Post(this.renderer, () => !!ACTIVE.husk);
 
     this.cam = new FollowCam(innerWidth / innerHeight);
     this.cam.reducedMotion = this.reducedMotion;
@@ -1801,6 +1806,7 @@ class Game {
     this.cam.reducedMotion = this.reducedMotion || !s.shake;
     this.pad.rumbleOn = s.rumble && !this.reducedMotion;
     this.hud.setFps(s.showFps ? 0 : null);
+    this.post.setBloom(s.bloom);
     if (this.threats) this.threats.level = this.faunaDead ? 'off' : s.threats;
     saveSettings(s);
   }
@@ -2206,7 +2212,7 @@ class Game {
     // inside a stone: the world outside is frozen, the suit stops counting
     if (this.mode === 'vault' && this.vault) {
       this.vault.frame(Math.min(0.05, raw), this.input(), this.lampOn);
-      this.vault.render(this.renderer);
+      this.vault.render(this.post.render);
       if (this.vault.closed) this.closeVault();
       return;
     }
@@ -2237,7 +2243,7 @@ class Game {
         });
         this.particles.update(raw2);
       }
-      this.renderer.render(this.scene, this.cam.camera);
+      this.post.render(this.scene, this.cam.camera);
       return;
     }
 
@@ -2265,7 +2271,7 @@ class Game {
       // the fold's last frame IS the cut: render the vault's first frame now
       if (this.mode === 'vault' && this.vault) {
         this.vault.frame(0, this.input(), this.lampOn);
-        this.vault.render(this.renderer);
+        this.vault.render(this.post.render);
         return;
       }
     }
@@ -2335,7 +2341,7 @@ class Game {
     this.finale.frame(dt, this.time, camRow);
     if (this.staging) this.tickSandbox(dt);
     this.cullLights();
-    this.renderer.render(this.scene, this.cam.camera);
+    this.post.render(this.scene, this.cam.camera);
   }
 
   /**

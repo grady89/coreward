@@ -21,6 +21,8 @@ export interface Settings {
   /** the Nine Stones, gentler: hazards at six-tenths speed. The message
    * is the reward, not the reflex — KINDLE stays reachable with this on. */
   vaultAssist: boolean;
+  /** soft glow around lava, ore and lights; off for slower GPUs */
+  bloom: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -35,6 +37,7 @@ const DEFAULTS: Settings = {
   showFps: false,
   threats: 'full',
   vaultAssist: false,
+  bloom: true,
 };
 
 export function loadSettings(): Settings {
