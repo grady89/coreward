@@ -408,7 +408,7 @@ const SPILL: Spill = {
   wf: new Float32Array(CAP), wb: new Float32Array(CAP),
 };
 /** a frostbloom's cold light on the stone around it (and its own face) */
-const FROST_HUE = 0x78d8ff, FROST_REACH = 2.1, FROST_GAIN = 0.17;
+const FROST_HUE = 0x78d8ff, FROST_REACH = 2.6, FROST_INNER = 0.6, FROST_GAIN = 0.32;
 
 /**
  * A seam's trunk runs along its local x from edge to edge, so turning it
@@ -693,7 +693,7 @@ class Chunk {
     for (let sy = y0 - 3; sy < y0 + CHUNK + R; sy++) {
       for (let sx = x0 - 3; sx < x0 + CHUNK + 3; sx++) {
         const st = terrain.get(sx, sy);
-        if (st === T.FROSTBLOOM) { frost = this.frostSpill(o, sx, sy, x0, y0) || frost; continue; }
+        if (st === T.FROSTBLOOM) { frost = this.frostSpill(terrain, o, sx, sy, x0, y0) || frost; continue; }
         const pool = st === T.LAVA;
         if (!pool && !isFissure(st, sx, sy)) continue;
         // a surface cell lights upward much further than sideways or down
@@ -790,18 +790,20 @@ class Chunk {
   }
 
   /**
-   * A frostbloom's cold light: the stone touching it goes ice-cyan, its own
-   * face too (under its violet heart), gone by two tiles. Added on
-   * top of any pool or seam light; true if it reached this chunk.
+   * A frostbloom's cold light: the stone touching it goes ice-cyan, brightest
+   * on the edges facing it, softening out to under three tiles. Its own face
+   * keeps only a little (its halo disc carries the tile, so it never reads as
+   * a lit panel, and a bloom next door adds none to it). Added on top of any
+   * pool or seam light; true if it reached this chunk.
    */
-  private frostSpill(o: Spill, sx: number, sy: number, x0: number, y0: number): boolean {
+  private frostSpill(terrain: Terrain, o: Spill, sx: number, sy: number, x0: number, y0: number): boolean {
     let hit = false;
     for (let ty = Math.max(y0, sy - 3); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
       for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 3); tx++) {
         const d = Math.hypot(tx - sx, ty - sy);
-        if (d >= FROST_REACH) continue;
-        const u = Math.max(0, (d - 0.5) / (FROST_REACH - 0.5));
-        const w = d === 0 ? 0.9 : 1 - u * u * (3 - 2 * u);
+        if (d >= FROST_REACH || (d > 0 && terrain.get(tx, ty) === T.FROSTBLOOM)) continue;
+        const u = Math.max(0, (d - FROST_INNER) / (FROST_REACH - FROST_INNER));
+        const w = d === 0 ? 0.35 : 1 - u * u * (3 - 2 * u);
         const i = (ty - y0) * CHUNK + (tx - x0);
         o.wb[i] += w;
         if (d > 0) { o.dx[i] += (sx - tx) * w / d; o.dy[i] += (ty - sy) * w / d; }

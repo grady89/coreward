@@ -78,6 +78,8 @@ export class Brinewyrm implements Creature {
   private spillBody: Spill;
   /** strength of the nacre film (it runs brighter as the wyrm heats up) */
   private nacre = { value: 0.6 };
+  /** the jaws' film: a fraction of the body's, so the mouth is a step darker */
+  private jawNacre = { value: 0.25 };
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
     // a segment is a stretched faceted gem, long enough that neighbours
@@ -94,8 +96,8 @@ export class Brinewyrm implements Creature {
       color: 0xffffff, flatShading: true, roughness: 0.26, metalness: 0.1,
       emissive: 0x1e2232,
     });
-    nacreMat.onBeforeCompile = sh => {
-      sh.uniforms.uNacre = this.nacre;
+    const nacreShader = (uNacre: { value: number }) => (sh: THREE.WebGLProgramParametersWithUniforms) => {
+      sh.uniforms.uNacre = uNacre;
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform float uNacre;')
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -113,6 +115,7 @@ export class Brinewyrm implements Creature {
   totalEmissiveRadiance += film * (0.4 + 0.8 * fr) * uNacre + rim * fr * fr * 0.9;
 }`);
     };
+    nacreMat.onBeforeCompile = nacreShader(this.nacre);
     nacreMat.customProgramCacheKey = () => 'brinewyrm-nacre-v2';
     this.body = new THREE.InstancedMesh(segGeo, nacreMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -137,6 +140,13 @@ export class Brinewyrm implements Creature {
     const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.38, 0), nacreMat);
     skull.scale.set(1.15, 0.92, 0.95);
     skull.position.x = -0.06;
+    // the jaws: the same film run dim over a slate-violet pearl, so the
+    // wedges stand off the pale skull and the mouth reads as a jaw line
+    const jawMat = new THREE.MeshStandardMaterial({
+      color: 0x6e6a96, flatShading: true, roughness: 0.3, metalness: 0.1, emissive: 0x0a0c18,
+    });
+    jawMat.onBeforeCompile = nacreShader(this.jawNacre);
+    jawMat.customProgramCacheKey = () => 'brinewyrm-nacre-jaw';
     const boneMat = new THREE.MeshStandardMaterial({
       color: 0xf4fbff, flatShading: true, roughness: 0.2, metalness: 0.05, emissive: 0x34405a,
     });
@@ -148,7 +158,7 @@ export class Brinewyrm implements Creature {
       geo.rotateZ(-Math.PI / 2);
       geo.scale(1, 0.62, 1);
       geo.translate(len / 2, -down * rad * 0.2, 0);
-      g.add(new THREE.Mesh(geo, nacreMat));
+      g.add(new THREE.Mesh(geo, jawMat));
       // teeth along the mouth edge, pointing across the gap
       const teeth: THREE.BufferGeometry[] = [];
       const n = Math.round(len / 0.16);
@@ -182,9 +192,20 @@ export class Brinewyrm implements Creature {
     this.gulletMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, side: THREE.DoubleSide });
     this.gullet = new THREE.Mesh(gulletGeo, this.gulletMat);
     this.gullet.frustumCulled = false;
-    this.eyeMat = new THREE.MeshBasicMaterial({ color: 0xeef8ff, toneMapped: false });
-    const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), this.eyeMat);
-    eye.position.set(0.06, 0.12, 0.4);
+    // the eye: a bright ice-cyan stone with a slit pupil, set in a dark
+    // socket so it reads against the pale skull at play size
+    this.eyeMat = new THREE.MeshBasicMaterial({ color: 0x7fe6ff, toneMapped: false });
+    const eye = new THREE.Group();
+    const socket = new THREE.Mesh(new THREE.IcosahedronGeometry(0.135, 0), new THREE.MeshBasicMaterial({ color: 0x050816 }));
+    socket.scale.set(1.3, 0.92, 0.5);
+    socket.position.set(-0.01, 0, -0.07);
+    const iris = new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 0), this.eyeMat);
+    iris.scale.set(1.2, 1, 0.6);
+    const pupil = new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 0), new THREE.MeshBasicMaterial({ color: 0x03050c }));
+    pupil.scale.set(0.16, 0.78, 0.2);
+    pupil.position.set(0.012, 0, 0.05);
+    eye.add(socket, iris, pupil);
+    eye.position.set(0.1, 0.12, 0.4);
     this.light = new THREE.PointLight(0x8ae4ff, 0, 7, 1.6);
     // out in front of the head, not inside it: it lights the pool and the
     // stone without burning the jaws to white
@@ -456,6 +477,7 @@ export class Brinewyrm implements Creature {
     const glow = this.phase === 'churn' ? 1 : this.phase === 'cruise' ? 0.35 + this.alert * 0.5 : 0.75;
     const swim = this.phase === 'cruise' ? 0.12 : 0.06;
     this.nacre.value = 0.55 + glow * 0.5;
+    this.jawNacre.value = this.nacre.value * 0.4;
     // the accents stay ice-cyan whatever brine it swims in
     const spotHue = tmpC2.setHex(0x8ae8ff).lerp(tmpC.setHex(ACTIVE.fluid.pulseA), 0.25).getHex();
     let midX = 0, midY = 0;
@@ -487,7 +509,7 @@ export class Brinewyrm implements Creature {
         this.throat.scale.set(0.9 + this.gape * 0.4, 0.45 + this.gape * 1.1, 0.5);
         // capped so the jaw's facets still read inside the bloom
         this.throatMat.color.setHex(0xece4ff).multiplyScalar(1.2 + glow * 0.7 + this.gape * 1.3);
-        this.eyeMat.color.setHex(0xe0f4ff).multiplyScalar(2 + glow * 0.7 + this.gape);
+        this.eyeMat.color.setHex(0x7fe6ff).multiplyScalar(2.6 + glow * 0.9 + this.gape);
         this.light.intensity = 1 + glow * 3 + this.gape * 2;
         this.spillHead.set(px, py, 3.8, 3.8, 0.24 + glow * 0.18 + this.gape * 0.3, 0x8ae4ff, 1.2);
         tmpM.makeScale(0, 0, 0);

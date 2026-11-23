@@ -592,7 +592,7 @@ const HALO: [number, number][] = [
   [0xd8ecff, 0.22],  // diamond: a soft cool sparkle
   [0xff8030, 0.2],   // embershard: banked coals, dimmer than gold, never ruby's pink
   [0xffffff, 0.75],  // veinlight (tinted per world)
-  [0x9a7cff, 0.3],   // frostbloom: a violet heart (its cyan spills onto the stone around it)
+  [0x52c8ff, 0.6],   // frostbloom: a soft cyan bloom behind the star (violet only in its stamens)
   [0x3cc8ff, 0.5],   // rime salt: cyan within
   [0xf4dcff, 0.16],  // nacre: a sheen, not a glow
   [0xff7034, 0.3],   // mimic: the cracks give it away
