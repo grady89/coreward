@@ -52,6 +52,9 @@ const CEIL_Y = 2.62;
 const CEIL_Z0 = -1.6;
 const CEIL_Z1 = 4.2;
 const FLOOR_Z1 = 4.6;
+/** where the deck's cut edge stands, and how high its lip rides */
+const SILL_Z = 3.95;
+const SILL_H = 0.09;
 const COVE = Math.atan2(CEIL_Z0 - WALL_Z, CEIL_Y - COVE_Y);
 const FIX_Z = 0.1;
 /** pillars stand at GRID + k·BAY; panel seams fall every PANEL from GRID */
@@ -252,6 +255,9 @@ class PropKit {
   sheen = new Kit();
   glow = new Kit();
   private light = new Map<string, Kit>();
+
+  /** what the polished deck gives back of the props' light: the room's one reflection kit (see reflectMat) */
+  constructor(public mirror: Kit) {}
 
   /** soft additive light laid on a surface: 'pool' is round, 'wash' fans down from its top edge */
   land(kind: 'pool' | 'wash', color: number, opacity: number): Kit {
@@ -455,11 +461,6 @@ function blanketGeo(): THREE.BufferGeometry {
 const JAR_GLASS = new THREE.MeshStandardMaterial({ color: 0xbfd8d2, roughness: 0.2, transparent: true, opacity: 0.35 });
 let rugMat: THREE.MeshStandardMaterial | null = null;
 const RUG_MAT = () => rugMat ??= new THREE.MeshStandardMaterial({ map: rugTexture(), roughness: 0.95 });
-let beamMat: THREE.MeshBasicMaterial | null = null;
-const BEAM_MAT = () => beamMat ??= new THREE.MeshBasicMaterial({
-  map: beamTexture(), color: 0xffb868, transparent: true, opacity: 0.13, side: THREE.DoubleSide,
-  depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
-});
 
 // ---------------- palettes as moods ----------------
 
@@ -482,14 +483,19 @@ interface Mood {
   hardware: number;
   /** on the wall: hue turn (0..1), saturation and lightness multipliers */
   hue: number; sat: number; lum: number;
+  /** the deck plating: what the palette's floor swatch is pulled toward, and how far */
+  deck: number; deckMix: number;
+  /** what the polished deck gives back of the lit wall above it */
+  sheen: number;
 }
 
 const MOODS: Record<string, Mood> = {
-  // DUSK: the stock room, warm amber under worn gunmetal
+  // DUSK: the stock room, warm amber under worn gunmetal, on a deck of oiled bronze-brown
   '': {
     lens: 0xffc77a, light: 0xffb36b, fill: 0xffd2a0, sky: 0xffd9b0, ground: 0x4a3b30,
     metal: 0x23272d, metalMix: 0.72, ceil: 0x2e2620, ceilMix: 0.3, wains: null,
     hardware: 0xb8925a, hue: 0, sat: 1, lum: 1,
+    deck: 0x5e4634, deckMix: 0.7, sheen: 0xffa860,
   },
   // SLATEBED: cold-water blue-grey, steel ribs, a cooler white overhead —
   // so the bought lamps and the radio glow warm against it
@@ -497,18 +503,21 @@ const MOODS: Record<string, Mood> = {
     lens: 0xe4f0ff, light: 0xa9c4e8, fill: 0xd6e4ff, sky: 0xd2def0, ground: 0x2a323c,
     metal: 0x1a2430, metalMix: 0.7, ceil: 0x161e28, ceilMix: 0.42, wains: 0x3a5070,
     hardware: 0xb4c2cc, hue: 0.02, sat: 1.55, lum: 0.94,
+    deck: 0x34465a, deckMix: 0.55, sheen: 0x9cc0ea,
   },
   // DUST ROSE: plum wainscot, brass ribs, a pink-peach light
   rose: {
     lens: 0xffcab8, light: 0xffaa96, fill: 0xffcab6, sky: 0xffd8cc, ground: 0x4a2c34,
     metal: 0x7a5a30, metalMix: 0.58, ceil: 0x3a1e2a, ceilMix: 0.4, wains: 0x7a3a4c,
     hardware: 0xd4a85c, hue: -0.03, sat: 1.35, lum: 1.03,
+    deck: 0x6a3a44, deckMix: 0.65, sheen: 0xff9a8a,
   },
   // VERDANT: deep green over warm wood, dark bronze, a golden light
   verdant: {
     lens: 0xffe6a0, light: 0xffcf6e, fill: 0xffe2a8, sky: 0xf2eac0, ground: 0x2c3824,
     metal: 0x3a2a18, metalMix: 0.68, ceil: 0x1a2618, ceilMix: 0.4, wains: 0x7a4a28,
     hardware: 0xd8b45a, hue: 0.01, sat: 1.45, lum: 0.86,
+    deck: 0x5a4028, deckMix: 0.7, sheen: 0xffc860,
   },
 };
 
@@ -561,6 +570,104 @@ function glowMat(kind: 'pool' | 'wash', color: number, opacity: number): THREE.M
   });
   glowMats.set(key, mat);
   return mat;
+}
+
+/**
+ * The deck is polished plate, so whatever is lit above it shows in it. A
+ * reflection is authored as a quad standing where its source stands (a lit
+ * wall, a porthole, a tank) and the vertex shader drops each corner to where
+ * the floor would mirror it for the camera that is looking right now — so the
+ * streak stays under its source on screen as the camera pans, and stretches
+ * toward the viewer the higher the source hangs. Additive, hue in the vertex
+ * colour, one draw for every streak in the room.
+ */
+let reflMat: THREE.MeshBasicMaterial | null = null;
+function reflectMat(): THREE.MeshBasicMaterial {
+  if (reflMat) return reflMat;
+  const tex = canvasTex(64, 128, gg => {
+    // a streak, the way a rough polished floor gives a light back: long,
+    // soft at both ends, a little wider where it runs out toward the viewer
+    const img = gg.createImageData(64, 128);
+    for (let j = 0; j < 128; j++) {
+      const t = j / 127;                                  // 0 at the top: the source's crown
+      const along = Math.pow(Math.sin(Math.PI * t), 1.4);
+      const spread = 0.6 + 0.4 * (1 - t);
+      for (let i = 0; i < 64; i++) {
+        const u = Math.abs(i / 63 - 0.5) * 2 / spread;
+        const a = Math.exp(-u * u * 2.6) * along;
+        const k = (j * 64 + i) * 4;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+        img.data[k + 3] = Math.round(Math.min(1, a) * 255);
+      }
+    }
+    gg.putImageData(img, 0, 0);
+  });
+  reflMat = new THREE.MeshBasicMaterial({
+    map: tex, vertexColors: true, transparent: true, depthWrite: false,
+    // the drop to the floor turns each quad over on screen
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
+  });
+  reflMat.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `
+      vec4 wp = modelMatrix * vec4(transformed, 1.0);
+      float rt = cameraPosition.y / (cameraPosition.y + max(wp.y, 0.0));
+      wp.xz = cameraPosition.xz + rt * (wp.xz - cameraPosition.xz);
+      wp.y = 0.007;
+      vec4 mvPosition = viewMatrix * wp;
+      gl_Position = projectionMatrix * mvPosition;
+    `);
+  };
+  reflMat.customProgramCacheKey = () => 'deck-reflection';
+  return reflMat;
+}
+
+/**
+ * A reflection of a lit patch: centred at x, from foot height y0 to crown y1,
+ * standing at depth z. The floor is rough, so the streak smears well past the
+ * patch's own mirror image — down to the source's foot and out past its crown.
+ */
+function refl(k: Kit, hex: number | THREE.Color, s: number, w: number, y0: number, y1: number, x: number, z: number): void {
+  const lo = Math.max(0, y0 - 0.6 * (y1 - y0) - 0.25), hi = y1 + 0.5 * (y1 - y0) + 0.3;
+  k.add(UNIT_QUAD, w, hi - lo, 1, x, (lo + hi) / 2, z, new THREE.Color().set(hex).multiplyScalar(s));
+}
+
+/** light in the air: soft across, fading from where it enters to where it lands */
+let shaftTex: THREE.CanvasTexture | null = null;
+function softShaftTex(): THREE.CanvasTexture {
+  return shaftTex ??= canvasTex(64, 128, gg => {
+    const img = gg.createImageData(64, 128);
+    for (let j = 0; j < 128; j++) {
+      const t = j / 127;                                  // 0 at the source
+      const fall = Math.pow(1 - t, 1.3) * (0.35 + 0.65 * Math.min(1, t * 6));
+      for (let i = 0; i < 64; i++) {
+        const u = Math.abs(i / 63 - 0.5) * 2;
+        const a = Math.pow(Math.max(0, 1 - u * u), 2.2) * fall;
+        const k = (j * 64 + i) * 4;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+        img.data[k + 3] = Math.round(Math.min(1, a) * 255);
+      }
+    }
+    gg.putImageData(img, 0, 0);
+  });
+}
+
+let duskShaftMat: THREE.MeshBasicMaterial | null = null;
+const DUSK_SHAFT = () => duskShaftMat ??= new THREE.MeshBasicMaterial({
+  map: softShaftTex(), color: 0xff9a4c, opacity: 0.4, transparent: true, side: THREE.DoubleSide,
+  depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+});
+let lampConeMat: THREE.MeshBasicMaterial | null = null;
+const LAMP_CONE = () => lampConeMat ??= new THREE.MeshBasicMaterial({
+  map: softShaftTex(), color: 0xffb868, opacity: 0.5, transparent: true, side: THREE.DoubleSide,
+  depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+});
+
+/** a quad narrower at the top than the bottom, uv'd edge to edge, centred on its middle */
+function trapezoid(topW: number, botW: number, h: number): THREE.BufferGeometry {
+  const geo = new THREE.PlaneGeometry(1, h);
+  const p = geo.getAttribute('position');
+  for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) * (p.getY(i) > 0 ? topW : botW));
+  return geo;
 }
 
 /**
@@ -806,13 +913,13 @@ function gemMatcap(hex: number): THREE.CanvasTexture {
     const r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
     const tone = (k: number, w = 0) =>
       `rgb(${[r, g, b].map(c => Math.round(Math.min(255, c * k + (255 - c * k) * w))).join(',')})`;
-    gg.fillStyle = tone(0.4);
+    gg.fillStyle = tone(0.5);
     gg.fillRect(0, 0, 128, 128);
     const body = gg.createRadialGradient(64, 72, 4, 64, 64, 64);
-    body.addColorStop(0, tone(1, 0.4));
-    body.addColorStop(0.45, tone(1, 0.08));
-    body.addColorStop(0.8, tone(0.78));
-    body.addColorStop(1, tone(0.42));
+    body.addColorStop(0, tone(1, 0.6));
+    body.addColorStop(0.45, tone(1, 0.25));
+    body.addColorStop(0.8, tone(0.92, 0.05));
+    body.addColorStop(1, tone(0.55));
     gg.fillStyle = body;
     gg.beginPath(); gg.arc(64, 64, 64, 0, Math.PI * 2); gg.fill();
     // the downlight, on every facet that faces up
@@ -1088,6 +1195,8 @@ export class Interior {
   private gems: THREE.Mesh[] = [];
   /** the gallery labels, kept apart from the room so a pointer can hit them */
   private placards: THREE.Mesh[] = [];
+  /** every deck reflection in the room, gathered through a rebuild and drawn as one */
+  private mirror = new Kit();
   private consoleDot: THREE.Mesh | null = null;
   private stations: Station[] = [];
   private hud: HTMLDivElement;
@@ -1099,6 +1208,8 @@ export class Interior {
   // palette materials, retinted in place when the walls are repainted
   private wallMat = new THREE.MeshStandardMaterial({ roughness: 0.75 });
   private trimMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
+  /** the sill's nosing: the trim's colour, worn down a shade by boots */
+  private nosingMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.2 });
   private floorMat = new THREE.MeshStandardMaterial({ roughness: 0.65, metalness: 0.1 });
   // vertex-shaded twins for the merged shell, retinted from the same palette:
   // the shade attribute steps the value, the palette keeps the hue
@@ -1189,11 +1300,12 @@ export class Interior {
     }
     this.wallMat.color.copy(wall);
     this.trimMat.color.setHex(p.trim);
+    this.nosingMat.color.setHex(p.trim).multiplyScalar(0.45);
     this.floorMat.color.setHex(p.floor);
     this.shellWall.color.copy(wall);
     this.shellWains.color.copy(m.wains === null ? wall : C(m.wains));
     this.shellCeil.color.copy(wall).lerp(C(m.ceil), m.ceilMix);
-    this.shellFloor.color.setHex(p.floor);
+    this.shellFloor.color.setHex(p.floor).lerp(C(m.deck), m.deckMix);
     this.shellFrame.color.copy(wall).lerp(C(m.metal), m.metalMix);
     this.shellLens.color.setHex(m.lens);
     this.hemi.color.setHex(m.sky);
@@ -1212,6 +1324,7 @@ export class Interior {
     this.placards = [];
     this.consoleDot = null;
     this.stations = [];
+    this.mirror = new Kit();
     this.applyPalette();
 
     const own = this.ctx.meta.furnishings;
@@ -1256,6 +1369,13 @@ export class Interior {
     this.buildWingDoor(g, GALLERY_X1, vivariumOpen, 'THE VIVARIUM', !galleryOpen);
     if (galleryOpen && vivariumOpen) this.buildVivarium(g);
 
+    // the deck's reflections, one draw: the shader places them, so never culled by where they were authored
+    if (!this.mirror.empty) {
+      const m = this.mirror.mesh(reflectMat());
+      m.frustumCulled = false;
+      g.add(m);
+    }
+
     // exit + sealed-door prompts join the station list
     this.stations.push({ x: HALL_X0 + 0.2, r: 1.0, label: 'STEP OUT', panel: null });
   }
@@ -1274,24 +1394,29 @@ export class Interior {
       frame: this.shellFrame, trim: this.trimMat, fixtures: true,
     };
     const wall = new Kit(), wains = new Kit(), ceil = new Kit(), floor = new Kit(), frame = new Kit(), lens = new Kit();
-    const halo = new Kit(), wash = new Kit(), pool = new Kit();
+    const halo = new Kit(), wash = new Kit(), pool = new Kit(), reach = new Kit(), mirror = this.mirror;
     const W = x1 - x0, CX = (x0 + x1) / 2;
-    // value falls away toward the camera, so the frame's edges stay dark
+    // value falls away toward the camera, so the frame's edges stay dark —
+    // but the deck only eases down: it is where the room's light lands
     const ceilFade = (z: number) => z < 0.6 ? 1 : Math.max(0.25, 1 - (z - 0.6) * 0.22);
-    const floorFade = (z: number) => z < 0.4 ? 1 : Math.max(0.1, 1 - (z - 0.4) * 0.34);
+    const floorFade = (z: number) => z < 0.6 ? 1 : Math.max(0.42, 1 - (z - 0.6) * 0.16);
+    // the wall in value: a bright upper course under the fixtures, a dimmer
+    // lower one, a dark wainscot; each panel steps a little off its neighbours
+    const courseLift = (y: number) => y < 1.4 ? 0.8 + (y - 0.69) * 0.12 : 0.98 + (y - 1.42) * 0.2;
 
     // ---- back wall
     wall.box(W, 2.45, 0.15, CX, 1.125, WALL_Z - 0.075, 0.4);           // backing, seen in the seams
     frame.box(W, 0.14, 0.06, CX, 0.07, WALL_Z + 0.03, 0.8);            // kick plate
     for (const [a, b] of cells(x0, x1, PANEL / 2, GRID)) {               // wainscot
-      wains.box(b - a - 0.03, 0.46, 0.05, (a + b) / 2, 0.38, WALL_Z + 0.025, 0.58 + hash01(a, 1) * 0.07);
+      wains.box(b - a - 0.03, 0.46, 0.05, (a + b) / 2, 0.38, WALL_Z + 0.025,
+        p => (0.44 + hash01(a, 1) * 0.08) * (0.82 + (p.y - 0.15) * 0.5));
     }
     g.add(box(W, 0.07, 0.07, S.trim, CX, 0.655, WALL_Z + 0.035));      // chair rail
     for (const [y0, y1] of [[0.69, 1.42], [1.42, 2.13]] as const) {
       for (const [a, b] of cells(x0, x1, PANEL, GRID)) {
-        const s = 0.9 + hash01(a, y0) * 0.15;
+        const s = 0.86 + hash01(a, y0) * 0.24;
         wall.box(b - a - 0.035, y1 - y0 - 0.035, 0.03, (a + b) / 2, (y0 + y1) / 2, WALL_Z + 0.015,
-          p => s * (0.84 + (p.y - 0.69) * 0.11));
+          p => s * courseLift(p.y));
         if (b - a < 0.4) continue;
         for (const bx of [a + 0.09, b - 0.09]) for (const by of [y0 + 0.08, y1 - 0.08]) {
           frame.box(0.035, 0.035, 0.02, bx, by, WALL_Z + 0.035, 1.15);
@@ -1332,12 +1457,15 @@ export class Interior {
     frame.rod(W, 0.022, CX, 2.55, -0.7, 1.1);
     for (const [a] of cells(x0, x1, PANEL, GRID)) frame.box(0.04, 0.09, 0.26, a, 2.565, -0.78, 0.6);
 
-    // ---- pillars, up the cove and across as ribs: the hab's skeleton
+    // ---- pillars, up the cove and across as ribs: the hab's skeleton. Across
+    // the ceiling the rib is shallow and in the ceiling's own finish, a step
+    // down from the panels rather than a dark bar, so under perspective it
+    // recedes instead of raking out of the frame
     for (let px = GRID + BAY; px < x1; px += BAY) {
       if (px < x0) continue;
       frame.box(0.17, COVE_Y, 0.1, px, COVE_Y / 2, WALL_Z + 0.06, 0.9);
       frame.box(0.17, cl + 0.05, 0.09, px, cy + nY * 0.04, cz + nZ * 0.04, 0.9, COVE);
-      frame.box(0.17, 0.15, cd, px, CEIL_Y - 0.075, cmz, p => 0.9 * ceilFade(p.z));
+      ceil.box(0.13, 0.06, cd, px, CEIL_Y - 0.03, cmz, p => 0.66 * ceilFade(p.z));
     }
 
     // ---- fixtures, one per bay
@@ -1349,6 +1477,10 @@ export class Interior {
       wash.quad(2.7, 1.95, bx, COVE_Y - 1.95 / 2, WALL_Z + 0.04, 'wall');
       halo.quad(2.4, cl, bx, cy + nY * 0.02, cz + nZ * 0.02, COVE);
       pool.quad(3.2, 2.6, bx, 0.004, -0.55, 'up');
+      // the fixture hangs out over the walk, so its light lands out there too
+      reach.quad(3.6, 3.4, bx, 0.005, 1.0, 'up');
+      // and the polished deck gives back the lit wall and the lens
+      refl(mirror, this.mood.sheen, 0.3, 1.9, 0.9, 2.2, bx, WALL_Z + 0.05);
     }
     for (const lx of lit) {
       const warm = new THREE.PointLight(this.mood.fill, 3.2, 7, 1.7);
@@ -1356,17 +1488,37 @@ export class Interior {
       g.add(warm);
     }
 
-    // ---- floor: a dark gutter at the wall, then staggered plates out toward the camera
-    floor.box(W, 0.2, FLOOR_Z1 - WALL_Z, CX, -0.12, (FLOOR_Z1 + WALL_Z) / 2, p => 0.32 * floorFade(p.z));
-    frame.box(W, 0.02, 0.17, CX, -0.02, WALL_Z + 0.085, 0.4);
+    // ---- floor: a dark gutter at the wall, then staggered plates out toward the camera.
+    // The bed sits just under the plates' faces, so a seam is a dark line from
+    // any angle — never a slot whose walls flicker when the camera looks down it
+    floor.box(W, 0.2, FLOOR_Z1 - WALL_Z, CX, -0.106, (FLOOR_Z1 + WALL_Z) / 2, p => 0.22 * floorFade(p.z));
+    frame.box(W, 0.02, 0.17, CX, -0.012, WALL_Z + 0.085, 0.4);
     for (const [a] of cells(x0, x1, 0.3, GRID)) frame.box(0.03, 0.012, 0.15, a, -0.006, WALL_Z + 0.085, 0.9);
     cells(-1.85, FLOOR_Z1, 0.92, -1.85).forEach(([za, zb], r) => {
+      // plates butt end to end along a row; the joint between them is a flat
+      // dark inlay, so the one that runs straight away from the camera reads
+      // as a line like the rest and not as a slot with flickering walls
       for (const [a, b] of cells(x0, x1, PANEL, GRID + (r % 2) * PANEL / 2)) {
         const s = 0.74 + hash01(a, za) * 0.14;
-        floor.box(b - a - 0.03, 0.02, zb - za - 0.03, (a + b) / 2, -0.01, (za + zb) / 2,
+        floor.box(b - a, 0.02, zb - za - 0.03, (a + b) / 2, -0.01, (za + zb) / 2,
           p => s * floorFade(p.z) * (0.62 + 0.38 * Math.min(1, (p.z + 1.85) / 0.9)));
+        if (a > x0 + 0.01) floor.box(0.024, 0.002, zb - za - 0.03, a, 0.001, (za + zb) / 2, p => 0.2 * floorFade(p.z));
       }
     });
+
+    // ---- the cut edge of the deck, nearest the camera: a raised sill of
+    // tread plate with a nosing in the room's trim, so the bottom of the frame
+    // is the edge of a cutaway and not more empty floor. Low lights tucked
+    // under the nosing wash the deck behind it
+    const sd = FLOOR_Z1 + 0.3 - SILL_Z;
+    frame.box(W, 0.3, sd, CX, SILL_H - 0.15, SILL_Z + sd / 2, p => 0.5 * Math.max(0.5, 1 - (p.z - SILL_Z) * 0.8));
+    for (let tz = SILL_Z + 0.1; tz < FLOOR_Z1; tz += 0.11) frame.box(W, 0.008, 0.03, CX, SILL_H + 0.004, tz, 0.75);
+    frame.box(W, 0.06, 0.03, CX, SILL_H - 0.03, SILL_Z - 0.012, 0.35);
+    g.add(box(W, 0.032, 0.05, skin ? S.trim : this.nosingMat, CX, SILL_H + 0.006, SILL_Z + 0.02));
+    for (let sx = GRID + PANEL / 2; S.fixtures && sx < x1; sx += PANEL) {
+      if (sx < x0 + 0.2) continue;
+      reach.quad(1.6, 1.4, sx, 0.0055, SILL_Z, 'up');
+    }
 
     // ---- the west wall, dressed round the way out
     if (x0 < HALL_X0) {
@@ -1395,20 +1547,32 @@ export class Interior {
     const L = this.mood.light;
     g.add(lens.mesh(this.shellLens));
     g.add(halo.mesh(glowMat('pool', L, 0.45)), wash.mesh(glowMat('wash', L, 0.85)), pool.mesh(glowMat('pool', L, 0.5)));
+    g.add(reach.mesh(glowMat('pool', L, 0.3)));
   }
 
   /** dusk through a porthole lands: a glow on the wall round the glass, a patch on the floor below */
   private duskSpill(g: THREE.Group, xs: number[], w: number, y: number): void {
-    const halo = new Kit(), patch = new Kit();
+    const halo = new Kit(), patch = new Kit(), shaft = new Kit(), mirror = this.mirror;
+    // the low sun comes in nearly level, so the light falls a long way out
+    // from the wall: down through the air in a soft shaft, and lands as a
+    // long warm patch on the deck in front of the glass
+    const LAND_Z = 0.9;
+    const dz = LAND_Z - WALL_Z, dy = y - 0.01, len = Math.hypot(dz, dy);
+    const tilt = -Math.atan2(dz, dy);
+    const shaftGeo = trapezoid(w * 0.9, w * 1.9, len);
     for (const x of xs) {
       halo.quad(w * 2.6, w * 2.6, x, y, WALL_Z + 0.042, 'wall');
       patch.quad(w * 1.3, 2.9, x, 0.006, -0.5, 'up');
+      patch.quad(w * 2.0, 2.4, x, 0.0065, LAND_Z - 0.3, 'up');
+      shaft.add(shaftGeo, 1, 1, 1, x, (y + 0.01) / 2, (WALL_Z + LAND_Z) / 2, 1, tilt);
+      refl(mirror, 0xff9a4a, 0.75, w * 0.95, y - w * 0.5, y + w * 0.5, x, WALL_Z + 0.04);
     }
-    g.add(halo.mesh(glowMat('pool', 0xff9447, 0.35)), patch.mesh(glowMat('pool', 0xff8a3d, 0.7)));
+    g.add(halo.mesh(glowMat('pool', 0xff9447, 0.35)), patch.mesh(glowMat('pool', 0xff8a3d, 0.75)));
+    g.add(shaft.mesh(DUSK_SHAFT()));
   }
 
   private buildStations(g: THREE.Group): void {
-    const k = new PropKit();
+    const k = new PropKit(this.mirror);
     const hw = this.hardware;
     const GUN = C(0x4b545e), GUN_L = C(0x5d6772), GUN_D = C(0x363d45), SOOT = C(0x23272d);
 
@@ -1440,6 +1604,7 @@ export class Interior {
     k.sheen.cyl(0.03, 0.07, 0.03, 4.45, 1.28, -1.45, GUN_D, 10);
     k.land('pool', 0xffb060, 0.5).quad(0.8, 0.5, 4.3, 0.656, -1.3, 'up');
     k.land('pool', 0xffb060, 0.32).quad(0.9, 0.9, 4.45, 1.18, WALL_Z + 0.046, 'wall');
+    refl(k.mirror, 0xffb060, 0.4, 0.45, 0.95, 1.4, 4.45, -1.45);
     this.stations.push({ x: 4, r: 0.9, label: 'THE LEDGER', panel: 'ledger' });
 
     // DISPATCH CONSOLE — a listening set with the dish's little brother
@@ -1459,6 +1624,7 @@ export class Interior {
     screen.position.set(8.5, 1.09, -1.378);
     g.add(screen);
     k.land('pool', 0x3ce6c8, 0.18).quad(0.9, 0.6, 8.5, 1.09, -1.375, 'wall');
+    refl(k.mirror, 0x3ce6c8, 0.1, 0.7, 0.9, 1.28, 8.5, -1.378);
     k.sheen.cyl(0.012, 0.016, 0.8, 8.78, 1.2, -1.52, GUN_D, 6);                 // the mast and its dish
     k.sheen.cyl(0.12, 0.02, 0.05, 8.78, 1.62, -1.52, GUN_L, 12, 0, 0.5);
     k.glow.add(UNIT_ICO, 0.016, 0.016, 0.016, 8.74, 1.66, -1.52, C(0xff4d29));
@@ -1519,7 +1685,7 @@ export class Interior {
   }
 
   private buildFurnishings(g: THREE.Group, own: string[]): void {
-    const k = new PropKit();
+    const k = new PropKit(this.mirror);
     const hw = this.hardware;
     const DARK = C(0x2a2e34), WOOD = C(0x7a5236), WOOD_L = C(0x9a6a3e), CREAM = C(0xe9e0cc);
 
@@ -1552,12 +1718,20 @@ export class Interior {
       k.sheen.cyl(0.03, 0.05, 0.04, SX, SY + 0.19, Z, C(0x30353c), 8);
       k.glow.cyl(0.18, 0.18, 0.004, SX, SY - 0.004, Z, C(0xffd89a), 14);  // lit from inside
       k.glow.add(UNIT_ICO, 0.05, 0.05, 0.05, SX, SY - 0.02, Z, C(0xfff2d0));
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.82, SY - 0.02, 18, 1, true), BEAM_MAT());
-      beam.position.set(SX, (SY - 0.02) / 2, Z);
-      g.add(beam);
+      // the cone as glow in the air: soft-edged and falling off toward the
+      // floor, a wide faint bloom behind a narrower, brighter core
+      const H = SY - 0.02;
+      const bloom = new THREE.Mesh(trapezoid(0.5, 2.1, H), LAMP_CONE());
+      bloom.position.set(SX, H / 2, Z - 0.05);
+      const core = new THREE.Mesh(trapezoid(0.3, 1.2, H), LAMP_CONE());
+      core.position.set(SX, H / 2, Z + 0.02);
+      g.add(bloom, core);
       k.land('pool', 0xffa04c, 0.8).quad(2.0, 1.7, SX, 0.008, Z + 0.1, 'up');
+      k.land('pool', 0xffa04c, 0.35).quad(2.6, 2.6, SX, 0.0085, Z + 1.3, 'up');
       k.land('wash', 0xffa85a, 0.55).quad(1.5, 1.5, SX, SY - 0.75, WALL_Z + 0.047, 'wall');
       k.land('pool', 0xffb060, 0.35).quad(1.4, 1.2, SX, SY + 0.05, WALL_Z + 0.046, 'wall');
+      refl(k.mirror, 0xffc27a, 0.7, 0.55, 1.35, 1.8, SX, Z);
+      refl(k.mirror, 0xffa85a, 0.3, 1.4, 0.55, 1.9, SX, WALL_Z + 0.05);
       const pt = new THREE.PointLight(0xffc27a, 3.4, 4.5, 1.6);
       pt.position.set(SX, SY - 0.15, Z + 0.15);
       g.add(pt);
@@ -1603,6 +1777,7 @@ export class Interior {
       k.land('wash', 0xffb060, 0.85).quad(1.1, 0.65, LX, 0.6, WALL_Z + 0.046, 'wall');
       k.land('pool', 0xffb060, 0.45).quad(0.7, 0.7, LX, 0.92, WALL_Z + 0.047, 'wall');
       k.land('pool', 0xffb060, 0.25).quad(0.9, 0.6, LX, 0.53, Z, 'up');
+      refl(k.mirror, 0xffb060, 0.35, 0.9, 0.35, 1.05, LX, WALL_Z + 0.05);
     }
     if (own.includes('galley')) {
       // a cabinet with a wood top, tiles behind, a shelf with a warm strip
@@ -1630,6 +1805,7 @@ export class Interior {
       k.sheen.cyl(0.042, 0.042, 0.02, SX - 0.06, 1.235, -1.88, hw, 10);
       k.land('wash', 0xffb060, 0.75).quad(0.95, 0.5, SX, 0.85, -1.926, 'wall');
       k.land('pool', 0xffb060, 0.5).quad(1.0, 0.45, SX - 0.05, 0.603, Z, 'up');
+      refl(k.mirror, 0xffd79a, 0.3, 0.8, 0.65, 1.12, SX, -1.9);
       // the hob, the kettle
       const KX = 17.52;
       k.sheen.cyl(0.11, 0.11, 0.012, KX, 0.606, Z, C(0x23272d), 14);
@@ -1699,6 +1875,8 @@ export class Interior {
       k.land('pool', 0xffa040, 0.6).quad(0.42, 0.28, X + 0.1, 0.74, -1.3, 'wall');
       k.land('pool', 0xff9a40, 0.32).quad(1.0, 0.8, X, 0.85, WALL_Z + 0.046, 'wall');
       k.land('pool', 0xff9a40, 0.3).quad(0.8, 0.9, X, 0.009, -0.95, 'up');
+      refl(k.mirror, 0xffa040, 0.5, 0.3, 0.66, 0.82, X + 0.1, -1.31);
+      refl(k.mirror, 0xff9a40, 0.22, 0.9, 0.45, 1.25, X, WALL_Z + 0.05);
     }
     if (own.includes('chart')) {
       const chart = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.82),
@@ -1718,7 +1896,7 @@ export class Interior {
   private buildWingDoor(g: THREE.Group, atX: number, open: boolean, name: string, hidden = false): void {
     if (hidden) return;  // the vivarium door isn't visible until the gallery exists
     // the threshold: a dark pier cased in bronze, its name on a plate, where the hab ends and a wing begins
-    const k = new PropKit();
+    const k = new PropKit(this.mirror);
     const BRONZE = C(0x6a5236), BRASS = C(0xb08a50);
     k.matte.bev(0.5, 2.3, 0.25, atX, 1.15, -1.6, C(0x2c272e), 0.03);
     k.sheen.bev(0.58, 0.14, 0.31, atX, 2.32, -1.6, BRONZE, 0.025);
@@ -1733,6 +1911,7 @@ export class Interior {
       k.sheen.cyl(0.05, 0.07, 0.07, atX, 2.03, -1.43, BRONZE, 10);
       k.glow.cyl(0.066, 0.066, 0.004, atX, 1.993, -1.43, C(0xffd89a), 10);
       k.land('wash', 0xffb868, 0.6).quad(0.42, 1.4, atX, 1.3, -1.466, 'wall');
+      refl(k.mirror, 0xffb868, 0.3, 0.42, 0.6, 2.0, atX, -1.466);
       k.flush(g);
       return;
     }
@@ -1770,7 +1949,7 @@ export class Interior {
       .slice(0, 6)
       .sort((a, b) => rarityRank(a.t) - rarityRank(b.t));   // then walk common → rare
 
-    const k = new PropKit();
+    const k = new PropKit(this.mirror);
     const tint = new Kit(), fan = new Kit(), beams = new Kit(), glass = new Kit();
     const x0 = HALL_X1, x1 = GALLERY_X1, CX = (x0 + x1) / 2, W = x1 - x0;
     const BRONZE = C(0x6a5236), BRONZE_D = C(0x33281c), BRASS = C(0xb8925a);
@@ -1811,15 +1990,15 @@ export class Interior {
       // the stone: lit facets over a burning core, turning slowly under its light
       const gem = new THREE.Mesh(displayCut(), new THREE.MeshMatcapMaterial({
         matcap: gemMatcap(hue), vertexColors: true, flatShading: true,
-        transparent: true, opacity: 0.8, toneMapped: false,
+        transparent: true, opacity: 0.94, toneMapped: false,
       }));
       gem.scale.setScalar(s);
       gem.position.set(px, gy, Z);
       gem.rotation.y = i * 0.7;
       const core = new THREE.Mesh(displayCut(), new THREE.MeshBasicMaterial({
-        color: C(hue).lerp(C(0xffffff), 0.4), toneMapped: false,
+        color: C(hue).lerp(C(0xffffff), 0.6), toneMapped: false,
       }));
-      core.scale.setScalar(0.5);
+      core.scale.setScalar(0.6);
       gem.add(core);
       g.add(gem);
       this.gems.push(gem);
@@ -1843,13 +2022,18 @@ export class Interior {
       tq(tint, WARM, 0.9, 0.66, 0.66, px, TOP + 0.003, Z, 'up');
       tq(tint, WARM, 0.4, 1.3, 1.3, px, CEIL_Y - 0.035, Z, 'down');
       tq(fan, 0xffc890, 0.42, 0.95, 1.7, px, CAN - 0.85, WALL_Z + 0.05, 'wall');
-      // the stone's own colour: a halo behind it, the wall, round the placard, a pool and a sheen on the floor
+      // the stone burns brightest in its own bay: a hot bloom over the cut, in
+      // front of the glass; then its colour, a step down, behind it, on the
+      // wall, round the placard, pooled on the floor and given back by the deck
       const glow = flawless ? 1.2 : 1;
-      tq(tint, hue, 0.5 * glow, 0.8, 0.95, px, gy, Z - 0.27, 'wall');
-      tq(tint, hue, 0.6 * glow, 1.9, 2.0, px, gy - 0.05, WALL_Z + 0.052, 'wall');
-      tq(tint, hue, 0.4 * glow, 0.95, 0.6, px, 0.64, -0.876, 'wall');
-      tq(tint, hue, 0.5 * glow, 1.5, 1.6, px, 0.007, -0.4, 'up');
-      tq(tint, hue, 0.22 * glow, 0.34, 2.4, px, 0.008, 0.35, 'up');
+      const hot = C(hue).lerp(C(0xffffff), 0.45).getHex();
+      tq(tint, hot, 0.55 * glow, 0.5 + 0.7 * s, 0.6 + 0.9 * s, px, gy, Z + 0.27, 'wall');
+      tq(tint, hue, 0.4 * glow, 0.8, 0.95, px, gy, Z - 0.27, 'wall');
+      tq(tint, hue, 0.38 * glow, 1.9, 2.0, px, gy - 0.05, WALL_Z + 0.052, 'wall');
+      tq(tint, hue, 0.3 * glow, 0.95, 0.6, px, 0.64, -0.876, 'wall');
+      tq(tint, hue, 0.36 * glow, 1.5, 1.6, px, 0.007, -0.4, 'up');
+      refl(k.mirror, hot, 0.5 * glow, 0.4, gy - 0.45 * s, gy + 0.45 * s, px, Z);
+      refl(k.mirror, hue, 0.2 * glow, 1.3, 0.3, 2.1, px, WALL_Z + 0.05);
 
       const plate = placard(d.name, depthLine(trophy.t), px, 0.66, -0.79);
       plate.userData.mineral = trophy.t;
@@ -1888,7 +2072,7 @@ export class Interior {
    */
   private buildVivarium(g: THREE.Group): void {
     const groups: (FaunaEntry['world'])[] = ['veil3', 'cryos2', 'maelis6', null];
-    const k = new PropKit();
+    const k = new PropKit(this.mirror);
     const tint = new Kit(), column = new Kit(), glass = new Kit();
     const METAL = C(0x283032), METAL_L = C(0x3c484a), Z = -1.0;
     const hues: number[] = [];
@@ -1910,13 +2094,14 @@ export class Interior {
       k.glow.cyl(0.858, 0.858, 0.014, tx, 1.646, Z, C(hue).multiplyScalar(0.55 * live), 20);
 
       // the water column, lit from the base; the glass edges catching it
-      tq(column, hue, 0.4 * live, 1.5, 1.48, tx, 0.905, Z, 'wall');
+      // (kept a step down, so the residents are the brightest thing in it)
+      tq(column, hue, 0.22 * live, 1.5, 1.48, tx, 0.905, Z, 'wall');
       for (const sx of [-1, 1]) tq(tint, hue, 0.55 * live, 0.06, 1.44, tx + sx * 0.77, 0.9, Z + 0.03, 'wall');
       // where it lands: the base inside, the floor in front, the wall behind, the ceiling over
       tq(tint, hue, 0.6 * live, 1.4, 1.4, tx, 0.182, Z, 'up');
       tq(tint, hue, 0.8 * live, 3.0, 2.6, tx, 0.007, -0.2, 'up');
-      tq(tint, hue, 0.28 * live, 0.5, 2.8, tx, 0.008, 1.0, 'up');
-      tq(tint, hue, 0.6 * live, 3.3, 2.9, tx, 1.0, WALL_Z + 0.05, 'wall');
+      refl(k.mirror, hue, 0.36 * live, 1.3, 0.2, 1.65, tx, Z + 0.78);
+      tq(tint, hue, 0.45 * live, 3.3, 2.9, tx, 1.0, WALL_Z + 0.05, 'wall');
       tq(tint, hue, 0.5 * live, 3.0, 2.8, tx, CEIL_Y - 0.035, -0.6, 'down');
 
       // the residents: walkers and growers on the tank floor, swimmers above them
@@ -1953,7 +2138,11 @@ export class Interior {
     const kind = LIGHTFORM[f.id] ?? 'swarm';
     const group = new THREE.Group();
     group.position.copy(home);
-    const mat = new THREE.MeshBasicMaterial({ color: f.color, vertexColors: true, toneMapped: false, side: THREE.DoubleSide });
+    // remembered as light: the body takes on its tank's hue at the edges, so a
+    // pale species still reads against the water; a white-hot core is laid over it
+    const tankHue = TANK_HUE[f.world ?? 'any'];
+    const bodyCol = C(f.color).lerp(C(tankHue), 0.6);
+    const mat = new THREE.MeshBasicMaterial({ color: bodyCol, vertexColors: true, toneMapped: false, side: THREE.DoubleSide });
     let body: THREE.Object3D;
     let inst: THREE.InstancedMesh | null = null;
     // the halo: width, height, centre height
@@ -1982,10 +2171,15 @@ export class Interior {
     }
     group.add(body);
     group.scale.setScalar(1.2);
-    const halo = new THREE.Mesh(UNIT_QUAD, glowMat('pool', f.color, 0.55));
+    // the halo sits a step below the body, so the silhouette stands out of it
+    const halo = new THREE.Mesh(UNIT_QUAD, glowMat('pool', C(f.color).lerp(C(tankHue), 0.5).getHex(), 0.32));
     halo.scale.set(hw, hh, 1);
     halo.position.set(0, hy, -0.22);
     group.add(halo);
+    const core = new THREE.Mesh(UNIT_QUAD, glowMat('pool', C(f.color).lerp(C(0xffffff), 0.6).getHex(), 0.7));
+    core.scale.set(hw * 0.42, hh * 0.42, 1);
+    core.position.set(0, hy, 0.16);
+    group.add(core);
     g.add(group);
     const form: FormAnim = { kind, group, body, inst, home, seed: home.x * 7.13 + f.id.length, heading: 0 };
     this.poseForm(form, form.seed, 0);
