@@ -67,8 +67,6 @@ export class Rimewings implements Creature {
   private spills: Spill[] = [];
   /** and on the floor or ledge under it, travelling with the flock */
   private washes: Spill[] = [];
-  /** and the same light where the lamp already lights the rock */
-  private tints: Tint[] = [];
   private sumX = new Float32Array(MAX_CLUSTERS);
   private sumY = new Float32Array(MAX_CLUSTERS);
   private sumN = new Float32Array(MAX_CLUSTERS);
@@ -106,13 +104,12 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     this.mesh.count = 0;
     this.mesh.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.mesh);
-    this.glow = new THREE.PointLight(0xbfe0ff, 0, 10, 1.4);
+    this.glow = new THREE.PointLight(0xbfe0ff, 0, 9, 1.6);
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
       this.clusters.push({ alive: false, phase: 'frozen', t: 0, coldFor: 0, ax: 0, ay: 0, life: 0, dazedT: 0, woke: false });
       this.spills.push(new Spill(scene, 0xbfe0ff));
       this.washes.push(new Spill(scene, ICE));
-      this.tints.push(new Tint(scene));
     }
   }
 
@@ -125,7 +122,6 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     this.glow.intensity = 0;
     for (const sp of this.spills) sp.off();
     for (const sp of this.washes) sp.off();
-    for (const t of this.tints) t.off();
     this.menace = 0;
   }
 
@@ -394,11 +390,11 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     }
     for (let ci = 0; ci < MAX_CLUSTERS; ci++) {
       const k = this.sumN[ci];
-      if (!this.clusters[ci].alive || k === 0) { this.spills[ci].off(); this.washes[ci].off(); this.tints[ci].off(); continue; }
+      if (!this.clusters[ci].alive || k === 0) { this.spills[ci].off(); this.washes[ci].off(); continue; }
       const heat = this.sumHeat[ci] / k;
       const cx = this.sumX[ci] / k, cy = this.sumY[ci] / k;
       // ice-cyan, not the lamp's white, so it reads as their own light
-      this.spills[ci].set(cx, cy, 6, 5, 0.5 + heat * 0.3, ICE, 1.8);
+      this.spills[ci].set(cx, cy, 5.5, 4.6, 0.42 + heat * 0.3, ICE, 1.5);
       // the first rock under the flock takes a cold pool that slides along
       // with it, fading the higher they fly
       const col = Math.floor(cx);
@@ -406,15 +402,9 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
       for (let r = Math.floor(-cy) + 1; r <= Math.floor(-cy) + 5; r++) {
         if (this.terrain.solidAt(col, r)) { floor = r; break; }
       }
-      if (floor < 0) {
-        this.washes[ci].off();
-        this.tints[ci].set(cx, cy, 6.5, 5.5, 0.75 + heat * 0.2);
-        continue;
-      }
+      if (floor < 0) { this.washes[ci].off(); continue; }
       const drop = floor + cy;   // tiles from the flock down to the floor's top
-      this.washes[ci].set(cx, -floor - 0.2, 8, 2.6, (0.9 + heat * 0.3) * (1 - drop / 10), ICE, 2.6);
-      // reaching down to the floor under them, so the lit ice there goes cyan too
-      this.tints[ci].set(cx, (cy - floor) / 2 - 0.3, 7, drop + 4.5, 0.75 + heat * 0.2);
+      this.washes[ci].set(cx, -floor - 0.3, 6, 2.2, (0.6 + heat * 0.3) * (1 - drop / 8), ICE, 2);
     }
     this.mesh.count = n;
     if (n > 0) {
@@ -425,7 +415,7 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
       // the flock's own cold light, not the lamp's white: the rock round
       // the centroid turns ice-cyan as they move
       this.glow.position.set(gx / gc, gy / gc, 0.4);
-      this.glow.intensity = 11;
+      this.glow.intensity = 8;
       this.glow.color.setHex(ICE);
     } else {
       // none hunting: the cluster nearest the pod keeps a cold glow on its rock
@@ -439,7 +429,7 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
       if (best >= 0) {
         const k = this.sumN[best];
         this.glow.position.set(this.sumX[best] / k, this.sumY[best] / k, 0.6);
-        this.glow.intensity = 5 + (this.sumHeat[best] / k) * 5;
+        this.glow.intensity = 1.6 + (this.sumHeat[best] / k) * 3;
         this.glow.color.setHex(ICE);
       } else {
         this.glow.intensity = 0;
@@ -448,58 +438,6 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     const target = anyHunt ? Math.max(0, 1 - closest / WAKE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);
   }
-}
-
-let tintTex: THREE.CanvasTexture | null = null;
-/**
- * The flock's light where the headlamp already lights the rock. An additive
- * pool can't show there (the lamp's white is already at the top), so this
- * takes the warm end out of whatever is under it instead: dst × (1 − src),
- * by reverse-subtract blending, the soft mask in the texture's rgb. The lit
- * ice and rock turn ice-cyan round the flock; dark rock, near zero, is left
- * to the additive wash. It shares the Spill's program (a basic map
- * material): blending is GL state, not a shader, so it never compiles one.
- */
-class Tint {
-  private mat: THREE.MeshBasicMaterial;
-  private mesh: THREE.Mesh;
-  constructor(scene: THREE.Scene) {
-    if (!tintTex) {
-      const cv = document.createElement('canvas');
-      cv.width = cv.height = 64;
-      const g = cv.getContext('2d')!;
-      g.fillStyle = '#000';
-      g.fillRect(0, 0, 64, 64);
-      const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-      grad.addColorStop(0, 'rgb(255,255,255)');
-      grad.addColorStop(0.35, 'rgb(220,220,220)');
-      grad.addColorStop(0.7, 'rgb(70,70,70)');
-      grad.addColorStop(1, 'rgb(0,0,0)');
-      g.fillStyle = grad;
-      g.fillRect(0, 0, 64, 64);
-      tintTex = new THREE.CanvasTexture(cv);
-    }
-    this.mat = new THREE.MeshBasicMaterial({
-      map: tintTex, color: 0x000000, transparent: true, depthWrite: false, toneMapped: false, fog: false,
-      blending: THREE.CustomBlending, blendEquation: THREE.ReverseSubtractEquation,
-      blendSrc: THREE.DstColorFactor, blendDst: THREE.OneFactor,
-    });
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.mat);
-    this.mesh.position.z = 0.7;
-    // ahead of every other transparent draw: it tints the opaque rock and
-    // ice only, never the moths' glass, their own pools or the lamp's haze
-    this.mesh.renderOrder = -1;
-    this.mesh.visible = false;
-    scene.add(this.mesh);
-  }
-  /** a = 0..1: how much of the lamp's red and a little of its green it takes */
-  set(x: number, y: number, w: number, h: number, a: number): void {
-    this.mesh.position.x = x; this.mesh.position.y = y;
-    this.mesh.scale.set(w, h, 1);
-    this.mat.color.setRGB(0.55 * a, 0.07 * a, 0, THREE.LinearSRGBColorSpace);
-    this.mesh.visible = a > 0.004;
-  }
-  off(): void { this.mesh.visible = false; }
 }
 
 /**

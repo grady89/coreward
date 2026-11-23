@@ -21,8 +21,6 @@ const MAX = 3;
 const LEGS = 6;
 const ESCAPE_DIST = 16;
 const ESCAPE_TIME = 14;
-/** its own light: the crystal's violet, whatever it carries */
-const VIOLET = 0x9a5cff;
 
 interface Crab {
   alive: boolean;
@@ -41,9 +39,7 @@ interface Crab {
   gemMat: THREE.MeshBasicMaterial;
   col: number;
   light: THREE.PointLight;
-  /** its violet light, a little of the trophy's colour in it */
-  glow: THREE.Color;
-  /** that light on the wall it clings to */
+  /** the gem's light on the wall it clings to */
   spill: Spill;
   jawU: THREE.Mesh; jawD: THREE.Mesh;
   /** the bite, mirrored in depth so it always faces the camera */
@@ -156,7 +152,7 @@ export class Mimics implements Creature {
       scene.add(group);
       this.crabs.push({
         alive: false, x: 0, y: 0, vx: 0, vy: 0, stolen: 0, born: 0, life: 0, deadT: 0, burstT: 0, pauseT: 0, dirX: 1, dirY: 0,
-        group, body, gem, gemMat, col: 0x6a4aa0, light, glow: new THREE.Color(VIOLET), spill: new Spill(scene, 0x6a4aa0), jawU, jawD, mouth, maw, lipU, lipD, upper, lower, legPhase: 0,
+        group, body, gem, gemMat, col: 0x6a4aa0, light, spill: new Spill(scene, 0x6a4aa0), jawU, jawD, mouth, maw, lipU, lipD, upper, lower, legPhase: 0,
       });
     }
   }
@@ -214,10 +210,7 @@ export class Mimics implements Creature {
     const col = c.stolen ? def(c.stolen).gem : 0x6a4aa0;
     c.col = col;
     c.gemMat.color.setHex(col);
-    // the trophy keeps its own colour; the light it all throws stays the
-    // crystal's violet, so the pool on the rock reads as the mimic's
-    c.glow.setHex(VIOLET).lerp(new THREE.Color(col), c.stolen ? 0.2 : 0);
-    c.light.color.copy(c.glow);
+    c.light.color.setHex(col);
     c.gem.visible = c.stolen !== 0;
     c.group.visible = true;
     c.group.scale.setScalar(0.01);
@@ -314,11 +307,11 @@ export class Mimics implements Creature {
       c.gem.rotation.y = time * 1.2;
       const beat = 0.5 + 0.5 * Math.sin(time * 4);
       c.gemMat.color.setHex(c.col).multiplyScalar(0.7 + beat * 0.4);
-      c.light.intensity = c.stolen ? 2.4 + beat * 0.9 : 1.4;
+      c.light.intensity = c.stolen ? 1.8 + beat * 0.8 : 0.9;
       // the group turns to face its heading: keep the light on the camera side
       c.light.position.z = 0.4 * facing;
-      const spillA = (c.stolen ? 0.36 + beat * 0.2 : 0.28) * pop;
-      c.spill.set(c.x, c.y, 4.4, 4.4, spillA, c.glow.getHex(), 1.6);
+      const spillA = (c.stolen ? 0.3 + beat * 0.2 : 0.22) * pop;
+      c.spill.set(c.x, c.y, 4, 4, spillA, c.stolen ? c.col : 0x9a6aff, 1.3);
       // mandibles snap on every burst; a slow working of the jaw at rest
       const gape = c.burstT > 0 ? 0.5 + 0.5 * Math.sin(time * 26) : 0.2 + 0.2 * Math.sin(time * 2.5);
       c.jawU.rotation.z = 0.15 + gape * 0.55;

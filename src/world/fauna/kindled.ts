@@ -1,17 +1,16 @@
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CORE_ROW } from '../../config';
 import { hdrBasic } from '../../fx/post';
 import { ACTIVE } from '../worlds';
-import { clamp01, lerp, Spill } from './types';
+import { clamp01, lerp, Spill, tmpC } from './types';
 
 // THE KINDLED — the core chamber's own. Every world.
 //
 // Four figures on the chamber floor, made of the same light as the core.
-// Not solid: white-gold facets burning hotter toward a white-hot heart, a
-// thin dark-ember line round the outside so they hold against the bright
-// room, shedding a shimmer of motes in the shape of someone leaning in,
-// reaching. They face the
+// Not solid: a shell of ember facets around a white-hot heart, a pocket of
+// dark around it in the bright room, shedding a shimmer of motes in the
+// shape of someone leaning in, reaching. They face the
 // fragment. When you enter they turn, and drift toward you, and stop two
 // steps short, and wait. They do not chase. They do not need to.
 //
@@ -46,6 +45,8 @@ interface Figure {
   heart: THREE.Mesh;
   heartMat: THREE.MeshBasicMaterial;
   light: THREE.PointLight;
+  /** a pocket of dark behind it, so its own light is what you see */
+  shade: Shade;
   /** its light pooled on the chamber floor */
   spill: Spill;
   arousal: number;      // 0..1 how much it has noticed you
@@ -56,9 +57,6 @@ export class Kindled {
   private figs: Figure[] = [];
   private mat: THREE.PointsMaterial;
   private coreMat: THREE.MeshBasicMaterial;
-  private hullMat: THREE.MeshBasicMaterial;
-  /** what an edge-on facet cools toward: the core's deep hue, dimmed */
-  private ember: THREE.Color;
   private fade = 1;
   private seenFired = false;
   /** 0..1 — the nearest figure's attention on you */
@@ -74,38 +72,30 @@ export class Kindled {
     const coreGeo = figureGeometry();
     const heartGeo = new THREE.OctahedronGeometry(0.1, 0);
     heartGeo.scale(0.85, 1.2, 0.7);
-    // self-lit, the facets baked into vertex colours: white-gold light, running
-    // past display white toward the heart so the chest blooms. Edge-on facets
-    // cool toward the core's amber, so the body grades from a hot middle to a
-    // warmer edge, and the outline hull below closes it with a thin dark
-    // line. Unfogged: the chamber's haze would wash it to the room's tan
+    // self-lit, the facets baked into vertex colours: a dark ember shell in
+    // the core's deep hue, lit from inside by the heart and fading to char at
+    // the hands and feet; edge-on facets catch a gold rim so the outline
+    // holds against the chamber. The heart is its own mesh
+    // unfogged: the chamber's haze would wash the shell to the room's tan
     this.coreMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false });
-    const ember = { value: new THREE.Color() };
     this.coreMat.onBeforeCompile = sh => {
-      sh.uniforms.uEmber = ember;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vKPos;')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvKPos = mvPosition.xyz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vKPos;\nuniform vec3 uEmber;')
+        .replace('#include <common>', '#include <common>\nvarying vec3 vKPos;')
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
-  // the facet's own normal from screen derivatives: a facet facing the eye
-  // keeps its white-gold, one turned edge-on cools toward the core's amber
+  // the facet's own normal from screen derivatives: a facet turned edge-on
+  // to the eye burns white, one facing it stays gold
   vec3 fn = normalize( cross( dFdx( vKPos ), dFdy( vKPos ) ) );
-  float rim = pow( 1.0 - abs( dot( fn, normalize( -vKPos ) ) ), 2.0 );
-  diffuseColor.rgb = mix( diffuseColor.rgb, uEmber, rim * 0.65 );
+  float rim = pow( 1.0 - abs( dot( fn, normalize( -vKPos ) ) ), 4.0 );
+  diffuseColor.rgb += vec3( 1.0, 0.7, 0.34 ) * rim * 1.6;
 }`);
     };
     this.coreMat.customProgramCacheKey = () => 'kindled-facets';
     hdrBasic(this.coreMat, 1.3);
-    this.ember = ember.value;
     const coreMat = this.coreMat;
-    // the outline: the same figure pushed out along its smoothed normals,
-    // back faces only, in dark ember. A thin line round the silhouette that
-    // separates a white figure from a bright room without darkening the room
-    const hullGeo = outlineGeometry(coreGeo, 0.024);
-    this.hullMat = new THREE.MeshBasicMaterial({ color: 0x2a0c04, side: THREE.BackSide, fog: false });
     for (let i = 0; i < N; i++) {
       const seed = moteSeeds();
       const pos = new Float32Array(PTS * 3);
@@ -116,15 +106,15 @@ export class Kindled {
       const core = new THREE.Mesh(coreGeo, coreMat);
       // its own material, so each heart flickers on its own beat
       const heartMat = new THREE.MeshBasicMaterial({ color: 0xfff2d0, toneMapped: false, fog: false });
-      hdrBasic(heartMat, 3.2);
+      hdrBasic(heartMat, 2.4);
       const heart = new THREE.Mesh(heartGeo, heartMat);
       heart.position.set(HEART.x, HEART.y, HEART.z);
-      core.add(heart, new THREE.Mesh(hullGeo, this.hullMat));
+      core.add(heart);
       const light = new THREE.PointLight(0xffffff, 1.6, 5, 1.8);
       scene.add(points, core, light);
       this.figs.push({
         x: POSTS[i], y: FLOOR_Y + 0.55, homeX: POSTS[i], face: POSTS[i] < 32 ? 1 : -1,
-        seed, points, pos, core, heart, heartMat, light,
+        seed, points, pos, core, heart, heartMat, light, shade: new Shade(scene),
         spill: new Spill(scene, 0xfff0c8), arousal: 0, touchCd: 0,
       });
     }
@@ -136,7 +126,7 @@ export class Kindled {
     // shader in the world. Dark means intensity 0; update() re-drives it.
     for (const f of this.figs) {
       f.points.visible = v; f.core.visible = v;
-      if (!v) { f.light.intensity = 0; f.spill.off(); }
+      if (!v) { f.light.intensity = 0; f.spill.off(); f.shade.off(); }
     }
   }
 
@@ -158,10 +148,9 @@ export class Kindled {
     this.setVisible(true);
     this.mat.color.setHex(ACTIVE.core.light);
     this.mat.opacity = 0.85 * this.fade;
-    // white-gold: the core's own pale tint; only the chest runs to white
-    this.coreMat.color.setHex(ACTIVE.core.body);
-    this.ember.setHex(ACTIVE.core.light).multiplyScalar(0.8);
-    this.hullMat.color.setHex(ACTIVE.core.shell).multiplyScalar(0.12);
+    // the shell in the core's deep hue: darker than the chamber's glow, so
+    // the white-gold heart and edges read inside it
+    this.coreMat.color.setHex(ACTIVE.core.shell).lerp(tmpC.setHex(ACTIVE.core.body), 0.1);
 
     let hit: KindledHit = null;
     let presence = 0;
@@ -226,7 +215,8 @@ export class Kindled {
       f.light.color.setHex(ACTIVE.core.body);
       f.light.intensity = (2.0 + f.arousal * 2.6 + gutter * 0.9) * this.fade;
       // pooled under the feet, not over the legs: the spill draws in front
-      f.spill.set(f.x, fy - 0.98, 3.8, 1.6, (0.36 + f.arousal * 0.14 + (gutter - 0.5) * 0.1) * this.fade, ACTIVE.core.body, 1.25);
+      f.spill.set(f.x, fy - 0.98, 3.4, 1.4, (0.28 + f.arousal * 0.14 + (gutter - 0.5) * 0.1) * this.fade, ACTIVE.core.body, 1.1);
+      f.shade.set(f.x + 0.15 * f.face, fy + 0.35, 2.6, 2.7, (0.6 + f.arousal * 0.2) * this.fade);
     }
     this.presence = lerp(this.presence, presence, Math.min(1, dt * 3));
     return hit;
@@ -326,32 +316,52 @@ function figureGeometry(): THREE.BufferGeometry {
   for (let i = 0; i < nrm.count; i++) {
     v.fromBufferAttribute(nrm, i);
     p.fromBufferAttribute(posA, i);
-    // white-gold facets with a spread across them, so the body still reads
-    // faceted; hotter toward the heart, a little cooler out at the hands and
-    // feet (linear values: they display far brighter than they read)
-    const d2 = p.distanceToSquared(chest);
-    const inner = Math.exp(-d2 / 0.06);
-    const b = (0.55 + 0.5 * Math.max(0, v.dot(key))) * (0.7 + 0.3 * Math.exp(-d2 / 0.3)) + 1.5 * inner;
+    // a dark ember shell with a spread across facets, glowing through from
+    // the heart (linear values: they display far brighter than they read)
+    const inner = Math.exp(-p.distanceToSquared(chest) / 0.06);
+    const b = 0.008 + 0.05 * Math.max(0, v.dot(key)) + 1.1 * inner;
     col[i * 3] = b; col[i * 3 + 1] = b; col[i * 3 + 2] = b;
   }
   all.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return all;
 }
 
+let shadeTex: THREE.CanvasTexture | null = null;
 /**
- * The figure's outline hull: its vertices welded (the parts are separate
- * pieces, so each keeps its own shell), smoothed normals, every vertex
- * pushed out by `w`. Drawn back faces only, it shows as a line of even
- * width round the silhouette.
+ * A soft pocket of dark set behind a figure, behind the floor's front faces
+ * so the floor keeps its light pool: in a chamber already full of light,
+ * the figure's own light only reads if the wall right behind it is dimmer.
  */
-function outlineGeometry(src: THREE.BufferGeometry, w: number): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', src.getAttribute('position').clone());
-  const hull = mergeVertices(g, 1e-4);
-  hull.computeVertexNormals();
-  const pos = hull.getAttribute('position'), nrm = hull.getAttribute('normal');
-  for (let i = 0; i < pos.count; i++) {
-    pos.setXYZ(i, pos.getX(i) + nrm.getX(i) * w, pos.getY(i) + nrm.getY(i) * w, pos.getZ(i) + nrm.getZ(i) * w);
+class Shade {
+  private mat: THREE.MeshBasicMaterial;
+  private mesh: THREE.Mesh;
+  constructor(scene: THREE.Scene) {
+    if (!shadeTex) {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 64;
+      const g = cv.getContext('2d')!;
+      const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(0.45, 'rgba(0,0,0,0.8)');
+      grad.addColorStop(0.75, 'rgba(0,0,0,0.3)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+      shadeTex = new THREE.CanvasTexture(cv);
+    }
+    this.mat = new THREE.MeshBasicMaterial({
+      map: shadeTex, color: 0x000000, transparent: true, opacity: 0, depthWrite: false, fog: false,
+    });
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.mat);
+    this.mesh.position.z = -0.3;
+    this.mesh.visible = false;
+    scene.add(this.mesh);
   }
-  return hull;
+  set(x: number, y: number, w: number, h: number, a: number): void {
+    this.mesh.position.x = x; this.mesh.position.y = y;
+    this.mesh.scale.set(w, h, 1);
+    this.mat.opacity = a;
+    this.mesh.visible = a > 0.004;
+  }
+  off(): void { this.mat.opacity = 0; this.mesh.visible = false; }
 }
