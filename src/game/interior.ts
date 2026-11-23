@@ -67,10 +67,7 @@ interface Station {
 
 // shared fixed-color materials (palette materials are per-instance fields)
 const GUNMETAL = new THREE.MeshStandardMaterial({ color: 0x4b545e, roughness: 0.45, metalness: 0.35 });
-const PLINTH = new THREE.MeshStandardMaterial({ color: 0x272b31, roughness: 0.8, metalness: 0.3 });
 const FERN = new THREE.MeshStandardMaterial({ color: 0x6e9668, roughness: 0.8 });
-const WARM_GLOW = new THREE.MeshBasicMaterial({ color: 0xffc06a, toneMapped: false });
-const TEAL_GLOW = new THREE.MeshBasicMaterial({ color: 0x3ce6c8, toneMapped: false });
 const AMBER_GLOW = new THREE.MeshBasicMaterial({ color: 0xff9a3c, toneMapped: false });
 const RED_GLOW = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
 
@@ -712,19 +709,362 @@ function placard(name: string, sub: string, x: number, y: number, z: number): TH
   return plate;
 }
 
-/** which display archetype a sponsored species takes in its tank */
-const LIGHTFORM: Record<string, 'swarm' | 'serpent' | 'walker' | 'motes'> = {
-  glimmerflies: 'swarm', rimewings: 'swarm', polyps: 'motes', frostbloom: 'motes',
-  longone: 'serpent', brinewyrm: 'serpent', shellbacks: 'serpent',
-  stillwalker: 'walker', mimic: 'walker', warden: 'walker',
-  riptide: 'motes', kindled: 'walker',
+// ---------------- the wings: two rooms of their own ----------------
+
+/** what a section of shell is made of; the wings swap the palette out for their own */
+interface ShellSkin {
+  wall: THREE.Material; wains: THREE.Material; ceil: THREE.Material;
+  floor: THREE.Material; frame: THREE.Material; trim: THREE.Material;
+  /** the hall's bay fixtures and their light; the wings hang their own */
+  fixtures: boolean;
+}
+
+const skinMat = (color: number, roughness: number, metalness = 0) =>
+  new THREE.MeshStandardMaterial({ color, roughness, metalness, vertexColors: true });
+
+/** THE GALLERY: deep plum-slate walls, dark bronze ribs, a ceiling kept dark for the track */
+const GALLERY_SKIN: ShellSkin = {
+  wall: skinMat(0x54405e, 0.85), wains: skinMat(0x2e2236, 0.75), ceil: skinMat(0x4e4258, 0.9),
+  floor: skinMat(0x3c3844, 0.42, 0.25), frame: skinMat(0x6a5236, 0.45, 0.55),
+  trim: new THREE.MeshStandardMaterial({ color: 0x9a7444, roughness: 0.4, metalness: 0.65 }),
+  fixtures: false,
 };
+/** THE VIVARIUM: teal-black, lit by its tanks */
+const VIVARIUM_SKIN: ShellSkin = {
+  wall: skinMat(0x1e3a38, 0.8), wains: skinMat(0x12221f, 0.7), ceil: skinMat(0x23403c, 0.9),
+  floor: skinMat(0x22302f, 0.55, 0.25), frame: skinMat(0x2a3a38, 0.5, 0.45),
+  trim: new THREE.MeshStandardMaterial({ color: 0x35514c, roughness: 0.45, metalness: 0.5 }),
+  fixtures: false,
+};
+/** the flat-shaded twins of the wings' walls, for the end cap */
+const GALLERY_CAP = new THREE.MeshStandardMaterial({ color: 0x3a2e42, roughness: 0.8 });
+const VIVARIUM_CAP = new THREE.MeshStandardMaterial({ color: 0x1a2a29, roughness: 0.8 });
+
+/** additive light whose hue rides in the vertex colour, so every exhibit's pools share one draw */
+const tintMats = new Map<string, THREE.MeshBasicMaterial>();
+function tintMat(kind: 'pool' | 'wash'): THREE.MeshBasicMaterial {
+  let m = tintMats.get(kind);
+  if (!m) {
+    m = glowMat(kind, 0xffffff, 1).clone();
+    m.vertexColors = true;
+    tintMats.set(kind, m);
+  }
+  return m;
+}
+
+/** a quad of tinted light: colour × strength baked in, laid on wall, floor, ceiling or at an angle */
+function tq(k: Kit, hex: number, s: number, w: number, h: number, x: number, y: number, z: number,
+            face: 'wall' | 'up' | 'down' | number): void {
+  const rx = typeof face === 'number' ? face : face === 'up' ? -Math.PI / 2 : face === 'down' ? Math.PI / 2 : 0;
+  k.add(UNIT_QUAD, w, h, 1, x, y, z, C(hex).multiplyScalar(s), rx);
+}
+
+/** a downlight seen in the air: warm, bright at the can, gone by the plinth */
+let trackBeamMat: THREE.MeshBasicMaterial | null = null;
+const TRACK_BEAM = () => trackBeamMat ??= new THREE.MeshBasicMaterial({
+  map: beamTexture(), color: 0xffd7a0, transparent: true, opacity: 0.11, side: THREE.DoubleSide,
+  depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+});
+
+/** a lit water column, seen through the glass: deepest in the middle, brightest down by the lamp in the base */
+let columnMat: THREE.MeshBasicMaterial | null = null;
+const COLUMN_MAT = () => columnMat ??= new THREE.MeshBasicMaterial({
+  map: onceTex('column', 64, 128, gg => {
+    const img = gg.createImageData(64, 128);
+    for (let j = 0; j < 128; j++) {
+      const t = 1 - j / 127;                              // 0 at the base
+      const v = 0.22 + 0.78 * Math.exp(-t * 2.2) + 0.12 * Math.max(0, t - 0.85) / 0.15;
+      for (let i = 0; i < 64; i++) {
+        const d = Math.abs(i / 63 - 0.5) * 2;
+        const a = Math.pow(Math.max(0, 1 - d * d), 0.6) * v * (0.9 + 0.1 * Math.sin(i * 0.7 + j * 0.05));
+        const k = (j * 64 + i) * 4;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+        img.data[k + 3] = Math.round(Math.min(1, a) * 255);
+      }
+    }
+    gg.putImageData(img, 0, 0);
+  }),
+  vertexColors: true, transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, toneMapped: false,
+});
+
+const TANK_GLASS = new THREE.MeshStandardMaterial({
+  color: 0xb8e6dc, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.13, depthWrite: false,
+});
+const VITRINE_GLASS = new THREE.MeshStandardMaterial({
+  color: 0xdce8f0, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.07, depthWrite: false,
+});
+
+/**
+ * A cut stone's light: a matcap per ore — the hue's shadow round the rim, the
+ * hue itself face-on, the warm downlight on every facet that turns up to it,
+ * and a white glint. Flat-shaded, each facet takes one tone, so a slow turn
+ * flashes them light and dark.
+ */
+function gemMatcap(hex: number): THREE.CanvasTexture {
+  return onceTex(`gemcap|${hex}`, 128, 128, gg => {
+    const r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
+    const tone = (k: number, w = 0) =>
+      `rgb(${[r, g, b].map(c => Math.round(Math.min(255, c * k + (255 - c * k) * w))).join(',')})`;
+    gg.fillStyle = tone(0.4);
+    gg.fillRect(0, 0, 128, 128);
+    const body = gg.createRadialGradient(64, 72, 4, 64, 64, 64);
+    body.addColorStop(0, tone(1, 0.4));
+    body.addColorStop(0.45, tone(1, 0.08));
+    body.addColorStop(0.8, tone(0.78));
+    body.addColorStop(1, tone(0.42));
+    gg.fillStyle = body;
+    gg.beginPath(); gg.arc(64, 64, 64, 0, Math.PI * 2); gg.fill();
+    // the downlight, on every facet that faces up
+    const top = gg.createLinearGradient(0, 0, 0, 62);
+    top.addColorStop(0, 'rgba(255,236,200,0.85)');
+    top.addColorStop(1, 'rgba(255,236,200,0)');
+    gg.fillStyle = top;
+    gg.beginPath(); gg.ellipse(64, 20, 50, 42, 0, 0, Math.PI * 2); gg.fill();
+    const glint = gg.createRadialGradient(46, 26, 0, 46, 26, 16);
+    glint.addColorStop(0, 'rgba(255,255,255,1)');
+    glint.addColorStop(1, 'rgba(255,255,255,0)');
+    gg.fillStyle = glint;
+    gg.fillRect(0, 0, 128, 128);
+  });
+}
+
+/** the display cut, wrapped: its own faces checkered light and dark so the cut reads */
+let cutGeo: THREE.BufferGeometry | null = null;
+function displayCut(): THREE.BufferGeometry {
+  if (cutGeo) return cutGeo;
+  const src = GEM_GEOS[DISPLAY_CUT];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', src.getAttribute('position').clone());
+  geo.setAttribute('normal', src.getAttribute('normal').clone());
+  const p = geo.getAttribute('position');
+  const col = new Float32Array(p.count * 3);
+  const c = new THREE.Vector3(), v = new THREE.Vector3();
+  for (let f = 0; f < p.count / 3; f++) {
+    c.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(p, f * 3 + k));
+    c.multiplyScalar(1 / 3);
+    const seg = Math.floor(((Math.atan2(c.z, c.x) + Math.PI) / (Math.PI * 2)) * 6);
+    const band = c.y > 0.02 ? 1 : 0;
+    const s = (seg + band) % 2 ? 1 : 0.7;
+    for (let k = 0; k < 3; k++) col.set([s, s, s], (f * 3 + k) * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return cutGeo = geo;
+}
+
+/**
+ * Faceted light: each face of a shape takes one tone by which way it faces,
+ * so an all-emissive body still reads as cut planes and not as a flat blob.
+ */
+const FACET_L = new THREE.Vector3(0.35, 0.8, 0.5).normalize();
+function facets(src: THREE.BufferGeometry, lo = 0.42, hi = 1): THREE.BufferGeometry {
+  const g = src.index ? src.toNonIndexed() : src.clone();
+  const p = g.getAttribute('position');
+  const prev = g.getAttribute('color');
+  const col = new Float32Array(p.count * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let f = 0; f < p.count / 3; f++) {
+    a.fromBufferAttribute(p, f * 3); b.fromBufferAttribute(p, f * 3 + 1); c.fromBufferAttribute(p, f * 3 + 2);
+    const n = c.sub(a).cross(b.sub(a)).normalize().negate();
+    const k = lo + (hi - lo) * (0.5 + 0.5 * n.dot(FACET_L));
+    for (let v = f * 3; v < f * 3 + 3; v++) {
+      for (let ch = 0; ch < 3; ch++) col[v * 3 + ch] = k * (prev ? prev.getComponent(v, ch) : 1);
+    }
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
+
+const UNIT_OCT = new THREE.OctahedronGeometry(1, 0);
+const UNIT_ICO0 = new THREE.IcosahedronGeometry(1, 0);
+let segGeo: THREE.BufferGeometry | null = null;
+let sliverGeo: THREE.BufferGeometry | null = null;
+let domeGeo: THREE.BufferGeometry | null = null;
+const SEG_GEO = () => segGeo ??= facets(UNIT_ICO0, 0.55);
+const SLIVER_GEO = () => sliverGeo ??= facets(UNIT_OCT, 0.6);
+const DOME_GEO = () => domeGeo ??= facets(new THREE.SphereGeometry(1, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0.5);
+
+/** the shape a sponsored species takes in its tank, matched to what it is */
+type FormKind = 'swarm' | 'spiral' | 'serpent' | 'wing' | 'walker' | 'crawler' | 'bloom' | 'sacs';
+const LIGHTFORM: Record<string, FormKind> = {
+  glimmerflies: 'swarm', riptide: 'spiral',
+  longone: 'serpent', brinewyrm: 'serpent',
+  rimewings: 'wing',
+  stillwalker: 'walker', warden: 'walker', kindled: 'walker',
+  mimic: 'crawler', shellbacks: 'crawler',
+  frostbloom: 'bloom', polyps: 'sacs',
+};
+/** the ones that stand on the tank floor; the rest swim */
+const FLOOR_FORMS = new Set<FormKind>(['walker', 'crawler', 'bloom', 'sacs']);
+
+/** each tank's water, lit in its world's hue; violet for the things that belong to none */
+const TANK_HUE: Record<string, number> = { veil3: 0xffa548, cryos2: 0x7fd2ff, maelis6: 0x3ce6b4, any: 0x9a7cff };
 
 interface FormAnim {
-  kind: 'swarm' | 'serpent' | 'walker' | 'motes';
+  kind: FormKind;
+  /** drifts round its home; carries the halo */
   group: THREE.Group;
-  parts: THREE.Object3D[];
+  /** turns, flaps, breathes */
+  body: THREE.Object3D;
+  inst: THREE.InstancedMesh | null;
+  home: THREE.Vector3;
   seed: number;
+  heading: number;
+}
+
+/** the downlight's cone, open at both ends */
+let beamGeo: THREE.BufferGeometry | null = null;
+const BEAM_GEO = () => beamGeo ??= new THREE.CylinderGeometry(0.05, 0.3, CEIL_Y - 0.33 - 1.0, 16, 1, true);
+
+/** a wing's name, engraved on the pier at its threshold */
+function wingPlateTexture(name: string): THREE.CanvasTexture {
+  return onceTex(`wingplate|${name}`, 256, 100, gg => {
+    gg.fillStyle = '#2a2018';
+    gg.fillRect(0, 0, 256, 100);
+    gg.strokeStyle = '#b08a50';
+    gg.lineWidth = 5;
+    gg.strokeRect(6, 6, 244, 88);
+    gg.textAlign = 'center';
+    gg.fillStyle = '#e8c88a';
+    const [the, rest] = name.startsWith('THE ') ? ['THE', name.slice(4)] : ['', name];
+    gg.font = '700 22px "Chakra Petch", system-ui, sans-serif';
+    gg.letterSpacing = '6px';
+    if (the) gg.fillText(the, 128, 36);
+    gg.letterSpacing = '3px';
+    let size = 40;
+    gg.font = `700 ${size}px "Chakra Petch", system-ui, sans-serif`;
+    while (gg.measureText(rest).width > 220 && size > 20) {
+      size -= 2;
+      gg.font = `700 ${size}px "Chakra Petch", system-ui, sans-serif`;
+    }
+    gg.fillText(rest, 128, the ? 78 : 64);
+  });
+}
+
+// scratch for posing the lightforms each frame
+const POSE_OBJ = new THREE.Object3D();
+const POSE_COL = new THREE.Color();
+const POSE_P = new THREE.Vector3();
+const POSE_Q = new THREE.Vector3();
+/** a ribbon's path: a figure of eight, leaning toward the glass */
+function ribbonAt(s: number, out: THREE.Vector3): void {
+  out.set(Math.sin(s) * 0.32, Math.sin(2 * s) * 0.12, Math.cos(s) * 0.13);
+}
+/** a serpent's path: a slow loop with a swell in it */
+function serpentAt(s: number, out: THREE.Vector3): void {
+  out.set(Math.sin(s) * 0.34, Math.sin(2 * s) * 0.1 + Math.sin(s * 3 + 1) * 0.03, Math.cos(s) * 0.14);
+}
+/** the polyp sacs: offset x, offset z, radius */
+const SACS: [number, number, number][] = [[-0.19, 0.02, 0.075], [-0.06, 0.06, 0.11], [0.08, 0.0, 0.09], [0.2, 0.05, 0.065], [0.02, -0.1, 0.08]];
+
+/** a thin shard from a to b: legs, arms, stems, antennae */
+function limb(k: Kit, ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, shade: number): void {
+  const dx = bx - ax, dy = by - ay, dz = bz - az, L = Math.hypot(dx, dy, dz);
+  k.add(UNIT_OCT, r, L / 2, r, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2, shade,
+    Math.atan2(dz, dy), 0, -Math.asin(dx / L));
+}
+
+/** one flat triangle, for wings */
+function tri(a: number[], b: number[], c: number[]): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c], 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * The rigid lightforms, built facing +x with their feet (or their centre, for
+ * a flier) at the origin. Returns whether to facet-shade it and its halo.
+ */
+function lightformShape(k: Kit, kind: FormKind, id: string): { facet: boolean; halo: [number, number, number] } {
+  if (kind === 'wing') {
+    // a frost moth, wings spread: forewings bright, hindwings a shade down
+    k.add(UNIT_OCT, 0.026, 0.1, 0.026, 0, 0, 0, 1);
+    k.add(UNIT_ICO0, 0.03, 0.03, 0.03, 0, 0.1, 0, 1);
+    for (const sx of [1, -1]) {
+      const W = (geo: THREE.BufferGeometry, shade: number) => { k.add(geo, sx, 1, 1, 0, 0, 0, shade); geo.dispose(); };
+      W(tri([0.01, 0.05, 0], [0.28, 0.17, 0], [0.24, 0.0, 0]), 1);
+      W(tri([0.01, 0.05, 0], [0.24, 0.0, 0], [0.02, -0.01, 0]), 0.78);
+      W(tri([0.02, -0.01, 0], [0.19, -0.03, 0], [0.12, -0.17, 0]), 0.62);
+      W(tri([0.02, -0.01, 0], [0.12, -0.17, 0], [0.01, -0.06, 0]), 0.5);
+      k.add(UNIT_OCT, 0.004, 0.08, 0.004, sx * 0.03, 0.17, 0, 0.9, 0, 0, -sx * 0.4);   // antennae
+    }
+    return { facet: false, halo: [1.0, 0.7, 0] };
+  }
+  if (kind === 'bloom') {
+    // a pale flower that is not veinlight: stem, two leaves, a double ring of petals round a hot heart
+    limb(k, 0, 0, 0, 0.02, 0.36, 0, 0.016, 0.7);
+    for (const sx of [-1, 1]) k.add(UNIT_OCT, 0.08, 0.016, 0.035, sx * 0.06, 0.1, 0, 0.75, 0, 0, sx * 0.5);
+    for (let p = 0; p < 7; p++) {
+      const a = (p / 7) * Math.PI * 2 + 0.2;
+      k.add(UNIT_OCT, 0.032, 0.11, 0.018, 0.02 + Math.sin(a) * 0.1, 0.44 + Math.cos(a) * 0.1, 0.01, 0.9, 0.25, 0, -a);
+    }
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2 + 0.6;
+      k.add(UNIT_OCT, 0.022, 0.06, 0.02, 0.02 + Math.sin(a) * 0.05, 0.44 + Math.cos(a) * 0.05, 0.03, 1, 0.25, 0, -a);
+    }
+    k.add(UNIT_ICO0, 0.04, 0.04, 0.04, 0.02, 0.44, 0.04, 1);
+    return { facet: true, halo: [0.85, 0.85, 0.4] };
+  }
+  if (kind === 'crawler') {
+    if (id === 'shellbacks') {
+      // a nacre isopod: overlapping plates nose to tail, a rolling row of legs under them
+      for (let p = 0; p < 6; p++) {
+        const x = -0.22 + p * 0.088;
+        k.add(UNIT_OCT, 0.068, 0.078 - Math.abs(p - 2.5) * 0.008, 0.12, x, 0.1, 0, p % 2 ? 1 : 0.8);
+      }
+      k.add(UNIT_OCT, 0.045, 0.05, 0.075, 0.3, 0.085, 0, 1);
+      for (const sz of [-1, 1]) limb(k, 0.33, 0.1, sz * 0.03, 0.44, 0.19, sz * 0.06, 0.008, 0.9);
+      for (let p = 0; p < 7; p++) {
+        const x = -0.24 + p * 0.085;
+        for (const sz of [-1, 1]) limb(k, x, 0.06, sz * 0.08, x + 0.02, 0, sz * 0.13, 0.011, 0.7);
+      }
+      return { facet: true, halo: [0.9, 0.5, 0.1] };
+    }
+    // the mimic: an opal a size too big, unfolded onto six legs, a stone lifted onto its back
+    k.add(UNIT_ICO0, 0.19, 0.12, 0.14, 0, 0.21, 0, 0.85);
+    k.add(UNIT_OCT, 0.045, 0.085, 0.045, -0.03, 0.37, 0, 1);
+    for (const sz of [-1, 1]) {
+      for (const xi of [-0.11, 0, 0.11]) {
+        limb(k, xi, 0.18, sz * 0.08, xi + 0.03, 0.24, sz * 0.18, 0.016, 0.75);
+        limb(k, xi + 0.03, 0.24, sz * 0.18, xi + 0.07, 0, sz * 0.21, 0.014, 0.75);
+      }
+      k.add(UNIT_OCT, 0.012, 0.05, 0.012, 0.19, 0.17, sz * 0.03, 1, 0, 0, -0.6);    // the mandibles
+    }
+    return { facet: true, halo: [0.8, 0.6, 0.22] };
+  }
+  // walkers
+  if (id === 'warden') {
+    // a tripod with a lantern where a head should be
+    for (const a of [0, 2.09, 4.19]) limb(k, Math.cos(a) * 0.17, 0, Math.sin(a) * 0.12, 0, 0.46, 0, 0.022, 0.7);
+    k.add(UNIT_OCT, 0.085, 0.055, 0.085, 0, 0.47, 0, 0.75);
+    limb(k, 0, 0.5, 0, 0.03, 0.62, 0, 0.016, 0.7);
+    k.add(UNIT_ICO0, 0.075, 0.075, 0.075, 0.035, 0.69, 0, 1);
+    k.add(UNIT_OCT, 0.06, 0.02, 0.06, 0.035, 0.77, 0, 0.6);
+    return { facet: true, halo: [0.85, 1.05, 0.48] };
+  }
+  if (id === 'kindled') {
+    // a figure of the core's own light, something dark and narrow inside it
+    k.add(UNIT_OCT, 0.11, 0.26, 0.08, 0, 0.42, 0, 1);
+    k.add(UNIT_ICO0, 0.06, 0.06, 0.06, 0.01, 0.76, 0, 1);
+    for (const sx of [-1, 1]) {
+      limb(k, sx * 0.07, 0.57, 0, sx * 0.14, 0.3, 0.01, 0.022, 0.85);
+      limb(k, sx * 0.04, 0.22, 0, sx * 0.06, 0, 0, 0.028, 0.85);
+    }
+    k.add(UNIT_OCT, 0.022, 0.2, 0.1, 0, 0.44, 0, 0.05);
+    return { facet: true, halo: [0.8, 1.1, 0.42] };
+  }
+  // a stillwalker: too tall, a figure of shards, leaning in
+  limb(k, -0.1, 0, 0, -0.025, 0.42, 0, 0.042, 0.85);
+  limb(k, 0.11, 0, 0.02, 0.04, 0.42, 0, 0.042, 0.85);
+  k.add(UNIT_OCT, 0.105, 0.23, 0.07, 0.02, 0.56, 0, 1, 0, 0, -0.1);
+  limb(k, -0.09, 0.7, 0, -0.13, 0.3, 0, 0.032, 0.9);
+  limb(k, 0.11, 0.7, 0, 0.16, 0.3, 0, 0.032, 0.9);
+  k.add(UNIT_OCT, 0.045, 0.075, 0.045, 0.06, 0.84, 0, 1);
+  k.add(UNIT_OCT, 0.018, 0.08, 0.018, -0.07, 0.78, -0.02, 0.9, 0, 0, 0.55);
+  k.add(UNIT_OCT, 0.018, 0.07, 0.018, 0.1, 0.78, -0.02, 0.9, 0, 0, -0.6);
+  return { facet: true, halo: [0.75, 1.15, 0.48] };
 }
 
 export class Interior {
@@ -886,9 +1226,9 @@ export class Interior {
     // east cap, and sealed hatches close off whatever isn't owned yet
     this.buildShell(g, 0, galleryOpen ? HALL_X1 : HALL_X1 + 0.8, [6.25, 13.25, 20.25]);
     if (galleryOpen) {
-      this.buildShell(g, HALL_X1, vivariumOpen ? GALLERY_X1 : GALLERY_X1 + 0.8, [27.25, 30.75]);
+      this.buildShell(g, HALL_X1, vivariumOpen ? GALLERY_X1 : GALLERY_X1 + 0.8, [], GALLERY_SKIN);
     }
-    if (galleryOpen && vivariumOpen) this.buildShell(g, GALLERY_X1, W, [37.75, 44.75]);
+    if (galleryOpen && vivariumOpen) this.buildShell(g, GALLERY_X1, W, [], VIVARIUM_SKIN);
     // west wall + the way out
     g.add(box(0.25, 3.2, 3.4, this.wallMat, HALL_X0 - 0.55, 1.5, -0.4));
     const doorTex = canvasTex(64, 128, gg => {
@@ -903,7 +1243,7 @@ export class Interior {
     door.rotation.y = Math.PI / 2;
     g.add(door);
     // east cap at the current end of the world
-    g.add(box(0.25, 3.2, 3.4, this.wallMat, endX + 0.55, 1.5, -0.4));
+    g.add(box(0.25, 3.2, 3.4, endX === VIVARIUM_X1 ? VIVARIUM_CAP : endX === GALLERY_X1 ? GALLERY_CAP : this.wallMat, endX + 0.55, 1.5, -0.4));
 
     // hall windows: dusk, always dusk
     for (const wx of [5, 11, 17]) g.add(duskWindow(0.85, wx, 1.55));
@@ -928,7 +1268,11 @@ export class Interior {
    * fixture whose light lands as gradients on the ceiling, upper wall and
    * floor; the bays named in `lit` also carry a real light.
    */
-  private buildShell(g: THREE.Group, x0: number, x1: number, lit: number[]): void {
+  private buildShell(g: THREE.Group, x0: number, x1: number, lit: number[], skin?: ShellSkin): void {
+    const S: ShellSkin = skin ?? {
+      wall: this.shellWall, wains: this.shellWains, ceil: this.shellCeil, floor: this.shellFloor,
+      frame: this.shellFrame, trim: this.trimMat, fixtures: true,
+    };
     const wall = new Kit(), wains = new Kit(), ceil = new Kit(), floor = new Kit(), frame = new Kit(), lens = new Kit();
     const halo = new Kit(), wash = new Kit(), pool = new Kit();
     const W = x1 - x0, CX = (x0 + x1) / 2;
@@ -942,7 +1286,7 @@ export class Interior {
     for (const [a, b] of cells(x0, x1, PANEL / 2, GRID)) {               // wainscot
       wains.box(b - a - 0.03, 0.46, 0.05, (a + b) / 2, 0.38, WALL_Z + 0.025, 0.58 + hash01(a, 1) * 0.07);
     }
-    g.add(box(W, 0.07, 0.07, this.trimMat, CX, 0.655, WALL_Z + 0.035)); // chair rail
+    g.add(box(W, 0.07, 0.07, S.trim, CX, 0.655, WALL_Z + 0.035));      // chair rail
     for (const [y0, y1] of [[0.69, 1.42], [1.42, 2.13]] as const) {
       for (const [a, b] of cells(x0, x1, PANEL, GRID)) {
         const s = 0.9 + hash01(a, y0) * 0.15;
@@ -997,7 +1341,7 @@ export class Interior {
     }
 
     // ---- fixtures, one per bay
-    for (let bx = GRID + BAY / 2; bx < x1; bx += BAY) {
+    for (let bx = GRID + BAY / 2; S.fixtures && bx < x1; bx += BAY) {
       if (bx < x0 + 0.3) continue;
       frame.box(0.62, 0.05, 0.32, bx, CEIL_Y - 0.06, FIX_Z, 0.75);
       lens.box(0.52, 0.02, 0.22, bx, CEIL_Y - 0.095, FIX_Z, 1);
@@ -1046,9 +1390,10 @@ export class Interior {
       frame.box(0.08, 0.08, DW * 2, WX + 0.04, 1.38, DZ, 0.9);
     }
 
-    g.add(wall.mesh(this.shellWall), wains.mesh(this.shellWains), ceil.mesh(this.shellCeil),
-      floor.mesh(this.shellFloor), frame.mesh(this.shellFrame), lens.mesh(this.shellLens));
+    g.add(wall.mesh(S.wall), wains.mesh(S.wains), ceil.mesh(S.ceil), floor.mesh(S.floor), frame.mesh(S.frame));
+    if (!S.fixtures) return;
     const L = this.mood.light;
+    g.add(lens.mesh(this.shellLens));
     g.add(halo.mesh(glowMat('pool', L, 0.45)), wash.mesh(glowMat('wash', L, 0.85)), pool.mesh(glowMat('pool', L, 0.5)));
   }
 
@@ -1372,12 +1717,26 @@ export class Interior {
 
   private buildWingDoor(g: THREE.Group, atX: number, open: boolean, name: string, hidden = false): void {
     if (hidden) return;  // the vivarium door isn't visible until the gallery exists
-    g.add(box(0.5, 2.3, 0.25, this.wallMat, atX, 1.15, -1.6));
-    g.add(box(0.56, 0.12, 0.3, this.trimMat, atX, 2.32, -1.6));
+    // the threshold: a dark pier cased in bronze, its name on a plate, where the hab ends and a wing begins
+    const k = new PropKit();
+    const BRONZE = C(0x6a5236), BRASS = C(0xb08a50);
+    k.matte.bev(0.5, 2.3, 0.25, atX, 1.15, -1.6, C(0x2c272e), 0.03);
+    k.sheen.bev(0.58, 0.14, 0.31, atX, 2.32, -1.6, BRONZE, 0.025);
+    k.sheen.bev(0.56, 0.12, 0.29, atX, 0.06, -1.6, BRONZE, 0.02);
+    for (const s of [-1, 1]) k.sheen.box(0.026, 2.06, 0.02, atX + s * 0.215, 1.18, -1.472, BRASS);
     if (open) {
-      g.add(glowDot(WARM_GLOW, atX, 2.1, -1.4, 0.035));
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.15),
+        new THREE.MeshBasicMaterial({ map: wingPlateTexture(name), toneMapped: false }));
+      plate.position.set(atX, 1.62, -1.468);
+      g.add(plate);
+      // a sconce over the plate, its light down the pier
+      k.sheen.cyl(0.05, 0.07, 0.07, atX, 2.03, -1.43, BRONZE, 10);
+      k.glow.cyl(0.066, 0.066, 0.004, atX, 1.993, -1.43, C(0xffd89a), 10);
+      k.land('wash', 0xffb868, 0.6).quad(0.42, 1.4, atX, 1.3, -1.466, 'wall');
+      k.flush(g);
       return;
     }
+    k.flush(g);
     // sealed: a hatch across the doorway, red-dogged
     g.add(box(0.2, 2.1, 2.6, GUNMETAL, atX, 1.05, -0.6));
     const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.028, 6, 14), new THREE.MeshStandardMaterial({ color: 0xa83a24, roughness: 0.6 }));
@@ -1394,6 +1753,11 @@ export class Interior {
    * column gives them up — the commonest thing in the ground by the door, the
    * rarest at the far end. Each occupied plinth carries a placard you can read
    * with E or with a click.
+   *
+   * Lit like a museum: a track over the plinths, a narrow warm downlight on
+   * each stone, and the stone's own colour washing its plinth, its placard,
+   * the wall behind it and the floor in front. All of that light is additive
+   * quads in three draws; two real lights carry the warmth onto the suit.
    */
   private buildGallery(g: THREE.Group): void {
     const best = new Map<number, Trophy>();
@@ -1406,28 +1770,86 @@ export class Interior {
       .slice(0, 6)
       .sort((a, b) => rarityRank(a.t) - rarityRank(b.t));   // then walk common → rare
 
+    const k = new PropKit();
+    const tint = new Kit(), fan = new Kit(), beams = new Kit(), glass = new Kit();
+    const x0 = HALL_X1, x1 = GALLERY_X1, CX = (x0 + x1) / 2, W = x1 - x0;
+    const BRONZE = C(0x6a5236), BRONZE_D = C(0x33281c), BRASS = C(0xb8925a);
+    const STONE = C(0x302a34), WARM = 0xffd9a0;
+    const Z = -1.1, TOP = 1.0, CAN = CEIL_Y - 0.33;
+
+    // the picture rail, and the track the downlights hang from
+    k.sheen.bev(W, 0.045, 0.035, CX, 1.98, WALL_Z + 0.03, BRONZE, 0.01);
+    k.sheen.box(W, 0.012, 0.014, CX, 2.0, WALL_Z + 0.05, BRASS);
+    k.sheen.box(W, 0.035, 0.07, CX, CEIL_Y - 0.07, Z, BRONZE_D);
+    for (let x = x0 + 0.6; x < x1; x += 1.95) k.sheen.box(0.02, 0.06, 0.02, x, CEIL_Y - 0.025, Z, BRONZE_D);
+
     for (let i = 0; i < 6; i++) {
       const px = HALL_X1 + 1.7 + i * 1.95;
-      g.add(cyl(0.3, 0.1, GUNMETAL, px, 0.05, -1.1, 16));
-      g.add(cyl(0.22, 0.85, PLINTH, px, 0.52, -1.1, 12));
-      g.add(cyl(0.28, 0.06, GUNMETAL, px, 0.97, -1.1, 16));
+      // the plinth: a bronze foot, a dark stone shaft, a bronze cap
+      k.sheen.cyl(0.3, 0.32, 0.1, px, 0.05, Z, BRONZE_D, 16);
+      k.matte.cyl(0.21, 0.23, 0.85, px, 0.52, Z, STONE, 8);
+      k.sheen.cyl(0.236, 0.236, 0.035, px, 0.16, Z, BRONZE, 8);
+      k.sheen.cyl(0.28, 0.27, 0.06, px, 0.97, Z, BRONZE, 16);
+      // the track head over it
+      k.sheen.cyl(0.012, 0.012, 0.12, px, CEIL_Y - 0.14, Z, BRONZE_D, 6);
+      k.sheen.cyl(0.05, 0.068, 0.15, px, CAN + 0.075, Z, BRONZE_D, 10);
+      k.sheen.cyl(0.072, 0.072, 0.02, px, CAN + 0.01, Z, BRONZE, 10);
+
       const trophy = shown[i];
       if (!trophy) {
-        g.add(glowDot(new THREE.MeshBasicMaterial({ color: 0x3a4048, toneMapped: false }), px, 1.12, -1.1, 0.04));
+        // an empty cradle, its light off
+        k.sheen.cyl(0.025, 0.07, 0.06, px, TOP + 0.03, Z, BRASS, 8);
+        k.matte.cyl(0.055, 0.055, 0.004, px, CAN - 0.002, Z, C(0x3a3430), 10);
         continue;
       }
       const d = tileDef(trophy.t);
-      const gemColor = d.gem ?? 0xffffff;
-      const mat = new THREE.MeshStandardMaterial({
-        color: gemColor, flatShading: true, roughness: 0.16, metalness: 0.55,
-        emissive: gemColor, emissiveIntensity: trophy.grade >= 2 ? 1.15 : 0.75,
-      });
-      const gem = new THREE.Mesh(GEM_GEOS[DISPLAY_CUT], mat);   // the display cut
-      const s = (trophy.grade >= 2 ? 0.62 : 0.5) * gemScaleOf(trophy.t) * 1.6;
-      gem.scale.setScalar(Math.max(0.34, s));
-      gem.position.set(px, 1.28, -1.1);
+      const hue = d.gem ?? 0xffffff;
+      const flawless = trophy.grade >= 2;
+      const s = Math.max(0.34, (flawless ? 0.62 : 0.5) * gemScaleOf(trophy.t) * 1.6);
+      const gy = TOP + 0.05 + 0.42 * s;                       // its tip in the cradle
+
+      // the stone: lit facets over a burning core, turning slowly under its light
+      const gem = new THREE.Mesh(displayCut(), new THREE.MeshMatcapMaterial({
+        matcap: gemMatcap(hue), vertexColors: true, flatShading: true,
+        transparent: true, opacity: 0.8, toneMapped: false,
+      }));
+      gem.scale.setScalar(s);
+      gem.position.set(px, gy, Z);
+      gem.rotation.y = i * 0.7;
+      const core = new THREE.Mesh(displayCut(), new THREE.MeshBasicMaterial({
+        color: C(hue).lerp(C(0xffffff), 0.4), toneMapped: false,
+      }));
+      core.scale.setScalar(0.5);
+      gem.add(core);
       g.add(gem);
       this.gems.push(gem);
+      k.sheen.cyl(0.025, 0.07, 0.06, px, TOP + 0.03, Z, BRASS, 8);
+
+      // the case over it: a breath of glass, brass at the edges, one edge catching the light
+      const ch = Math.min(CAN - 0.12, gy + 0.43 * s + 0.08) - TOP;
+      glass.add(UNIT_BOX, 0.5, ch, 0.5, px, TOP + ch / 2, Z, 1);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        k.sheen.box(0.014, ch, 0.014, px + sx * 0.25, TOP + ch / 2, Z + sz * 0.25, BRASS);
+      }
+      for (const sz of [-1, 1]) k.sheen.box(0.514, 0.014, 0.014, px, TOP + ch, Z + sz * 0.25, BRASS);
+      for (const sx of [-1, 1]) k.sheen.box(0.014, 0.014, 0.5, px + sx * 0.25, TOP + ch, Z, BRASS);
+      k.glow.box(0.48, 0.006, 0.006, px, TOP + ch + 0.008, Z + 0.252, C(0xffe6c0).multiplyScalar(0.85));
+      // the cap's lip, lit by the downlight and the stone together
+      k.glow.add(UNIT_RING, 0.276, 0.276, 0.08, px, TOP, Z, C(WARM).lerp(C(hue), 0.4).multiplyScalar(0.7), Math.PI / 2);
+
+      // the downlight: a lens, a cone in the air, a pool on the plinth, its spill on ceiling and wall
+      k.glow.cyl(0.055, 0.055, 0.004, px, CAN - 0.002, Z, C(0xfff0c8), 10);
+      beams.add(BEAM_GEO(), 1, 1, 1, px, (CAN + TOP) / 2, Z, 1);
+      tq(tint, WARM, 0.9, 0.66, 0.66, px, TOP + 0.003, Z, 'up');
+      tq(tint, WARM, 0.4, 1.3, 1.3, px, CEIL_Y - 0.035, Z, 'down');
+      tq(fan, 0xffc890, 0.42, 0.95, 1.7, px, CAN - 0.85, WALL_Z + 0.05, 'wall');
+      // the stone's own colour: a halo behind it, the wall, round the placard, a pool and a sheen on the floor
+      const glow = flawless ? 1.2 : 1;
+      tq(tint, hue, 0.5 * glow, 0.8, 0.95, px, gy, Z - 0.27, 'wall');
+      tq(tint, hue, 0.6 * glow, 1.9, 2.0, px, gy - 0.05, WALL_Z + 0.052, 'wall');
+      tq(tint, hue, 0.4 * glow, 0.95, 0.6, px, 0.64, -0.876, 'wall');
+      tq(tint, hue, 0.5 * glow, 1.5, 1.6, px, 0.007, -0.4, 'up');
+      tq(tint, hue, 0.22 * glow, 0.34, 2.4, px, 0.008, 0.35, 'up');
 
       const plate = placard(d.name, depthLine(trophy.t), px, 0.66, -0.79);
       plate.userData.mineral = trophy.t;
@@ -1440,59 +1862,207 @@ export class Interior {
         label: `READ — ${d.name.toUpperCase()}${trophy.grade >= 2 ? ' · FLAWLESS' : ''}`,
       });
     }
-    for (const wx of [HALL_X1 + 3.6, HALL_X1 + 7.5]) g.add(duskWindow(0.7, wx, 1.7));
+
+    // dusk between the exhibits, and where it lands
+    const ports = [HALL_X1 + 4.625, HALL_X1 + 8.525];
+    for (const wx of ports) g.add(duskWindow(0.7, wx, 1.45));
+    this.duskSpill(g, ports, 0.7, 1.45);
+    // two real lights, kept low and warm, so the suit and the plinths have a key
+    for (const lx of [HALL_X1 + 4.6, HALL_X1 + 8.5]) {
+      const pt = new THREE.PointLight(0xffc890, 2.0, 5.5, 1.7);
+      pt.position.set(lx, 2.0, -0.3);
+      g.add(pt);
+    }
+
+    k.flush(g);
+    for (const [kit, mat] of [[tint, tintMat('pool')], [fan, tintMat('wash')], [beams, TRACK_BEAM()], [glass, VITRINE_GLASS]] as const) {
+      if (!kit.empty) g.add(kit.mesh(mat));
+    }
   }
 
+  /**
+   * Four tanks, one per world and one for the things that belong to none.
+   * Each holds a column of water lit in its world's hue from the base, and the
+   * light lands: a pool on the floor, a wash on the wall and the ceiling, the
+   * glass edges rimmed. The room has no fixtures of its own; the tanks light it.
+   */
   private buildVivarium(g: THREE.Group): void {
     const groups: (FaunaEntry['world'])[] = ['veil3', 'cryos2', 'maelis6', null];
+    const k = new PropKit();
+    const tint = new Kit(), column = new Kit(), glass = new Kit();
+    const METAL = C(0x283032), METAL_L = C(0x3c484a), Z = -1.0;
+    const hues: number[] = [];
     for (let i = 0; i < 4; i++) {
       const tx = GALLERY_X1 + 1.9 + i * 2.6;
-      // tank: gunmetal base + cap, faint teal glass column
-      g.add(cyl(0.85, 0.16, GUNMETAL, tx, 0.08, -1.0, 20));
-      g.add(cyl(0.78, 1.5, new THREE.MeshStandardMaterial({
-        color: 0x9fd8cc, roughness: 0.15, transparent: true, opacity: 0.16, depthWrite: false,
-      }), tx, 0.91, -1.0, 20));
-      g.add(cyl(0.85, 0.1, GUNMETAL, tx, 1.7, -1.0, 20));
-      g.add(glowDot(TEAL_GLOW, tx + 0.7, 0.14, -0.65, 0.025));
-
       const residents = FAUNA.filter(f => f.world === groups[i] && this.ctx.meta.sponsored.includes(f.id)).slice(0, 3);
-      for (let j = 0; j < residents.length; j++) {
-        this.forms.push(this.buildLightform(g, residents[j], tx + (j - (residents.length - 1) / 2) * 0.42, 0.75));
-      }
+      const hue = TANK_HUE[groups[i] ?? 'any'];
+      const live = residents.length > 0 ? 1 : 0.35;
+      hues.push(hue);
+
+      // the tank: a dark metal base with a lit trim ring, the glass, a cap with a lit lip
+      k.sheen.cyl(0.85, 0.9, 0.16, tx, 0.08, Z, METAL, 20);
+      k.sheen.cyl(0.81, 0.84, 0.02, tx, 0.17, Z, METAL_L, 20);
+      k.glow.cyl(0.874, 0.874, 0.024, tx, 0.115, Z, C(hue).multiplyScalar(0.95 * live), 20);
+      k.glow.add(UNIT_ICO, 0.02, 0.02, 0.02, tx + 0.55, 0.045, Z + 0.7, C(0x3ce6c8));
+      glass.add(cylGeo(0.78, 0.78, 1.5, 20), 1, 1, 1, tx, 0.91, Z, 1);
+      k.sheen.cyl(0.85, 0.85, 0.1, tx, 1.7, Z, METAL, 20);
+      k.sheen.cyl(0.6, 0.85, 0.05, tx, 1.775, Z, METAL_L, 20);
+      k.glow.cyl(0.858, 0.858, 0.014, tx, 1.646, Z, C(hue).multiplyScalar(0.55 * live), 20);
+
+      // the water column, lit from the base; the glass edges catching it
+      tq(column, hue, 0.4 * live, 1.5, 1.48, tx, 0.905, Z, 'wall');
+      for (const sx of [-1, 1]) tq(tint, hue, 0.55 * live, 0.06, 1.44, tx + sx * 0.77, 0.9, Z + 0.03, 'wall');
+      // where it lands: the base inside, the floor in front, the wall behind, the ceiling over
+      tq(tint, hue, 0.6 * live, 1.4, 1.4, tx, 0.182, Z, 'up');
+      tq(tint, hue, 0.8 * live, 3.0, 2.6, tx, 0.007, -0.2, 'up');
+      tq(tint, hue, 0.28 * live, 0.5, 2.8, tx, 0.008, 1.0, 'up');
+      tq(tint, hue, 0.6 * live, 3.3, 2.9, tx, 1.0, WALL_Z + 0.05, 'wall');
+      tq(tint, hue, 0.5 * live, 3.0, 2.8, tx, CEIL_Y - 0.035, -0.6, 'down');
+
+      // the residents: walkers and growers on the tank floor, swimmers above them
+      const forms = residents.map(f => LIGHTFORM[f.id] ?? 'swarm');
+      const floor = residents.filter((_, j) => FLOOR_FORMS.has(forms[j]));
+      const air = residents.filter((_, j) => !FLOOR_FORMS.has(forms[j]));
+      // a lone walker keeps to one side, so the swimmers never pass through it
+      const fx = [[0.34], [-0.34, 0.34], [-0.44, 0, 0.44]];
+      const ay = [[1.0], [1.22, 0.78], [1.32, 0.98, 0.64]];
+      const ax = floor.length === 1 ? -0.16 : 0;
+      floor.forEach((f, j) => this.forms.push(this.buildLightform(g, f,
+        new THREE.Vector3(tx + fx[floor.length - 1][j], 0.18, Z + (j % 2 ? -0.16 : 0.1)))));
+      air.forEach((f, j) => this.forms.push(this.buildLightform(g, f,
+        new THREE.Vector3(tx + ax + (air.length > 1 ? (j % 2 ? 0.12 : -0.12) : 0), ay[air.length - 1][j], Z + 0.05))));
     }
+    // two real lights, low between the tanks, so their colour reaches the suit and the floor plates
+    for (const [a, b] of [[0, 1], [2, 3]]) {
+      const pt = new THREE.PointLight(C(hues[a]).lerp(C(hues[b]), 0.5), 1.6, 5, 1.6);
+      pt.position.set(GALLERY_X1 + 1.9 + (a + b) / 2 * 2.6, 0.9, -0.3);
+      g.add(pt);
+    }
+
+    k.flush(g);
+    g.add(column.mesh(COLUMN_MAT()), glass.mesh(TANK_GLASS), tint.mesh(tintMat('pool')));
   }
 
-  /** a species, remembered in light — small, tinted, alive enough */
-  private buildLightform(g: THREE.Group, f: FaunaEntry, x: number, y: number): FormAnim {
-    const kind = LIGHTFORM[f.id] ?? 'motes';
+  /**
+   * A species remembered in light: one glowing low-poly silhouette, built from
+   * emissive facets in its own colour and matched to what it is — a ribbon of
+   * slivers, a serpent, a moth, a walker, a crawler, a bloom, a cluster of sacs
+   * — with a soft halo behind it. It drifts; nothing in here is in a hurry.
+   */
+  private buildLightform(g: THREE.Group, f: FaunaEntry, home: THREE.Vector3): FormAnim {
+    const kind = LIGHTFORM[f.id] ?? 'swarm';
     const group = new THREE.Group();
-    group.position.set(x, y, -1.0);
-    const mat = new THREE.MeshBasicMaterial({ color: f.color, toneMapped: false, transparent: true, opacity: 0.9 });
-    const parts: THREE.Object3D[] = [];
-    if (kind === 'swarm') {
-      for (let i = 0; i < 6; i++) {
-        const m = new THREE.Mesh(new THREE.TetrahedronGeometry(0.028), mat);
-        group.add(m); parts.push(m);
-      }
-    } else if (kind === 'serpent') {
-      for (let i = 0; i < 6; i++) {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.05 - i * 0.005, 8, 6), mat);
-        group.add(m); parts.push(m);
-      }
-    } else if (kind === 'walker') {
-      for (let i = 0; i < 3; i++) {
-        const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.07 - i * 0.015), mat);
-        m.position.y = i * 0.12;
-        group.add(m); parts.push(m);
-      }
+    group.position.copy(home);
+    const mat = new THREE.MeshBasicMaterial({ color: f.color, vertexColors: true, toneMapped: false, side: THREE.DoubleSide });
+    let body: THREE.Object3D;
+    let inst: THREE.InstancedMesh | null = null;
+    // the halo: width, height, centre height
+    let hw = 0.9, hh = 0.9, hy = 0;
+    const COUNT: Partial<Record<FormKind, number>> = { swarm: 16, spiral: 18, serpent: 10, sacs: 5 };
+    const n = COUNT[kind];
+    if (n) {
+      const geo = kind === 'serpent' ? SEG_GEO() : kind === 'sacs' ? DOME_GEO() : SLIVER_GEO();
+      inst = new THREE.InstancedMesh(geo, mat, n);
+      inst.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 0.7);   // the whole drift, not one part
+      for (let i = 0; i < n; i++) inst.setColorAt(i, new THREE.Color(1, 1, 1));
+      body = inst;
+      [hw, hh, hy] = kind === 'swarm' ? [1.1, 0.7, 0] : kind === 'spiral' ? [0.9, 0.85, 0]
+        : kind === 'serpent' ? [1.15, 0.6, 0] : [0.85, 0.55, 0.08];
     } else {
-      for (let i = 0; i < 10; i++) {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 4), mat);
-        group.add(m); parts.push(m);
+      const k = new Kit();
+      const fx = lightformShape(k, kind, f.id);
+      const m = k.mesh(mat);
+      if (fx.facet) {
+        const flat = m.geometry;
+        m.geometry = facets(flat, 0.55);
+        flat.dispose();
       }
+      body = m;
+      [hw, hh, hy] = fx.halo;
     }
+    group.add(body);
+    group.scale.setScalar(1.2);
+    const halo = new THREE.Mesh(UNIT_QUAD, glowMat('pool', f.color, 0.55));
+    halo.scale.set(hw, hh, 1);
+    halo.position.set(0, hy, -0.22);
+    group.add(halo);
     g.add(group);
-    return { kind, group, parts, seed: x * 7.13 + f.id.length };
+    const form: FormAnim = { kind, group, body, inst, home, seed: home.x * 7.13 + f.id.length, heading: 0 };
+    this.poseForm(form, form.seed, 0);
+    return form;
+  }
+
+  /** one frame of a lightform's drift */
+  private poseForm(f: FormAnim, t: number, dt: number): void {
+    const { home, group, body, inst } = f;
+    const o = POSE_OBJ, c = POSE_COL;
+    if (inst && (f.kind === 'swarm' || f.kind === 'spiral' || f.kind === 'serpent')) {
+      group.position.set(home.x + Math.sin(t * 0.13) * 0.06, home.y + Math.sin(t * 0.21) * 0.05, home.z);
+      const n = inst.count;
+      for (let i = 0; i < n; i++) {
+        let tw = 1;
+        if (f.kind === 'swarm') {
+          // a ribbon of glass slivers pouring along a figure of eight, glinting edge-on
+          const s = t * 0.55 - i * 0.14;
+          ribbonAt(s, POSE_P); ribbonAt(s + 0.02, POSE_Q);
+          const j = Math.sin(i * 2.7 + t * 0.9) * 0.035;
+          POSE_P.y += j; POSE_Q.y += j;
+          o.scale.set(0.032, 0.032 * (0.6 + 0.7 * Math.abs(Math.sin(t * 1.7 + i))), 0.095 * (1 - (i / n) * 0.35));
+          tw = 0.75 + 0.35 * Math.sin(t * 2.3 + i * 1.7);
+        } else if (f.kind === 'spiral') {
+          // a spiral of motes all leaning one way, round an eye
+          const a = t * 0.45 + i * 0.62, r = 0.045 + i * 0.017;
+          POSE_P.set(Math.cos(a) * r + i * 0.009, Math.sin(a) * r * 0.9, Math.sin(a) * r * 0.3);
+          POSE_Q.set(Math.cos(a + 0.1) * r + i * 0.009, Math.sin(a + 0.1) * r * 0.9, Math.sin(a + 0.1) * r * 0.3);
+          const m = i === 0 ? 0.055 : 0.03 * (1 - i / n * 0.4);
+          o.scale.set(m, m, i === 0 ? m : 0.06);
+          tw = i === 0 ? 1.4 : 0.8 + 0.25 * Math.sin(t * 1.5 - i * 0.5);
+        } else {
+          // a serpent: a long head, plates tapering to the tail, lights pulsing tail to head
+          const s = t * 0.4 - i * 0.2;
+          serpentAt(s, POSE_P); serpentAt(s + 0.02, POSE_Q);
+          const r = 0.07 * (1 - (i / n) * 0.55);
+          if (i === 0) o.scale.set(0.068, 0.058, 0.13); else o.scale.set(r, r * 0.85, 0.085);
+          tw = 0.8 + 0.3 * Math.max(0, Math.sin(t * 2 + i * 0.7));
+        }
+        o.position.copy(POSE_P);
+        o.lookAt(POSE_Q);
+        o.updateMatrix();
+        inst.setMatrixAt(i, o.matrix);
+        inst.setColorAt(i, c.setScalar(tw));
+      }
+    } else if (inst) {
+      // sacs breathing in a rhythm, green draining to white as they fill
+      for (let i = 0; i < inst.count; i++) {
+        const [dx, dz, r] = SACS[i];
+        const fill = 0.5 + 0.5 * Math.sin(t * 1.1 + i * 1.9);
+        const s = r * (0.9 + 0.22 * fill);
+        o.position.set(dx, 0, dz);
+        o.rotation.set(0, 0, 0);
+        o.scale.set(s, s * 1.15, s);
+        o.updateMatrix();
+        inst.setMatrixAt(i, o.matrix);
+        inst.setColorAt(i, c.setScalar(0.85 + 0.45 * fill));
+      }
+    } else if (f.kind === 'wing') {
+      group.position.set(home.x + Math.sin(t * 0.31) * 0.2, home.y + Math.sin(t * 0.62) * 0.1, home.z);
+      body.scale.x = 0.3 + 0.7 * Math.abs(Math.cos(t * 1.9));
+      body.rotation.z = Math.cos(t * 0.31) * 0.18;
+    } else if (f.kind === 'bloom') {
+      body.rotation.y = Math.sin(t * 0.3) * 0.5;
+      body.scale.setScalar(1 + Math.sin(t * 0.7) * 0.04);
+    } else {
+      // walkers pace, crawlers wander; both turn round at the glass
+      const range = f.kind === 'walker' ? 0.12 : 0.2;
+      group.position.set(home.x + Math.sin(t * 0.2) * range, home.y + Math.abs(Math.sin(t * 2.2)) * 0.01, home.z);
+      const want = Math.cos(t * 0.2) >= 0 ? 0 : Math.PI;
+      f.heading += (want - f.heading) * Math.min(1, dt * 1.5);
+      body.rotation.y = f.heading;
+    }
+    if (inst) {
+      inst.instanceMatrix.needsUpdate = true;
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    }
   }
 
   // ---------------- the frame ----------------
@@ -1555,30 +2125,8 @@ export class Interior {
   }
 
   private animate(dt: number): void {
-    for (const gem of this.gems) gem.rotation.y += dt * 0.6;
-    for (const f of this.forms) {
-      const t = this.time + f.seed;
-      if (f.kind === 'swarm') {
-        f.parts.forEach((p, i) => {
-          const a = t * (0.9 + (i % 3) * 0.25) + i * 1.05;
-          p.position.set(Math.cos(a) * 0.2, Math.sin(a * 1.4 + i) * 0.32, Math.sin(a) * 0.12);
-          p.rotation.y = a;
-        });
-      } else if (f.kind === 'serpent') {
-        f.parts.forEach((p, i) => {
-          const ph = t * 1.6 - i * 0.55;
-          p.position.set(Math.cos(ph) * 0.22, Math.sin(ph * 2) * 0.1 - i * 0.02 + 0.05, Math.sin(ph) * 0.1);
-        });
-      } else if (f.kind === 'walker') {
-        f.group.position.y = 0.75 + Math.sin(t * 0.8) * 0.04;
-        f.group.rotation.y = t * 0.5;
-      } else {
-        f.parts.forEach((p, i) => {
-          const a = t * 0.5 + i * 2.4;
-          p.position.set(Math.cos(a + i) * 0.24, Math.sin(a * 1.3) * 0.3, Math.sin(a * 0.8) * 0.12);
-        });
-      }
-    }
+    for (const gem of this.gems) gem.rotation.y += dt * 0.35;
+    for (const f of this.forms) this.poseForm(f, this.time + f.seed, dt);
   }
 
   private nearestStation(): Station | null {
