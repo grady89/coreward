@@ -72,6 +72,8 @@ const rockMat = new THREE.MeshStandardMaterial({
 const strataUniforms = {
   uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
   uStone: { value: 1 },
+  /** a heat fissure's light on its stone: the seam hue at the wash's even brightness */
+  uSeam: { value: new THREE.Color(0) },
 };
 /**
  * Where the headlamp lands: the pod casts LAMP_RAYS rays across the beam's
@@ -97,6 +99,9 @@ function syncStrata(): void {
   const g = spentWorld() ? undefined : ACTIVE.strataGlow;
   strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
   strataUniforms.uStone.value = spentWorld() ? 0 : 1;
+  const c = strataUniforms.uSeam.value.setHex(spentWorld() ? 0 : fissureHue());
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  c.multiplyScalar(Math.min(1, 0.26 / Math.max(lum, 1e-3)));
 }
 /** the haze carries the world's fluid hue at the wash's even brightness */
 let hazeFor: unknown = null;
@@ -113,6 +118,7 @@ rockMat.onBeforeCompile = shader => {
   shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
   shader.uniforms.uStrata = strataUniforms.uStrata;
   shader.uniforms.uStone = strataUniforms.uStone;
+  shader.uniforms.uSeam = strataUniforms.uSeam;
   shader.uniforms.uLampO = lampUniforms.uLampO;
   shader.uniforms.uLampHit = lampUniforms.uLampHit;
   shader.uniforms.uLampTile = lampUniforms.uLampTile;
@@ -123,6 +129,10 @@ attribute vec3 glow;
 attribute vec3 wash;
 attribute vec2 washDir;
 attribute float matte;
+attribute vec4 heat;
+attribute vec2 seam;
+varying vec4 vHeat;
+varying vec2 vSeam;
 varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
@@ -133,6 +143,7 @@ varying vec2 vCell;
 varying float vMatte;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
 	vGlow = glow; vWash = wash; vWashDir = washDir; vMatte = matte;
+	vHeat = heat; vSeam = seam;
 	vBox = position; vBoxN = normal;
 	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;
 	// block centres sit at k + 0.5, so floor() never straddles an integer
@@ -142,6 +153,9 @@ varying float vMatte;`)
 uniform float uFluidTime;
 uniform float uFluidAmp;
 uniform float uStone;
+uniform vec3 uSeam;
+varying vec4 vHeat;
+varying vec2 vSeam;
 varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
@@ -193,6 +207,19 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 	float wf = vBoxN.z > 0.5 ? 0.6 + 0.8 * dot(vBox.xy, wd) : 0.15 + max(0.0, dot(vBoxN.xy, wd));
 	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
 	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(stAlbedo, vec3(0.333)));
+	// a fissure cluster heats its stone: the seam field, baked at every
+	// block corner, runs smoothly across faces and block borders (front, side
+	// and top alike) and is gone about two tiles out; on the seam's own face
+	// the stone burns hottest along the crack's trunk
+	{
+		vec2 hq = clamp(vBox.xy + 0.5, 0.0, 1.0);
+		float hf = mix(mix(vHeat.z, vHeat.w, hq.x), mix(vHeat.x, vHeat.y, hq.x), hq.y);
+		float hface = vBoxN.z > 0.5 ? 1.0 : 0.75;
+		float pd = abs(vSeam.x * vBox.y - vSeam.y * vBox.x);
+		float band = vBoxN.z > 0.5 ? exp(-pd * pd / 0.006) * 0.9 + exp(-pd * pd / 0.05) * 0.55 : 0.0;
+		totalEmissiveRadiance += uSeam * (0.34 * hf * hf * hface + band * dot(vSeam, vSeam)) * wp
+			* min(1.0, 0.5 + 3.0 * dot(stAlbedo, vec3(0.333))) * (1.0 - 0.6 * vMatte);
+	}
 	// the beam lands: stone inside the lamp's wedge, up to the first face it
 	// meets along each ray, catches the lamp; the axis' hit is a hotspot
 	if (uLampCol.r + uLampCol.g + uLampCol.b > 0.0) {
@@ -240,7 +267,7 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		reflectedLight.directSpecular *= 1.0 - 0.8 * mm;
 	}`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v7';
+rockMat.customProgramCacheKey = () => 'rock-glow-v8';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -372,11 +399,13 @@ const DIRTY_RING: readonly (readonly [number, number])[] = [[0, 0], [-1, 0], [1,
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
 
-interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array; wf: Float32Array }
+interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array; wf: Float32Array; h: Float32Array }
 const SPILL: Spill = {
   r: new Float32Array(CAP), g: new Float32Array(CAP), b: new Float32Array(CAP),
   dx: new Float32Array(CAP), dy: new Float32Array(CAP), w: new Float32Array(CAP),
   wf: new Float32Array(CAP),
+  /** seam heat at each block's four corners: top-left, top-right, bottom-left, bottom-right */
+  h: new Float32Array(CAP * 4),
 };
 
 /**
@@ -418,6 +447,8 @@ class Chunk {
   wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
   washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
   matte: THREE.InstancedBufferAttribute;             // per rock instance: 1 at/next to an ore (lit value capped)
+  heat: THREE.InstancedBufferAttribute;              // per rock instance: seam heat at its four corners
+  seam: THREE.InstancedBufferAttribute;              // per rock instance: its own seam's trunk direction (0 = none)
   fl: THREE.InstancedBufferAttribute;                // per fluid instance: corner depths, surface, world x
   hz: THREE.InstancedBufferAttribute;                // per haze sheet: run ends, surface y
   gems: THREE.InstancedMesh[];
@@ -449,6 +480,10 @@ class Chunk {
     rockGeo.setAttribute('washDir', this.washDir);
     this.matte = new THREE.InstancedBufferAttribute(new Float32Array(CAP), 1);
     rockGeo.setAttribute('matte', this.matte);
+    this.heat = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
+    rockGeo.setAttribute('heat', this.heat);
+    this.seam = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
+    rockGeo.setAttribute('seam', this.seam);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     const fluidGeo = lavaGeo.clone();
     this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
@@ -480,6 +515,7 @@ class Chunk {
     this.chewLocal = -1;
     let nr = 0, nl = 0, nh = 0;
     (this.glow.array as Float32Array).fill(0);
+    (this.seam.array as Float32Array).fill(0);
     const ng = GEM_GEOS.map(() => 0);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
     const spent = spentWorld();
@@ -555,6 +591,7 @@ class Chunk {
         this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
         this.washDir.setXY(nr, lit.dx[local], lit.dy[local]);
         this.matte.setX(nr, spent ? 0 : nearOre(terrain, x, y));
+        this.heat.setXYZW(nr, lit.h[local * 4], lit.h[local * 4 + 1], lit.h[local * 4 + 2], lit.h[local * 4 + 3]);
         this.rockIds.set(local, nr);
         nr++;
 
@@ -564,6 +601,7 @@ class Chunk {
         let gemScale = 1;
         let cls = 0;
         let harvestable = true;
+        let roll = 0;
         if (d.ore || t === T.MIMIC || t === T.FROSTBLOOM) {
           cls = gemClassOf(t);
           gemColor = gemTintOf(t);
@@ -578,10 +616,12 @@ class Chunk {
           gemColor = fissureHue();
           gemScale = 1;
           harvestable = false;
+          roll = seamRoll(terrain, x, y);
           if (!spent) {
             // the seam's own stone burns behind it, out to the block's edges
             tmpC.setHex(gemColor).multiplyScalar(0.3);
             this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
+            this.seam.setXY(nr - 1, Math.cos(roll), Math.sin(roll));
           }
         }
         if (gemColor && ng[cls] < GEM_CAP) {
@@ -595,7 +635,7 @@ class Chunk {
             pulse: harvestable ? mo.pulse : 0.04,
             wobble: harvestable ? mo.wobble : 0,
             tilt: (cellHash(x, y, 7) - 0.5) * 0.9,
-            roll: !harvestable ? seamRoll(terrain, x, y)
+            roll: !harvestable ? roll
               : mo.sway ? (cellHash(x, y, 29) - 0.5) * 0.8 : cellHash(x, y, 29) * Math.PI * 2,
             // a fissure rides the face of its own cube, which the jitter
             // above pushes forward (h > 0.82 puts it at z ≥ 0.529, tilted
@@ -627,6 +667,8 @@ class Chunk {
     this.wash.needsUpdate = true;
     this.washDir.needsUpdate = true;
     this.matte.needsUpdate = true;
+    this.heat.needsUpdate = true;
+    this.seam.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
@@ -644,7 +686,7 @@ class Chunk {
    */
   private spill(terrain: Terrain, x0: number, y0: number, spent: boolean): Spill {
     const o = SPILL;
-    o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0); o.wf.fill(0);
+    o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0); o.wf.fill(0); o.h.fill(0);
     if (spent) return o;
     const R = 5;
     for (let sy = y0 - 3; sy < y0 + CHUNK + R; sy++) {
@@ -659,6 +701,19 @@ class Chunk {
         const reach = pool ? 2.6 : 1.9, inner = pool ? 0.6 : 0.4;
         const k = pool ? 1 : 0.6;
         const acc = pool ? o.w : o.wf;
+        if (!pool) {
+          // the seam's heat at every block corner within reach, its own
+          // block's included: full at the seam's corners, gone by ~1.9 tiles
+          for (let ty = Math.max(y0, sy - 3); ty <= Math.min(y0 + CHUNK - 1, sy + 2); ty++) {
+            for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 2); tx++) {
+              const i4 = ((ty - y0) * CHUNK + (tx - x0)) * 4;
+              for (let c = 0; c < 4; c++) {
+                const d = Math.hypot(tx + (c & 1) - sx - 0.5, ty + (c >> 1) - sy - 0.5);
+                if (d < 1.9) o.h[i4 + c] += 1 - smooth01((d - 0.7) / 1.2);
+              }
+            }
+          }
+        }
         for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
           for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 3); tx++) {
             if (tx === sx && ty === sy) continue;
@@ -691,6 +746,8 @@ class Chunk {
       const f = o.wf[i] > 0 ? 0.32 * (1 - Math.exp(-o.wf[i])) : 0;
       o.r[i] = pr * s + fc.r * f; o.g[i] = pg * s + fc.g * f; o.b[i] = pb * s + fc.b * f;
       o.w[i] += o.wf[i];
+      // saturating, like the wash: a knot of seams is hotter than one, not 4×
+      for (let c = i * 4; c < i * 4 + 4; c++) o.h[c] = 1 - Math.exp(-1.2 * o.h[c]);
     }
     if (coreLit && y0 + CHUNK > CORE_TY - CORE_REACH && y0 < CORE_TY + CORE_REACH) {
       // every core at one brightness: a pale cyan heart must not out-wash amber
