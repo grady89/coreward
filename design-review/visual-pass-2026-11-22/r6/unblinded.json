@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 6.3,
+  "candidate": 5.7,
+  "delta": -0.6,
+  "preferred": "best",
+  "why": "Shallow and surface shots are identical. In the deep and fissure shots B keeps the stone dark and lets the cracks light it, and it adds slight back-wall haze. That fits the brief's 'fissures light the stone' and 'depth' goals much better than A's flat saturated fills."
+ },
+ "lighting": {
+  "best": 6.4,
+  "candidate": 6.8,
+  "delta": 0.4,
+  "preferred": "candidate",
+  "why": "B keeps everything A does well and adds a darker title shaft with glow from below, fissures that light their stone, and backdrops that fall to true black at mid depth. The gain is moderate: cores, beam and surface are effectively unchanged."
+ },
+ "identity": {
+  "best": 7.0,
+  "candidate": 7.2,
+  "delta": 0.2,
+  "preferred": "candidate",
+  "why": "B is nearly identical but adds world-specific material cues (frost glints on Cryos, a faint nacre tint on Maelis) and slightly darker backdrops. These are small but real identity gains. Both share the Cryos/Maelis core convergence."
+ },
+ "fluids": {
+  "best": 6.8,
+  "candidate": 6.4,
+  "delta": -0.4,
+  "preferred": "best",
+  "why": "The frames are nearly identical except the fissure tiles: in B the host stone is darker and the glow is centred on the crack. That gives real light-in-the-dark contrast and makes the cracks read as light sources, closer to reference 04. Pools and cores are unchanged."
+ },
+ "characters": {
+  "best": 6.0,
+  "candidate": 6.3,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "B adds the pilot's orange trim from the reference, a hint of a glimmerfly ribbon and creature light that lands on the floor. The cost is a less readable shellback body and slightly flatter dark in the glimmerfly shot. Otherwise the two are near-identical."
+ },
+ "vaults": {
+  "best": 6.3,
+  "candidate": 6.6,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "B matches A's gameplay readability and makes light land better: larger sconce pools and edge-lit pillars that model the stone. The difference is small, and in one spot the lighter pillars sit close to the backdrop's value."
+ },
+ "ui": {
+  "best": 6.7,
+  "candidate": 6.8,
+  "delta": 0.1,
+  "preferred": "candidate",
+  "why": "Only the title differs in any meaningful way. A's darker scrim keeps the text crisp and the mood closer to the dark-shaft reference, while B's lighter grid clutters the text column. The other shots are effectively identical."
+ },
+ "minerals": {
+  "best": 6.6,
+  "candidate": 6.6,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "Every shot is visually identical between A and B apart from tiny pose and spark variation on the mimic and embershard, which changes no reading at gameplay size."
+ }
+}

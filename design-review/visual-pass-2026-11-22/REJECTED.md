@@ -42,3 +42,12 @@
 
 ## r5 J4 (part) — fang-tip ember glints (in 63b2a33) — removed, rest of J4 kept
 - Vault reviewer: fangs became "thin pins with bulb tips that look like candles or grass" — a hazard-readability regression. Vault readability is a hard rule, so the glints are removed even though J4 as a whole scored +0.3.
+
+## r6 K2 — fissure heat field: per-corner seam heat baked in spill() + crack-trunk glow band, on top of the kept per-tile halo (35731ea) — reverted
+- Scores (paired, r6): rock 6.3 → 5.7 (−0.6), fluids 6.8 → 6.4 (−0.4); lighting liked the wash.
+- Why it lost: the heat field lit whole fissure blocks to a uniform saturated orange/cyan/green, so the cracks stopped reading as the light source and the dark between them shrank ("no dark stone for the fissures to light"). The best build — darker host stone with the glow centred on the crack — is what reviewers want.
+- Next time, differently: brightness must fall off FROM the crack line within the host face (crack-centred, radial), not raise the whole block; any neighbour spill tight and dim.
+
+## r6 K4 — per-world rock surface: CRYOS crystal catch-lights (hashed facet normals in specular), MAELIS nacre hue drift on lit diffuse (d1570f5) — reverted
+- Scores: rock fell (mostly K2's doing); the rock reviewer still saw "per-world material character is only a hue tint" on both sides, so K4 earned no rock credit; identity +0.2 (frost glints, faint nacre) — below the bar. The identity reviewer read the glints as "small dash marks" and the nacre as too faint.
+- Next time, differently: if retried, softer point-like glints only where the beam lands and a nacre strong enough to read — but it's a low-yield direction.
