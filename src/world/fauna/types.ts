@@ -255,12 +255,11 @@ export class Spill {
     this.mesh.visible = false;
     parent.add(this.mesh);
   }
-  /** x/y in the parent's space; w/h in tiles; a = 0..1 strength; gain > 1
-   *  drives the colour past white for a creature whose hue is dim (teal, amber) */
-  set(x: number, y: number, w: number, h: number, a: number, color?: number, gain = 1): void {
+  /** x/y in the parent's space; w/h in tiles; a = 0..1 strength */
+  set(x: number, y: number, w: number, h: number, a: number, color?: number): void {
     this.mesh.position.x = x; this.mesh.position.y = y;
     this.mesh.scale.set(w, h, 1);
-    if (color !== undefined) this.mat.color.setHex(color).multiplyScalar(gain);
+    if (color !== undefined) this.mat.color.setHex(color);
     this.mat.opacity = a;
     this.mesh.visible = a > 0.004;
   }

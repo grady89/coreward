@@ -10,26 +10,13 @@ import { hdrBasic, hdrEmissive } from '../fx/post';
 //
 // Silhouette is helmet-dominant: the dome is 40% of the height and wider than
 // the shoulders, gapped from them by a dark neck ring. That notch is the whole
-// read at gameplay scale. Amber is the trim the reference gives him: visor
-// rim, belt and ear pods, plus the three blocks that still read when he is a
-// few pixels tall — gloves, boot caps and a stripe round the pack. The suit
-// stays white; the amber holds a faint self-light so it does not brown out in
-// a dark room. The visor is lit from inside. Reference: reference-art/astronaut.
+// read at gameplay scale. Amber lives in thin bands (visor rim, belt, ear pods,
+// cuffs, boot tops), never in slabs. The visor is lit from inside. Reference: reference-art/astronaut.
 
 const SUIT = new THREE.MeshStandardMaterial({ color: 0xe8e0cb, roughness: 0.6, metalness: 0.15 });
 // white under warm sconces, and a faint cool edge that lifts him off the wall
 holdWhite(SUIT, 0xbfe4ff, 0.7);
-// matte and a shade under the paint chip, so a hard light (the pad, his own
-// lamp) leaves it orange instead of clipping it to cream
-const SUIT_ACCENT = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.05 });
-/** albedo as a share of the chip, and how much of it the trim keeps in the dark */
-const ACCENT_ALB = 0.4;
-const ACCENT_SELF = 0.4;
-function paintAccent(hex: number): void {
-  SUIT_ACCENT.color.setHex(hex).multiplyScalar(ACCENT_ALB);
-  SUIT_ACCENT.emissive.setHex(hex).multiplyScalar(ACCENT_SELF);
-}
-paintAccent(0xff9a3c);
+const SUIT_ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.2 });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
 const VISOR = new THREE.MeshStandardMaterial({ color: 0x103a40, roughness: 0.15, metalness: 0.45, emissive: 0x16c4c0, emissiveIntensity: 0.75 });
 const LENS = new THREE.MeshBasicMaterial({ color: 0xffe6c0, toneMapped: false });
@@ -62,7 +49,7 @@ export function applySuitFinish(f: { suit: number; accent: number; facet?: boole
   SUIT.metalness = f.facet ? 0.8 : 0.15;
   SUIT.roughness = f.facet ? 0.25 : 0.6;
   SUIT.needsUpdate = true;
-  paintAccent(f.accent);
+  SUIT_ACCENT.color.setHex(f.accent);
 }
 
 /** the whole character, hip to helmet — a dash ghost sized to match */
@@ -113,15 +100,14 @@ function buildLeg(x: number): { hip: THREE.Group; knee: THREE.Group } {
   const calf = new THREE.Mesh(new THREE.CapsuleGeometry(0.037, 0.025, 3, 8), SUIT);
   calf.position.y = -0.03;
   // boot overlaps the calf's heel so the two never separate mid-swing, and
-  // its sole lands exactly on the bottom of the collision box. The boot is an
-  // amber cap over a thin dark sole: the feet are where the eye finds him
-  const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.054, 0.034, 10), SUIT_ACCENT);
-  boot.position.y = -0.067;
-  boot.scale.z = 1.25;
-  const sole = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.054, 0.012, 10), STEEL);
-  sole.position.y = -0.089;
-  sole.scale.z = 1.25;
-  knee.add(calf, boot, sole);
+  // its sole lands exactly on the bottom of the collision box
+  const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.052, 0.04, 10), STEEL);
+  boot.position.y = -0.075;
+  boot.scale.z = 1.2;
+  const bootTop = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.046, 0.014, 10), SUIT_ACCENT);
+  bootTop.position.y = -0.05;
+  bootTop.scale.z = 1.2;
+  knee.add(calf, boot, bootTop);
   hip.add(thigh, knee);
   return { hip, knee };
 }
@@ -136,14 +122,9 @@ function buildArm(side: number): { shoulder: THREE.Group; elbow: THREE.Group } {
   elbow.position.y = -0.055;
   const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.026, 3, 8), SUIT);
   forearm.position.y = -0.024;
-  // the glove: a cuff and a mitt in one amber block, big enough to show as a
-  // dot of colour at the end of each arm
-  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.02, 10), SUIT_ACCENT);
-  cuff.position.y = -0.046;
-  const glove = new THREE.Mesh(new THREE.SphereGeometry(0.034, 10, 8), SUIT_ACCENT);
-  glove.position.y = -0.066;
-  glove.scale.set(1, 0.9, 1.1);
-  elbow.add(forearm, cuff, glove);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.014, 10), SUIT_ACCENT);
+  cuff.position.y = -0.05;
+  elbow.add(forearm, cuff);
   shoulder.add(upper, elbow);
   return { shoulder, elbow };
 }
@@ -200,14 +181,9 @@ export function buildSuit(visorSpill = false): Suit {
   const chestLamp = new THREE.Mesh(new THREE.CircleGeometry(0.019, 10), LENS);
   chestLamp.position.set(0.036, -0.005, 0.079);
 
-  // pack rides high and small — barely there from the front, but in profile
-  // its amber band and lid show past the torso
+  // pack rides high and small — barely there from the front
   const pack = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.11, 0.05), STEEL);
   pack.position.set(0, -0.022, -0.086);
-  const packBand = new THREE.Mesh(new THREE.BoxGeometry(0.108, 0.03, 0.058), SUIT_ACCENT);
-  packBand.position.set(0, -0.04, -0.086);
-  const packLid = new THREE.Mesh(new THREE.BoxGeometry(0.104, 0.016, 0.056), SUIT_ACCENT);
-  packLid.position.set(0, 0.035, -0.086);
 
   // arms pivot at the shoulder and bend at the elbow
   const aL = buildArm(-1);
@@ -217,7 +193,7 @@ export function buildSuit(visorSpill = false): Suit {
   const lL = buildLeg(-0.05);
   const lR = buildLeg(0.05);
 
-  group.add(helmet, neck, torso, belt, chestLamp, pack, packBand, packLid, aL.shoulder, aR.shoulder, lL.hip, lR.hip);
+  group.add(helmet, neck, torso, belt, chestLamp, pack, aL.shoulder, aR.shoulder, lL.hip, lR.hip);
   // seated in the pack's back face, so an ornament reads as mounted, not hovering
   return {
     group, helmet,

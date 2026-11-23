@@ -170,7 +170,7 @@ export class Wardens implements Creature {
     this.beamTarget = new THREE.Object3D();
     this.beamTarget.position.set(8, 0, 0);
     this.beam.target = this.beamTarget;
-    this.glow = new THREE.PointLight(0xffe0a0, 4.5, 9, 1.6);
+    this.glow = new THREE.PointLight(0xffe0a0, 2.5, 6, 1.6);
     this.lantern.add(this.housing, cap, this.lamp, this.beamCone, this.beam, this.beamTarget, this.glow);
 
     this.group.add(this.hip, this.neck, this.lantern);
@@ -297,8 +297,8 @@ export class Wardens implements Creature {
       this.emberMat.color.setHex(0x3a2410);
       this.beam.intensity = (1 - f) * 20 * (Math.random() < 0.5 ? 1 : 0.2);
       this.beamMat.opacity = (1 - f) * 0.3 * (Math.random() < 0.5 ? 1 : 0.4);
-      this.glow.intensity = (1 - f) * 3.6;
-      this.spill.set(0, -0.9, 7.6, 6.8, (1 - f) * 0.65 * (Math.random() < 0.5 ? 1 : 0.5), 0xffb04a, 1.5);
+      this.glow.intensity = (1 - f) * 2;
+      this.spill.set(0, -0.1, 5.2, 4.4, (1 - f) * 0.65 * (Math.random() < 0.5 ? 1 : 0.5), 0xffb04a);
       if (Math.random() < dt * 8) this.particles.sparkBurst(this.x + (Math.random() - 0.5), this.y + 1, 0xffe0a0, { count: 3, speed: 2.5, up: 1, life: 0.5, gravity: 8, spread: 0.3 });
       if (this.collapseT <= 0 && this.pendingDown) {
         this.pendingDown = false;
@@ -438,11 +438,9 @@ export class Wardens implements Creature {
     this.beamCone.scale.x = lerp(this.beamCone.scale.x, this.engaged ? 1.1 : 1, ks);
     this.beamCone.scale.y = lerp(this.beamCone.scale.y, narrow, ks);
     this.beamCone.scale.z = this.beamCone.scale.y;
-    this.glow.intensity = blind ? 0.2 : 4.5 + white * 3;
-    // the furnace's light lands on the hall around the hip, pooled low on the
-    // floor and walls so the lantern's hex above it keeps its dark frame;
-    // engaged, it whitens with the beam
-    this.spill.set(0, -0.9, 7.6, 6.8, blind ? 0.13 : 0.8 + white * 0.2, this.engaged ? 0xffd890 : 0xffa040, 1.5);
+    this.glow.intensity = blind ? 0.2 : 2.5 + white * 3;
+    // the furnace's light lands on the hall around the hip; engaged, it whitens with the beam
+    this.spill.set(0, -0.1, 5.2, 4.4, blind ? 0.13 : 0.8 + white * 0.25, this.engaged ? 0xffd890 : 0xffa040);
     this.beamTarget.position.set(8, 0, 0);
     // a blinded lantern droops
     this.droop = lerp(this.droop, blind ? -0.6 : 0, Math.min(1, dt * 3));
