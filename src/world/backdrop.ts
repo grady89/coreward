@@ -16,6 +16,11 @@ import { hdrBasic } from '../fx/post';
  * hazes it in that hue, thickest deep in a cavern and thinning toward its rim,
  * so the space reads as depth rather than a flat plane. Kept dark: the lamp
  * still does the work. Atmosphere drives the hue with depth.
+ *
+ * Only the lit pocket holds that haze: past a few tiles in from the rim, and
+ * toward the frame's edges, the haze and the ambient fill fall away to black
+ * (direct light — the lamp, pools, fissures — is left alone), so black means
+ * void and the pocket around the pod pops. The core's chamber keeps its flood.
  */
 const backwallU = {
   uCavity: { value: new THREE.Color(0, 0, 0) },
@@ -23,6 +28,8 @@ const backwallU = {
   /** v (uv) where the core's chamber starts: its light keeps its own hue */
   uCoreV: { value: 0 },
   uDepth: { value: null as THREE.Texture | null },
+  /** tiles the distance field in uDepth spans (texel 1.0) */
+  uReach: { value: 1 },
 };
 /** linear luminance the cavity's haze is held to, deep in an open cavern */
 const CAVITY_LUM = 0.024;
@@ -44,33 +51,27 @@ export function createBackwall(scene: THREE.Scene, terrain: Terrain): void {
   tex.magFilter = THREE.NearestFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
 
-  // how far each open cell lies from the cavity's rim (rock), in tiles, 0..1
-  // over four tiles; rows are stored bottom-up to match the plane's uvs
-  const REACH = 4;
-  const dist = new Float32Array(WORLD_W * H).fill(REACH);
+  // how far each open cell lies from the cavity's rim (rock), in tiles, out to
+  // REACH; stored as d / REACH, rows bottom-up to match the plane's uvs
+  const REACH = 8;
+  const R2 = REACH * REACH;
+  const depth = new Uint8Array(WORLD_W * H);
   const open = (x: number, y: number) => y >= 0 && y < WORLD_ROWS && terrain.get(x, y) === T.AIR;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < WORLD_W; x++) {
-      if (!open(x, y)) { dist[y * WORLD_W + x] = 0; continue; }
-      let d = REACH;
+      if (!open(x, y)) continue;
+      let d2 = R2;
       for (let dy = -REACH; dy <= REACH; dy++) {
         for (let dx = -REACH; dx <= REACH; dx++) {
-          const e = Math.hypot(dx, dy);
-          if (e >= d) continue;
+          const e2 = dx * dx + dy * dy;
+          if (e2 >= d2) continue;
           const sx = x + dx, sy = y + dy;
           // the sky above the field is open air, the world's sides are rock
           if (sy < 0) continue;
-          if (sx < 0 || sx >= WORLD_W || !open(sx, sy)) d = e;
+          if (sx < 0 || sx >= WORLD_W || !open(sx, sy)) d2 = e2;
         }
       }
-      dist[y * WORLD_W + x] = d;
-    }
-  }
-  const depth = new Uint8Array(WORLD_W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < WORLD_W; x++) {
-      const t = Math.max(0, dist[y * WORLD_W + x] - 0.5) / (REACH - 0.5);
-      depth[(H - 1 - y) * WORLD_W + x] = Math.round(255 * t * t * (3 - 2 * t));
+      depth[(H - 1 - y) * WORLD_W + x] = Math.round(255 * Math.sqrt(d2) / REACH);
     }
   }
   const dtex = new THREE.DataTexture(depth, WORLD_W, H, THREE.RedFormat, THREE.UnsignedByteType);
@@ -78,6 +79,7 @@ export function createBackwall(scene: THREE.Scene, terrain: Terrain): void {
   dtex.minFilter = THREE.LinearFilter;
   dtex.needsUpdate = true;
   backwallU.uDepth.value = dtex;
+  backwallU.uReach.value = REACH;
   // a cold world re-hues more of the warm lamp's light on its far wall
   backwallU.uCool.value = ACTIVE.hazard.cold ? 0.6 : 0.3;
   backwallU.uCoreV.value = 1 - (CORE_ROW - 12) / H;
@@ -85,25 +87,46 @@ export function createBackwall(scene: THREE.Scene, terrain: Terrain): void {
   const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
   mat.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, backwallU);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+varying vec2 vNdc;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+	vNdc = gl_Position.xy / gl_Position.w;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uCavity;
 uniform float uCool;
 uniform float uCoreV;
-uniform sampler2D uDepth;`)
+uniform float uReach;
+uniform sampler2D uDepth;
+varying vec2 vNdc;`)
       .replace('#include <opaque_fragment>', `{
 		const vec3 LW = vec3(0.2126, 0.7152, 0.0722);
-		float dep = texture2D(uDepth, vMapUv).r;
+		float tiles = texture2D(uDepth, vMapUv).r * uReach;
+		float dep = smoothstep(0.5, 4.0, tiles);
 		// the light landing here takes the world's hue (luminance kept)
 		vec3 hue = uCavity / max(dot(uCavity, LW), 1e-5);
-		float cool = uCool * smoothstep(uCoreV - 0.02, uCoreV + 0.01, vMapUv.y);
+		float above = smoothstep(uCoreV - 0.02, uCoreV + 0.01, vMapUv.y);
+		float cool = uCool * above;
 		outgoingLight = mix(outgoingLight, dot(outgoingLight, LW) * hue, cool);
+		vec3 direct = reflectedLight.directDiffuse + reflectedLight.directSpecular;
+		direct = mix(direct, dot(direct, LW) * hue, cool);
+		vec3 fill = outgoingLight - direct;
+		// the pocket holds the air: deep in a cavern and toward the frame's
+		// edges the haze and ambient fill fall to black; light reaching the
+		// far wall from fixtures thins toward the edges too, but the pocket
+		// around the pod (frame centre) keeps all of the lamp
+		float far = smoothstep(3.0, 7.5, tiles);
+		float edge = smoothstep(0.2, 1.2, length(vNdc * vec2(1.0, 1.15)));
+		float fade = mix(1.0, (1.0 - 0.8 * far) * (1.0 - 0.8 * edge), above);
+		float lit = mix(1.0, 1.0 - 0.45 * edge, above);
 		// farther back reads hazier: less of the lamp's contrast, more of the air
-		outgoingLight = outgoingLight * (1.0 - 0.35 * dep) + uCavity * (0.35 + 0.65 * dep);
+		outgoingLight = direct * (1.0 - 0.35 * dep) * lit
+			+ (fill * (1.0 - 0.35 * dep) + uCavity * (0.35 + 0.65 * dep)) * fade;
 	}
 	#include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'backwall-cavity-v1';
+  mat.customProgramCacheKey = () => 'backwall-cavity-v2';
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W, H), mat);
   // extra height so the camera never sees past the world's bottom edge
   mesh.position.set(WORLD_W / 2, -H / 2, -0.62);
