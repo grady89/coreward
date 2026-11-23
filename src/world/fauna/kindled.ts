@@ -1,13 +1,15 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CORE_ROW } from '../../config';
+import { hdrBasic } from '../../fx/post';
 import { ACTIVE } from '../worlds';
-import { clamp01, lerp } from './types';
+import { clamp01, lerp, Spill } from './types';
 
 // THE KINDLED — the core chamber's own. Every world.
 //
 // Four figures on the chamber floor, made of the same light as the core.
-// Not solid: a shimmer of motes in the shape of someone standing, with
-// something dark and narrow inside where a body would be. They face the
+// Not solid: a figure of white-hot facets, brighter than the core behind it,
+// shedding a shimmer of motes in the shape of someone standing. They face the
 // fragment. When you enter they turn, and drift toward you, and stop two
 // steps short, and wait. They do not chase. They do not need to.
 //
@@ -39,6 +41,8 @@ interface Figure {
   pos: Float32Array;
   core: THREE.Mesh;
   light: THREE.PointLight;
+  /** its light pooled on the chamber floor */
+  spill: Spill;
   arousal: number;      // 0..1 how much it has noticed you
   touchCd: number;
 }
@@ -46,6 +50,7 @@ interface Figure {
 export class Kindled {
   private figs: Figure[] = [];
   private mat: THREE.PointsMaterial;
+  private coreMat: THREE.MeshBasicMaterial;
   private fade = 1;
   private seenFired = false;
   /** 0..1 — the nearest figure's attention on you */
@@ -58,8 +63,12 @@ export class Kindled {
       color: 0xffffff, size: 0.075, transparent: true, opacity: 0.85, depthWrite: false,
       blending: THREE.AdditiveBlending, toneMapped: false,
     });
-    const coreGeo = new THREE.CapsuleGeometry(0.1, 0.55, 3, 6);
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const coreGeo = figureGeometry();
+    // self-lit, the facets baked into vertex colours: brighter than anything
+    // near it, so it blooms against even the core's own orange
+    this.coreMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+    hdrBasic(this.coreMat, 1.8);
+    const coreMat = this.coreMat;
     for (let i = 0; i < N; i++) {
       const seed = new Float32Array(PTS * 3);
       for (let k = 0; k < PTS; k++) {
@@ -92,7 +101,7 @@ export class Kindled {
       scene.add(points, core, light);
       this.figs.push({
         x: POSTS[i], y: FLOOR_Y + 0.55, homeX: POSTS[i], face: POSTS[i] < 32 ? 1 : -1,
-        seed, points, pos, core, light, arousal: 0, touchCd: 0,
+        seed, points, pos, core, light, spill: new Spill(scene, 0xfff0c8), arousal: 0, touchCd: 0,
       });
     }
     this.setVisible(false);
@@ -103,7 +112,7 @@ export class Kindled {
     // shader in the world. Dark means intensity 0; update() re-drives it.
     for (const f of this.figs) {
       f.points.visible = v; f.core.visible = v;
-      if (!v) f.light.intensity = 0;
+      if (!v) { f.light.intensity = 0; f.spill.off(); }
     }
   }
 
@@ -125,6 +134,8 @@ export class Kindled {
     this.setVisible(true);
     this.mat.color.setHex(ACTIVE.core.light);
     this.mat.opacity = 0.85 * this.fade;
+    // white-hot, a breath of the core's own tint
+    this.coreMat.color.setHex(ACTIVE.core.body).lerp(WHITE, 0.3);
 
     let hit: KindledHit = null;
     let presence = 0;
@@ -174,13 +185,55 @@ export class Kindled {
         f.pos[k * 3 + 2] = 0.2 + sz;
       }
       (f.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-      f.core.position.set(f.x, fy + 0.3, 0.2);
-      f.core.scale.setScalar(this.fade);
-      f.light.position.set(f.x, fy + 0.5, 0.6);
-      f.light.color.setHex(ACTIVE.core.light);
-      f.light.intensity = (1.2 + f.arousal * 2.2 + Math.sin(time * 3 + i) * 0.3) * this.fade;
+      f.core.position.set(f.x, fy, 0.2);
+      f.core.scale.set(this.fade * f.face, this.fade, this.fade);
+      f.light.position.set(f.x, fy + 0.4, 0.8);
+      f.light.color.setHex(ACTIVE.core.body);
+      const flick = Math.sin(time * 3 + i) * 0.3;
+      f.light.intensity = (2.2 + f.arousal * 2.6 + flick) * this.fade;
+      f.spill.set(f.x, fy - 0.5, 3.4, 2.2, (0.3 + f.arousal * 0.15 + flick * 0.08) * this.fade, ACTIVE.core.body, 1.1);
     }
     this.presence = lerp(this.presence, presence, Math.min(1, dt * 3));
     return hit;
   }
+}
+
+const WHITE = new THREE.Color(0xffffff);
+
+/**
+ * A standing figure in a dozen facets — head, shoulders narrowing to the
+ * hips, two legs, two hanging arms — slimmer than the mote cloud, so the
+ * motes read as its aura. Each facet's brightness is baked into its vertex
+ * colour from a fixed key light, so an unlit body still reads as faceted.
+ */
+function figureGeometry(): THREE.BufferGeometry {
+  const part = (g: THREE.BufferGeometry, x: number, y: number, rz = 0): THREE.BufferGeometry => {
+    const n = g.index ? g.toNonIndexed() : g;
+    n.rotateZ(rz);
+    n.translate(x, y, 0);
+    n.deleteAttribute('uv');
+    n.deleteAttribute('normal');
+    return n;
+  };
+  const geo = mergeGeometries([
+    part(new THREE.IcosahedronGeometry(0.12, 0), 0, 0.86),
+    part(new THREE.CylinderGeometry(0.16, 0.09, 0.5, 6), 0, 0.38),
+    part(new THREE.OctahedronGeometry(0.1, 0).scale(1.1, 0.8, 0.8), 0, 0.12),
+    part(new THREE.CylinderGeometry(0.055, 0.035, 0.6, 5), -0.08, -0.22),
+    part(new THREE.CylinderGeometry(0.055, 0.035, 0.6, 5), 0.08, -0.22),
+    part(new THREE.CylinderGeometry(0.045, 0.03, 0.5, 5), -0.22, 0.34, -0.1),
+    part(new THREE.CylinderGeometry(0.045, 0.03, 0.5, 5), 0.22, 0.34, 0.1),
+  ])!;
+  geo.computeVertexNormals();
+  const nrm = geo.getAttribute('normal');
+  const col = new Float32Array(nrm.count * 3);
+  const key = new THREE.Vector3(0.5, 0.6, 0.65).normalize();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < nrm.count; i++) {
+    v.fromBufferAttribute(nrm, i);
+    const b = 0.5 + 0.5 * Math.max(0, v.dot(key));
+    col[i * 3] = b; col[i * 3 + 1] = b; col[i * 3 + 2] = b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
 }

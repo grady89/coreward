@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { rockColor } from '../tiles';
 import { Particles } from '../../fx/particles';
+import { hdrBasic } from '../../fx/post';
 import {
   Creature, ThreatCtx, ThreatLevel, Chain, wide, lerp, clamp01,
-  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, rimLight,
+  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2, rimLight, Spill,
 } from './types';
 
 // THE LONG ONES — VEIL-3's hunter tier. They hunt by VIBRATION.
@@ -56,18 +57,25 @@ export class LongOne implements Creature {
   private jawL: THREE.Mesh;
   private jawR: THREE.Mesh;
   private throat: THREE.Mesh;
+  private gullet: THREE.Mesh;
   private throatLight: THREE.PointLight;
+  /** the fissure line's light on the tunnel it fills, and the maw's */
+  private bodySpill: Spill;
+  private headSpill: Spill;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private particles: Particles) {
-    // a plated ring segment, axis along +X so it lies along the spine
-    const segGeo = new THREE.CylinderGeometry(0.38, 0.31, 0.56, 7, 1);
+    // a plated ring segment, axis along +X so it lies along the spine. Longer
+    // than the link spacing, so the plates overlap into one body even round
+    // a bend
+    const segGeo = new THREE.CylinderGeometry(0.43, 0.33, 0.76, 7, 1);
     segGeo.rotateZ(-Math.PI / 2);
     const segMat = new THREE.MeshStandardMaterial({
-      flatShading: true, roughness: 0.42, metalness: 0.45,
-      emissive: 0x1a0806, emissiveIntensity: 1,
+      flatShading: true, roughness: 0.55, metalness: 0.2,
+      emissive: 0x260c05, emissiveIntensity: 1,
     });
-    // ember caught on the plate edges: out of the wall it reads as a body
-    rimLight(segMat, 0xff7a3a, 0.55);
+    // the fissure's heat caught on every plate edge: out of the wall it reads
+    // as a body, not a hole in the dark
+    rimLight(segMat, 0xff8a40, 1.05);
     this.body = new THREE.InstancedMesh(segGeo, segMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.body.frustumCulled = false;
@@ -75,10 +83,13 @@ export class LongOne implements Creature {
     this.body.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.body);
 
-    // dorsal lights: one per plate, pulsing tail-to-head
-    const dotGeo = new THREE.SphereGeometry(0.09, 6, 5);
-    const dotMat = new THREE.MeshBasicMaterial({ toneMapped: false });
-    this.lights = new THREE.InstancedMesh(dotGeo, dotMat, SEGS);
+    // the dorsal fissure: one molten sliver per plate, end to end along the
+    // spine, pulsing tail-to-head — VEIL's glowing crack, alive
+    const fisGeo = new THREE.OctahedronGeometry(0.1, 0);
+    fisGeo.scale(3.3, 0.6, 1.1);
+    const fisMat = new THREE.MeshBasicMaterial({ toneMapped: false });
+    hdrBasic(fisMat, 1.6);
+    this.lights = new THREE.InstancedMesh(fisGeo, fisMat, SEGS);
     this.lights.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.lights.frustumCulled = false;
     this.lights.count = 0;
@@ -88,33 +99,64 @@ export class LongOne implements Creature {
     // the head: a blunt wedge, no eyes, a split jaw that opens as it closes on you
     this.head = new THREE.Group();
     const skullMat = new THREE.MeshStandardMaterial({
-      color: 0x5a2a22, flatShading: true, roughness: 0.4, metalness: 0.5, emissive: 0x200806,
+      color: 0x8a4430, flatShading: true, roughness: 0.5, metalness: 0.2, emissive: 0x260c05,
     });
-    rimLight(skullMat, 0xff7a3a, 0.55);
-    const skull = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.0, 7), skullMat);
+    rimLight(skullMat, 0xff8a40, 1.05);
+    const skull = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.05, 7), skullMat);
     skull.rotation.z = -Math.PI / 2;
     skull.position.x = 0.2;
     const jawGeo = new THREE.ConeGeometry(0.16, 0.9, 4);
     jawGeo.translate(0, 0.45, 0);
     jawGeo.rotateZ(-Math.PI / 2);
+    // chitin mandibles, the maw's heat on their edges
     const jawMat = new THREE.MeshStandardMaterial({
-      color: 0x2a1410, flatShading: true, roughness: 0.3, metalness: 0.7,
+      color: 0x7a4632, flatShading: true, roughness: 0.45, metalness: 0.2, emissive: 0x1e0804,
     });
+    rimLight(jawMat, 0xffa050, 1.2);
     this.jawL = new THREE.Mesh(jawGeo, jawMat);
     this.jawR = new THREE.Mesh(jawGeo, jawMat);
     this.jawL.position.set(0.55, 0.16, 0);
     this.jawR.position.set(0.55, -0.16, 0);
+    // white-hot fang tips hooked inward, and a tooth halfway down each jaw:
+    // the hottest value on the creature marks the end that hurts
+    const fangMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8, toneMapped: false });
+    hdrBasic(fangMat, 2.4);
+    const fangGeo = new THREE.ConeGeometry(0.07, 0.3, 4);
+    fangGeo.rotateZ(-Math.PI / 2);
+    for (const [jaw, s] of [[this.jawL, -1], [this.jawR, 1]] as const) {
+      const tip = new THREE.Mesh(fangGeo, fangMat);
+      tip.position.set(0.86, s * 0.03, 0);
+      tip.rotation.z = s * 0.55;
+      const tooth = new THREE.Mesh(fangGeo, fangMat);
+      tooth.position.set(0.42, s * 0.07, 0);
+      tooth.rotation.z = s * 1.2;
+      tooth.scale.setScalar(0.7);
+      jaw.add(tip, tooth);
+    }
     this.throat = new THREE.Mesh(
       new THREE.CircleGeometry(0.26, 8),
       new THREE.MeshBasicMaterial({ color: 0xff6a2a, toneMapped: false, side: THREE.DoubleSide }),
     );
     this.throat.position.set(0.62, 0, 0);
     this.throat.rotation.y = Math.PI / 2;
-    this.throatLight = new THREE.PointLight(0xff5a2a, 0, 4, 2);
-    this.throatLight.position.set(0.7, 0, 0.3);
-    this.head.add(skull, this.jawL, this.jawR, this.throat, this.throatLight);
+    // the gullet seen from the side: a furnace between the jaw roots that
+    // swells as the mouth opens
+    const gulletMat = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
+    hdrBasic(gulletMat, 2.2);
+    this.gullet = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), gulletMat);
+    this.gullet.position.set(0.62, 0, 0.06);
+    const gulletCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c8, toneMapped: false }));
+    hdrBasic(gulletCore.material as THREE.MeshBasicMaterial, 2.6);
+    gulletCore.position.set(0.06, 0, 0.1);
+    this.gullet.add(gulletCore);
+    this.throatLight = new THREE.PointLight(0xff6a2a, 0, 5, 1.8);
+    this.throatLight.position.set(0.7, 0, 0.6);
+    this.head.add(skull, this.jawL, this.jawR, this.throat, this.gullet, this.throatLight);
     this.head.visible = false;
     scene.add(this.head);
+    this.bodySpill = new Spill(scene, 0xff6a2a);
+    this.headSpill = new Spill(scene, 0xffa050);
   }
 
   reset(): void {
@@ -122,6 +164,7 @@ export class LongOne implements Creature {
     this.body.count = 0;
     this.lights.count = 0;
     this.head.visible = false;
+    this.bodySpill.off(); this.headSpill.off();
     this.rumble = 0;
   }
 
@@ -130,6 +173,7 @@ export class LongOne implements Creature {
     this.body.count = 0;
     this.lights.count = 0;
     this.head.visible = false;
+    this.bodySpill.off(); this.headSpill.off();
   }
 
   private trySpawn(podX: number, podY: number): boolean {
@@ -261,8 +305,12 @@ export class LongOne implements Creature {
         this.dustAcc = 0;
         const wallX = Math.floor(this.outX + (this.spawnX - this.outX) * 0.5);
         const wallY = Math.floor(-(this.outY + (this.spawnY - this.outY) * 0.5));
-        this.particles.dustBurst(this.outX, this.outY, rockColor(this.terrain.get(wallX, wallY), wallX, wallY),
-          { count: 6, speed: 3.5, up: 1.5, life: 0.9, gravity: 9, spread: 0.8 });
+        // the wall's own grit, scorched dark by the body coming through it,
+        // and embers off the fissure line
+        tmpC.setHex(rockColor(this.terrain.get(wallX, wallY), wallX, wallY)).lerp(tmpC2.setHex(0x2a120a), 0.6);
+        this.particles.dustBurst(this.outX, this.outY, tmpC.getHex(),
+          { count: 4, speed: 3.5, up: 1.5, life: 0.9, gravity: 9, spread: 0.8 });
+        this.particles.sparkBurst(this.outX, this.outY, 0xff8a3c, { count: 3, speed: 3, up: 1.5, life: 0.7, gravity: 5, spread: 0.8 });
       }
       ctx.shake(0.08);
       this.rumble += (1 - this.rumble) * Math.min(1, dt * 4);
@@ -275,7 +323,8 @@ export class LongOne implements Creature {
       this.dustAcc += dt;
       if (this.dustAcc > 0.15) {
         this.dustAcc = 0;
-        this.particles.dustBurst(this.outX, this.outY, 0x4a3a32, { count: 4, speed: 2.5, up: 1.2, life: 0.8, gravity: 9, spread: 0.7 });
+        this.particles.dustBurst(this.outX, this.outY, 0x2e160e, { count: 3, speed: 2.5, up: 1.2, life: 0.8, gravity: 9, spread: 0.7 });
+        this.particles.sparkBurst(this.outX, this.outY, 0xff8a3c, { count: 2, speed: 2, up: 1.2, life: 0.6, gravity: 5, spread: 0.7 });
       }
       this.rumble += (0.6 - this.rumble) * Math.min(1, dt * 2);
       moving = 1;
@@ -343,10 +392,10 @@ export class LongOne implements Creature {
       this.rumble += (target - this.rumble) * Math.min(1, dt * 3);
     }
 
-    // scraping the walls as it moves: dust off the tunnel it fills
+    // embers shaken off the fissure line as it moves
     if (moving > 0.3 && this.phase !== 'emerging' && this.phase !== 'burrowing' && Math.random() < dt * 5) {
       const k = 2 + Math.floor(Math.random() * 6);
-      this.particles.dustBurst(this.chain.x[k], this.chain.y[k], 0x3a2a24, { count: 2, speed: 1.5, up: 0.5, life: 0.6, gravity: 7, spread: 0.6 });
+      this.particles.sparkBurst(this.chain.x[k], this.chain.y[k], 0xff8a3c, { count: 2, speed: 1.2, up: 0.6, life: 0.6, gravity: 4, spread: 0.6 });
     }
 
     // ---- body ----
@@ -366,7 +415,9 @@ export class LongOne implements Creature {
         this.jawL.rotation.z = g * 0.75;
         this.jawR.rotation.z = -g * 0.75;
         this.throat.scale.setScalar(0.4 + g * 0.8);
-        this.throatLight.intensity = g * 3 + (this.stunT > 0 ? 2 : 0);
+        const heat = 0.85 + Math.sin(time * 6) * 0.08;
+        this.gullet.scale.set(1.35 + g * 0.5, (0.75 + g * 0.9) * heat, 0.9);
+        this.throatLight.intensity = 1.4 + g * 3 + (this.stunT > 0 ? 2 : 0);
         // instance 0 belongs to the head group — collapse it
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
@@ -377,26 +428,37 @@ export class LongOne implements Creature {
       const t = i / SEGS;
       const taper = (i < 4 ? 1.05 : 1.08 - t * 0.62);
       tmpP.set(px, py, 0.1);
-      tmpE.set(time * 1.6 + i * 0.5, 0, h);
+      // plates set at a stagger and rocking, not spinning: a fixed spine the
+      // fissure can run along
+      tmpE.set(i * 0.45 + Math.sin(time * 1.6 + i * 0.5) * 0.25, 0, h);
       tmpQ.setFromEuler(tmpE);
       tmpS.set(1, taper, taper);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.body.setMatrixAt(i, tmpM);
-      // alternating plates: gloss and matte, darker toward the tail
-      tmpC.setHex(i % 2 ? 0x6a3428 : 0x3a201c).multiplyScalar(1 - t * 0.25);
+      // alternating plates, a shade apart, darker toward the tail
+      tmpC.setHex(i % 2 ? 0x7e3e2c : 0x5c2c20).multiplyScalar(1 - t * 0.25);
       this.body.setColorAt(i, tmpC);
 
-      // the dorsal wave runs tail → head while it hunts; still and dim when lost
+      // the dorsal wave runs tail → head while it hunts; banked low when lost
       const pulse = hunting ? Math.pow(Math.max(0, Math.sin(time * 5 + i * 0.9)), 3) : 0.12;
       const stun = this.stunT > 0 ? 1 : 0;
-      tmpP.set(px - Math.sin(h) * 0.3, py + Math.cos(h) * 0.3, 0.35);
-      tmpS.setScalar(0.6 + pulse * 0.9 + stun * 0.6);
+      // along the upper flank, on the face toward the camera
+      const off = 0.3 * taper;
+      tmpP.set(px - Math.sin(h) * off, py + Math.cos(h) * off, 0.1 + 0.3 * taper);
+      tmpE.set(0, 0, h);
+      tmpQ.setFromEuler(tmpE);
+      tmpS.set(taper, 0.8 + pulse * 0.8 + stun * 0.6, 1);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.lights.setMatrixAt(i, tmpM);
-      tmpC.setHex(stun ? 0xffffff : 0xff7a3c).multiplyScalar(0.25 + pulse * 1.4 + stun);
+      tmpC.setHex(stun ? 0xffffff : 0xff8a3c).multiplyScalar(0.75 + pulse * 1.6 + stun);
       this.lights.setColorAt(i, tmpC);
     }
     this.body.count = SEGS; this.lights.count = SEGS;
+    // its own light on the rock: the fissure line along the body, the maw at the head
+    const mid = SEGS >> 1;
+    const stunGlow = this.stunT > 0 ? 0.3 : 0;
+    this.bodySpill.set(this.chain.x[mid], this.chain.y[mid], 8, 6, (hunting ? 0.6 : 0.4) + stunGlow, 0xff6a2a, 1.3);
+    this.headSpill.set(this.head.position.x, this.head.position.y, 4.6, 4.6, 0.5 + this.gape * 0.4 + stunGlow, 0xffa050, 1.4);
     this.body.instanceMatrix.needsUpdate = true;
     this.lights.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;

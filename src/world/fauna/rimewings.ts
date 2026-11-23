@@ -3,7 +3,7 @@ import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, air, onWall, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2 } from './types';
+import { Creature, ThreatCtx, ThreatLevel, air, onWall, tmpM, tmpP, tmpQ, tmpS, tmpC, tmpC2, Spill } from './types';
 
 // RIMEWINGS — CRYOS-2's swarm tier. Keyed on HEAT.
 //
@@ -26,6 +26,8 @@ const BAND_HI = 470;
 const SHIVER = 1.3;        // seconds from first warmth to flight
 const COLD_CALM = 2.4;     // seconds of cold engine before they settle
 const SETTLE = 1.8;        // seconds of sinking before they lock
+// flap about the body's own axis first, then turn to the heading
+const pose = new THREE.Euler(0, 0, 0, 'ZYX');
 
 type Phase = 'frozen' | 'waking' | 'hunting' | 'settling';
 
@@ -58,23 +60,37 @@ export class Rimewings implements Creature {
   readonly clusters: Cluster[] = [];
   private mesh: THREE.InstancedMesh;
   private glow: THREE.PointLight;
+  /** each cluster's cold light on the rock it hangs against */
+  private spills: Spill[] = [];
+  private sumX = new Float32Array(MAX_CLUSTERS);
+  private sumY = new Float32Array(MAX_CLUSTERS);
+  private sumN = new Float32Array(MAX_CLUSTERS);
+  private sumHeat = new Float32Array(MAX_CLUSTERS);
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
-    // an ice blade: two wings as one flat rhombus with a thick core
-    const geo = new THREE.OctahedronGeometry(0.2, 0);
-    geo.scale(1.5, 0.55, 0.14);
+    // an ice moth: a chunky body, two mirrored faceted wings, a bright eye.
+    // A per-face `glow` attribute marks what burns (eye, core, leading edges)
+    const geo = mothGeometry();
     const mat = new THREE.MeshStandardMaterial({
       flatShading: true, roughness: 0.15, metalness: 0.1,
-      transparent: true, opacity: 0.85,
-      emissive: 0xffffff, emissiveIntensity: 0.55,
+      transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+      emissive: 0xa0ecff, emissiveIntensity: 0.55,
     });
-    // instance color drives the emissive so a woken wing glows from inside
+    const ice = { value: new THREE.Color(0x8ae8ff) };
+    // instance colour drives the emissive, so a woken wing glows from inside;
+    // the eye and the leading edges keep a cold ember even frozen
     mat.onBeforeCompile = sh => {
-      sh.fragmentShader = sh.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;'
-      );
+      sh.uniforms.uIce = ice;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uIce;\nvarying float vGlow;')
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+totalEmissiveRadiance *= vColor.rgb * vGlow;
+totalEmissiveRadiance += uIce * (max(vGlow - 1.0, 0.0) * 0.5 + vGlow * 0.14);`);
     };
+    mat.customProgramCacheKey = () => 'rimewing-glow';
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_WINGS);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -85,6 +101,7 @@ export class Rimewings implements Creature {
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
       this.clusters.push({ alive: false, phase: 'frozen', t: 0, coldFor: 0, ax: 0, ay: 0, life: 0, dazedT: 0, woke: false });
+      this.spills.push(new Spill(scene, 0xbfe0ff));
     }
   }
 
@@ -95,6 +112,7 @@ export class Rimewings implements Creature {
     for (const c of this.clusters) c.alive = false;
     this.mesh.count = 0;
     this.glow.intensity = 0;
+    for (const sp of this.spills) sp.off();
     this.menace = 0;
   }
 
@@ -269,6 +287,7 @@ export class Rimewings implements Creature {
     }
 
     const dmgMul = level === 'reduced' ? 0.5 : 1;
+    this.sumX.fill(0); this.sumY.fill(0); this.sumN.fill(0); this.sumHeat.fill(0);
     let n = 0;
     let gx = 0, gy = 0, gc = 0;
     for (let i = 0; i < this.wings.length; i++) {
@@ -346,16 +365,25 @@ export class Rimewings implements Creature {
       const sp = Math.hypot(w.vx, w.vy);
       const ang = c.phase === 'hunting' && sp > 0.5 ? Math.atan2(w.vy, w.vx) : w.rot;
       tmpP.set(w.x + (Math.random() - 0.5) * shiver, w.y + (Math.random() - 0.5) * shiver, 0.25);
-      tmpE.set(0, c.phase === 'hunting' ? Math.sin(w.phase * 7) * 0.9 : 0, ang);
-      tmpQ.setFromEuler(tmpE);
+      pose.set(c.phase === 'hunting' ? Math.sin(w.phase * 7) * 0.9 : 0, 0, ang);
+      tmpQ.setFromEuler(pose);
       tmpS.setScalar(0.9 + Math.sin(w.phase) * 0.06);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.mesh.setMatrixAt(n, tmpM);
       // frozen: pale glass. Hunting: the world's light burning through it.
+      // even frozen, a cold ember stays lit in the eye and the core
       tmpC.setHex(ACTIVE.swarm.color).lerp(tmpC2.setHex(ACTIVE.swarm.hunting), heat)
-        .multiplyScalar(0.7 + heat * 1.3);
+        .multiplyScalar(1.45 + heat * 0.55);
       this.mesh.setColorAt(n, tmpC);
       n++;
+      this.sumX[w.cluster] += w.x; this.sumY[w.cluster] += w.y;
+      this.sumN[w.cluster]++; this.sumHeat[w.cluster] += heat;
+    }
+    for (let ci = 0; ci < MAX_CLUSTERS; ci++) {
+      const k = this.sumN[ci];
+      if (!this.clusters[ci].alive || k === 0) { this.spills[ci].off(); continue; }
+      const heat = this.sumHeat[ci] / k;
+      this.spills[ci].set(this.sumX[ci] / k, this.sumY[ci] / k, 5, 4.2, 0.32 + heat * 0.35, ACTIVE.swarm.hunting, 1.4);
     }
     this.mesh.count = n;
     if (n > 0) {
@@ -372,4 +400,52 @@ export class Rimewings implements Creature {
     const target = anyHunt ? Math.max(0, 1 - closest / WAKE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);
   }
+}
+
+/**
+ * One moth, nose along +X: an elongated octahedral body, two mirrored wings
+ * swept back from it, each a shallow faceted pyramid, and a small eye at the
+ * nose. Per-face `glow` is the emissive mask: the eye burns, the core and
+ * the leading facets glow, the trailing membrane stays glass.
+ */
+function mothGeometry(): THREE.BufferGeometry {
+  type V = [number, number, number];
+  const pos: number[] = [], glow: number[] = [];
+  const tri = (a: V, b: V, c: V, g: number): void => {
+    pos.push(...a, ...b, ...c);
+    glow.push(g, g, g);
+  };
+  // body
+  const nose: V = [0.2, 0, 0], tail: V = [-0.16, 0, 0];
+  const ring: V[] = [[0.03, 0.07, 0], [0.03, 0, 0.075], [0.03, -0.07, 0], [0.03, 0, -0.075]];
+  for (let i = 0; i < 4; i++) {
+    const a = ring[i], b = ring[(i + 1) % 4];
+    tri(nose, a, b, 1.6);
+    tri(tail, b, a, 0.9);
+  }
+  // wings, mirrored in y
+  for (const s of [1, -1]) {
+    const r1: V = [0.07, 0.05 * s, 0], r2: V = [-0.09, 0.05 * s, 0];
+    const elbow: V = [0.05, 0.27 * s, 0], tip: V = [-0.11, 0.38 * s, 0];
+    for (const z of [0.035, -0.035]) {
+      const ridge: V = [-0.01, 0.19 * s, z];
+      tri(r1, elbow, ridge, 1.5);     // leading edge: the ice-cyan glow
+      tri(elbow, tip, ridge, 1.3);
+      tri(tip, r2, ridge, 0.5);       // trailing membrane: glass
+      tri(r2, r1, ridge, 0.65);
+    }
+  }
+  // the eye: a bright point at the nose, proud of the body toward the camera
+  const e = 0.045, ex = 0.15, ez = 0.05;
+  const eye: V[] = [[ex + e, 0, ez], [ex, e, ez], [ex - e, 0, ez], [ex, -e, ez]];
+  for (let i = 0; i < 4; i++) {
+    tri([ex, 0, ez + e], eye[i], eye[(i + 1) % 4], 4);
+    tri([ex, 0, ez - e], eye[(i + 1) % 4], eye[i], 4);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('glow', new THREE.Float32BufferAttribute(glow, 1));
+  geo.scale(1.1, 1.1, 1.1);
+  geo.computeVertexNormals();
+  return geo;
 }
