@@ -837,7 +837,9 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
   const chord = await page.evaluate(async () => {
     const { g, until } = window.__H();
     const v = g.vault;
-    await until(() => v.phase === 'run', 20);
+    // the crack trim waits for the stone to land (and fades in), so measure the
+    // chord on an assembled room, not one still flying in
+    await until(() => v.phase === 'run' && v.arriveDone && v.rimShow >= 1, 400);
     // a spy on the audio side of the chord — the bed has to duck too
     const calls = [];
     const real = v.audio;
