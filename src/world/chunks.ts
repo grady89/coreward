@@ -266,22 +266,9 @@ export const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped
 /** with bloom on, the hot meniscus (only) is pushed past white so it blooms;
  * the body below it stays under the threshold */
 const MENIS_HDR = 1.6;
-/**
- * CRYOS brine only (1 there, 0 everywhere else): the body sinks to deep
- * cyan a tile under its bright surface line instead of glowing as one pale
- * slab, so what swims in it (and the light it throws) reads against it.
- */
-const brineDeep = { value: 0 };
-let brineFor: unknown = null;
-function syncBrine(): void {
-  if (brineFor === ACTIVE) return;
-  brineFor = ACTIVE;
-  brineDeep.value = !spentWorld() && ACTIVE.id === 'cryos2' ? 1 : 0;
-}
 lavaMat.onBeforeCompile = shader => {
   Object.assign(shader.uniforms, fluidUniforms);
   shader.uniforms.uBloomOn = bloomOn;
-  shader.uniforms.uBrineDeep = brineDeep;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec4 fl;
@@ -298,7 +285,6 @@ uniform float uFluidTime;
 uniform float uFluidAmp;
 uniform float uFluidLive;
 uniform float uBloomOn;
-uniform float uBrineDeep;
 varying vec4 vFl;
 varying vec3 vFP;
 varying vec3 vFN;
@@ -317,7 +303,6 @@ float flBit(float m, float b) { return mod(floor(m / b), 2.0); }`)
 		// top-to-bottom falloff instead of one flat value
 		float sealed = rockU * (1.0 - airU);
 		float body = mix(0.95 - 0.33 * sealed, 0.26 - 0.1 * sealed, smoothstep(0.0, 2.2 + 0.3 * sealed, depth));
-		body = mix(body, mix(0.6 - 0.25 * sealed, 0.075, smoothstep(0.0, 1.6 + 0.3 * sealed, depth)), uBrineDeep);
 		float sh = uFluidAmp * (0.09 * sin(wx * 1.9 + uFluidTime * 1.1 - depth * 2.3)
 			+ 0.05 * sin(wx * 0.7 - uFluidTime * 0.6) + 0.04 * sin(uFluidTime * 1.6));
 		// slow currents: thin brighter bands drifting through the body, so
@@ -326,9 +311,6 @@ float flBit(float m, float b) { return mod(floor(m / b), 2.0); }`)
 			+ 1.6 * sin(vFW.y * 1.3 - vFW.x * 0.5 - uFluidTime * 0.22 * uFluidAmp));
 		float cur = smoothstep(0.78, 0.97, cw) * smoothstep(0.3, 1.6, depth);
 		vec3 c = base * (body + sh + 0.22 * cur);
-		// deep brine: the shimmer and currents ride the body's own value, so
-		// the dark water moves without going black or striping bright
-		c = mix(c, base * (body * (1.0 + 2.2 * sh) + 0.06 * cur), uBrineDeep);
 		// rock holds the liquid: a soft contact shade along a basin wall
 		float ex = vFP.x + 0.5, ey = 0.5 - vFP.y;
 		float front = step(0.5, vFN.z);
@@ -349,7 +331,7 @@ float flBit(float m, float b) { return mod(floor(m / b), 2.0); }`)
 		diffuseColor.rgb = mix(base, c, uFluidLive);
 	}`);
 };
-lavaMat.customProgramCacheKey = () => 'fluid-glow-v5';
+lavaMat.customProgramCacheKey = () => 'fluid-glow-v4';
 
 /**
  * The air over a pool holds its light: one additive sheet per surface run,
@@ -425,8 +407,8 @@ const SPILL: Spill = {
   dx: new Float32Array(CAP), dy: new Float32Array(CAP), w: new Float32Array(CAP),
   wf: new Float32Array(CAP), wb: new Float32Array(CAP),
 };
-/** a frostbloom's cold light on the stone around it (its own face carries its halo) */
-const FROST_HUE = 0x48d4ff, FROST_REACH = 1.9, FROST_GAIN = 0.3;
+/** a frostbloom's cold light on the stone around it (and its own face) */
+const FROST_HUE = 0x78d8ff, FROST_REACH = 2.1, FROST_GAIN = 0.17;
 
 /**
  * A seam's trunk runs along its local x from edge to edge, so turning it
@@ -459,7 +441,7 @@ interface GemAnim {
   id: number; wx: number; wy: number; s: number; phase: number;
   spin: number; pulse: number; wobble: number; tilt: number; roll: number;
   z: number; dim: number; flat: boolean; sway: boolean;
-  /** a frostbloom: posed as veinlight, with a cold flicker every few seconds */
+  /** a frostbloom: turns in the face plane and breathes a cold pulse */
   bloom?: boolean;
 }
 
@@ -535,7 +517,6 @@ class Chunk {
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
     const spent = spentWorld();
     syncStrata();
-    syncBrine();
     const lit = this.spill(terrain, x0, y0, spent);
     if (!spent) syncHaze();
     const isFl = (x: number, y: number) => terrain.get(x, y) === T.LAVA;
@@ -667,7 +648,7 @@ class Chunk {
             flat: !harvestable,
             sway: !!mo.sway,
           };
-          if (t === T.FROSTBLOOM) anim.bloom = true;
+          if (t === T.FROSTBLOOM) { anim.bloom = true; anim.tilt *= 0.08; }
           this.gemAnim[cls].push(anim);
           this.poseGem(cls, anim, 0);
           this.gems[cls].setColorAt(i, tmpC.setHex(gemColor).multiplyScalar(anim.dim));
@@ -761,7 +742,7 @@ class Chunk {
         if (o.wb[i] <= 0) continue;
         // saturating hard: one bloom lights its neighbours, a bed of them
         // does not flood the wall
-        const b = FROST_GAIN * (1 - Math.exp(-1.2 * o.wb[i]));
+        const b = FROST_GAIN * (1 - Math.exp(-1.6 * o.wb[i]));
         o.r[i] += bc.r * b; o.g[i] += bc.g * b; o.b[i] += bc.b * b;
       }
     }
@@ -809,23 +790,21 @@ class Chunk {
   }
 
   /**
-   * A frostbloom's cold light: the stone touching it goes cyan, hardest on
-   * the side facing it, its diagonals far less, gone by two tiles. Its own face is lit by
-   * its halo disc, as veinlight's is. Added on top of any pool or seam
-   * light; true if it reached this chunk.
+   * A frostbloom's cold light: the stone touching it goes ice-cyan, its own
+   * face too (under its violet heart), gone by two tiles. Added on
+   * top of any pool or seam light; true if it reached this chunk.
    */
   private frostSpill(o: Spill, sx: number, sy: number, x0: number, y0: number): boolean {
     let hit = false;
     for (let ty = Math.max(y0, sy - 3); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
       for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 3); tx++) {
         const d = Math.hypot(tx - sx, ty - sy);
-        if (d === 0 || d >= FROST_REACH) continue;
+        if (d >= FROST_REACH) continue;
         const u = Math.max(0, (d - 0.5) / (FROST_REACH - 0.5));
-        const w = 1 - u * u * (3 - 2 * u);
+        const w = d === 0 ? 0.9 : 1 - u * u * (3 - 2 * u);
         const i = (ty - y0) * CHUNK + (tx - x0);
         o.wb[i] += w;
-        // weighted hard so a neighbour's face shades toward the bloom
-        o.dx[i] += (sx - tx) * 2 * w / d; o.dy[i] += (ty - sy) * 2 * w / d;
+        if (d > 0) { o.dx[i] += (sx - tx) * w / d; o.dy[i] += (ty - sy) * w / d; }
         hit = true;
       }
     }
@@ -835,6 +814,20 @@ class Chunk {
   private poseGem(cls: number, a: GemAnim, time: number): void {
     // harvestable ore protrudes and turns; fissures lie flat in the rock face
     tmpP.set(a.wx, a.wy, a.z);
+    if (a.bloom) {
+      // a frostbloom faces you and turns slowly in the face plane, a faint
+      // shimmer of yaw so its facets catch the lamp; every few seconds a cold
+      // pulse runs through it (the tell: veinlight breathes, this flickers)
+      tmpE.set(a.tilt, Math.sin(time * 0.6 + a.phase) * a.wobble * 2, a.roll + time * a.spin);
+      tmpQ.setFromEuler(tmpE);
+      tmpS.setScalar(a.s * (1 + Math.sin(time * 1.1 + a.phase) * a.pulse));
+      tmpM.compose(tmpP, tmpQ, tmpS);
+      this.gems[cls].setMatrixAt(a.id, tmpM);
+      const beat = Math.pow(0.5 + 0.5 * Math.sin(time * 1.3 + a.phase), 8);
+      this.gems[cls].setColorAt(a.id, tmpC.setScalar(0.92 + beat * 0.45));
+      if (this.gems[cls].instanceColor) this.gems[cls].instanceColor.needsUpdate = true;
+      return;
+    }
     if (a.flat) {
       tmpE.set(0, 0, a.roll);
     } else {
@@ -849,13 +842,6 @@ class Chunk {
     tmpS.setScalar(a.s * pulse);
     tmpM.compose(tmpP, tmpQ, tmpS);
     this.gems[cls].setMatrixAt(a.id, tmpM);
-    if (a.bloom) {
-      // a frostbloom moves exactly as veinlight does; every few seconds a
-      // cold flicker runs through it (the tell: veinlight breathes, this flickers)
-      const beat = Math.pow(0.5 + 0.5 * Math.sin(time * 1.3 + a.phase), 8);
-      this.gems[cls].setColorAt(a.id, tmpC.setScalar(0.92 + beat * 0.45));
-      if (this.gems[cls].instanceColor) this.gems[cls].instanceColor.needsUpdate = true;
-    }
   }
 
   /** slow spin + glow pulse on every resource */

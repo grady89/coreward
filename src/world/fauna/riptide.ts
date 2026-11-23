@@ -48,11 +48,11 @@ function irisGeometry(): THREE.BufferGeometry {
       for (const [tri, k] of [[[0, 2, 1], 0], [[0, 3, 2], 1]] as const) {
         // pale inner ring, green outer ring, and a dark limbal edge round it all
         const v = (r === 0 ? 1.0 : r === 1 ? 0.6 : 0.16) * (0.66 + h(r * 40 + i * 2 + k) * 0.5);
-        // the inner ring runs toward white, the outer leans sea-green
+        // the inner ring runs toward white, the outer stays the world's green
         const w = r === 0 ? 0.55 : 0.12;
         for (const j of tri) {
           pos.push(p[j][0], p[j][1], 0);
-          col.push(v * (0.5 + 0.5 * w), v, v * (0.72 + 0.28 * w));
+          col.push(v * (0.6 + 0.4 * w), v, v * (0.85 + 0.15 * w));
         }
       }
     }
@@ -236,8 +236,7 @@ export class Riptide implements Creature {
       map: spillTexture(), color: 0x3ce6c8, transparent: true, opacity: 0, depthWrite: false,
       blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
     });
-    // wide enough to catch the inner arms of the swirl
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 4.6), this.coreHaloMat);
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3.4), this.coreHaloMat);
     halo.position.z = -0.03;
     this.coreIrisMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false });
     this.coreIris = new THREE.Mesh(irisGeometry(), this.coreIrisMat);
@@ -472,20 +471,13 @@ export class Riptide implements Creature {
       // the slit narrows as it focuses on you
       this.corePupil.scale.set(0.42 - strength * 0.16, 1.25 + strength * 0.2, 1);
       // HDR gain past the bloom threshold: the eye is the brightest thing here
-      this.coreIrisMat.color.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.12)
+      this.coreIrisMat.color.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.2)
         .multiplyScalar((1.5 + beat * 0.35 + strength * 0.8) * seen);
       this.coreHaloMat.color.setHex(ACTIVE.gemTint).multiplyScalar(1.4);
       this.coreHaloMat.opacity = Math.min(1, 0.26 * bloom + beat * 0.06);
-      // and its light lands on the rock around it: stretched down through
-      // the swirl to the first floor under the heart (within eight tiles),
-      // so the floor and the arms between catch it, not the dark above
-      tmpCol.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.1);
-      const col = Math.floor(fx), row = Math.floor(-fy);
-      let k = 1;
-      while (k <= 8 && !this.terrain.solidAt(col, row + k)) k++;
-      const drop = k <= 8 ? k - (-fy - row) : 0;
-      this.coreSpill.set(fx, fy - drop * 0.55, 8 + drop * 0.5, 6.5 + drop * 1.3,
-        Math.min(0.7, (0.24 + beat * 0.05 + drop * 0.025) * bloom), tmpCol.getHex(), 1.35);
+      // and its light lands on the rock around it
+      tmpCol.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.15);
+      this.coreSpill.set(fx, fy, 8, 6.5, Math.min(0.6, (0.2 + beat * 0.05) * bloom), tmpCol.getHex(), 1.3);
     } else {
       this.coreSpill.off();
     }

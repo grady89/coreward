@@ -489,7 +489,7 @@ export class Brinewyrm implements Creature {
         this.throatMat.color.setHex(0xece4ff).multiplyScalar(1.2 + glow * 0.7 + this.gape * 1.3);
         this.eyeMat.color.setHex(0xe0f4ff).multiplyScalar(2 + glow * 0.7 + this.gape);
         this.light.intensity = 1 + glow * 3 + this.gape * 2;
-        this.spillHead.set(px, py, 3.6, 3.6, 0.34 + glow * 0.2 + this.gape * 0.3, 0x8ae4ff, 1.3);
+        this.spillHead.set(px, py, 3.8, 3.8, 0.24 + glow * 0.18 + this.gape * 0.3, 0x8ae4ff, 1.2);
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
         this.spots.setMatrixAt(0, tmpM);
