@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 6.4,
+  "candidate": 5.8,
+  "delta": -0.6,
+  "preferred": "best",
+  "why": "B's fissures actually light their stone and its beam-lit faces keep their form instead of blowing out. Both directly serve the brief. The rest is identical, so the gain is moderate."
+ },
+ "lighting": {
+  "best": 6.0,
+  "candidate": 6.3,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "B's glowing fissures are a real step toward 04, but it blows out all three cores into flat discs and weakens the beam on the surfaces it hits across five shots, so A meets the 'glow' and 'light lands' rules better overall."
+ },
+ "identity": {
+  "best": 7.0,
+  "candidate": 7.3,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "B's faceted, world-tinted cores are a clear identity win at the climax of each world, which outweighs its regression: the deep fissures lost their glow halo, and that should be restored from A."
+ },
+ "fluids": {
+  "best": 5.9,
+  "candidate": 6.4,
+  "delta": 0.5,
+  "preferred": "candidate",
+  "why": "B's fissure glow is a real gain toward reference 04, but its overexposed flat-disc cores break the hero object in all three core shots. The fix is A's cores combined with B's fissures."
+ },
+ "characters": {
+  "best": 6.3,
+  "candidate": 6.0,
+  "delta": -0.3,
+  "preferred": "best",
+  "why": "B improves pilot trim and shellback light spill, but its glimmerfly frame floods the dark with red haze and the stillwalker is cropped out, which costs more than those gains."
+ },
+ "vaults": {
+  "best": 5.8,
+  "candidate": 6.1,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "B's lit ledge tops and glowing doors make footing noticeably more legible, especially in Return and Kindled. Its pin-shaped fangs are a hazard-readability regression to revert."
+ },
+ "ui": {
+  "best": 7.0,
+  "candidate": 7.0,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "The UI and HUD are identical in every shot. The only visible differences are in world lighting (B's lamp beam and lit tiles are slightly dimmer in hud-play and veil3-surface), and that falls outside this category."
+ },
+ "minerals": {
+  "best": 6.8,
+  "candidate": 6.8,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "A and B are pixel-near-identical in every shot; only trivial pose differences appear on the mimic, so they get the same score."
+ }
+}

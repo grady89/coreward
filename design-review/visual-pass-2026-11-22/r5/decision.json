@@ -1,0 +1,56 @@
+{
+ "round": 5,
+ "best_before": "93dddfe (r5/best, GPU)",
+ "candidate": "63b2a33 (J1 ae07d25, J2 f93b051, J3 900e420, J4 63b2a33)",
+ "deltas": {
+  "rock": -0.6,
+  "lighting": 0.3,
+  "identity": 0.3,
+  "fluids": 0.5,
+  "characters": -0.3,
+  "vaults": 0.3,
+  "ui": 0.0,
+  "minerals": 0.0
+ },
+ "fixes": {
+  "J1 rock": {
+   "commit": "ae07d25",
+   "target": "rock",
+   "delta": -0.6,
+   "decision": "revert (surgical, keeps J2)"
+  },
+  "J2 faceted core + beam hit": {
+   "commit": "f93b051",
+   "target": "lighting+fluids",
+   "delta": "0.3 / 0.5",
+   "decision": "keep"
+  },
+  "J3 characters": {
+   "commit": "900e420",
+   "target": "characters",
+   "delta": -0.3,
+   "decision": "revert (598aeed)"
+  },
+  "J4 vaults": {
+   "commit": "63b2a33",
+   "target": "vaults",
+   "delta": 0.3,
+   "decision": "keep, minus the fang-tip glints (readability)"
+  }
+ },
+ "other_drops_over_0.3": [],
+ "best_scores": {
+  "rock": 6.4,
+  "lighting": 6.3,
+  "identity": 7.0,
+  "fluids": 6.4,
+  "characters": 6.4,
+  "vaults": 6.1,
+  "ui": 7.2,
+  "minerals": 7.2
+ },
+ "note": "Kept categories take the candidate's paired score (lighting 6.3, fluids 6.4, vaults 6.1) per the rule, even where that is below the previous round's number \u00e2\u20ac\u201d absolute numbers drift \u00c2\u00b10.5 between reviewers; the final absolute scoring settles where things stand.",
+ "goal_met": false,
+ "new_best": "c5bced5 (J3 reverted 598aeed, J1 reverted 4879d0b, fang glints removed c5bced5); shots r6/best (GPU)",
+ "vault_suite_note": "after the glint removal: vaults.mjs 47/46/47 (one new flake: one-way gate), routes 7/7"
+}

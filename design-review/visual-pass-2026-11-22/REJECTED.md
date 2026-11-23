@@ -29,3 +29,16 @@
 - Scores (paired, r4): vaults 5.9 → 6.1 (+0.2) — within noise. The reviewer saw the two builds as "nearly identical"; it preferred the candidate's broader warmer sconce washes in EMBER but nothing else changed its read.
 - Why it lost: below the 0.3 bar. The remaining vault complaints (wall as bright as footing in VAULT/RETURN, footing tops unlit in RETURN/KINDLED, sparse warm light in RETURN, black spawn-gate box, faint fangs in dark rooms) weren't moved enough.
 - Next time, differently: target the specific frames the reviewer marks lowest (RETURN spawn/room at 5) — lit walkable top faces independent of nearby lights, a tinted spawn-gate interior instead of a black box, emissive fang tips in unlit rooms — rather than global wall/haze retuning.
+
+## r5 J1 — rock: halved surface jitter, near-black deep stone (strata floor down, ambient halved, pod light cut by distance from air), connected fissure veins (seamPose, 5 crack classes) with a per-instance 3×3 vein glow replacing the per-tile host disc (ae07d25) — reverted
+- Scores (paired, r5): rock 6.4 → 5.8 (−0.6). Identity and lighting reviewers also saw the deep fissures "lose their glow halo" and read as "flat line decals".
+- Why it lost: the new vein glow (strength 0.24, normalised) was weaker than the old per-tile fissure halo + wash it replaced, so the one thing every reviewer asks for — fissures that light their stone — went backwards; the darker deep rock made that worse.
+- Next time, differently: keep the existing per-tile halo and ADD to it; any vein continuity must not lower per-fissure brightness.
+
+## r5 J3 — characters: amber gloves/boots/pack on the pilot, hull light floor, wider shellback/warden pools + stronger point lights, glimmerfly hooked strand (900e420) — reverted
+- Scores (paired, r5): characters 6.3 → 6.0 (−0.3).
+- Why it lost: the reviewer liked the trim and shellback spill but marked the glimmerfly frame down for a red haze flooding the frame and the stillwalker shot for the creature sitting off-frame. Both look like shot-state variance in the fauna sandbox (dread wash during the hunt; stillwalker staging) rather than art, but the rule is the rule.
+- Next time, differently: land the pilot trim and shellback spill on their own (they were praised); check the fauna sandbox frames for the dread wash and staging before scoring.
+
+## r5 J4 (part) — fang-tip ember glints (in 63b2a33) — removed, rest of J4 kept
+- Vault reviewer: fangs became "thin pins with bulb tips that look like candles or grass" — a hazard-readability regression. Vault readability is a hard rule, so the glints are removed even though J4 as a whole scored +0.3.
