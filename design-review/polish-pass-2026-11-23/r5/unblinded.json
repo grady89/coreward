@@ -1,0 +1,32 @@
+{
+ "creatures-a": {
+  "best": 6.6,
+  "candidate": 6.8,
+  "delta": 0.2,
+  "why": "The Long One and the Kindled are identical, and the Mimic differs only in pose. A's Rimewings throw a much stronger cyan pool onto the ice, which is exactly 'glow that lands', while B's wash is whiter and weaker."
+ },
+ "creatures-b": {
+  "best": 6.4,
+  "candidate": 7.0,
+  "delta": 0.6,
+  "why": "B turns the Brinewyrm from a decorative crystal ribbon into a readable predator (eye, teeth, surfacing pose) and makes Frostbloom's and the Riptide's light land on their surroundings. The Frostbloom disguise is unsolved in both."
+ },
+ "quarters-room": {
+  "best": 6.4,
+  "candidate": 6.6,
+  "delta": 0.2,
+  "why": "The builds are identical except B's porthole floor spill, which lands as detached circular orange blobs in the foreground rather than window light, adding noise without reading as dusk; A is marginally cleaner."
+ },
+ "furnishings": {
+  "best": 6.8,
+  "candidate": 7.2,
+  "delta": 0.4,
+  "why": "Same furnishings, but B removes the stray foreground light blobs, gives the rug a woven border, and retints the locker and fixtures per palette, so each palette reads as a whole room rather than a wall recolour."
+ },
+ "wings": {
+  "best": 7.0,
+  "candidate": 7.1,
+  "delta": 0.1,
+  "why": "Wing shots are effectively identical; B wins by a hair because the hall floor lacks A's stray orange blob next to the suit."
+ }
+}

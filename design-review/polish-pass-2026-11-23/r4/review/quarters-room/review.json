@@ -1,0 +1,56 @@
+{
+  "A": {
+    "category": "quarters-room",
+    "score": 7.0,
+    "per_shot": [
+      {"shot": "quarters-stock-west.png", "score": 7, "note": "Real ceiling with ribs, fixtures and pipe runs, riveted wall panels, dusk portholes; warm and calm. Floor spill is a broad muddy wash and the foreground third is an empty slab."},
+      {"shot": "quarters-stock-mid.png", "score": 7, "note": "Cone pools under each fixture land on the wall nicely; floor reads as large plates but lighting on it is blotchy with an odd cool-green smudge left of the suit."},
+      {"shot": "quarters-stock-east.png", "score": 7, "note": "Corkboard, locker and porthole give a hab identity; stock room already reads as a lived-in corridor, not a box. Dark east wall gives good contrast."},
+      {"shot": "quarters-full-west.png", "score": 7, "note": "Fern, patterned rug, glowing radio dial and book shelf all read as themselves; richer than stock. Rug is small and flat relative to the room."},
+      {"shot": "quarters-full-mid.png", "score": 7, "note": "Arc lamp pools warmly on wall and floor; star chart is a strong focal accent. Floor wash under it is soft but smeary."},
+      {"shot": "quarters-full-east.png", "score": 7, "note": "Galley with kettle and cups, bunk with pillow and bedding, wall lamp; Gallery doorway glow is inviting. Bunk bedding sinks into shadow; foreground floor patchy."}
+    ],
+    "top_issues": [
+      {"issue": "Foreground floor is a large dead slab with blotchy, shapeless light washes", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "Bottom third of every frame is low-information plating whose light patches read as rendering smears rather than porthole or lamp spill; it dilutes the room.", "suggested_direction": "Shape porthole spill as soft elongated ellipses tied to the porthole positions, keep the foreground darker and quieter, and add plate seams/value steps so the floor reads as plating."},
+      {"issue": "Walls lack small lived-in hab detail between stations", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png"], "why": "Panels and red stripe repeat uniformly; the hab feels tidy but slightly generic.", "suggested_direction": "Add sparse conduit drops, junction boxes, labels or switch plates between bays."},
+      {"issue": "Some furnishings are small or under-lit at play scale", "shots": ["quarters-full-west.png", "quarters-full-east.png"], "why": "Rug is a thin strip; bunk bedding goes dark maroon in shadow, so the bed reads less cosy than it could.", "suggested_direction": "Give the bunk a small warm practical wash and lift the bedding value; slightly enlarge or brighten the rug pattern."},
+      {"issue": "Odd cool-green floor smudge", "shots": ["quarters-stock-mid.png", "quarters-full-mid.png"], "why": "A teal patch on the floor left of the suit breaks the warm palette without a visible source.", "suggested_direction": "Tie it to a visible source (the console screen) or remove it."}
+    ],
+    "protect": [
+      "Ceiling with ribs, pipe runs and warm fixtures casting cones on the wall",
+      "Dusk portholes as warm windows",
+      "Furnishings reading as themselves: fern, patterned rug, glowing radio, books, star chart, kettle and cups, bunk",
+      "Arc lamp pooling light on wall and floor",
+      "Suit remains the most legible element",
+      "Dark corners and the warm-not-grim balance"
+    ]
+  },
+  "B": {
+    "category": "quarters-room",
+    "score": 7.2,
+    "per_shot": [
+      {"shot": "quarters-stock-west.png", "score": 7, "note": "Same strong shell as A plus a conduit drop with junction box; floor plates have darker seams and value steps. Porthole spill now appears as two hard round orange blobs in the foreground."},
+      {"shot": "quarters-stock-mid.png", "score": 7, "note": "Conduit drops and junction boxes between bays and a floor grate add lived-in hab detail; round foreground light coins look like stray decals."},
+      {"shot": "quarters-stock-east.png", "score": 7, "note": "Floor plating reads more clearly than A; one round spill blob still floats disconnected from any source."},
+      {"shot": "quarters-full-west.png", "score": 7, "note": "All furnishings read as in A; floor near the wall is darker so the rug and pieces sit better. Round spill spots remain distracting."},
+      {"shot": "quarters-full-mid.png", "score": 8, "note": "Richest frame: conduit, star chart, arc lamp pool, books, floor grate; warm and cared-for. Foreground coins are the main flaw."},
+      {"shot": "quarters-full-east.png", "score": 7, "note": "Same galley, bunk and Gallery doorway as A; Gallery's rose spill on the floor is a nice touch. Bunk bedding still dark."}
+    ],
+    "top_issues": [
+      {"issue": "Porthole spill renders as hard circular orange coins on the foreground floor", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png", "quarters-stock-east.png", "quarters-full-west.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "They sit far in front of the portholes with crisp round edges and read as decals or bugs, not as dusk light landing on the floor.", "suggested_direction": "Stretch them into soft, elongated shapes that fall from each porthole toward the viewer, with feathered edges and lower intensity near the camera."},
+      {"issue": "Foreground floor still takes a large share of the frame with little interest", "shots": ["quarters-stock-mid.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "Even with better plating, the bottom third is mostly empty plating.", "suggested_direction": "Let the foreground fall darker toward the camera edge so the eye goes to the lit wall band."},
+      {"issue": "Bunk bedding under-lit", "shots": ["quarters-full-east.png"], "why": "The bed is the cosiest object in the room but reads as a dark maroon slab.", "suggested_direction": "Lift bedding value and let the wall lamp pool onto the blanket and pillow."},
+      {"issue": "Rug is small for its role", "shots": ["quarters-full-west.png", "quarters-full-mid.png"], "why": "Pattern reads, but it is a thin strip that barely changes the floor.", "suggested_direction": "Slightly larger footprint or a warm light pool landing on it."}
+    ],
+    "protect": [
+      "Wall conduit drops and junction boxes between bays",
+      "Floor plating with seams, value steps and the grate hatch",
+      "Ceiling ribs, pipe runs and warm fixture cones on the wall",
+      "Dusk portholes and the Gallery doorway's rose spill",
+      "All furnishings reading as themselves, furnished room clearly richer than stock",
+      "Suit remains the most legible element"
+    ]
+  },
+  "preference": "B",
+  "why": "B adds lived-in wall conduit and better-read floor plating, which serves the hab-not-box goal; its hard round porthole spill spots are the one regression and keep the margin small."
+}

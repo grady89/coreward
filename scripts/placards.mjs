@@ -15,10 +15,12 @@ const key = (code) => page.evaluate(c => {
 }, code);
 
 await page.goto('http://localhost:4173');
-await page.waitForTimeout(2500);
+await page.waitForFunction(() => !!window.__game && !!document.querySelector('#t-new'), null, { timeout: 90000 });
 await page.evaluate(() => localStorage.clear());
 await page.click('#t-new');
-await page.waitForTimeout(3600);
+// wait on the game, not the wall clock: under SwiftShader the intro runs slow
+await page.waitForFunction(() => window.__game?.mode === 'play', null, { timeout: 120000 });
+await page.waitForTimeout(600);
 
 // a gallery worth looking at: the wing, and one cut stone of every kind,
 // stocked out of order on purpose so the ordering has something to do
@@ -39,9 +41,10 @@ await page.evaluate(() => {
   g.ctrl.px = 7; g.ctrl.py = 0.42; g.ctrl.vx = 0; g.ctrl.vy = 0;
   g.cam.snap(7, 2, 14);
 });
-await page.waitForTimeout(400);
+await page.waitForFunction(() => !!window.__game.ctrl.dock, null, { timeout: 15000 }).catch(() => {});
 await key('KeyE');
-await page.waitForTimeout(700);
+await page.waitForFunction(() => !!window.__game.interior, null, { timeout: 15000 }).catch(() => {});
+await page.waitForTimeout(300);
 
 // --- the order on the plinths ---
 const order = await page.evaluate(() => window.__game.interior.stations

@@ -1,0 +1,57 @@
+{
+  "A": {
+    "category": "creatures-a",
+    "score": 6.6,
+    "per_shot": [
+      {"shot": "creature-longone.png", "score": 7, "note": "Molten serpent erupting into open cavern; self-glow hazes the dark around it and reads as a threat; segmented body gets busy at play size."},
+      {"shot": "creature-longone-close.png", "score": 7, "note": "Head, mandibles and glowing seams read clearly; warm bloom lands in the air and beam haze, still in VEIL amber; head core blows out to white."},
+      {"shot": "creature-mimic.png", "score": 6.5, "note": "Small crystal spider on a lava shelf with the pod for scale; violet/cyan accent against amber works and lights the wall beside it, but it is tiny and the legs are thin at play size."},
+      {"shot": "creature-mimic-close.png", "score": 7, "note": "Faceted crystal crown plus white fangs sells 'ore that bites'; cool glow washes the rock face it clings to."},
+      {"shot": "creature-kindled.png", "score": 6, "note": "Two lit mannequin figures in the bright core chamber; they glow and light the floor, but against an amber-flooded room they barely separate and do not read as pursuers."},
+      {"shot": "creature-kindled-close.png", "score": 6.5, "note": "Clean faceted bodies with ember sparks; floor pools warm under them; posture is neutral and statue-like, no menace."},
+      {"shot": "creature-rimewings.png", "score": 6.5, "note": "Ice-cyan flock with emissive points glowing in the lamp beam; sits in CRYOS palette; their own light barely reaches the rock below."},
+      {"shot": "creature-rimewings-close.png", "score": 7, "note": "Faceted wings plus glowing cores read as living light; bloom is soft and on-palette; wing silhouettes slightly lost inside the glow."}
+    ],
+    "top_issues": [
+      {"issue": "Kindled have no threat and get lost in the bright core chamber", "shots": ["creature-kindled.png", "creature-kindled-close.png"], "why": "A pursuer made of light reads as two calm white statues; the core room is already flooded with amber, so their light adds nothing and nothing about them says danger.", "suggested_direction": "Give them a forward-leaning, reaching pose and a hotter or contrasting core (white-gold with a darker shell, or a flicker), and darken their immediate surround so their own light pool is the brightest thing near them."},
+      {"issue": "Rimewings' glow does not land on the world", "shots": ["creature-rimewings.png", "creature-rimewings-close.png"], "why": "House style is 'lit by itself in the dark'; the flock is visible mainly because the headlamp beam is on it, and the rock below gets no cyan spill.", "suggested_direction": "Add a small shared cyan light that follows the flock centroid so the ice floor and walls pick up a moving cool wash, and keep them visible outside the beam."},
+      {"issue": "Long One body becomes noisy at play size", "shots": ["creature-longone.png"], "why": "Many small bright segments merge into a jagged blob; the head-to-tail read weakens in the gameplay frame.", "suggested_direction": "Fewer, chunkier segments with darker gaps between plates so the S-curve silhouette reads, and keep the brightest value at the head only."},
+      {"issue": "Geode Mimic is small and spindly in the gameplay frame", "shots": ["creature-mimic.png"], "why": "At play scale the thin legs vanish and it reads as a sparkle more than a biting creature.", "suggested_direction": "Thicken legs and enlarge the jaw/fang wedge so the dangerous end reads at distance; keep the crystal crown as the ore disguise."}
+    ],
+    "protect": [
+      "Long One's molten amber self-glow and the warm haze it throws into the dark",
+      "Mimic's violet-crystal accent against VEIL amber, and its cool light washing the rock it sits on",
+      "Mimic's crystal crown plus white fangs reading as 'ore that bites'",
+      "Rimewings' emissive cores and ice-cyan palette",
+      "Faceted low-poly construction on all four"
+    ]
+  },
+  "B": {
+    "category": "creatures-a",
+    "score": 5.6,
+    "per_shot": [
+      {"shot": "creature-longone.png", "score": 5, "note": "Serpent laid flat like a plank across a pocket, with a lamp structure sitting directly under it; the two shapes overlap and the creature's silhouette and threat are muddled."},
+      {"shot": "creature-longone-close.png", "score": 4.5, "note": "A bright hexagonal beacon sits in front of the serpent's body and steals the focal point; the body reads as stacked boards, head small; little of its own glow."},
+      {"shot": "creature-mimic.png", "score": 5.5, "note": "Mimic tiny on a dark cave wall beside a pink ore tile that competes with it; cool glow lands but the creature is hard to find."},
+      {"shot": "creature-mimic-close.png", "score": 6, "note": "Crystal spider under a ceiling ledge, cyan light washes the block above; mouth/fangs barely read, so it looks less dangerous than A."},
+      {"shot": "creature-kindled.png", "score": 6, "note": "Same staging as A; feet burn into a stronger white pool on the floor, more 'made of light' but legs dissolve; still no menace."},
+      {"shot": "creature-kindled-close.png", "score": 6.5, "note": "Lower bodies blow out into the floor glow; stronger light-lands than A but silhouette loses its legs; equal overall."},
+      {"shot": "creature-rimewings.png", "score": 5.5, "note": "Pale shards visible only because the lamp hits them; no self-glow, so they read as paper birds rather than living light."},
+      {"shot": "creature-rimewings-close.png", "score": 6, "note": "Wing shapes are crisper and more legible than A, but unlit by themselves; fails the house 'glow that lands' rule."}
+    ],
+    "top_issues": [
+      {"issue": "Long One staged on top of a lamp/beacon structure", "shots": ["creature-longone.png", "creature-longone-close.png"], "why": "The beacon is brighter than the creature and overlaps its body, so the threat loses focal priority and the silhouette tangles.", "suggested_direction": "Stage the serpent away from other light sources in dark rock so its own glow is the only light, as in A."},
+      {"issue": "Long One reads as a flat rigid plank", "shots": ["creature-longone.png", "creature-longone-close.png"], "why": "Straight horizontal body with uniform segments has no burrowing curve and low emissive, so it reads as debris.", "suggested_direction": "Restore an S-curve and the molten seam emissive between plates; bring the head forward and brighten it."},
+      {"issue": "Rimewings lost their self-glow", "shots": ["creature-rimewings.png", "creature-rimewings-close.png"], "why": "Without emissive cores they exist only inside the headlamp beam, which contradicts the creatures-as-light house style.", "suggested_direction": "Bring back emissive cyan cores and add a light that spills onto the ice, while keeping B's crisper wing shapes."},
+      {"issue": "Mimic hard to find at play size and competing with nearby ore", "shots": ["creature-mimic.png"], "why": "Tiny violet shape on a black wall next to a saturated pink tile; the eye goes to the ore, not the creature.", "suggested_direction": "Put it on a floor or ledge with pod-for-scale as in A, enlarge it, and keep competing emissive tiles out of its immediate surround."},
+      {"issue": "Kindled have no threat", "shots": ["creature-kindled.png", "creature-kindled-close.png"], "why": "Same as A: calm statues in a room already full of amber light.", "suggested_direction": "Aggressive pose plus darker local surround so their light is what you see."}
+    ],
+    "protect": [
+      "Kindled feet burning into the floor: a stronger light-lands pool than A",
+      "Rimewings' crisp individual wing silhouettes",
+      "Mimic's cyan wash on the ceiling block in the close-up"
+    ]
+  },
+  "preference": "A",
+  "why": "A stages the Long One and Mimic as self-lit threats in the dark and keeps the Rimewings emissive; B buries the Long One behind a beacon and strips the Rimewings' glow. Kindled are effectively equal."
+}

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Terrain } from '../terrain';
 import { def } from '../tiles';
 import { Particles } from '../../fx/particles';
-import { Creature, ThreatCtx, ThreatLevel, air, onWall, limb, lerp, clamp01, ease } from './types';
+import { hdrBasic } from '../../fx/post';
+import { Creature, ThreatCtx, ThreatLevel, air, onWall, limb, lerp, clamp01, ease, rimLight, Spill } from './types';
 
 // GEODE MIMICS — VEIL-3's thief tier. Keyed on GREED.
 //
@@ -35,7 +37,15 @@ interface Crab {
   body: THREE.Mesh;
   gem: THREE.Mesh;
   gemMat: THREE.MeshBasicMaterial;
+  col: number;
   light: THREE.PointLight;
+  /** the gem's light on the wall it clings to */
+  spill: Spill;
+  jawU: THREE.Mesh; jawD: THREE.Mesh;
+  /** the bite, mirrored in depth so it always faces the camera */
+  mouth: THREE.Group;
+  maw: THREE.Mesh;
+  lipU: THREE.Mesh; lipD: THREE.Mesh;
   upper: THREE.Mesh[]; lower: THREE.Mesh[];
   legPhase: number;
 }
@@ -47,20 +57,91 @@ export class Mimics implements Creature {
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private particles: Particles) {
     const bodyGeo = new THREE.IcosahedronGeometry(0.3, 0);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a2a5a, emissive: 0x5a30a0, emissiveIntensity: 0.5, flatShading: true, roughness: 0.35, metalness: 0.2 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a2a5a, emissive: 0x5a30a0, emissiveIntensity: 0.6, flatShading: true, roughness: 0.35, metalness: 0.2 });
+    // violet crystal light caught on the facet edges
+    rimLight(bodyMat, 0x9a6aff, 1.1);
     const gemGeo = new THREE.OctahedronGeometry(0.2, 0);
-    const legGeo = new THREE.BoxGeometry(1, 1, 1);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x2a1e42, roughness: 0.6, flatShading: true });
+    // a four-faceted tapering crystal: stout at the hip and knee, to a point at the foot
+    const legGeo = new THREE.CylinderGeometry(0.2, 0.5, 1, 4);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x55408a, emissive: 0x281650, roughness: 0.5, flatShading: true });
+    rimLight(legMat, 0x9a6aff, 1.1);
+    // the setting: three crystal prongs grown up around the trophy
+    const prongGeo = new THREE.OctahedronGeometry(0.07, 0);
+    prongGeo.scale(0.8, 2.2, 0.8);
+    // the bite: a split crack-mouth burning violet across the front of the
+    // shell, facing the camera, crystal fangs over and under it, and two
+    // mandibles behind its front corner
+    // mandibles: big hooked wedges, so the biting end reads at play size
+    const jawGeo = new THREE.ConeGeometry(0.15, 0.5, 4);
+    jawGeo.translate(0, 0.25, 0);
+    jawGeo.rotateZ(-Math.PI / 2);
+    // a pale crystal fang on each mandible's tip
+    const fangGeo = new THREE.ConeGeometry(0.06, 0.2, 4);
+    fangGeo.translate(0, 0.1, 0);
+    const mawMat = new THREE.MeshBasicMaterial({ color: 0x9a4cff, toneMapped: false });
+    hdrBasic(mawMat, 2.3);
+    const mawGeo = new THREE.OctahedronGeometry(0.1, 0);
+    mawGeo.scale(2.5, 0.85, 0.45);
+    const mawCoreMat = new THREE.MeshBasicMaterial({ color: 0xf4d8ff, toneMapped: false });
+    hdrBasic(mawCoreMat, 2.0);
+    const mawCoreGeo = new THREE.OctahedronGeometry(0.1, 0);
+    mawCoreGeo.scale(2.0, 0.24, 0.3);
+    mawCoreGeo.translate(0.01, 0, 0.03);
+    // pale violet crystal, lit from the maw — not white, or they read as bone
+    const toothMat = new THREE.MeshBasicMaterial({ color: 0xc8b4ff, toneMapped: false });
+    // one row of four fangs per lip, a single mesh each: long at the front
+    // corner, a wedge of teeth that grows toward the bite
+    const row = (y0: number, down: boolean): THREE.BufferGeometry => mergeGeometries([0, 1, 2, 3].map(t => {
+      const h = 0.09 + t * 0.03;
+      const g = new THREE.ConeGeometry(0.034, h, 3);
+      if (down) g.rotateZ(Math.PI);
+      g.translate(0, down ? -h / 2 : h / 2, 0);
+      g.rotateZ(-(t - 1.5) * 0.12);
+      g.translate(0.1 + t * 0.085, y0, 0.27);
+      return g;
+    }))!;
+    const upperTeeth = row(0.0, true);
+    const lowerTeeth = row(-0.14, false);
     for (let i = 0; i < MAX; i++) {
       const group = new THREE.Group();
       const body = new THREE.Mesh(bodyGeo, bodyMat);
       body.scale.set(1.2, 0.8, 1);
+      body.rotation.x = 0.35;
       const gemMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+      hdrBasic(gemMat, 1.2);
       const gem = new THREE.Mesh(gemGeo, gemMat);
-      gem.position.set(0, 0.36, 0.05);
+      // seated in the shell, not floating over it
+      gem.position.set(0, 0.27, 0.04);
+      gem.scale.setScalar(1.15);
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * Math.PI * 2 + 0.4;
+        const prong = new THREE.Mesh(prongGeo, bodyMat);
+        prong.position.set(Math.cos(a) * 0.15, 0.24, Math.sin(a) * 0.12);
+        prong.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+        group.add(prong);
+      }
+      // local +z is toward the camera; the group's turn is undone in depth
+      // each frame (scale.z = facing), so the mouth never ends up behind it
+      const mouth = new THREE.Group();
+      const maw = new THREE.Mesh(mawGeo, mawMat);
+      maw.position.set(0.25, -0.07, 0.22);
+      maw.add(new THREE.Mesh(mawCoreGeo, mawCoreMat));
+      const lipU = new THREE.Mesh(upperTeeth, toothMat), lipD = new THREE.Mesh(lowerTeeth, toothMat);
+      const jawU = new THREE.Mesh(jawGeo, legMat);
+      const jawD = new THREE.Mesh(jawGeo, legMat);
+      jawU.position.set(0.36, 0.0, 0.12);
+      jawD.position.set(0.36, -0.14, 0.12);
+      for (const [jaw, s] of [[jawU, -1], [jawD, 1]] as const) {
+        const fang = new THREE.Mesh(fangGeo, toothMat);
+        fang.position.set(0.46, 0, 0);
+        // hooked in toward the bite
+        fang.rotation.z = -Math.PI / 2 + s * 0.9;
+        jaw.add(fang);
+      }
+      mouth.add(maw, lipU, lipD, jawU, jawD);
       const light = new THREE.PointLight(0xffffff, 0, 4.5, 1.8);
-      light.position.set(0, 0.4, 0.4);
-      group.add(body, gem, light);
+      light.position.set(0, 0.4, 0.6);
+      group.add(body, gem, mouth, light);
       const upper: THREE.Mesh[] = [], lower: THREE.Mesh[] = [];
       for (let k = 0; k < LEGS; k++) {
         const u = new THREE.Mesh(legGeo, legMat), l = new THREE.Mesh(legGeo, legMat);
@@ -71,20 +152,20 @@ export class Mimics implements Creature {
       scene.add(group);
       this.crabs.push({
         alive: false, x: 0, y: 0, vx: 0, vy: 0, stolen: 0, born: 0, life: 0, deadT: 0, burstT: 0, pauseT: 0, dirX: 1, dirY: 0,
-        group, body, gem, gemMat, light, upper, lower, legPhase: 0,
+        group, body, gem, gemMat, col: 0x6a4aa0, light, spill: new Spill(scene, 0x6a4aa0), jawU, jawD, mouth, maw, lipU, lipD, upper, lower, legPhase: 0,
       });
     }
   }
 
   reset(): void {
-    for (const c of this.crabs) { c.alive = false; c.deadT = 0; c.group.visible = false; }
+    for (const c of this.crabs) { c.alive = false; c.deadT = 0; c.group.visible = false; c.spill.off(); }
     this.pending.length = 0; this.killed.length = 0;
   }
 
   /** a mimic tile was cut at (x, y): something comes out next frame */
   hatch(x: number, y: number): void { this.pending.push({ x, y }); }
 
-  private die(c: Crab): void { c.alive = false; c.deadT = 0; c.group.visible = false; }
+  private die(c: Crab): void { c.alive = false; c.deadT = 0; c.group.visible = false; c.spill.off(); }
 
   private kill(c: Crab): void {
     this.particles.sparkBurst(c.x, c.y, 0xb266ff, { count: 22, speed: 3.5, up: 2, life: 0.9, gravity: 5, spread: 0.5 });
@@ -95,6 +176,7 @@ export class Mimics implements Creature {
     c.deadT = 1.5;
     c.gem.visible = false;
     c.light.intensity = 0;
+    c.spill.off();
   }
 
   blast(x: number, y: number, radius: number): void {
@@ -126,6 +208,7 @@ export class Mimics implements Creature {
     c.dirX = ctx.podX > c.x ? -1 : 1; c.dirY = 0.3;
     c.stolen = ctx.steal();
     const col = c.stolen ? def(c.stolen).gem : 0x6a4aa0;
+    c.col = col;
     c.gemMat.color.setHex(col);
     c.light.color.setHex(col);
     c.gem.visible = c.stolen !== 0;
@@ -213,15 +296,30 @@ export class Mimics implements Creature {
       const g = c.group;
       const pop = ease(clamp01(c.born / 0.3));
       g.position.set(c.x, c.y, 0.25);
-      g.scale.setScalar(pop);
+      // a size up on the stone it hid as, so the bite reads at play size
+      g.scale.setScalar(pop * 1.3);
       const facing = c.dirX >= 0 ? 1 : -1;
+      c.mouth.scale.z = facing;
       g.rotation.z = lerp(g.rotation.z, c.burstT > 0 ? Math.atan2(c.dirY, c.dirX * facing) * 0.4 * facing : 0, Math.min(1, dt * 10));
       g.rotation.y = facing > 0 ? 0 : Math.PI;
-      c.body.rotation.x = time * 0.4;
-      c.gem.rotation.y = time * 2.2;
-      c.gem.rotation.z = Math.sin(time * 3) * 0.2;
-      c.gem.position.y = 0.36 + Math.sin(time * 6) * 0.03;
-      c.light.intensity = c.stolen ? 2.2 + Math.sin(time * 8) * 0.5 : 0.6;
+      // the shell breathes; the trophy turns slowly in its setting and pulses
+      c.body.scale.y = 0.8 + Math.sin(time * 3) * 0.03;
+      c.gem.rotation.y = time * 1.2;
+      const beat = 0.5 + 0.5 * Math.sin(time * 4);
+      c.gemMat.color.setHex(c.col).multiplyScalar(0.7 + beat * 0.4);
+      c.light.intensity = c.stolen ? 1.8 + beat * 0.8 : 0.9;
+      // the group turns to face its heading: keep the light on the camera side
+      c.light.position.z = 0.4 * facing;
+      const spillA = (c.stolen ? 0.3 + beat * 0.2 : 0.22) * pop;
+      c.spill.set(c.x, c.y, 4, 4, spillA, c.stolen ? c.col : 0x9a6aff, 1.3);
+      // mandibles snap on every burst; a slow working of the jaw at rest
+      const gape = c.burstT > 0 ? 0.5 + 0.5 * Math.sin(time * 26) : 0.2 + 0.2 * Math.sin(time * 2.5);
+      c.jawU.rotation.z = 0.15 + gape * 0.55;
+      c.jawD.rotation.z = -0.15 - gape * 0.55;
+      // the crack opens with the jaw: teeth part, the light inside swells
+      c.lipU.position.y = gape * 0.035;
+      c.lipD.position.y = -gape * 0.035;
+      c.maw.scale.set(1, 0.75 + gape * 0.9, 1);
       // legs: tripod gait in local space — feet lunge on bursts, lock on pauses
       for (let k = 0; k < LEGS; k++) {
         const side = k < 3 ? 1 : -1;
@@ -234,8 +332,9 @@ export class Mimics implements Creature {
         const lift = Math.max(0, Math.cos(ph)) * 0.12 * moving;
         const fx = along * 0.42 + stride, fy = -0.36 + lift, fz = side * 0.42;
         const kx = (hipX + fx) / 2, ky = (hipY + fy) / 2 + 0.22, kz = (hipZ + fz) / 2 + side * 0.06;
-        limb(c.upper[k], hipX, hipY, hipZ, kx, ky, kz, 0.05);
-        limb(c.lower[k], kx, ky, kz, fx, fy, fz, 0.035);
+        // stout crystal legs: thin ones vanish at play size
+        limb(c.upper[k], hipX, hipY, hipZ, kx, ky, kz, 0.19);
+        limb(c.lower[k], kx, ky, kz, fx, fy, fz, 0.15);
       }
     }
   }

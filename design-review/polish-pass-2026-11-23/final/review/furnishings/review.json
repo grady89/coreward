@@ -1,0 +1,27 @@
+{ "category": "furnishings", "score": 6.8, "per_shot": [
+  {"shot": "quarters-full-mid.png", "score": 6, "note": "Warm, structured hab with lamp pools landing, but furnishings are small and pinned to the back wall while the lower ~40% is empty floor; rug and radio are cut off at the left edge and read as a red stripe and a box at this scale."},
+  {"shot": "quarters-close-1.png", "score": 7.5, "note": "Fern in a banded pot reads instantly; radio has a lit dial and antenna; rug edge shows pattern and fringe; desk clutter feels lived-in."},
+  {"shot": "quarters-close-2.png", "score": 7.5, "note": "Rug is the best item: bold woven diamond pattern with fringe. Books and radio read, but the shelf holds only five books and looks sparse for a bought item."},
+  {"shot": "quarters-close-3.png", "score": 7, "note": "Arc lamp is a strong warm source that pools on wall and floor; star chart reads as a framed chart but is a generic blue ring diagram that looks more like a screen than a cared-for print."},
+  {"shot": "quarters-close-4.png", "score": 8, "note": "Most lived-in frame: copper kettle with steam, mugs, tile splash, tea towel, corkboard, bunk with maroon blanket, pillow and reading lamp. Clearly cared for."},
+  {"shot": "quarters-palette-slate.png", "score": 6.5, "note": "Distinct cool grey room with teal stripe and louvred lower wall; the warm lamp contrasts well, but cold-white ceiling fixtures and grey floor make it read as an office more than a sanctuary."},
+  {"shot": "quarters-palette-rose.png", "score": 6, "note": "Reads as a pink colour grade over the DUSK room rather than its own mood; ceiling, floor and walls all take the same tint and it sits too close to stock DUSK."},
+  {"shot": "quarters-palette-verdant.png", "score": 6.5, "note": "Wood wainscot below olive panels gives it real identity, the best palette; but the green tint spills into floor and ceiling, which look murky olive rather than chosen."}
+],
+"top_issues": [
+  {"issue": "Furnishings are too small and too far back at play scale", "shots": ["quarters-full-mid.png", "quarters-palette-slate.png", "quarters-palette-rose.png", "quarters-palette-verdant.png"], "why": "In the gameplay frame the bottom ~40% is empty floor and the items hug the back wall, so the rug, radio, books and jars shrink to small shapes. The brief asks for each item to read at play scale, and a furnished room to look clearly richer than stock.", "suggested_direction": "Frame tighter or lower the camera so the floor takes less of the frame, or bring the floor-level items (rug, bunk, galley) closer to the play plane. Keep the rug fully in frame rather than cropped at the edge."},
+  {"issue": "Palettes are mostly global hue tints, not distinct rooms", "shots": ["quarters-palette-rose.png", "quarters-palette-slate.png", "quarters-palette-verdant.png"], "why": "Ceiling, floor, walls and light colour all shift together, so DUST ROSE reads as a pink grade over DUSK. VERDANT's wood wainscot shows how much a material change helps, and the others lack an equivalent.", "suggested_direction": "Give each palette one material or structural signature as well as a wall colour: SLATE could get dark stone-grey panels with a brushed-metal trim, ROSE a soft upholstered or clay lower panel with brass trim. Keep floor and ceiling a neutral that complements the wall rather than tinting them all the same hue."},
+  {"issue": "SLATEBED loses the sanctuary warmth", "shots": ["quarters-palette-slate.png"], "why": "Cold-white ceiling fixtures plus grey surfaces make the room feel institutional; the brief says warm, not grim, in every mood.", "suggested_direction": "Keep the cool walls but leave the practicals warm, or near-warm, so warm pools still land on cool stone. That contrast is the mood."},
+  {"issue": "Book shelf and star chart look thin next to the galley and bunk", "shots": ["quarters-close-2.png", "quarters-close-3.png", "quarters-full-mid.png"], "why": "Five books on a short bracket shelf and a generic blue ring diagram don't feel as cared for or as personal as the kettle, mugs and bedding.", "suggested_direction": "Fill the shelf with more spines of varied height, a leaning book and a small object. Give the star chart a paper or parchment ground with constellation lines and a frame, so it reads as a print rather than a display."},
+  {"issue": "Radio dial glow barely lands", "shots": ["quarters-close-1.png", "quarters-full-mid.png"], "why": "The dial is lit but throws little light on the nightstand or wall, and in the mid shot it is a cropped box at the frame edge.", "suggested_direction": "Add a small warm light spill from the dial onto the nightstand top and the wall behind it, and make sure the radio sits inside the frame at play scale."}
+],
+"protect": [
+  "The woven rug's bold diamond pattern and fringe",
+  "The galley vignette: copper kettle with steam, mugs, tile splash, tea towel",
+  "The bunk with blanket, pillow and wall reading lamp",
+  "The fern's faceted fronds and banded pot",
+  "The arc lamp pooling warm light on wall and floor",
+  "Hab structure: panel seams, ribs, conduit, ceiling fixtures and porthole dusk, with no black slab ceiling",
+  "The VERDANT wood wainscot as a model for palette identity",
+  "The suit stays the brightest, clearest thing in every frame"
+] }

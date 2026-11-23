@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { rockColor } from '../tiles';
 import { Particles } from '../../fx/particles';
+import { hdrBasic } from '../../fx/post';
 import {
   Creature, ThreatCtx, ThreatLevel, Chain, wide, lerp, clamp01,
-  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, rimLight,
+  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2, rimLight, Spill,
 } from './types';
 
 // THE LONG ONES — VEIL-3's hunter tier. They hunt by VIBRATION.
@@ -27,6 +28,7 @@ const SPEED = 4.8;
 const HUNT = 17;
 const DAMAGE = 26;
 const STILL_TO_LOSE = 1.6;
+const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
 type Phase = 'emerging' | 'hunting' | 'searching' | 'burrowing';
 
@@ -51,85 +53,174 @@ export class LongOne implements Creature {
   private chain = new Chain(SEGS, SPACING);
 
   private body: THREE.InstancedMesh;
+  private sinew: THREE.InstancedMesh;
   private lights: THREE.InstancedMesh;
+  /** the fissure's white-hot core line, inside the amber */
+  private lightCore: THREE.InstancedMesh;
   private head: THREE.Group;
   private jawL: THREE.Mesh;
   private jawR: THREE.Mesh;
   private throat: THREE.Mesh;
+  private gullet: THREE.Mesh;
   private throatLight: THREE.PointLight;
+  /** the furnace in the maw, haloed so it reads at play size */
+  private gulletHalo: Spill;
+  /** the fissure line's light on the tunnel it fills, and the maw's */
+  private bodySpill: Spill;
+  private headSpill: Spill;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private particles: Particles) {
-    // a plated ring segment, axis along +X so it lies along the spine
-    const segGeo = new THREE.CylinderGeometry(0.38, 0.31, 0.56, 7, 1);
+    // a chunky plate, axis along +X so it lies along the spine: one on every
+    // other link, so seven big plates read at play size instead of thirteen
+    // small ones. A hex wedge, flared toward the head like a scale, turned so
+    // a flat face meets the camera
+    const segGeo = new THREE.CylinderGeometry(0.52, 0.3, 0.88, 6, 1);
+    segGeo.rotateY(Math.PI / 6);
     segGeo.rotateZ(-Math.PI / 2);
     const segMat = new THREE.MeshStandardMaterial({
-      flatShading: true, roughness: 0.42, metalness: 0.45,
-      emissive: 0x1a0806, emissiveIntensity: 1,
+      flatShading: true, roughness: 0.55, metalness: 0.2,
+      emissive: 0x2e0e06, emissiveIntensity: 1,
     });
-    // ember caught on the plate edges: out of the wall it reads as a body
-    rimLight(segMat, 0xff7a3a, 0.55);
+    // the fissure's heat caught on every plate edge: out of the wall it reads
+    // as a body, not a hole in the dark
+    rimLight(segMat, 0xff8a40, 1.6);
+    // ...graded by the plate's own colour, so the rim cools toward the tail
+    // with the plates and the head keeps the brightest edges
+    const rimBase = segMat.onBeforeCompile;
+    segMat.onBeforeCompile = (sh, r) => {
+      rimBase.call(segMat, sh, r);
+      sh.fragmentShader = sh.fragmentShader.replace('totalEmissiveRadiance += uRim *', 'totalEmissiveRadiance += vColor.r * 5.5 * uRim *');
+    };
+    segMat.customProgramCacheKey = () => 'longone-plate';
     this.body = new THREE.InstancedMesh(segGeo, segMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.body.frustumCulled = false;
     this.body.count = 0;
     this.body.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.body);
+    // the sinew between plates: narrower, dark, unrimmed, so each plate
+    // stands apart across a dark gap and the curve still reads as one body
+    const sinewGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.5, 6, 1);
+    sinewGeo.rotateZ(-Math.PI / 2);
+    this.sinew = new THREE.InstancedMesh(sinewGeo, new THREE.MeshStandardMaterial({
+      color: 0x34180f, flatShading: true, roughness: 0.8, emissive: 0x160503,
+    }), SEGS);
+    this.sinew.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.sinew.frustumCulled = false;
+    this.sinew.count = 0;
+    scene.add(this.sinew);
 
-    // dorsal lights: one per plate, pulsing tail-to-head
-    const dotGeo = new THREE.SphereGeometry(0.09, 6, 5);
-    const dotMat = new THREE.MeshBasicMaterial({ toneMapped: false });
-    this.lights = new THREE.InstancedMesh(dotGeo, dotMat, SEGS);
+    // the dorsal fissure: one molten sliver per plate, end to end along the
+    // spine, pulsing tail-to-head — VEIL's glowing crack, alive
+    const fisGeo = new THREE.OctahedronGeometry(0.1, 0);
+    fisGeo.scale(3.9, 0.85, 1.1);
+    const fisMat = new THREE.MeshBasicMaterial({ toneMapped: false });
+    hdrBasic(fisMat, 2.3);
+    this.lights = new THREE.InstancedMesh(fisGeo, fisMat, SEGS);
     this.lights.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.lights.frustumCulled = false;
     this.lights.count = 0;
     this.lights.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.lights);
+    // a thinner, hotter line down the middle of each sliver: the amber stays
+    // the hue, the core is what blooms
+    const fisCoreGeo = new THREE.OctahedronGeometry(0.1, 0);
+    fisCoreGeo.scale(3.3, 0.32, 0.6);
+    fisCoreGeo.translate(0, 0, 0.06);
+    const fisCoreMat = new THREE.MeshBasicMaterial({ toneMapped: false });
+    hdrBasic(fisCoreMat, 2.5);
+    this.lightCore = new THREE.InstancedMesh(fisCoreGeo, fisCoreMat, SEGS);
+    this.lightCore.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.lightCore.frustumCulled = false;
+    this.lightCore.count = 0;
+    this.lightCore.setColorAt(0, tmpC.setHex(0xffffff));
+    scene.add(this.lightCore);
 
     // the head: a blunt wedge, no eyes, a split jaw that opens as it closes on you
     this.head = new THREE.Group();
     const skullMat = new THREE.MeshStandardMaterial({
-      color: 0x5a2a22, flatShading: true, roughness: 0.4, metalness: 0.5, emissive: 0x200806,
+      color: 0x8a4430, flatShading: true, roughness: 0.5, metalness: 0.2, emissive: 0x2e0e06,
     });
-    rimLight(skullMat, 0xff7a3a, 0.55);
-    const skull = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.0, 7), skullMat);
+    rimLight(skullMat, 0xff8a40, 1.6);
+    const skull = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.05, 7), skullMat);
     skull.rotation.z = -Math.PI / 2;
     skull.position.x = 0.2;
     const jawGeo = new THREE.ConeGeometry(0.16, 0.9, 4);
     jawGeo.translate(0, 0.45, 0);
     jawGeo.rotateZ(-Math.PI / 2);
+    // chitin mandibles, the maw's heat on their edges
     const jawMat = new THREE.MeshStandardMaterial({
-      color: 0x2a1410, flatShading: true, roughness: 0.3, metalness: 0.7,
+      color: 0x7a4632, flatShading: true, roughness: 0.45, metalness: 0.2, emissive: 0x1e0804,
     });
+    rimLight(jawMat, 0xffa050, 1.7);
     this.jawL = new THREE.Mesh(jawGeo, jawMat);
     this.jawR = new THREE.Mesh(jawGeo, jawMat);
     this.jawL.position.set(0.55, 0.16, 0);
     this.jawR.position.set(0.55, -0.16, 0);
+    // white-hot fang tips hooked inward, and a tooth halfway down each jaw:
+    // the hottest value on the creature marks the end that hurts
+    const fangMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8, toneMapped: false });
+    hdrBasic(fangMat, 2.4);
+    const fangGeo = new THREE.ConeGeometry(0.07, 0.3, 4);
+    fangGeo.rotateZ(-Math.PI / 2);
+    for (const [jaw, s] of [[this.jawL, -1], [this.jawR, 1]] as const) {
+      const tip = new THREE.Mesh(fangGeo, fangMat);
+      tip.position.set(0.86, s * 0.03, 0);
+      tip.rotation.z = s * 0.55;
+      const tooth = new THREE.Mesh(fangGeo, fangMat);
+      tooth.position.set(0.42, s * 0.07, 0);
+      tooth.rotation.z = s * 1.2;
+      tooth.scale.setScalar(0.7);
+      jaw.add(tip, tooth);
+    }
     this.throat = new THREE.Mesh(
       new THREE.CircleGeometry(0.26, 8),
       new THREE.MeshBasicMaterial({ color: 0xff6a2a, toneMapped: false, side: THREE.DoubleSide }),
     );
     this.throat.position.set(0.62, 0, 0);
     this.throat.rotation.y = Math.PI / 2;
-    this.throatLight = new THREE.PointLight(0xff5a2a, 0, 4, 2);
-    this.throatLight.position.set(0.7, 0, 0.3);
-    this.head.add(skull, this.jawL, this.jawR, this.throat, this.throatLight);
+    // the gullet seen from the side: a furnace between the jaw roots that
+    // swells as the mouth opens
+    // swells as the mouth opens. Set proud of the jaw roots, toward the
+    // camera, so the skull never hides it
+    const gulletMat = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
+    hdrBasic(gulletMat, 2.4);
+    this.gullet = new THREE.Mesh(new THREE.IcosahedronGeometry(0.25, 0), gulletMat);
+    this.gullet.position.set(0.6, 0, 0.2);
+    const gulletCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 0),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c8, toneMapped: false }));
+    hdrBasic(gulletCore.material as THREE.MeshBasicMaterial, 2.8);
+    gulletCore.position.set(0.06, 0, 0.12);
+    this.gullet.add(gulletCore);
+    this.throatLight = new THREE.PointLight(0xff6a2a, 0, 5, 1.8);
+    this.throatLight.position.set(0.7, 0, 0.6);
+    this.head.add(skull, this.jawL, this.jawR, this.throat, this.gullet, this.throatLight);
     this.head.visible = false;
     scene.add(this.head);
+    this.gulletHalo = new Spill(this.head, 0xffa040);
+    this.bodySpill = new Spill(scene, 0xff6a2a);
+    this.headSpill = new Spill(scene, 0xffa050);
   }
 
   reset(): void {
     this.alive = false;
     this.body.count = 0;
+    this.sinew.count = 0;
     this.lights.count = 0;
+    this.lightCore.count = 0;
     this.head.visible = false;
+    this.bodySpill.off(); this.headSpill.off();
     this.rumble = 0;
   }
 
   private die(): void {
     this.alive = false;
     this.body.count = 0;
+    this.sinew.count = 0;
     this.lights.count = 0;
+    this.lightCore.count = 0;
     this.head.visible = false;
+    this.bodySpill.off(); this.headSpill.off();
   }
 
   private trySpawn(podX: number, podY: number): boolean {
@@ -261,8 +352,12 @@ export class LongOne implements Creature {
         this.dustAcc = 0;
         const wallX = Math.floor(this.outX + (this.spawnX - this.outX) * 0.5);
         const wallY = Math.floor(-(this.outY + (this.spawnY - this.outY) * 0.5));
-        this.particles.dustBurst(this.outX, this.outY, rockColor(this.terrain.get(wallX, wallY), wallX, wallY),
-          { count: 6, speed: 3.5, up: 1.5, life: 0.9, gravity: 9, spread: 0.8 });
+        // the wall's own grit, scorched dark by the body coming through it,
+        // and embers off the fissure line
+        tmpC.setHex(rockColor(this.terrain.get(wallX, wallY), wallX, wallY)).lerp(tmpC2.setHex(0x2a120a), 0.6);
+        this.particles.dustBurst(this.outX, this.outY, tmpC.getHex(),
+          { count: 4, speed: 3.5, up: 1.5, life: 0.9, gravity: 9, spread: 0.8 });
+        this.particles.sparkBurst(this.outX, this.outY, 0xff8a3c, { count: 3, speed: 3, up: 1.5, life: 0.7, gravity: 5, spread: 0.8 });
       }
       ctx.shake(0.08);
       this.rumble += (1 - this.rumble) * Math.min(1, dt * 4);
@@ -275,7 +370,8 @@ export class LongOne implements Creature {
       this.dustAcc += dt;
       if (this.dustAcc > 0.15) {
         this.dustAcc = 0;
-        this.particles.dustBurst(this.outX, this.outY, 0x4a3a32, { count: 4, speed: 2.5, up: 1.2, life: 0.8, gravity: 9, spread: 0.7 });
+        this.particles.dustBurst(this.outX, this.outY, 0x2e160e, { count: 3, speed: 2.5, up: 1.2, life: 0.8, gravity: 9, spread: 0.7 });
+        this.particles.sparkBurst(this.outX, this.outY, 0xff8a3c, { count: 2, speed: 2, up: 1.2, life: 0.6, gravity: 5, spread: 0.7 });
       }
       this.rumble += (0.6 - this.rumble) * Math.min(1, dt * 2);
       moving = 1;
@@ -343,10 +439,10 @@ export class LongOne implements Creature {
       this.rumble += (target - this.rumble) * Math.min(1, dt * 3);
     }
 
-    // scraping the walls as it moves: dust off the tunnel it fills
+    // embers shaken off the fissure line as it moves
     if (moving > 0.3 && this.phase !== 'emerging' && this.phase !== 'burrowing' && Math.random() < dt * 5) {
       const k = 2 + Math.floor(Math.random() * 6);
-      this.particles.dustBurst(this.chain.x[k], this.chain.y[k], 0x3a2a24, { count: 2, speed: 1.5, up: 0.5, life: 0.6, gravity: 7, spread: 0.6 });
+      this.particles.sparkBurst(this.chain.x[k], this.chain.y[k], 0xff8a3c, { count: 2, speed: 1.2, up: 0.6, life: 0.6, gravity: 4, spread: 0.6 });
     }
 
     // ---- body ----
@@ -366,40 +462,72 @@ export class LongOne implements Creature {
         this.jawL.rotation.z = g * 0.75;
         this.jawR.rotation.z = -g * 0.75;
         this.throat.scale.setScalar(0.4 + g * 0.8);
-        this.throatLight.intensity = g * 3 + (this.stunT > 0 ? 2 : 0);
+        const heat = 0.85 + Math.sin(time * 6) * 0.08;
+        this.gullet.scale.set(1.35 + g * 0.5, (0.75 + g * 0.9) * heat, 0.9);
+        this.throatLight.intensity = 1.8 + g * 3 + (this.stunT > 0 ? 2 : 0);
+        this.gulletHalo.set(0.6, 0, 1.25 + g * 0.5, 1.0 + g * 0.5, (0.38 + g * 0.25) * heat, 0xff9a3c, 1.35);
         // instance 0 belongs to the head group — collapse it
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
+        this.sinew.setMatrixAt(0, tmpM);
         this.lights.setMatrixAt(0, tmpM);
+        this.lightCore.setMatrixAt(0, tmpM);
         continue;
       }
       // plates bulge behind the head then taper to the tail
       const t = i / SEGS;
       const taper = (i < 4 ? 1.05 : 1.08 - t * 0.62);
+      const plate = i % 2 === 1;
       tmpP.set(px, py, 0.1);
-      tmpE.set(time * 1.6 + i * 0.5, 0, h);
+      // a fixed spine with only a slow rock, so every plate shows the same
+      // face and the body reads as one curve, not a scatter of facets
+      tmpE.set(Math.sin(time * 1.6 + i * 0.5) * 0.08, 0, h);
       tmpQ.setFromEuler(tmpE);
       tmpS.set(1, taper, taper);
       tmpM.compose(tmpP, tmpQ, tmpS);
-      this.body.setMatrixAt(i, tmpM);
-      // alternating plates: gloss and matte, darker toward the tail
-      tmpC.setHex(i % 2 ? 0x6a3428 : 0x3a201c).multiplyScalar(1 - t * 0.25);
+      // plates on odd links, sinew on even: each instance collapses in the other
+      this.body.setMatrixAt(i, plate ? tmpM : ZERO);
+      this.sinew.setMatrixAt(i, plate ? ZERO : tmpM);
+      // darker toward the tail
+      tmpC.setHex(0x763a2a).multiplyScalar(1 - t * 0.6);
       this.body.setColorAt(i, tmpC);
+      if (!plate) {
+        this.lights.setMatrixAt(i, ZERO);
+        this.lightCore.setMatrixAt(i, ZERO);
+        continue;
+      }
 
-      // the dorsal wave runs tail → head while it hunts; still and dim when lost
-      const pulse = hunting ? Math.pow(Math.max(0, Math.sin(time * 5 + i * 0.9)), 3) : 0.12;
+      // the dorsal wave runs tail → head while it hunts; banked low when lost.
+      // The line cools toward the tail: the head is the brightest thing on it
+      const pulse = (hunting ? Math.pow(Math.max(0, Math.sin(time * 5 + i * 0.9)), 3) : 0.12) * (1 - t * 0.6);
       const stun = this.stunT > 0 ? 1 : 0;
-      tmpP.set(px - Math.sin(h) * 0.3, py + Math.cos(h) * 0.3, 0.35);
-      tmpS.setScalar(0.6 + pulse * 0.9 + stun * 0.6);
+      const cool = 1 - t * 0.72;
+      // along the upper flank, on the face toward the camera
+      const off = 0.3 * taper;
+      tmpP.set(px - Math.sin(h) * off, py + Math.cos(h) * off, 0.1 + 0.3 * taper);
+      tmpE.set(0, 0, h);
+      tmpQ.setFromEuler(tmpE);
+      tmpS.set(taper, 0.85 + pulse * 0.7 + stun * 0.6, 1);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.lights.setMatrixAt(i, tmpM);
-      tmpC.setHex(stun ? 0xffffff : 0xff7a3c).multiplyScalar(0.25 + pulse * 1.4 + stun);
+      this.lightCore.setMatrixAt(i, tmpM);
+      tmpC.setHex(stun ? 0xffffff : 0xff8a3c).multiplyScalar((0.75 + pulse * 1.2 + stun) * cool);
       this.lights.setColorAt(i, tmpC);
+      tmpC.setHex(stun ? 0xffffff : 0xffd890).multiplyScalar((0.55 + pulse * 0.7 + stun) * cool * cool);
+      this.lightCore.setColorAt(i, tmpC);
     }
-    this.body.count = SEGS; this.lights.count = SEGS;
+    this.body.count = SEGS; this.sinew.count = SEGS; this.lights.count = SEGS; this.lightCore.count = SEGS;
+    // its own light on the rock: the fissure line along the body, the maw at the head
+    const mid = SEGS >> 1;
+    const stunGlow = this.stunT > 0 ? 0.3 : 0;
+    this.bodySpill.set(this.chain.x[mid], this.chain.y[mid], 8.5, 6, (hunting ? 0.68 : 0.45) + stunGlow, 0xff6a2a, 1.3);
+    this.headSpill.set(this.head.position.x, this.head.position.y, 5, 5, 0.5 + this.gape * 0.4 + stunGlow, 0xffa050, 1.4);
     this.body.instanceMatrix.needsUpdate = true;
+    this.sinew.instanceMatrix.needsUpdate = true;
     this.lights.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;
     if (this.lights.instanceColor) this.lights.instanceColor.needsUpdate = true;
+    this.lightCore.instanceMatrix.needsUpdate = true;
+    if (this.lightCore.instanceColor) this.lightCore.instanceColor.needsUpdate = true;
   }
 }

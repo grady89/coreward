@@ -1,0 +1,58 @@
+{
+  "A": {
+    "category": "creatures-b",
+    "score": 6.4,
+    "per_shot": [
+      {"shot": "creature-brinewyrm.png", "score": 6, "note": "Faceted ice ribbon in a strong cyan pool, but no eye or mouth: it reads as a drifting crystal fish, not a threat, and its head end is ambiguous at play size."},
+      {"shot": "creature-brinewyrm-close.png", "score": 6, "note": "Nice faceted white/lilac body with cyan studs, but still no face. The bright pool washes out the creature's own glow, so nothing marks it as dangerous."},
+      {"shot": "creature-frostbloom.png", "score": 6, "note": "The star crystal sits on a violet-tinted tile. The tell is there but it reads as a different object, not as veinlight ore. Glow barely lands on the neighbouring tiles."},
+      {"shot": "creature-frostbloom-close.png", "score": 6, "note": "Pretty faceted starburst, but the violet panel is off-hue for CRYOS and the light stays inside its own tile."},
+      {"shot": "creature-polyps.png", "score": 6.5, "note": "Three spiked sea-green domes. Their glow pools nicely down into the rock below, and the spikes read as the danger. The rock around them is flat near-black with no nacre."},
+      {"shot": "creature-polyps-close.png", "score": 6.5, "note": "Good glow that lands, clear spiky silhouette. Surrounding stone is uniform dark green-black with no iridescence."},
+      {"shot": "creature-riptide.png", "score": 7, "note": "Glowing slit-pupil eye inside a sea-green swirl of streaks reads instantly as a current with an eye. Swimmer on the left edge is mostly cropped."},
+      {"shot": "creature-riptide-close.png", "score": 7, "note": "Strong eye and vortex. The swirl lights the haze but only faintly lands on the floor tiles."}
+    ],
+    "top_issues": [
+      {"issue": "Brinewyrm has no face or dangerous end", "shots": ["creature-brinewyrm.png", "creature-brinewyrm-close.png"], "why": "A threat must read as a threat at play size. Without an eye or jaw it reads as a decorative crystal ribbon.", "suggested_direction": "Give the head an eye and a jaw/teeth wedge and point it toward the pod or the surface."},
+      {"issue": "Frostbloom does not disguise itself as veinlight ore", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "Veinlight elsewhere is a cyan tile with branching crackle. A violet starburst tile reads as its own object, so the trap is neither disguised nor subtle.", "suggested_direction": "Base it on the veinlight crackle tile and keep the tell small, e.g. a slight inward-pointing petal or a pulse, while staying in the ice-cyan family."},
+      {"issue": "Frostbloom glow stays inside its tile", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "Glow that lands is the house style. Here the neighbouring rock is barely lit.", "suggested_direction": "Add a soft cyan spill onto the adjacent tile faces, like the ore glow in the Stillwalkers frame."},
+      {"issue": "MAELIS rock lacks nacre", "shots": ["creature-polyps.png", "creature-polyps-close.png"], "why": "06-maelis is iridescent sea-green. Here the habitat is a flat black-green grid, so the creatures float on a void.", "suggested_direction": "Add pale nacre edge sheen on the lit faces near the polyps, without raising ambient light."}
+    ],
+    "protect": [
+      "Riptide's glowing slit-pupil eye inside the streaked sea-green vortex",
+      "Polyps' glow pooling down into the rock beneath them",
+      "Brinewyrm's faceted white/lilac body with cyan studs and the glowing CRYOS brine pool",
+      "Low-poly faceted construction across all four creatures"
+    ]
+  },
+  "B": {
+    "category": "creatures-b",
+    "score": 7.0,
+    "per_shot": [
+      {"shot": "creature-brinewyrm.png", "score": 7, "note": "Wyrm breaks the surface with a big slit-pupil eye and a toothed jaw. It reads as a predator at play size, and its head glow blooms onto the back wall above the pool."},
+      {"shot": "creature-brinewyrm-close.png", "score": 7.5, "note": "Clear head, eye, teeth and tapering tail in an S-curve: a strong, readable threat in the CRYOS palette. The eye style matches the Riptide's."},
+      {"shot": "creature-frostbloom.png", "score": 6.5, "note": "Cyan starburst now spills teal light onto the tiles around and below it, so it sits inside CRYOS. It still does not look like the veinlight crackle ore it is meant to mimic."},
+      {"shot": "creature-frostbloom-close.png", "score": 6.5, "note": "Beautiful, and its glow lands on the neighbours. With the violet gone the tell is close to invisible, and it still reads as its own object rather than as ore."},
+      {"shot": "creature-polyps.png", "score": 6.5, "note": "Four spiked domes with pale nacre-ish rim light on the cap tiles and good glow pooling. A large swimmer in the top-left corner pulls focus from the polyps."},
+      {"shot": "creature-polyps-close.png", "score": 7, "note": "Pale glassy highlights on the cap stones add a touch of nacre and separate the colony from the dark rock. Spikes read well as the hazard."},
+      {"shot": "creature-riptide.png", "score": 7, "note": "Same strong eye and vortex. The eye light now washes the pod and the floor more. The swimmer sits behind the depth readout at the top of the HUD."},
+      {"shot": "creature-riptide-close.png", "score": 7, "note": "The eye's light lands visibly on the pod and floor tiles. The pod is slightly blown out but still legible."}
+    ],
+    "top_issues": [
+      {"issue": "Frostbloom still does not read as veinlight ore, and its tell is now too faint", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "The brief wants a beautiful ore with a subtle tell. B's starburst is a unique shape, so it is not disguised. With the violet panel gone it has no clear tell either.", "suggested_direction": "Build it from the veinlight crackle tile and add one small, deliberate tell (an off-rhythm pulse, a curled petal tip, a faint frost rim)."},
+      {"issue": "Swimmers placed where they compete with the subject or the HUD", "shots": ["creature-polyps.png", "creature-riptide.png"], "why": "In the polyps shot a bright swimmer in the corner pulls the eye. In the riptide shot it overlaps the depth readout.", "suggested_direction": "Keep the swimmers inside the riptide's swirl, away from HUD zones, and out of the polyps' habitat frame unless they are intended to be there."},
+      {"issue": "MAELIS rock still mostly a flat black-green grid", "shots": ["creature-polyps.png", "creature-riptide.png"], "why": "06-maelis is nacreous and iridescent. Apart from the polyp cap tiles, the surrounding stone has no sheen.", "suggested_direction": "Extend the pale nacre edge highlight to lit faces near the light sources, keeping the dark real elsewhere."},
+      {"issue": "Riptide eye light slightly blows out the pod in the close-up", "shots": ["creature-riptide-close.png"], "why": "The suit and pod should stay the most legible thing in the frame. A near-white pod loses its visor contrast.", "suggested_direction": "Cap the eye's light intensity on the pod, or tint it sea-green rather than white."}
+    ],
+    "protect": [
+      "Brinewyrm's surfacing pose with slit-pupil eye and toothed jaw",
+      "Shared slit-pupil eye language between the Brinewyrm and the Riptide",
+      "Frostbloom's cyan glow spilling onto the neighbouring tiles",
+      "Nacre-like rim highlights on the polyp cap stones",
+      "Riptide's eye light landing on the floor and pod",
+      "Low-poly faceted construction and world-correct hues (CRYOS cyan, MAELIS sea-green)"
+    ]
+  },
+  "preference": "B",
+  "why": "B turns the Brinewyrm from a decorative crystal ribbon into a readable predator (eye, teeth, surfacing pose) and makes Frostbloom's and the Riptide's light land on their surroundings. The Frostbloom disguise is unsolved in both."
+}

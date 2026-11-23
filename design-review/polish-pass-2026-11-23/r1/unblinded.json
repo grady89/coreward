@@ -1,0 +1,27 @@
+{
+ "creatures-a": {
+  "best": 3.2,
+  "candidate": 6.8,
+  "delta": 3.6
+ },
+ "creatures-b": {
+  "best": 4.0,
+  "candidate": 6.3,
+  "delta": 2.3
+ },
+ "quarters-room": {
+  "best": 3.5,
+  "candidate": 7.0,
+  "delta": 3.5
+ },
+ "furnishings": {
+  "best": 3.5,
+  "candidate": 7.5,
+  "delta": 4.0
+ },
+ "wings": {
+  "best": 3.8,
+  "candidate": 7.3,
+  "delta": 3.5
+ }
+}
