@@ -27,6 +27,10 @@ const backwallU = {
   uCool: { value: 0 },
   /** v (uv) where the core's chamber starts: its light keeps its own hue */
   uCoreV: { value: 0 },
+  /** the fragment on the wall (uv) and the wall's size in tiles: the
+   * chamber's light falls off from it into dark far walls */
+  uCoreUv: { value: new THREE.Vector2() },
+  uSpan: { value: new THREE.Vector2(1, 1) },
   uDepth: { value: null as THREE.Texture | null },
   /** tiles the distance field in uDepth spans (texel 1.0) */
   uReach: { value: 1 },
@@ -83,6 +87,8 @@ export function createBackwall(scene: THREE.Scene, terrain: Terrain): void {
   // a cold world re-hues more of the warm lamp's light on its far wall
   backwallU.uCool.value = ACTIVE.hazard.cold ? 0.6 : 0.3;
   backwallU.uCoreV.value = 1 - (CORE_ROW - 12) / H;
+  backwallU.uCoreUv.value.set(0.5, 1 - (CORE_ROW + 5) / H);
+  backwallU.uSpan.value.set(WORLD_W, H);
 
   const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
   mat.onBeforeCompile = shader => {
@@ -97,6 +103,8 @@ varying vec2 vNdc;`)
 uniform vec3 uCavity;
 uniform float uCool;
 uniform float uCoreV;
+uniform vec2 uCoreUv;
+uniform vec2 uSpan;
 uniform float uReach;
 uniform sampler2D uDepth;
 varying vec2 vNdc;`)
@@ -123,10 +131,15 @@ varying vec2 vNdc;`)
 		// farther back reads hazier: less of the lamp's contrast, more of the air
 		outgoingLight = direct * (1.0 - 0.35 * dep) * lit
 			+ (fill * (1.0 - 0.35 * dep) + uCavity * (0.35 + 0.65 * dep)) * fade;
+		// the chamber: lit hardest round the fragment, its far walls and
+		// ceiling a step darker
+		float cr = length((vMapUv - uCoreUv) * uSpan * vec2(1.0, 1.25));
+		float cf = 1.0 / (1.0 + pow(max(0.0, cr - 4.0) / 7.0, 2.0));
+		outgoingLight *= mix(1.0, mix(0.28, 1.0, cf), 1.0 - above);
 	}
 	#include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'backwall-cavity-v2';
+  mat.customProgramCacheKey = () => 'backwall-cavity-v3';
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W, H), mat);
   // extra height so the camera never sees past the world's bottom edge
   mesh.position.set(WORLD_W / 2, -H / 2, -0.62);
@@ -566,19 +579,15 @@ export function createEmber(scene: THREE.Scene): Ember {
   shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shards.frustumCulled = false;
 
-  // light shaft: the fragment's glow reaching up the dig
-  const shaftCv = document.createElement('canvas');
-  shaftCv.width = 2; shaftCv.height = 128;
-  const sg = shaftCv.getContext('2d')!;
-  const sGrad = sg.createLinearGradient(0, 128, 0, 0);
-  sGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
-  sGrad.addColorStop(1, 'rgba(255,255,255,0)');
-  sg.fillStyle = sGrad;
-  sg.fillRect(0, 0, 2, 128);
+  // light shaft: the fragment's glow reaching up the dig, soft at every
+  // edge so it never shows as a box against the back wall
   const shaft = new THREE.Mesh(
     new THREE.PlaneGeometry(5.5, 18),
     new THREE.MeshBasicMaterial({
-      map: new THREE.CanvasTexture(shaftCv), color: ACTIVE.core.light,
+      map: fieldTexture(32, 128, (u, v) => {
+        const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+        return 0.5 * across * across * smooth(0, 0.12, v) * (1 - v);
+      }), color: ACTIVE.core.light,
       transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending,
       depthWrite: false, toneMapped: false,
     })
@@ -603,7 +612,8 @@ export function createEmber(scene: THREE.Scene): Ember {
     airMat(chamber ? fieldTexture(128, 96, (u, v) => {
       // the vault: brightest round the fragment, still lit at the walls
       const r = Math.hypot((u - 0.5) * 2, (v - 0.5) * 2);
-      return Math.max(0, 1 - r) ** 1.5 * 0.75 + Math.max(0, 1 - r * 2.2) ** 2 * 0.25;
+      // (falling off fast enough that the far walls go a step darker)
+      return Math.max(0, 1 - r) ** 2.4 * 0.75 + Math.max(0, 1 - r * 2.2) ** 2 * 0.3;
     }) : haloTexture(), 0.5)
   );
   flood.position.set(0, 0.5, -0.58);

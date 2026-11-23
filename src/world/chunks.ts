@@ -274,9 +274,11 @@ lavaMat.onBeforeCompile = shader => {
 attribute vec4 fl;
 varying vec4 vFl;
 varying vec3 vFP;
-varying float vFTop;`)
+varying vec3 vFN;
+varying vec2 vFW;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-	vFl = fl; vFP = position; vFTop = normal.y;`);
+	vFl = fl; vFP = position; vFN = normal;
+	vFW = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
 uniform float uFluidTime;
@@ -285,24 +287,51 @@ uniform float uFluidLive;
 uniform float uBloomOn;
 varying vec4 vFl;
 varying vec3 vFP;
-varying float vFTop;`)
+varying vec3 vFN;
+varying vec2 vFW;
+float flBit(float m, float b) { return mod(floor(m / b), 2.0); }`)
     .replace('#include <color_fragment>', `#include <color_fragment>
 	{
 		vec3 base = diffuseColor.rgb;
+		float m = floor(vFl.z + 0.5);
+		float airU = flBit(m, 1.0), airL = flBit(m, 2.0), airR = flBit(m, 4.0), airD = flBit(m, 8.0);
+		float rockL = flBit(m, 16.0), rockR = flBit(m, 32.0), rockU = flBit(m, 64.0);
 		float depth = mix(vFl.x, vFl.y, clamp(vFP.x + 0.5, 0.0, 1.0)) + (0.5 - vFP.y);
 		float wx = vFl.w + vFP.x;
-		float body = mix(0.95, 0.26, smoothstep(0.0, 2.2, depth));
+		// a body sealed under rock has no surface: it starts a step down
+		// and sinks to dark further below, so a fall or a side body has a
+		// top-to-bottom falloff instead of one flat value
+		float sealed = rockU * (1.0 - airU);
+		float body = mix(0.95 - 0.33 * sealed, 0.26 - 0.1 * sealed, smoothstep(0.0, 2.2 + 0.3 * sealed, depth));
 		float sh = uFluidAmp * (0.09 * sin(wx * 1.9 + uFluidTime * 1.1 - depth * 2.3)
 			+ 0.05 * sin(wx * 0.7 - uFluidTime * 0.6) + 0.04 * sin(uFluidTime * 1.6));
-		vec3 c = base * (body + sh);
-		float menis = vFl.z * max(1.0 - smoothstep(0.0, 0.17, 0.5 - vFP.y), step(0.5, vFTop));
+		// slow currents: thin brighter bands drifting through the body, so
+		// a big mass reads as moving liquid, not a fill
+		float cw = sin(vFW.x * 1.7 + vFW.y * 0.8 + uFluidTime * 0.35 * uFluidAmp
+			+ 1.6 * sin(vFW.y * 1.3 - vFW.x * 0.5 - uFluidTime * 0.22 * uFluidAmp));
+		float cur = smoothstep(0.78, 0.97, cw) * smoothstep(0.3, 1.6, depth);
+		vec3 c = base * (body + sh + 0.22 * cur);
+		// rock holds the liquid: a soft contact shade along a basin wall
+		float ex = vFP.x + 0.5, ey = 0.5 - vFP.y;
+		float front = step(0.5, vFN.z);
+		float contact = front * max(rockL * (1.0 - smoothstep(0.0, 0.22, ex)),
+			max(rockR * (1.0 - smoothstep(0.0, 0.22, 1.0 - ex)), sealed * (1.0 - smoothstep(0.0, 0.2, ey))));
+		c *= 1.0 - 0.45 * contact;
+		// every face that meets air carries the hot surface line: the
+		// meniscus on top, a bright edge down a side open to the cavity,
+		// and the open faces themselves
+		float menis = airU * max(1.0 - smoothstep(0.0, 0.17, ey), step(0.5, vFN.y));
+		float side = front * max(airL * (1.0 - smoothstep(0.0, 0.1, ex)), airR * (1.0 - smoothstep(0.0, 0.1, 1.0 - ex)));
+		side = max(side, max(airL * step(0.5, -vFN.x), airR * step(0.5, vFN.x)) * 0.5);
+		side = max(side, airD * (front * (1.0 - smoothstep(0.0, 0.08, 1.0 - ey)) + step(0.5, -vFN.y)) * 0.6);
+		float edge = max(menis, side * 0.85);
 		vec3 hot = base * (1.5 + sh * 1.5) + vec3(0.16, 0.16, 0.12);
 		hot *= mix(1.0, ${MENIS_HDR.toFixed(2)}, uBloomOn);
-		c = mix(c, hot, menis * 0.9);
+		c = mix(c, hot, edge * 0.9);
 		diffuseColor.rgb = mix(base, c, uFluidLive);
 	}`);
 };
-lavaMat.customProgramCacheKey = () => 'fluid-glow-v3';
+lavaMat.customProgramCacheKey = () => 'fluid-glow-v4';
 
 /**
  * The air over a pool holds its light: one additive sheet per surface run,
@@ -352,7 +381,7 @@ hazeMat.customProgramCacheKey = () => 'fluid-haze-v1';
  * skin and dies a few tiles into the rock mass. Off once the fragment is taken.
  */
 const CORE_TX = WORLD_W / 2 - 0.5, CORE_TY = CORE_ROW + 4.5;
-const CORE_REACH = 30, CORE_INNER = 3.5, CORE_KNEE = 7, CORE_GAIN = 0.62, CORE_POOL = 0.9;
+const CORE_REACH = 30, CORE_INNER = 3.5, CORE_KNEE = 5.5, CORE_GAIN = 0.62, CORE_POOL = 0.9;
 const smooth01 = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 let coreLit = true;
 
@@ -513,7 +542,15 @@ class Chunk {
           // each top corner meets the liquid beside at the same depth
           const dl = isFl(x - 1, y) ? (rows + colDepth(x - 1, y)) / 2 : rows;
           const dr = isFl(x + 1, y) ? (rows + colDepth(x + 1, y)) / 2 : rows;
-          this.fl.setXYZW(nl, dl, dr, top ? 1 : 0, wx);
+          // which sides meet air (surface lines) or rock (contact shade);
+          // bit 1 = air above, 2/4 = air left/right, 8 = air below,
+          // 16/32 = rock left/right, 64 = rock above
+          const tl = terrain.get(x - 1, y), tr = terrain.get(x + 1, y), tu = terrain.get(x, y - 1);
+          const sides = (top ? 1 : 0) | (tl === T.AIR ? 2 : 0) | (tr === T.AIR ? 4 : 0)
+            | (terrain.get(x, y + 1) === T.AIR ? 8 : 0)
+            | (tl !== T.AIR && tl !== T.LAVA ? 16 : 0) | (tr !== T.AIR && tr !== T.LAVA ? 32 : 0)
+            | (tu !== T.AIR && tu !== T.LAVA ? 64 : 0);
+          this.fl.setXYZW(nl, dl, dr, sides, wx);
           nl++;
           // the first surface cell of a run in this chunk lays the run's haze
           const surf = (sx: number) => isFl(sx, y) && terrain.get(sx, y - 1) === T.AIR;
