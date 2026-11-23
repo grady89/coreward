@@ -42,6 +42,22 @@ const HALL_X1 = 23;
 const GALLERY_X1 = 35;
 const VIVARIUM_X1 = 47;
 
+// the shell in section: the wall face things hang on, the cove up to the
+// ceiling, and how far ceiling and floor run out toward the camera (far
+// enough to fill the frame, so neither edge is a black band)
+const WALL_Z = -2.015;
+const COVE_Y = 2.3;
+const CEIL_Y = 2.62;
+const CEIL_Z0 = -1.6;
+const CEIL_Z1 = 4.2;
+const FLOOR_Z1 = 4.6;
+const COVE = Math.atan2(CEIL_Z0 - WALL_Z, CEIL_Y - COVE_Y);
+const FIX_Z = 0.1;
+/** pillars stand at GRID + k·BAY; panel seams fall every PANEL from GRID */
+const GRID = HALL_X0;
+const BAY = 3.5;
+const PANEL = 1.75;
+
 interface Station {
   x: number; r: number; label: string; panel: InteriorPanel | null;
   /** a gallery placard, by tile type — read instead of opening a station panel */
@@ -60,6 +76,9 @@ const WARM_GLOW = new THREE.MeshBasicMaterial({ color: 0xffc06a, toneMapped: fal
 const TEAL_GLOW = new THREE.MeshBasicMaterial({ color: 0x3ce6c8, toneMapped: false });
 const AMBER_GLOW = new THREE.MeshBasicMaterial({ color: 0xff9a3c, toneMapped: false });
 const RED_GLOW = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
+/** what the palette's wall colour is pulled toward for the ceiling and the ribs */
+const CEIL_SHADOW = new THREE.Color(0x2e2620);
+const FRAME_METAL = new THREE.Color(0x23272d);
 
 function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -86,6 +105,148 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// ---------------- the shell's building blocks ----------------
+
+/** a stable 0..1 per panel, so the value steps don't shuffle on every rebuild */
+function hash01(a: number, b = 0): number {
+  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const UNIT_ROD = new THREE.CylinderGeometry(1, 1, 1, 8).rotateZ(Math.PI / 2);   // runs along x
+const UNIT_QUAD = new THREE.PlaneGeometry(1, 1);
+
+type Shade = number | ((p: THREE.Vector3) => number);
+
+/**
+ * Many parts baked into one vertex-shaded mesh: a whole wall of panels, seams,
+ * bolts and ribs is one draw call. The shade is a grey multiplier on the
+ * material colour, so the palette still owns the hue and every secondary tone
+ * (seam, step, kick plate) is derived from it.
+ */
+class Kit {
+  private pos: number[] = [];
+  private nor: number[] = [];
+  private uv: number[] = [];
+  private col: number[] = [];
+  private idx: number[] = [];
+  private m = new THREE.Matrix4();
+  private nm = new THREE.Matrix3();
+  private q = new THREE.Quaternion();
+  private e = new THREE.Euler();
+  private v = new THREE.Vector3();
+  private s = new THREE.Vector3();
+
+  add(src: THREE.BufferGeometry, sx: number, sy: number, sz: number,
+      x: number, y: number, z: number, shade: Shade, rotX = 0): void {
+    this.m.compose(this.v.set(x, y, z), this.q.setFromEuler(this.e.set(rotX, 0, 0)), this.s.set(sx, sy, sz));
+    this.nm.getNormalMatrix(this.m);
+    const p = src.getAttribute('position'), n = src.getAttribute('normal');
+    const t = src.getAttribute('uv'), ix = src.getIndex()!;
+    const base = this.pos.length / 3;
+    for (let i = 0; i < p.count; i++) {
+      this.v.fromBufferAttribute(p, i).applyMatrix4(this.m);
+      this.pos.push(this.v.x, this.v.y, this.v.z);
+      const k = typeof shade === 'number' ? shade : shade(this.v);
+      this.col.push(k, k, k);
+      this.v.fromBufferAttribute(n, i).applyMatrix3(this.nm).normalize();
+      this.nor.push(this.v.x, this.v.y, this.v.z);
+      this.uv.push(t.getX(i), t.getY(i));
+    }
+    for (let i = 0; i < ix.count; i++) this.idx.push(base + ix.getX(i));
+  }
+
+  box(w: number, h: number, d: number, x: number, y: number, z: number, shade: Shade, rotX = 0): void {
+    this.add(UNIT_BOX, w, h, d, x, y, z, shade, rotX);
+  }
+
+  /** a pipe along x */
+  rod(len: number, r: number, x: number, y: number, z: number, shade: Shade): void {
+    this.add(UNIT_ROD, len, r, r, x, y, z, shade);
+  }
+
+  /** a flat quad facing the camera (wall), the ceiling (up), the floor (down), or tipped back by an angle */
+  quad(w: number, h: number, x: number, y: number, z: number, face: 'wall' | 'up' | 'down' | number): void {
+    const rx = typeof face === 'number' ? face : face === 'up' ? -Math.PI / 2 : face === 'down' ? Math.PI / 2 : 0;
+    this.add(UNIT_QUAD, w, h, 1, x, y, z, 1, rx);
+  }
+
+  mesh(mat: THREE.Material): THREE.Mesh {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    geo.setIndex(this.idx);
+    geo.computeBoundingSphere();
+    const m = new THREE.Mesh(geo, mat);
+    if (mat.transparent) m.renderOrder = 1;
+    return m;
+  }
+}
+
+/** grid cells of size `step` (seams at origin + k·step), clipped to [x0, x1] */
+function cells(x0: number, x1: number, step: number, origin: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let a = origin + Math.floor((x0 - origin) / step) * step; a < x1; a += step) {
+    const lo = Math.max(a, x0), hi = Math.min(a + step, x1);
+    if (hi - lo > 0.05) out.push([lo, hi]);
+  }
+  return out;
+}
+
+/**
+ * Light that lands without being a light: soft additive gradients laid on the
+ * wall, floor and ceiling. Cheap, so the hall can have a pool under every
+ * fixture and a dusk patch under every porthole on three real lights.
+ */
+let poolTex: THREE.CanvasTexture | null = null;
+let washTex: THREE.CanvasTexture | null = null;
+const glowMats = new Map<string, THREE.MeshBasicMaterial>();
+
+function glowMat(kind: 'pool' | 'wash', color: number, opacity: number): THREE.MeshBasicMaterial {
+  const key = `${kind}|${color}|${opacity}`;
+  const had = glowMats.get(key);
+  if (had) return had;
+  if (!poolTex) {
+    poolTex = canvasTex(128, 128, gg => {
+      const r = gg.createRadialGradient(64, 64, 0, 64, 64, 64);
+      r.addColorStop(0, 'rgba(255,255,255,1)');
+      r.addColorStop(0.3, 'rgba(255,255,255,0.6)');
+      r.addColorStop(0.65, 'rgba(255,255,255,0.16)');
+      r.addColorStop(1, 'rgba(255,255,255,0)');
+      gg.fillStyle = r; gg.fillRect(0, 0, 128, 128);
+    });
+  }
+  if (!washTex) {
+    // a fixture's light on the wall below it: hot at the top, fanning and
+    // fading down — an inverted cone with soft edges
+    washTex = canvasTex(128, 128, gg => {
+      const img = gg.createImageData(128, 128);
+      for (let j = 0; j < 128; j++) {
+        const t = j / 127;                               // 0 at the top
+        const spread = 0.3 + t * 0.6;
+        const fall = Math.pow(1 - t, 1.5) * (0.4 + 0.6 * Math.exp(-t * 3));
+        for (let i = 0; i < 128; i++) {
+          const u = Math.abs(i / 127 - 0.5) * 2 / spread;
+          const a = Math.max(0, 1 - u * u) * fall;
+          const k = (j * 128 + i) * 4;
+          img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+          img.data[k + 3] = Math.round(Math.min(1, a) * 255);
+        }
+      }
+      gg.putImageData(img, 0, 0);
+    });
+  }
+  const mat = new THREE.MeshBasicMaterial({
+    map: kind === 'pool' ? poolTex : washTex, color, opacity, transparent: true,
+    depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  });
+  glowMats.set(key, mat);
+  return mat;
 }
 
 /**
@@ -282,6 +443,13 @@ export class Interior {
   private wallMat = new THREE.MeshStandardMaterial({ roughness: 0.75 });
   private trimMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
   private floorMat = new THREE.MeshStandardMaterial({ roughness: 0.65, metalness: 0.1 });
+  // vertex-shaded twins for the merged shell, retinted from the same palette:
+  // the shade attribute steps the value, the palette keeps the hue
+  private shellWall = new THREE.MeshStandardMaterial({ roughness: 0.8, vertexColors: true });
+  private shellCeil = new THREE.MeshStandardMaterial({ roughness: 0.85, vertexColors: true });
+  private shellFloor = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.15, vertexColors: true });
+  private shellFrame = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.35, vertexColors: true });
+  private shellLens = new THREE.MeshBasicMaterial({ color: 0xffc77a, toneMapped: false });
 
   constructor(private ctx: InteriorCtx, aspect: number, ui: HTMLElement) {
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 60);
@@ -291,7 +459,7 @@ export class Interior {
     this.camera.lookAt(this.cx, 0.95, 0);
 
     this.scene.background = new THREE.Color(0x0e0b09);
-    this.scene.add(new THREE.HemisphereLight(0xffd9b0, 0x2a2a30, 1.05));
+    this.scene.add(new THREE.HemisphereLight(0xffd9b0, 0x4a3b30, 0.85));
 
     this.applyPalette();
     this.suit = buildSuit();
@@ -353,6 +521,10 @@ export class Interior {
     this.wallMat.color.setHex(p.wall);
     this.trimMat.color.setHex(p.trim);
     this.floorMat.color.setHex(p.floor);
+    this.shellWall.color.setHex(p.wall);
+    this.shellCeil.color.setHex(p.wall).lerp(CEIL_SHADOW, 0.3);
+    this.shellFloor.color.setHex(p.floor);
+    this.shellFrame.color.setHex(p.wall).lerp(FRAME_METAL, 0.72);
   }
 
   // ---------------- the room ----------------
@@ -374,27 +546,15 @@ export class Interior {
     const endX = this.maxX();
     const g = this.roomGroup;
     const W = VIVARIUM_X1 + 1;
-    const CX = W / 2;
 
-    // shell: floor, back wall, ceiling, trim — built full-width; sealed
-    // hatches close off whatever isn't owned yet
-    g.add(box(W, 0.2, 3.4, this.floorMat, CX, -0.1, -0.4));
-    g.add(box(W, 3.2, 0.15, this.wallMat, CX, 1.5, -2.06));
-    g.add(box(W, 0.15, 3.4, DARKPIPE, CX, CEIL + 0.42, -0.4));
-    // warm practicals, hall first, then whichever wings exist
-    const lampXs = [6, 14, 20];
-    if (galleryOpen) lampXs.push(26, 32);
-    if (galleryOpen && vivariumOpen) lampXs.push(38, 44);
-    for (const lx of lampXs) {
-      const warm = new THREE.PointLight(0xffd9a0, 4, 9, 1.8);
-      warm.position.set(lx, 1.9, 1.0);
-      g.add(warm);
+    // shell: wall, ceiling and floor plating, one section per room so a wing
+    // can be dressed on its own; the last owned section runs on under the
+    // east cap, and sealed hatches close off whatever isn't owned yet
+    this.buildShell(g, 0, galleryOpen ? HALL_X1 : HALL_X1 + 0.8, [6.25, 13.25, 20.25]);
+    if (galleryOpen) {
+      this.buildShell(g, HALL_X1, vivariumOpen ? GALLERY_X1 : GALLERY_X1 + 0.8, [27.25, 30.75]);
     }
-    g.add(box(W, 0.12, 0.03, this.trimMat, CX, 0.06, -1.97));
-    g.add(box(W, 0.07, 0.03, this.trimMat, CX, CEIL + 0.24, -1.97));
-    for (let rx = HALL_X0 + 3.5; rx < VIVARIUM_X1; rx += 3.5) {
-      g.add(box(0.14, CEIL + 0.35, 0.1, DARKPIPE, rx, (CEIL + 0.35) / 2, -1.98));
-    }
+    if (galleryOpen && vivariumOpen) this.buildShell(g, GALLERY_X1, W, [37.75, 44.75]);
     // west wall + the way out
     g.add(box(0.25, 3.2, 3.4, this.wallMat, HALL_X0 - 0.55, 1.5, -0.4));
     const doorTex = canvasTex(64, 128, gg => {
@@ -413,6 +573,7 @@ export class Interior {
 
     // hall windows: dusk, always dusk
     for (const wx of [5, 11, 17]) g.add(duskWindow(0.85, wx, 1.55));
+    this.duskSpill(g, [5, 11, 17], 0.85, 1.55);
 
     this.buildStations(g);
     this.buildFurnishings(g, own);
@@ -423,6 +584,148 @@ export class Interior {
 
     // exit + sealed-door prompts join the station list
     this.stations.push({ x: HALL_X0 + 0.2, r: 1.0, label: 'STEP OUT', panel: null });
+  }
+
+  /**
+   * The hab's skin from x0 to x1. Back to front: kick plate, wainscot, chair
+   * rail, two courses of insulated panels, a service run, the cove, a panelled
+   * ceiling carried out over the camera, and floor plating run out toward it.
+   * Pillars climb the cove and cross the ceiling as ribs. Every bay gets a
+   * fixture whose light lands as gradients on the ceiling, upper wall and
+   * floor; the bays named in `lit` also carry a real light.
+   */
+  private buildShell(g: THREE.Group, x0: number, x1: number, lit: number[]): void {
+    const wall = new Kit(), ceil = new Kit(), floor = new Kit(), frame = new Kit(), lens = new Kit();
+    const halo = new Kit(), wash = new Kit(), pool = new Kit();
+    const W = x1 - x0, CX = (x0 + x1) / 2;
+    // value falls away toward the camera, so the frame's edges stay dark
+    const ceilFade = (z: number) => z < 0.6 ? 1 : Math.max(0.25, 1 - (z - 0.6) * 0.22);
+    const floorFade = (z: number) => z < 0.4 ? 1 : Math.max(0.1, 1 - (z - 0.4) * 0.34);
+
+    // ---- back wall
+    wall.box(W, 2.45, 0.15, CX, 1.125, WALL_Z - 0.075, 0.4);           // backing, seen in the seams
+    frame.box(W, 0.14, 0.06, CX, 0.07, WALL_Z + 0.03, 0.8);            // kick plate
+    for (const [a, b] of cells(x0, x1, PANEL / 2, GRID)) {               // wainscot
+      wall.box(b - a - 0.03, 0.46, 0.05, (a + b) / 2, 0.38, WALL_Z + 0.025, 0.58 + hash01(a, 1) * 0.07);
+    }
+    g.add(box(W, 0.07, 0.07, this.trimMat, CX, 0.655, WALL_Z + 0.035)); // chair rail
+    for (const [y0, y1] of [[0.69, 1.42], [1.42, 2.13]] as const) {
+      for (const [a, b] of cells(x0, x1, PANEL, GRID)) {
+        const s = 0.9 + hash01(a, y0) * 0.15;
+        wall.box(b - a - 0.035, y1 - y0 - 0.035, 0.03, (a + b) / 2, (y0 + y1) / 2, WALL_Z + 0.015,
+          p => s * (0.84 + (p.y - 0.69) * 0.11));
+        if (b - a < 0.4) continue;
+        for (const bx of [a + 0.09, b - 0.09]) for (const by of [y0 + 0.08, y1 - 0.08]) {
+          frame.box(0.035, 0.035, 0.02, bx, by, WALL_Z + 0.035, 1.15);
+        }
+      }
+    }
+    // the service run under the cove
+    frame.rod(W, 0.042, CX, 2.235, WALL_Z + 0.065, 0.95);
+    frame.rod(W, 0.024, CX, 2.16, WALL_Z + 0.04, 1.25);
+    for (const [a] of cells(x0, x1, PANEL / 2, GRID)) frame.box(0.05, 0.14, 0.1, a, 2.205, WALL_Z + 0.055, 0.6);
+    // vents low in the wainscot, where nothing stands in front of them
+    for (const vx of [3.05, 10.6, 14.6]) {
+      if (vx < x0 || vx > x1) continue;
+      frame.box(0.44, 0.22, 0.02, vx, 0.37, WALL_Z + 0.055, 0.35);
+      for (let k = 0; k < 4; k++) frame.box(0.4, 0.025, 0.03, vx, 0.29 + k * 0.053, WALL_Z + 0.065, 1.1);
+    }
+
+    // ---- the cove, where the wall turns into the ceiling
+    const cy = (COVE_Y + CEIL_Y) / 2, cz = (WALL_Z + CEIL_Z0) / 2;
+    const cl = Math.hypot(CEIL_Y - COVE_Y, CEIL_Z0 - WALL_Z);
+    const nY = -Math.sin(COVE), nZ = Math.cos(COVE);                   // its face: down and out
+    ceil.box(W, cl + 0.06, 0.03, CX, cy - nY * 0.03, cz - nZ * 0.03, 0.35, COVE);
+    for (const [a, b] of cells(x0, x1, PANEL, GRID)) {
+      ceil.box(b - a - 0.035, cl - 0.04, 0.03, (a + b) / 2, cy, cz, 0.8 + hash01(a, 7) * 0.12, COVE);
+    }
+
+    // ---- the ceiling: insulated panels hung between the ribs
+    const cd = CEIL_Z1 - CEIL_Z0, cmz = (CEIL_Z0 + CEIL_Z1) / 2;
+    ceil.box(W, 0.1, cd, CX, CEIL_Y + 0.05, cmz, p => 0.3 * ceilFade(p.z));
+    for (const [za, zb] of cells(CEIL_Z0, CEIL_Z1, 0.97, CEIL_Z0)) {
+      for (const [a, b] of cells(x0, x1, PANEL, GRID)) {
+        const s = 0.72 + hash01(a, za) * 0.14;
+        ceil.box(b - a - 0.04, 0.035, zb - za - 0.04, (a + b) / 2, CEIL_Y - 0.0175, (za + zb) / 2,
+          p => s * ceilFade(p.z));
+      }
+    }
+    frame.rod(W, 0.04, CX, 2.53, -0.85, 0.85);
+    frame.rod(W, 0.022, CX, 2.55, -0.7, 1.1);
+    for (const [a] of cells(x0, x1, PANEL, GRID)) frame.box(0.04, 0.09, 0.26, a, 2.565, -0.78, 0.6);
+
+    // ---- pillars, up the cove and across as ribs: the hab's skeleton
+    for (let px = GRID + BAY; px < x1; px += BAY) {
+      if (px < x0) continue;
+      frame.box(0.17, COVE_Y, 0.1, px, COVE_Y / 2, WALL_Z + 0.06, 0.9);
+      frame.box(0.17, cl + 0.05, 0.09, px, cy + nY * 0.04, cz + nZ * 0.04, 0.9, COVE);
+      frame.box(0.17, 0.15, cd, px, CEIL_Y - 0.075, cmz, p => 0.9 * ceilFade(p.z));
+    }
+
+    // ---- fixtures, one per bay
+    for (let bx = GRID + BAY / 2; bx < x1; bx += BAY) {
+      if (bx < x0 + 0.3) continue;
+      frame.box(0.62, 0.05, 0.32, bx, CEIL_Y - 0.06, FIX_Z, 0.75);
+      lens.box(0.52, 0.02, 0.22, bx, CEIL_Y - 0.095, FIX_Z, 1);
+      halo.quad(3.0, 2.6, bx, CEIL_Y - 0.04, FIX_Z, 'down');
+      wash.quad(2.7, 1.95, bx, COVE_Y - 1.95 / 2, WALL_Z + 0.04, 'wall');
+      halo.quad(2.4, cl, bx, cy + nY * 0.02, cz + nZ * 0.02, COVE);
+      pool.quad(3.2, 2.6, bx, 0.004, -0.55, 'up');
+    }
+    for (const lx of lit) {
+      const warm = new THREE.PointLight(0xffd2a0, 3.2, 7, 1.7);
+      warm.position.set(lx, 2.2, FIX_Z + 0.2);
+      g.add(warm);
+    }
+
+    // ---- floor: a dark gutter at the wall, then staggered plates out toward the camera
+    floor.box(W, 0.2, FLOOR_Z1 - WALL_Z, CX, -0.12, (FLOOR_Z1 + WALL_Z) / 2, p => 0.32 * floorFade(p.z));
+    frame.box(W, 0.02, 0.17, CX, -0.02, WALL_Z + 0.085, 0.4);
+    for (const [a] of cells(x0, x1, 0.3, GRID)) frame.box(0.03, 0.012, 0.15, a, -0.006, WALL_Z + 0.085, 0.9);
+    cells(-1.85, FLOOR_Z1, 0.92, -1.85).forEach(([za, zb], r) => {
+      for (const [a, b] of cells(x0, x1, PANEL, GRID + (r % 2) * PANEL / 2)) {
+        const s = 0.74 + hash01(a, za) * 0.14;
+        floor.box(b - a - 0.03, 0.02, zb - za - 0.03, (a + b) / 2, -0.01, (za + zb) / 2,
+          p => s * floorFade(p.z) * (0.62 + 0.38 * Math.min(1, (p.z + 1.85) / 0.9)));
+      }
+    });
+
+    // ---- the west wall, dressed round the way out
+    if (x0 < HALL_X0) {
+      const WX = HALL_X0 - 0.425;                         // its face
+      const DZ = -0.4, DW = 0.36;                         // the door and its frame
+      const low: [number, number][] = [[WALL_Z, DZ - DW], [DZ + DW, 1.3]];
+      for (const [za, zb] of low) {
+        frame.box(0.06, 0.14, zb - za, WX + 0.03, 0.07, (za + zb) / 2, 0.8);
+        wall.box(0.05, 0.46, zb - za - 0.03, WX + 0.025, 0.38, (za + zb) / 2, 0.6);
+        g.add(box(0.07, 0.07, zb - za, this.trimMat, WX + 0.035, 0.655, (za + zb) / 2));
+      }
+      for (const [y0, y1] of [[0.69, 1.42], [1.42, 2.13]] as const) {
+        const row: [number, number][] = y0 < 1.4 ? low : [[WALL_Z, DZ], [DZ, 1.3]];
+        for (const [za, zb] of row) {
+          const s = 0.9 + hash01(za, y0) * 0.15;
+          wall.box(0.03, y1 - y0 - 0.035, zb - za - 0.035, WX + 0.015, (y0 + y1) / 2, (za + zb) / 2,
+            p => s * (0.84 + (p.y - 0.69) * 0.11));
+        }
+      }
+      for (const s of [-1, 1]) frame.box(0.08, 1.38, 0.08, WX + 0.04, 0.69, DZ + s * (DW - 0.04), 0.9);
+      frame.box(0.08, 0.08, DW * 2, WX + 0.04, 1.38, DZ, 0.9);
+    }
+
+    g.add(wall.mesh(this.shellWall), ceil.mesh(this.shellCeil), floor.mesh(this.shellFloor),
+      frame.mesh(this.shellFrame), lens.mesh(this.shellLens));
+    g.add(halo.mesh(glowMat('pool', 0xffb36b, 0.45)), wash.mesh(glowMat('wash', 0xffb36b, 0.85)),
+      pool.mesh(glowMat('pool', 0xffb36b, 0.5)));
+  }
+
+  /** dusk through a porthole lands: a glow on the wall round the glass, a patch on the floor below */
+  private duskSpill(g: THREE.Group, xs: number[], w: number, y: number): void {
+    const halo = new Kit(), patch = new Kit();
+    for (const x of xs) {
+      halo.quad(w * 2.6, w * 2.6, x, y, WALL_Z + 0.042, 'wall');
+      patch.quad(w * 1.3, 2.9, x, 0.006, -0.5, 'up');
+    }
+    g.add(halo.mesh(glowMat('pool', 0xff9447, 0.35)), patch.mesh(glowMat('pool', 0xff8a3d, 0.7)));
   }
 
   private buildStations(g: THREE.Group): void {
