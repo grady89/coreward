@@ -74,10 +74,10 @@ export class Polyps implements Creature {
   float ndv = saturate(abs(dot(normalize(vViewPosition), normal)));
   float fr = pow(1.0 - ndv, 1.8);
   // the glow, plus a pearl sheen catching on the outermost facets
-  totalEmissiveRadiance += vColor.rgb * (0.12 + 1.4 * fr) + vec3(0.86, 0.82, 0.95) * 0.3 * fr * fr;
+  totalEmissiveRadiance += vColor.rgb * (0.3 + 1.6 * fr) + vec3(0.86, 0.82, 0.95) * 0.4 * fr * fr;
 }`);
     };
-    sacMat.customProgramCacheKey = () => 'polyp-sac-v2';
+    sacMat.customProgramCacheKey = () => 'polyp-sac-v3';
     this.sacs = new THREE.InstancedMesh(sacGeo, sacMat, MAX_POLYPS);
     this.sacs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.sacs.frustumCulled = false;
@@ -96,7 +96,7 @@ export class Polyps implements Creature {
     this.cores.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.cores);
 
-    this.glow = new THREE.PointLight(0x6affc8, 0, 7, 1.8);
+    this.glow = new THREE.PointLight(0x6affc8, 0, 9, 1.6);
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
       this.clusters.push({ alive: false, ax: 0, ay: 0, life: 0, seen: false, noticed: false });
@@ -300,8 +300,9 @@ export class Polyps implements Creature {
       const f = p.inflate;
       const breath = Math.sin(p.phase * (1.4 + f * 4) + p.phase) * 0.035;
       const tremble = f > 0.6 ? (f - 0.6) * 0.14 : 0;
-      // chunky at rest, near a tile across when it is about to go
-      const s = (0.8 + f * 0.5 + breath) * p.size;
+      // chunky at rest (a tile across: they read at play size), well over
+      // one when it is about to go
+      const s = (1.12 + f * 0.6 + breath) * p.size;
       // the dome's rim sits on the wall face, its crown leans out of it
       const bx = p.x - p.nx * 0.24 + (Math.random() - 0.5) * tremble;
       const by = p.y - p.ny * 0.24 + (Math.random() - 0.5) * tremble;
@@ -316,19 +317,19 @@ export class Polyps implements Creature {
       const beat = 0.5 + 0.5 * Math.sin(p.phase * (1.6 + f * 7));
       // sea-green glow → white-hot rim; the instance colour drives the glow only
       tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xffffff), f * f)
-        .multiplyScalar(0.32 + beat * 0.1 + f * 1.5 + (f > 0.6 ? (f - 0.6) * 2.5 * beat : 0));
+        .multiplyScalar(0.5 + beat * 0.16 + f * 1.5 + (f > 0.6 ? (f - 0.6) * 2.5 * beat : 0));
       this.sacs.setColorAt(n, tmpC);
 
       // the heart sits mid-dome along the normal, proud of its front face
       const h = 0.5 * s * lean * 0.62;
       tmpP.set(bx + p.nx * h, by + p.ny * h, tmpP.z + 0.5 * s * 0.95 * 0.72);
-      tmpS.setScalar((0.85 + f * 0.9 + beat * 0.12) * p.size);
+      tmpS.setScalar((1.15 + f * 1.1 + beat * 0.16) * p.size);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.cores.setMatrixAt(n, tmpM);
       // pearl-green at rest (nacre over sea-glow), white-hot when it is about to go
       tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xe6fff6), 0.25 + beat * 0.2)
         .lerp(tmpC2.setHex(0xffffff), Math.min(1, f * 1.2))
-        .multiplyScalar(0.95 + beat * 0.6 + f * 2.2);
+        .multiplyScalar(1.25 + beat * 0.7 + f * 2.2);
       this.cores.setColorAt(n, tmpC);
       n++;
 
@@ -353,22 +354,22 @@ export class Polyps implements Creature {
       const cx = a[k] / a[k + 2], cy = a[k + 1] / a[k + 2], cf = a[k + 3];
       // centred a little into the wall they grow on, so most of it lands on stone
       const sx = cx - a[k + 4] / a[k + 2] * 0.7, sy = cy - a[k + 5] / a[k + 2] * 0.7;
-      const w = 3.6 + Math.min(4, a[k + 2]) * 0.35 + cf * 1.6;
+      const w = 4.8 + Math.min(4, a[k + 2]) * 0.45 + cf * 1.6;
       const beat = 0.5 + 0.5 * Math.sin(ctx.time * 1.7 + ci * 2.1);
       tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xffffff), cf * cf * 0.7);
-      this.spills[ci].set(sx, sy, w, w, 0.5 + beat * 0.12 + cf * 0.45, tmpC.getHex(), 1.3);
+      this.spills[ci].set(sx, sy, w, w, 0.68 + beat * 0.14 + cf * 0.45, tmpC.getHex(), 1.3);
       const cd = Math.hypot(podX - cx, podY - cy);
       if (cd < nearD) { nearD = cd; nearC = ci; }
     }
     if (gw > 0.05) {
       this.glow.position.set(gx / gw, gy / gw, 0.5);
-      this.glow.intensity = 1 + peak * 9;
+      this.glow.intensity = 2 + peak * 9;
       this.glow.color.setHex(ACTIVE.swarm.hunting);
     } else if (nearC >= 0 && nearD < 16) {
       // at rest the nearest cluster still lights its stone, faintly
       const k = nearC * 6;
       this.glow.position.set(this.acc[k] / this.acc[k + 2], this.acc[k + 1] / this.acc[k + 2], 0.6);
-      this.glow.intensity = 1.2 + Math.sin(ctx.time * 1.7) * 0.25;
+      this.glow.intensity = 2.4 + Math.sin(ctx.time * 1.7) * 0.4;
       this.glow.color.setHex(ACTIVE.swarm.hunting);
     } else {
       this.glow.intensity = 0;

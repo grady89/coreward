@@ -42,7 +42,8 @@ function vortexTexture(): THREE.CanvasTexture {
   // pseudo-random per arm so every run draws the same water.
   const h = (n: number): number => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
   const strands = 9;
-  for (const [blur, width, alpha] of [[10, 24, 0.3], [4, 9, 0.36], [1.5, 2.5, 0.42]] as const) {
+  // a narrow glow round each arm, not a fog over the whole disc
+  for (const [blur, width, alpha] of [[7, 15, 0.2], [3, 7, 0.44], [1.2, 2.2, 0.6]] as const) {
     g.filter = `blur(${blur}px)`;
     for (let k = 0; k < strands; k++) {
       const a0 = (k / strands) * Math.PI * 2 + h(k) * 0.6;
@@ -63,13 +64,18 @@ function vortexTexture(): THREE.CanvasTexture {
     }
   }
   g.filter = 'none';
+  // real dark between the arms: steepen the falloff so the blur's tails
+  // drop to nothing instead of washing the gaps grey-green
+  const img = g.getImageData(0, 0, N, N), px = img.data;
+  for (let i = 3; i < px.length; i += 4) px[i] = Math.round(255 * Math.pow(px[i] / 255, 1.7));
+  g.putImageData(img, 0, 0);
   // fade the rim to nothing and calm the eye
   g.globalCompositeOperation = 'destination-in';
   const fade = g.createRadialGradient(c, c, 0, c, c, c);
-  fade.addColorStop(0, 'rgba(255,255,255,0.35)');
+  fade.addColorStop(0, 'rgba(255,255,255,0.25)');
   fade.addColorStop(0.2, 'rgba(255,255,255,1)');
-  fade.addColorStop(0.62, 'rgba(255,255,255,0.75)');
-  fade.addColorStop(1, 'rgba(255,255,255,0)');
+  fade.addColorStop(0.6, 'rgba(255,255,255,0.7)');
+  fade.addColorStop(0.92, 'rgba(255,255,255,0)');
   g.fillStyle = fade;
   g.fillRect(0, 0, N, N);
   vortexTex = new THREE.CanvasTexture(cv);
@@ -364,12 +370,13 @@ export class Riptide implements Creature {
       f.rotation.z = Math.sin(time * 0.17) * 0.12;
       // turning with the motes (inner layer faster), harder as it grips
       this.flowMats[k].map!.rotation = -this.spin * (k === 0 ? 0.55 : 0.95) - k * 1.3;
-      this.flowMats[k].opacity = this.flowOpacity * (k === 0 ? 0.34 : 0.28) * (1 + strength * 0.6);
+      this.flowMats[k].opacity = this.flowOpacity * (k === 0 ? 0.64 : 0.5) * (1 + strength * 0.6);
       f.visible = this.flowOpacity > 0.01;
     }
     this.flowMats[0].color.setHex(ACTIVE.gemTint);
     this.flowMats[1].color.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.25);
-    this.spill.set(fx, fy, RADIUS * 2.2, RADIUS * 1.45, this.flowOpacity * (0.24 + strength * 0.25), ACTIVE.gemTint, 1.2);
+    // its light on the stone, kept low: the haze is in the arms, not the air
+    this.spill.set(fx, fy, RADIUS * 2, RADIUS * 1.3, this.flowOpacity * (0.11 + strength * 0.2), ACTIVE.gemTint, 1.2);
   }
 
   private animateMotes(dt: number, strength: number): void {

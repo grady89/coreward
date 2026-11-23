@@ -13,7 +13,7 @@ import {
 // THE BRINEWYRM — CRYOS-2's hunter tier. Keyed on HEAT.
 //
 // It lives in the cryobrine: a pearl eel cruising the pool, its nacre
-// throwing sea-green and rose off every facet, a line of lights down its
+// throwing ice-cyan and violet off every facet, a line of lights down its
 // flank. Run your engine near a pool and the lights run hot, the brine
 // churns — and it BREACHES: a jawed head with a lit throat and one bright
 // eye, thrown clear of the pool in an arc at your nozzle. The bite is not what
@@ -74,12 +74,14 @@ export class Brinewyrm implements Creature {
     // the nacre so the sheen travels
     const segGeo = new THREE.IcosahedronGeometry(0.34, 0);
     segGeo.scale(1.3, 0.92, 0.9);
-    // pearl with a thin-film sheen: each flat facet throws a different
-    // tint by its angle to the eye (sea-green, aqua, rose), strongest at
-    // the silhouette, plus a sea-green rim so it separates from dark rock
+    // pearl with a thin-film sheen: each flat facet throws its own tint,
+    // set by its angle to the eye and which way it faces (ice-cyan through
+    // violet, a rose glint between), strongest at the silhouette, plus a
+    // cyan-violet rim so it separates from dark rock. The pearl underneath
+    // is kept a step down so the sheen, not the albedo, carries the body.
     const nacreMat = new THREE.MeshStandardMaterial({
       color: 0xffffff, flatShading: true, roughness: 0.26, metalness: 0.1,
-      emissive: 0x3a4648,
+      emissive: 0x1e2232,
     });
     nacreMat.onBeforeCompile = sh => {
       sh.uniforms.uNacre = this.nacre;
@@ -89,12 +91,18 @@ export class Brinewyrm implements Creature {
 {
   float ndv = saturate(abs(dot(normalize(vViewPosition), normal)));
   float fr = pow(1.0 - ndv, 1.6);
-  vec3 film = 0.5 + 0.5 * cos(6.2832 * (ndv * 1.35 + vec3(0.12, 0.45, 0.78)));
-  film = mix(film, vec3(0.42, 1.0, 0.84), 0.5);
-  totalEmissiveRadiance += film * (0.32 + 0.6 * fr) * uNacre + vec3(0.36, 1.0, 0.84) * fr * fr * 0.9;
+  // the film's phase: view angle plus the facet's own facing, so
+  // neighbouring facets split into different colours and the roll walks them
+  float ph = ndv * 2.2 + dot(normal, vec3(1.7, 2.6, 0.9));
+  float t = 0.5 + 0.5 * sin(ph * 3.1416);
+  vec3 film = mix(vec3(0.32, 0.9, 1.0), vec3(0.7, 0.46, 1.0), t * t);
+  // a rose-pearl glint where the band turns over
+  film = mix(film, vec3(1.0, 0.7, 0.92), 0.55 * pow(1.0 - abs(2.0 * t - 1.0), 3.0));
+  vec3 rim = mix(vec3(0.5, 0.9, 1.0), vec3(0.72, 0.56, 1.0), t);
+  totalEmissiveRadiance += film * (0.4 + 0.8 * fr) * uNacre + rim * fr * fr * 0.9;
 }`);
     };
-    nacreMat.customProgramCacheKey = () => 'brinewyrm-nacre';
+    nacreMat.customProgramCacheKey = () => 'brinewyrm-nacre-v2';
     this.body = new THREE.InstancedMesh(segGeo, nacreMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.body.frustumCulled = false;
@@ -119,7 +127,7 @@ export class Brinewyrm implements Creature {
     skull.scale.set(1.15, 0.92, 0.95);
     skull.position.x = -0.06;
     const boneMat = new THREE.MeshStandardMaterial({
-      color: 0xf4fbff, flatShading: true, roughness: 0.2, metalness: 0.05, emissive: 0x3a5a58,
+      color: 0xf4fbff, flatShading: true, roughness: 0.2, metalness: 0.05, emissive: 0x34405a,
     });
     const jaw = (len: number, rad: number, down: number): THREE.Group => {
       const g = new THREE.Group();
@@ -150,13 +158,13 @@ export class Brinewyrm implements Creature {
     this.jawU.position.set(0.12, 0.05, 0);
     this.jawL = jaw(0.6, 0.22, -1);
     this.jawL.position.set(0.1, -0.08, 0);
-    this.throatMat = new THREE.MeshBasicMaterial({ color: 0x8affe0, toneMapped: false });
+    this.throatMat = new THREE.MeshBasicMaterial({ color: 0x9ae8ff, toneMapped: false });
     this.throat = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), this.throatMat);
     this.throat.position.set(0.36, -0.02, 0);
-    this.eyeMat = new THREE.MeshBasicMaterial({ color: 0xe8fff6, toneMapped: false });
+    this.eyeMat = new THREE.MeshBasicMaterial({ color: 0xeef8ff, toneMapped: false });
     const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), this.eyeMat);
     eye.position.set(0.06, 0.12, 0.4);
-    this.light = new THREE.PointLight(0x7af0d8, 0, 7, 1.6);
+    this.light = new THREE.PointLight(0x8ae4ff, 0, 7, 1.6);
     // out in front of the head, not inside it: it lights the pool and the
     // stone without burning the jaws to white
     this.light.position.set(0.5, 0, 1.1);
@@ -164,8 +172,8 @@ export class Brinewyrm implements Creature {
     this.head.visible = false;
     scene.add(this.head);
 
-    this.spillHead = new Spill(scene, 0x7af0d8);
-    this.spillBody = new Spill(scene, 0x6affc8);
+    this.spillHead = new Spill(scene, 0x8ae4ff);
+    this.spillBody = new Spill(scene, 0x7ad8ff);
   }
 
   reset(): void {
@@ -427,8 +435,8 @@ export class Brinewyrm implements Creature {
     const glow = this.phase === 'churn' ? 1 : this.phase === 'cruise' ? 0.35 + this.alert * 0.5 : 0.75;
     const swim = this.phase === 'cruise' ? 0.12 : 0.06;
     this.nacre.value = 0.55 + glow * 0.5;
-    // the accents lean sea-green whatever brine it swims in
-    const spotHue = tmpC2.setHex(0x7affd8).lerp(tmpC.setHex(ACTIVE.fluid.pulseA), 0.25).getHex();
+    // the accents stay ice-cyan whatever brine it swims in
+    const spotHue = tmpC2.setHex(0x8ae8ff).lerp(tmpC.setHex(ACTIVE.fluid.pulseA), 0.25).getHex();
     let midX = 0, midY = 0;
     for (let i = 0; i < SEGS; i++) {
       const h = this.chain.heading(i);
@@ -446,10 +454,11 @@ export class Brinewyrm implements Creature {
         this.jawU.rotation.z = 0.15 + this.gape * 0.5;
         this.jawL.rotation.z = -(0.2 + this.gape * 0.6);
         this.throat.scale.set(1.5 + this.gape * 0.4, 0.7 + this.gape * 1.4, 1.25);
-        this.throatMat.color.setHex(0x8affe0).multiplyScalar(1.6 + glow * 0.9 + this.gape * 1.6);
-        this.eyeMat.color.setHex(0xd8fff0).multiplyScalar(2.2 + glow * 0.8 + this.gape);
-        this.light.intensity = 1 + glow * 4 + this.gape * 2;
-        this.spillHead.set(px, py, 3.2, 3.2, 0.28 + glow * 0.2 + this.gape * 0.3, 0x7af0d8, 1.2);
+        // capped so the jaw's facets still read inside the bloom
+        this.throatMat.color.setHex(0x9ae8ff).multiplyScalar(1.2 + glow * 0.7 + this.gape * 1.3);
+        this.eyeMat.color.setHex(0xe0f4ff).multiplyScalar(2 + glow * 0.7 + this.gape);
+        this.light.intensity = 1 + glow * 3 + this.gape * 2;
+        this.spillHead.set(px, py, 3.2, 3.2, 0.24 + glow * 0.18 + this.gape * 0.3, 0x8ae4ff, 1.2);
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
         this.spots.setMatrixAt(0, tmpM);
@@ -470,10 +479,11 @@ export class Brinewyrm implements Creature {
       tmpS.set(Math.min(2.5, Math.max(1, gap / SPACING)), taper, taper);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.body.setMatrixAt(i, tmpM);
-      // pearl that drifts rose → white → sea-green along the body; in the
-      // pool it takes a little of the brine's colour but stays solid
+      // pearl that drifts lavender → ice along the body, a step below
+      // white so the sheen carries it; in the pool it takes a little of the
+      // brine's colour but stays solid
       const tint = 0.5 + 0.5 * Math.sin(i * 0.9 - time * 1.2);
-      tmpC.setHex(0xf3e6ee).lerp(tmpC2.setHex(0xd6f7ec), tint);
+      tmpC.setHex(0xe0d6f4).lerp(tmpC2.setHex(0xcceaf6), tint);
       if (inWater) tmpC.lerp(tmpC2.setHex(ACTIVE.fluid.base), 0.2);
       this.body.setColorAt(i, tmpC);
       // the flank lights pulse head → tail, the opposite way to a Long One's spine
@@ -492,7 +502,7 @@ export class Brinewyrm implements Creature {
     }
     // the body's light on the pool floor and the walls, out along its length
     const hx = this.chain.x[0], hy = this.chain.y[0];
-    this.spillBody.set((midX + hx) / 2, (midY + hy) / 2, 5.6, 4, 0.3 + glow * 0.3, 0x6affc8, 1.2);
+    this.spillBody.set((midX + hx) / 2, (midY + hy) / 2, 5.6, 4, 0.3 + glow * 0.3, 0x7ad8ff, 1.2);
     this.body.count = SEGS; this.spots.count = SEGS * 2;
     this.body.instanceMatrix.needsUpdate = true;
     this.spots.instanceMatrix.needsUpdate = true;
