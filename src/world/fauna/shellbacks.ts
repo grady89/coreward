@@ -107,7 +107,7 @@ export class Shellbacks implements Creature {
     scene.add(this.beads);
 
     for (let i = 0; i < MAX; i++) {
-      const l = new THREE.PointLight(0xe8dcff, 0, 4.5, 1.8);
+      const l = new THREE.PointLight(0xe8dcff, 0, 6.5, 1.8);
       this.lights.push(l);
       scene.add(l);
       this.spills.push(new Spill(scene, 0x3ce6c8));
@@ -346,11 +346,12 @@ export class Shellbacks implements Creature {
       // ---- body ----
       b.chain.follow(b.x, b.y, 1);
       light.position.set(b.x, b.y, 0.5);
-      light.intensity = 1.2 + b.curl * 0.6 + (b.stagger > 0 ? Math.sin(time * 30) * 0.8 : 0);
-      // the dorsal line's light on the tunnel: centred on the shell, banked when curled
+      light.intensity = 2.6 + b.curl * 0.8 + (b.stagger > 0 ? Math.sin(time * 30) * 0.8 : 0);
+      // the dorsal line's light on the tunnel: centred on the shell, banked
+      // when curled — as wide and as strong as a held stillwalker's sheen
       const mid = SEGS >> 1;
-      this.spills[k].set(lerp(b.chain.x[mid], b.x, b.curl), lerp(b.chain.y[mid], b.y, b.curl), 4.4, 3.8,
-        0.9 * (1 - b.curl * 0.5) * (b.stagger > 0 ? 0.6 + Math.sin(time * 30) * 0.4 : 1));
+      this.spills[k].set(lerp(b.chain.x[mid], b.x, b.curl), lerp(b.chain.y[mid], b.y, b.curl), 6.2, 5.4,
+        0.95 * (1 - b.curl * 0.4) * (b.stagger > 0 ? 0.6 + Math.sin(time * 30) * 0.4 : 1), 0x3ce6c8, 1.5);
       const iris = time * 0.25;
       for (let i = 0; i < SEGS; i++) {
         let px = b.chain.x[i], py = b.chain.y[i], h = b.chain.heading(i);
