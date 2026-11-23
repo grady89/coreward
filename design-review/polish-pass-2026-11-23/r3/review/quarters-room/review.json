@@ -1,0 +1,55 @@
+{
+  "A": {
+    "category": "quarters-room",
+    "score": 6.6,
+    "per_shot": [
+      {"shot": "quarters-stock-west.png", "score": 6, "note": "Real hab shell now (ribbed ceiling, fixtures, riveted panels, red stripe, dusk portholes) but the floor is a mirror: long vertical streaks and a cyan smear under the terminal read as wet glass, not a home."},
+      {"shot": "quarters-stock-mid.png", "score": 6, "note": "Warm ceiling cones on the wall are good; the floor reflections dominate the lower half and the wall is one uniform panel field."},
+      {"shot": "quarters-stock-east.png", "score": 6, "note": "Fridge, porthole and corkboard sit well in the warm light; streaky glossy floor again; dark right doorway is a nice contrast corner."},
+      {"shot": "quarters-full-west.png", "score": 7, "note": "Fern, patterned rug, radio with lit dial and books all read; clearly richer than stock, but the glossy floor streaks pull focus away from the furnishings."},
+      {"shot": "quarters-full-mid.png", "score": 7, "note": "Arc lamp pools on the wall and floor; star chart reads but is dim and flat, almost a dark rectangle; cyan reflection streak still under the terminal."},
+      {"shot": "quarters-full-east.png", "score": 7, "note": "Galley (kettle, cups, tiles) and bunk with bedding read well; bunk sconce is small and barely lands; Gallery door is a dark slot."}
+    ],
+    "top_issues": [
+      {"issue": "Floor is a near-mirror with long vertical light streaks", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png", "quarters-stock-east.png", "quarters-full-west.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "Reads as wet glass or a showroom, not a lived-in deck plate; the streaks are the brightest, busiest thing in the lower half and compete with the suit.", "suggested_direction": "Rougher, satin plating: keep warm pools where light lands but kill the long specular smears."},
+      {"issue": "Cyan streak reflected under the terminal", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png", "quarters-full-west.png", "quarters-full-mid.png"], "why": "A cold off-hue smear in a warm sanctuary that looks like a rendering artifact.", "suggested_direction": "Remove or heavily soften the screen's floor reflection."},
+      {"issue": "Practicals on furnishings barely land", "shots": ["quarters-full-mid.png", "quarters-full-east.png"], "why": "The star chart is a dim dark rectangle and the bunk sconce is a tiny point; bought things don't feel cared for or lit as features.", "suggested_direction": "Give the chart a picture light and let the bunk sconce wash the wall and pillow warmly."},
+      {"issue": "Wall is one uniform panel field", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png", "quarters-stock-east.png"], "why": "Every bay is the same riveted plate and the stock room still feels a bit like a repeated corridor tile.", "suggested_direction": "Vary bays: insulated quilted panels, inset grids, conduit runs, so value changes across the wall."},
+      {"issue": "Heavy dark striped foreground band", "shots": ["quarters-stock-west.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "The bottom 10% of the frame is a black striped slab that adds weight without information.", "suggested_direction": "Lift it slightly into a lit sill or floor edge, or crop it tighter."}
+    ],
+    "protect": [
+      "Ribbed ceiling with recessed warm fixtures and beams; no black void",
+      "Dusk portholes as warm windows matching 02-surface",
+      "Warm cones of light on the wall from each fixture, with dark gaps between",
+      "Furnishings reading at play scale: patterned rug, fern, radio dial, books, kettle and cups, bunk bedding",
+      "Suit is the clearest, brightest figure in every frame"
+    ]
+  },
+  "B": {
+    "category": "quarters-room",
+    "score": 7.2,
+    "per_shot": [
+      {"shot": "quarters-stock-west.png", "score": 6.5, "note": "Same shell as A but floor is satin with soft pools instead of mirror streaks, and an inset grid bay adds wall variety; lower floor has some blurry blotches."},
+      {"shot": "quarters-stock-mid.png", "score": 6.5, "note": "Louvred/grid wall bays break the repeat; floor pools read as light landing; still plain as a stock room should be."},
+      {"shot": "quarters-stock-east.png", "score": 6.5, "note": "Calmer floor lets the fridge, porthole and corkboard lead; grid panel under the porthole helps; foreground floor has smudgy dark patches."},
+      {"shot": "quarters-full-west.png", "score": 7.5, "note": "Radio glows and pools on the floor; book shelf has its own strip light; rug, fern read clearly; clearly richer than stock."},
+      {"shot": "quarters-full-mid.png", "score": 7.5, "note": "Star chart is now lit with a picture light and glows blue as a showpiece; arc lamp washes the wall and pools on the floor; warm and cared for."},
+      {"shot": "quarters-full-east.png", "score": 8, "note": "Copper kettle catches light, galley shelf light, bunk sconce washes the wall and pillow, chart glows, warm rose spill from the Gallery door: the best frame."}
+    ],
+    "top_issues": [
+      {"issue": "Blurry blotchy patches across the near floor", "shots": ["quarters-stock-west.png", "quarters-stock-east.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "Soft dark and light smudges in the lower third read as smeared reflection or noisy AO, not as intentional pools; it slightly muddies the cleanest part of the frame.", "suggested_direction": "Keep the satin floor but make the pools crisper and fewer, tied to visible sources, with plain mid-value plating between."},
+      {"issue": "Stock room is still modest", "shots": ["quarters-stock-west.png", "quarters-stock-mid.png", "quarters-stock-east.png"], "why": "Good shell, but with few bays varied and no conduit or insulated panels the unfurnished hall is decent rather than inviting.", "suggested_direction": "A few more structural variations (quilted insulation, conduit drops, a floor hatch) in the stock shell."},
+      {"issue": "Heavy dark striped foreground band", "shots": ["quarters-stock-west.png", "quarters-full-mid.png", "quarters-full-east.png"], "why": "Bottom strip of the frame is a dark slab that adds weight without information.", "suggested_direction": "Lift it into a lit floor edge or trim it."},
+      {"issue": "Ceiling upper band falls to near-black", "shots": ["quarters-stock-mid.png", "quarters-full-mid.png"], "why": "Top ~15% of frame goes very dark; structure is there but barely reads at the top edge.", "suggested_direction": "Faint bounce from the fixtures onto the upper ceiling panels so the ceiling reads as a surface all the way up."}
+    ],
+    "protect": [
+      "Satin floor with warm pools instead of mirror streaks",
+      "Picture light on the star chart and its blue glow",
+      "Bunk sconce washing the wall and pillow; galley shelf light on kettle and tiles",
+      "Inset grid / louvred wall bays that break the panel repeat",
+      "Ribbed ceiling with warm fixtures, dusk portholes, and the suit as the clearest figure"
+    ]
+  },
+  "preference": "B",
+  "why": "Same room, but B replaces A's wet-mirror floor streaks with satin pools, varies the wall bays, and lights the furnishings (star chart, bunk sconce, galley, shelf), so light lands warmly and bought things look cared for."
+}

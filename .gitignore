@@ -150,3 +150,5 @@ vite.config.ts.timestamp-*
 
 # visual-pass review screenshots: kept on disk, out of git (report keeps pairs/ and final/)
 design-review/visual-pass-*/r*/**/*.png
+# polish-pass shots: kept on disk, out of git
+design-review/polish-pass-*/r*/**/*.png

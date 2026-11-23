@@ -360,18 +360,55 @@ const VEIN_FRONDS = (() => {
   return merge(parts);
 })();
 
-// 9 FROSTBLOOM — a dense urchin burst of frost needles off one white-hot
-// point, radiating every direction. Lavender at the tips, near-white and
-// glowing at the heart: a round frost flower, never a fan.
-const FROST_BURST = (() => {
+// 9 FROSTBLOOM — the trap that passes for veinlight: a cold flower of
+// faceted ice petals standing proud of the face, cupped toward the viewer
+// around a white-hot heart, with long needles reaching past the block's
+// edge. Ice-cyan with a few violet stamens at the heart. The tell is the
+// rime: a ring of frost flakes on the stone around it that no living
+// veinlight leaves. Built facing +z (it turns in the face plane, never
+// edge-on) and lifted clear of a jittered rock face.
+const FROST_BLOOM = (() => {
+  const Z = 0.14;
+  const ICE = 0x9ae2ff, CYAN = 0x1c96ff;
+  // a petal: a long flat bipyramid whose two front faces split light from
+  // shade down its spine, glowing at the root and cooling to cyan at the tip
+  const petal = (root: number, tip: number, eRoot: number, eTip: number) =>
+    paintFaces(new THREE.OctahedronGeometry(1, 0), 0.18, 0.08, (c, n) => {
+      const t = Math.max(0, Math.min(1, (c.y + 1) / 2));
+      const k = (n.x > 0 ? 1 : 0.5) * (n.y > 0 ? 1 : 0.85);
+      return [col(root).lerp(col(tip), t), (eRoot + (eTip - eRoot) * t) * k];
+    });
+  // out from the heart along angle a, tipped toward the viewer by tilt
+  const ray = (a: number, tilt: number, len: number, w: number, d: number, z = Z) =>
+    new THREE.Matrix4().makeTranslation(0, 0, z)
+      .multiply(new THREE.Matrix4().makeRotationZ(a))
+      .multiply(new THREE.Matrix4().makeRotationX(tilt))
+      .multiply(new THREE.Matrix4().makeTranslation(0, len / 2 + 0.03, 0))
+      .multiply(new THREE.Matrix4().makeScale(w, len / 2, d));
   const parts: Part[] = [
-    { geo: paint(new THREE.IcosahedronGeometry(0.1, 0), 0xf4f2ff, 2.4, 0.3, 0), m: pose(0, 0, 0) },
+    { geo: paint(new THREE.IcosahedronGeometry(0.085, 0), 0xf6fcff, 2.8, 0.2, 0), m: pose(0, 0, Z + 0.05) },
   ];
-  spread(40).forEach((d, i) => {
-    const len = 0.26 + (i % 3) * 0.05;
-    const needle = paintY(new THREE.OctahedronGeometry(1, 0), 0.25, 0.1, -1, 0xeceaff, 1.3, 1, 0xa294ff, 0.45);
-    parts.push({ geo: needle, m: along(d, len * 0.5, 0.032, len * 0.5, 0.032) });
-  });
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    // the outer petals: wide, nearly flat to the face
+    parts.push({ geo: petal(ICE, CYAN, 0.95, 0.85), m: ray(a, 0.32, 0.46, 0.115, 0.05) });
+    // the inner petals, between them: shorter and cupped up toward you
+    parts.push({ geo: petal(0xe4f8ff, 0x48c0ff, 1.2, 0.8), m: ray(a + Math.PI / 6, 0.78, 0.3, 0.085, 0.045, Z + 0.02) });
+    // needles past the block's edge
+    parts.push({ geo: petal(0xb4ecff, 0x2eaaff, 1.0, 0.9), m: ray(a + Math.PI / 6, 0.1, 0.58, 0.026, 0.026, Z - 0.01) });
+  }
+  // the violet stamens: the old bloom's colour kept as an accent at the heart
+  for (let i = 0; i < 5; i++) {
+    const a = i * Math.PI * 2 / 5 + 0.3;
+    parts.push({ geo: paint(new THREE.OctahedronGeometry(0.034, 0), 0xb49cff, 2.2, 0.3, 0), m: pose(Math.cos(a) * 0.09, Math.sin(a) * 0.09, Z + 0.1) });
+  }
+  // the rime ring: flat frost flakes lying on the stone around it
+  for (let i = 0; i < 16; i++) {
+    const a = i * Math.PI * 2 / 16 + (i % 3) * 0.11;
+    const r = 0.4 + ((i * 7) % 5) * 0.018;
+    const s = 0.018 + ((i * 5) % 3) * 0.006;
+    parts.push({ geo: paint(new THREE.CircleGeometry(s, 6), 0xc8e8ff, 0.3, 0.5, 0), m: pose(Math.cos(a) * r, Math.sin(a) * r, Z - 0.04, 0, 0, a) });
+  }
   return merge(parts);
 })();
 
@@ -491,7 +528,7 @@ const CRACKS = [
 
 export const GEM_GEOS: THREE.BufferGeometry[] = [
   COPPER_NODULE, IRON_BLOCKS, SILVER_SPRAY, GOLD_WOUND, RUBY_CLUSTER, OPAL_EGG,
-  DIAMOND_MARQUISE, EMBER_SHARDS, VEIN_FRONDS, FROST_BURST, SALT_CUBE,
+  DIAMOND_MARQUISE, EMBER_SHARDS, VEIN_FRONDS, FROST_BLOOM, SALT_CUBE,
   NACRE_FAN, MIMIC_EGG,
   ...CRACKS,
 ];
@@ -555,7 +592,7 @@ const HALO: [number, number][] = [
   [0xd8ecff, 0.22],  // diamond: a soft cool sparkle
   [0xff8030, 0.2],   // embershard: banked coals, dimmer than gold, never ruby's pink
   [0xffffff, 0.75],  // veinlight (tinted per world)
-  [0xc4bcff, 0.45],  // frostbloom: cold white from the heart
+  [0x52c8ff, 0.6],   // frostbloom: a soft cyan bloom behind the star (violet only in its stamens)
   [0x3cc8ff, 0.5],   // rime salt: cyan within
   [0xf4dcff, 0.16],  // nacre: a sheen, not a glow
   [0xff7034, 0.3],   // mimic: the cracks give it away
@@ -580,7 +617,7 @@ const MOTION: Motion[] = [
   { spin: 0.9, pulse: 0.05, wobble: 0.06 },   // diamond: catches light constantly
   { spin: 0.4, pulse: 0.13, wobble: 0.05 },   // embershard: banked fire, breathing
   { spin: 0.25, pulse: 0.17, wobble: 0.12 },  // veinlight: slow organic breathing
-  { spin: 0.15, pulse: 0.09, wobble: 0.04 },  // frostbloom: near still, waiting
+  { spin: 0.05, pulse: 0.025, wobble: 0.04 }, // frostbloom: near still, waiting (it turns in the face plane)
   { spin: 0.2, pulse: 0.03, wobble: 0 },      // rime salt: a crust, not a jewel
   { spin: 0.5, pulse: 0.05, wobble: 0.05, sway: true }, // nacre: a fan rocking, sheen sliding
   { spin: 1.25, pulse: 0.1, wobble: 0.28 },   // mimic: voidopal's motion, off a beat

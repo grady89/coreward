@@ -1,0 +1,157 @@
+{
+ "creature-longone": {
+  "calls": 153,
+  "triangles": 31802,
+  "scene": "play"
+ },
+ "creature-longone-close": {
+  "calls": 93,
+  "triangles": 20740,
+  "scene": "play"
+ },
+ "creature-mimic": {
+  "calls": 104,
+  "triangles": 22826,
+  "scene": "play"
+ },
+ "creature-mimic-close": {
+  "calls": 96,
+  "triangles": 22212,
+  "scene": "play"
+ },
+ "creature-kindled": {
+  "calls": 108,
+  "triangles": 8690,
+  "scene": "play"
+ },
+ "creature-kindled-close": {
+  "calls": 100,
+  "triangles": 8180,
+  "scene": "play"
+ },
+ "creature-rimewings": {
+  "calls": 79,
+  "triangles": 36630,
+  "scene": "play"
+ },
+ "creature-rimewings-close": {
+  "calls": 79,
+  "triangles": 36630,
+  "scene": "play"
+ },
+ "creature-brinewyrm": {
+  "calls": 148,
+  "triangles": 49837,
+  "scene": "play"
+ },
+ "creature-brinewyrm-close": {
+  "calls": 121,
+  "triangles": 37899,
+  "scene": "play"
+ },
+ "creature-frostbloom": {
+  "calls": 79,
+  "triangles": 40496,
+  "scene": "play"
+ },
+ "creature-frostbloom-close": {
+  "calls": 60,
+  "triangles": 18878,
+  "scene": "play"
+ },
+ "creature-polyps": {
+  "calls": 75,
+  "triangles": 34753,
+  "scene": "play"
+ },
+ "creature-polyps-close": {
+  "calls": 67,
+  "triangles": 21821,
+  "scene": "play"
+ },
+ "creature-riptide": {
+  "calls": 134,
+  "triangles": 32555,
+  "scene": "play"
+ },
+ "creature-riptide-close": {
+  "calls": 86,
+  "triangles": 12207,
+  "scene": "play"
+ },
+ "quarters-stock-west": {
+  "calls": 63,
+  "triangles": 20010,
+  "scene": "interior"
+ },
+ "quarters-stock-mid": {
+  "calls": 66,
+  "triangles": 20504,
+  "scene": "interior"
+ },
+ "quarters-stock-east": {
+  "calls": 62,
+  "triangles": 19950,
+  "scene": "interior"
+ },
+ "quarters-full-west": {
+  "calls": 105,
+  "triangles": 27434,
+  "scene": "interior"
+ },
+ "quarters-full-mid": {
+  "calls": 97,
+  "triangles": 27880,
+  "scene": "interior"
+ },
+ "quarters-full-east": {
+  "calls": 102,
+  "triangles": 35616,
+  "scene": "interior"
+ },
+ "quarters-gallery": {
+  "calls": 112,
+  "triangles": 38136,
+  "scene": "interior"
+ },
+ "quarters-vivarium": {
+  "calls": 94,
+  "triangles": 19513,
+  "scene": "interior"
+ },
+ "quarters-palette-slate": {
+  "calls": 98,
+  "triangles": 32408,
+  "scene": "interior"
+ },
+ "quarters-palette-rose": {
+  "calls": 98,
+  "triangles": 27928,
+  "scene": "interior"
+ },
+ "quarters-palette-verdant": {
+  "calls": 98,
+  "triangles": 29200,
+  "scene": "interior"
+ },
+ "quarters-close-1": {
+  "calls": 96,
+  "triangles": 26600,
+  "scene": "interior"
+ },
+ "quarters-close-2": {
+  "calls": 78,
+  "triangles": 27320,
+  "scene": "interior"
+ },
+ "quarters-close-3": {
+  "calls": 84,
+  "triangles": 27324,
+  "scene": "interior"
+ },
+ "quarters-close-4": {
+  "calls": 84,
+  "triangles": 33732,
+  "scene": "interior"
+ }
+}

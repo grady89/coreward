@@ -1,0 +1,32 @@
+{
+ "creatures-a": {
+  "best": 6.5,
+  "candidate": 6.3,
+  "delta": -0.2,
+  "why": "B wins on threat readability: a hot mouth on the Long One and a Kindled that separates from the bright chamber. It gives back A's best moment, the Rimewings' cyan light landing on the floor, so the margin is small."
+ },
+ "creatures-b": {
+  "best": 6.5,
+  "candidate": 6.2,
+  "delta": -0.3,
+  "why": "B fixes the two weakest creatures: the brinewyrm finally reads as a swimming wyrm and the frostbloom reads at play size. A keeps a slight edge on polyp light landing on the floor and on showing the riptide swimmer."
+ },
+ "quarters-room": {
+  "best": 7.0,
+  "candidate": 7.2,
+  "delta": 0.2,
+  "why": "B adds lived-in wall conduit and better-read floor plating, which serves the hab-not-box goal; its hard round porthole spill spots are the one regression and keep the margin small."
+ },
+ "furnishings": {
+  "best": 7.2,
+  "candidate": 6.9,
+  "delta": -0.3,
+  "why": "Same furnishings in both; B wins on palette coherence (slate fixtures all cool), a rug that sits on the floor and better-lit kettle, while A's floor has an artifact-like row of identical light blobs. B's lighter floor costs some dark-corner contrast, so the gap is small."
+ },
+ "wings": {
+  "best": 6.8,
+  "candidate": 7.2,
+  "delta": 0.4,
+  "why": "In A the exhibit light reaches the ceiling and the room, so the wings feel lit by their showpieces. B's softer floor and stronger gem bloom are real gains, but B lets the upper third fall to near-black. Best would be A's room light combined with B's floor and bloom."
+ }
+}

@@ -1,0 +1,58 @@
+{
+  "A": {
+    "category": "creatures-b",
+    "score": 6.2,
+    "per_shot": [
+      {"shot": "creature-brinewyrm.png", "score": 6.5, "note": "Faceted pale serpent reads clearly against the cyan pool and its glow lands on the pool floor, but the head is small and the threat end is weak at play size."},
+      {"shot": "creature-brinewyrm-close.png", "score": 5, "note": "Open toothed jaw reads well, but the whole frame takes a red-brown warm cast and the brine goes grey, so it no longer looks like CRYOS."},
+      {"shot": "creature-frostbloom.png", "score": 7, "note": "A bright ice-star tile that reads as beautiful ore, and its cyan light spills into the tiles below, with a violet backing as the subtle tell."},
+      {"shot": "creature-frostbloom-close.png", "score": 7.5, "note": "Crisp faceted starburst, cold palette, light lands on the neighbouring blocks. Strong low-poly jewel, though it reads more like a crystal than veinlight."},
+      {"shot": "creature-polyps.png", "score": 6, "note": "Four sea-green domes ring a cavity and wash it with green light, but they read as lamps or eggs, not animals, and the hazard is unclear."},
+      {"shot": "creature-polyps-close.png", "score": 6.5, "note": "Chunky faceted domes with glowing cores and a good green bloom on the stone. The light lands, but there is no mouth or tendrils to sell it as a creature."},
+      {"shot": "creature-riptide.png", "score": 6, "note": "Defined teal spiral filaments read as a current in the MAELIS hue, but no eye is visible and the starfield makes it read as space, not water."},
+      {"shot": "creature-riptide-close.png", "score": 5.5, "note": "Spiral is crisp, but the swimmer is cropped under the depth HUD and there is still no focal eye or danger read."}
+    ],
+    "top_issues": [
+      {"issue": "Brinewyrm close-up shot has a warm red-brown cast that breaks CRYOS ice-cyan", "shots": ["creature-brinewyrm-close.png"], "why": "One hue per world: the wyrm's habitat should say CRYOS from any distance, and the brine pool loses its glow under the warm wash.", "suggested_direction": "Remove whatever warm grade or tint is applied in this state and keep the pool emissive cyan, as the wide shot does."},
+      {"issue": "Riptide has no readable eye or threat focal point", "shots": ["creature-riptide.png", "creature-riptide-close.png"], "why": "The brief calls it a current with an eye. Right now it is a pretty nebula, and the player cannot tell that it is a creature or where the danger is.", "suggested_direction": "Put a bright faceted eye or iris at the vortex centre that blooms and lights the nearby rock, and thin the starfield dots so the vortex reads as water, not sky."},
+      {"issue": "Pressure Polyps read as lamps or eggs, not creatures", "shots": ["creature-polyps.png", "creature-polyps-close.png"], "why": "A threat must read as a threat at play size. Smooth domes with a diamond read as pickups or lights.", "suggested_direction": "Add a chunky faceted mouth or crown of short tendrils, plus a pulse or brighter rim on the dangerous face, while keeping the green bloom that lands on the stone."},
+      {"issue": "Brinewyrm head is small relative to its body at play size", "shots": ["creature-brinewyrm.png"], "why": "Silhouette and dangerous end should read in the gameplay frame, not only in the close-up.", "suggested_direction": "Enlarge the head and jaw slightly and give the mouth interior an emissive accent so the biting end stands out."},
+      {"issue": "Riptide swimmer framed off-screen and under the HUD", "shots": ["creature-riptide-close.png"], "why": "The creature's swimmers are part of what sells it, and here they are cut off at the frame edge.", "suggested_direction": "Keep swimmers orbiting inside the visible vortex area, below the HUD band."}
+    ],
+    "protect": [
+      "Frostbloom's bright faceted ice star and the cyan light it spills into the neighbouring tiles",
+      "Polyps' sea-green bloom that washes the surrounding stone",
+      "Brinewyrm's faceted pale body with cyan studs against the emissive pool",
+      "Riptide's crisp spiral filaments in the MAELIS teal"
+    ]
+  },
+  "B": {
+    "category": "creatures-b",
+    "score": 5.8,
+    "per_shot": [
+      {"shot": "creature-brinewyrm.png", "score": 7, "note": "Bigger, more lit head with an open jaw, a curling body, and strong self-glow that lands on the water. Reads as a predator at play size."},
+      {"shot": "creature-brinewyrm-close.png", "score": 7, "note": "Stays fully in the CRYOS cyan palette. The wyrm blooms into the pool and lights the surface, though the bloom slightly burns out the jaw detail."},
+      {"shot": "creature-frostbloom.png", "score": 5, "note": "Small, faint white spark in a lilac haze. Hard to spot at play size, and its glow does not land on the neighbouring stone."},
+      {"shot": "creature-frostbloom-close.png", "score": 5.5, "note": "Thin spiky crystal on a dusty violet tile. Reads more like a sticker than a beautiful ore, and the light stays inside its own tile."},
+      {"shot": "creature-polyps.png", "score": 5.5, "note": "Four domes sit on a floor ledge with a modest green pool of light. Natural placement, but small, dim and creature-ambiguous."},
+      {"shot": "creature-polyps-close.png", "score": 5.5, "note": "Same domes larger, with light landing on the ledge below, but most of the frame is empty dark rock and there is no threat read."},
+      {"shot": "creature-riptide.png", "score": 6, "note": "Large, soft sea-green vortex that washes the room, but the filaments are diffuse, with no eye and a space-like starfield."},
+      {"shot": "creature-riptide-close.png", "score": 5, "note": "Pod is jammed at the bottom edge, the swimmer is cropped in the corner under the HUD, and the vortex is a soft haze with no focal eye."}
+    ],
+    "top_issues": [
+      {"issue": "Frostbloom lost its presence and its glow no longer lands", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "It must read as a beautiful glowing ore. The small white spark on a lilac tile is easy to miss and does not light the stone around it.", "suggested_direction": "Restore a larger faceted ice-cyan crystal cluster that fills the tile and spills cyan onto adjacent blocks. Keep the violet as a faint tell only."},
+      {"issue": "Riptide has no readable eye or threat focal point, and the vortex is diffuse", "shots": ["creature-riptide.png", "creature-riptide-close.png"], "why": "It is described as a current with an eye. The soft haze reads as fog or a nebula, not a creature.", "suggested_direction": "Tighten the spiral filaments, add an emissive faceted eye at the centre that lights the rock below, and reduce the star-like particles."},
+      {"issue": "Pressure Polyps read as lamps or eggs, not creatures", "shots": ["creature-polyps.png", "creature-polyps-close.png"], "why": "A threat must read as a threat at play size, and these are small and dim on a dark ledge.", "suggested_direction": "Give them a faceted mouth or tendril crown and a stronger green bloom that washes the ledge and wall behind them."},
+      {"issue": "Riptide close framing crops the pod and the swimmers", "shots": ["creature-riptide-close.png"], "why": "Both the player and the creature's swimmers are cut off at the frame edges, so the shot does not read.", "suggested_direction": "Frame with the pod and vortex centre both in view and keep swimmers inside the frame, below the HUD."},
+      {"issue": "Brinewyrm bloom slightly over-burns the head", "shots": ["creature-brinewyrm-close.png"], "why": "Glow should bloom softly. Over-bright facets flatten the jaw read in close-up.", "suggested_direction": "Pull the head emissive down a touch so the teeth and facets keep their value separation."}
+    ],
+    "protect": [
+      "Brinewyrm's larger head, open jaw and curled pose, which read as a predator at play size",
+      "Brinewyrm close-up staying in the ice-cyan CRYOS palette with the pool glowing",
+      "Polyps mounted on a floor ledge as a natural habitat placement",
+      "Riptide's large sea-green wash that tints the room"
+    ]
+  },
+  "preference": "A",
+  "why": "B clearly improves the Brinewyrm (bigger threat read, stays cyan in close-up), but it badly weakens the Frostbloom and dims the Polyps. A's Frostbloom and Polyps glow land on the stone, so A is better on balance."
+}

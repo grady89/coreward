@@ -1,0 +1,56 @@
+{
+  "A": {
+    "category": "creatures-a",
+    "score": 6.3,
+    "per_shot": [
+      {"shot": "creature-longone.png", "score": 6.5, "note": "Chunky faceted amber serpent with a warm halo on the back wall; the head's mouth glow is dim, so the biting end barely outreads the tail at play size."},
+      {"shot": "creature-longone-close.png", "score": 7, "note": "Segments read clearly and sit in VEIL amber, but they look like hollow cones, and the halo mostly lights empty air, not the tunnel rock it should be burrowing through."},
+      {"shot": "creature-mimic.png", "score": 6, "note": "Violet crab reads as a creature with pincers, and its violet pool is self-lit and on-colour, but it floats in an open void and never reads as an ore that bites."},
+      {"shot": "creature-mimic-close.png", "score": 6.5, "note": "Clean faceted crystal body with a cyan crown and a soft violet bloom; the light pools on the empty backdrop, not on the stone around it."},
+      {"shot": "creature-kindled.png", "score": 5.5, "note": "Cream glowing mannequins merge with the cream pillar and bright core chamber; they read as light but not as a pursuer or a threat."},
+      {"shot": "creature-kindled-close.png", "score": 5.5, "note": "Washed-out pale bodies with no focal point or menace; sparks are nice, but the silhouette is lost against the lit pillar."},
+      {"shot": "creature-rimewings.png", "score": 7, "note": "Tight cyan flock with a strong ice-cyan pool landing on the floor; the clearest 'glow that lands' in the set and squarely CRYOS."},
+      {"shot": "creature-rimewings-close.png", "score": 7, "note": "Crystalline wings catch the light, and the cyan wash on the floor blocks sells the self-lit flock; individual birds are small but legible."}
+    ],
+    "top_issues": [
+      {"issue": "Kindled has no threat read and loses its silhouette in bright scenes", "shots": ["creature-kindled.png", "creature-kindled-close.png"], "why": "Pale cream bodies on a cream and amber chamber give no value contrast; a pursuer has to be picked out instantly.", "suggested_direction": "Give it a hot focal core and darker or more saturated limbs, or a local darkening behind it, so it separates by value from bright backgrounds."},
+      {"issue": "Geode Mimic does not read as an ore", "shots": ["creature-mimic.png", "creature-mimic-close.png"], "why": "It hovers in an open cavity as an obvious crab, so the 'ore that bites' fantasy and its tell are absent.", "suggested_direction": "Stage it seated in or against a rock face with a geode-like resting silhouette; let the pincers and legs be the reveal."},
+      {"issue": "Creature light lights air more than rock", "shots": ["creature-longone-close.png", "creature-mimic-close.png"], "why": "The brief wants a creature's light to spill onto the stone around it; here it is mostly a screen-space halo over void.", "suggested_direction": "Stage the Long One and Mimic close enough to rock faces that their point light visibly washes the nearest block faces."},
+      {"issue": "Long One's dangerous end is under-stated", "shots": ["creature-longone.png"], "why": "At play size the head glow is about as bright as the body seams, so the eye doesn't go to the mouth.", "suggested_direction": "Make the mouth the hottest point on the body, with a stronger value step from head to tail."}
+    ],
+    "protect": [
+      "Rimewings' cyan floor pool: the creature's own light visibly landing on the rock",
+      "Long One's chunky faceted segments in VEIL amber with ember seams",
+      "Mimic's violet-on-amber accent with the cyan crystal crown",
+      "Low-poly faceted construction across all four"
+    ]
+  },
+  "B": {
+    "category": "creatures-a",
+    "score": 6.5,
+    "per_shot": [
+      {"shot": "creature-longone.png", "score": 7, "note": "Same serpent with a white-hot mouth glow; the biting end now clearly leads at play size."},
+      {"shot": "creature-longone-close.png", "score": 7, "note": "The hot mouth gives a clear focal point and danger read, but the segments are still hollow cones and the light still lands mostly on air."},
+      {"shot": "creature-mimic.png", "score": 6, "note": "Crab reads equally well; the cooler, wider pool touches the nearby block faces, but it reads more like headlamp spill than the mimic's own light and still floats in a void."},
+      {"shot": "creature-mimic-close.png", "score": 6.5, "note": "The tilted pose is more dynamic and the light lands on the right-hand block, but the grey-cyan pool loses A's colour cohesion with the violet body."},
+      {"shot": "creature-kindled.png", "score": 6.5, "note": "Darker bodies with a burning diamond heart, sparks and a local darkening behind them; reads as a figure and a threat against the bright chamber."},
+      {"shot": "creature-kindled-close.png", "score": 6.5, "note": "Clear silhouettes and a focal heart; the dark smudge aura and dull brown limbs undercut 'made of light' somewhat."},
+      {"shot": "creature-rimewings.png", "score": 6.5, "note": "Larger, more bird-like wings and a looser flock, but the cyan floor pool is gone; the floor is lit by the white headlamp only."},
+      {"shot": "creature-rimewings-close.png", "score": 6.5, "note": "Bigger, nicer wing shapes; the flock glows but its light no longer visibly lands on the ice below."}
+    ],
+    "top_issues": [
+      {"issue": "Rimewings lost their light-on-floor", "shots": ["creature-rimewings.png", "creature-rimewings-close.png"], "why": "Without the cyan pool the flock reads as lit objects, not light sources; this is the main way B regresses from A.", "suggested_direction": "Restore a cyan point light or floor wash under the flock, keeping B's larger wing shapes."},
+      {"issue": "Kindled's dark aura conflicts with 'a pursuer made of light'", "shots": ["creature-kindled.png", "creature-kindled-close.png"], "why": "It solves readability, but a brown body in a dark smudge reads more as shadow than as light.", "suggested_direction": "Keep the heart and value separation, but make the limbs emissive-edged or ember-lit, and keep the darkening subtle or tie it to its glow."},
+      {"issue": "Geode Mimic does not read as an ore", "shots": ["creature-mimic.png", "creature-mimic-close.png"], "why": "It is shown hovering as an obvious crab with no disguise or tell.", "suggested_direction": "Stage it embedded in or against the rock face with a geode resting silhouette; keep the mimic's light the violet of its body."},
+      {"issue": "Long One's segments read as hollow cones, and its light lights air", "shots": ["creature-longone-close.png"], "why": "The funnel shapes undercut 'serpent', and the halo doesn't wash the tunnel stone.", "suggested_direction": "Close the segment backs or overlap them as plates, and bring the body near rock so the glow lands on the block faces."}
+    ],
+    "protect": [
+      "Long One's white-hot mouth as the dangerous-end focal point",
+      "Kindled's heart-glow focal point and value separation from bright backgrounds",
+      "Rimewings' larger crystalline wing silhouettes",
+      "Low-poly faceted construction and world hue families"
+    ]
+  },
+  "preference": "B",
+  "why": "B wins on threat readability: a hot mouth on the Long One and a Kindled that separates from the bright chamber. It gives back A's best moment, the Rimewings' cyan light landing on the floor, so the margin is small."
+}

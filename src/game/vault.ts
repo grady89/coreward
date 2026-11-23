@@ -461,6 +461,8 @@ export class VaultRun {
   private grav: GravityField | null = null;
   private ambient!: THREE.AmbientLight;
   private rimMat!: THREE.MeshBasicMaterial;
+  /** 0..1: the cracks wait for the stone to land */
+  private rimShow = 0;
   private fog: { mesh: THREE.Mesh; vx: number; x0: number; x1: number }[] = [];
   /** the back wall's warm pools: one instance per light that throws one */
   private wallPools: THREE.InstancedBufferGeometry | null = null;
@@ -1942,10 +1944,11 @@ export class VaultRun {
     const map = new THREE.CanvasTexture(bake);
     map.colorSpace = THREE.SRGBColorSpace;
 
-    // only where it can show: open tiles with wall, and a tile of stone
-    // round them so the parallax never opens a black seam at a masonry edge
+    // behind open tiles AND behind the stone: while the courses fly in, the
+    // wall where a block will land must already be there, not a black hole
+    // waiting for it. Void and true dark stay unbuilt.
     const show = (x: number, y: number): boolean =>
-      x >= 0 && y >= 0 && x < p.w && y < p.h && !p.solid[y * p.w + x] && mAt[y * p.w + x] > 0;
+      x >= 0 && y >= 0 && x < p.w && y < p.h && mAt[y * p.w + x] > 0;
     const pos: number[] = [], uv: number[] = [];
     const u = (x: number): number => (x + 1) / W;
     const v = (y: number): number => 1 - (y + 1) / H;
@@ -3570,7 +3573,11 @@ export class VaultRun {
     const lit = this.sconceLit.reduce((n, b) => n + (b ? 1 : 0), 0);
     this.ambient.intensity = AMBIENT_BASE * (1 + 0.055 * lit) + 0.5 * chord;
     if (this.rimMat) {
-      this.rimMat.opacity = Math.min(RIM_MAX, LATTICE[this.act].rim + RIM_STEP * lit + 0.12 * chord);
+      // the cracks belong to the stone: they show once the courses have
+      // landed, and go out the moment the room starts to let go
+      const want = this.arriveDone && this.phase !== 'leave' ? 1 : 0;
+      this.rimShow += Math.sign(want - this.rimShow) * Math.min(Math.abs(want - this.rimShow), dt / 0.4);
+      this.rimMat.opacity = this.rimShow * Math.min(RIM_MAX, LATTICE[this.act].rim + RIM_STEP * lit + 0.12 * chord);
     }
     // the fog banks drift, and their distinct z is what makes the black move
     for (const f of this.fog) {

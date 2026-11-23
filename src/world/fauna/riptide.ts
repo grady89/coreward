@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, openness, lerp, clamp01, ease, wide } from './types';
+import { Creature, ThreatCtx, ThreatLevel, openness, lerp, clamp01, ease, wide, Spill, spillTexture } from './types';
 
 // THE RIPTIDE — MAELIS-6's hunter tier. Keyed on SPACE.
 //
 // You never see it whole. It is a current in the water with a will: a slow
-// spiral of drifting motes that all lean the same way, a shadow far too big
-// behind the rock that only shows through the gaps, and — every so often,
+// spiral of drifting motes that all lean the same way, a vast pale-green
+// churn turning behind the rock that only shows through the gaps, its light
+// on every stone it passes, and — every so often,
 // when you're close — an eye the size of a room that opens, looks at you,
 // and closes again.
 //
@@ -16,11 +17,109 @@ import { Creature, ThreatCtx, ThreatLevel, openness, lerp, clamp01, ease, wide }
 // cave it will take the pod. In a one-wide tunnel it can't get a grip.
 // The counter is the game's own verb: dig into the rock and it loses you.
 
-const MOTES = 1400;
+/** streaks of current, not stars: few, short, and bright only inside the spiral */
+const MOTES = 380;
 const RADIUS = 9;
 const BAND = 300;
 const CRUISE = 1.1;
 const PULL = 26;
+const tmpWhite = new THREE.Color(0xffffff);
+const tmpCol = new THREE.Color();
+
+/**
+ * The heart of the current: a faceted iris in two rings of flat facets, each
+ * its own shade (pale at the pupil, the world's green at the rim), so it
+ * reads as a cut jewel of an eye rather than a smooth disc. Vertex colours
+ * only; the material colour carries the world tint and the HDR gain.
+ */
+function irisGeometry(): THREE.BufferGeometry {
+  const SEG = 10, rings = [0.3, 0.62, 1.0, 1.14];
+  const h = (n: number): number => { const v = Math.sin(n * 91.7 + 17.3) * 43758.5453; return v - Math.floor(v); };
+  const pos: number[] = [], col: number[] = [];
+  for (let r = 0; r < 3; r++) {
+    for (let i = 0; i < SEG; i++) {
+      const a0 = (i / SEG) * Math.PI * 2 + r * (Math.PI / SEG), a1 = a0 + (Math.PI * 2) / SEG;
+      const r0 = rings[r], r1 = rings[r + 1];
+      const p = [
+        [Math.cos(a0) * r0, Math.sin(a0) * r0], [Math.cos(a1) * r0, Math.sin(a1) * r0],
+        [Math.cos(a1) * r1, Math.sin(a1) * r1], [Math.cos(a0) * r1, Math.sin(a0) * r1],
+      ];
+      // two triangles per facet, each a step apart in value: the cut
+      for (const [tri, k] of [[[0, 2, 1], 0], [[0, 3, 2], 1]] as const) {
+        // pale inner ring, green outer ring, and a dark limbal edge round it all
+        const v = (r === 0 ? 1.0 : r === 1 ? 0.6 : 0.16) * (0.66 + h(r * 40 + i * 2 + k) * 0.5);
+        // the inner ring runs toward white, the outer leans sea-green
+        const w = r === 0 ? 0.55 : 0.12;
+        for (const j of tri) {
+          pos.push(p[j][0], p[j][1], 0);
+          col.push(v * (0.5 + 0.5 * w), v, v * (0.72 + 0.28 * w));
+        }
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
+let vortexTex: THREE.CanvasTexture | null = null;
+/**
+ * The current itself: soft spiral arms of haze winding into a calm eye,
+ * fading out at the rim. Drawn once; each layer turns it in UV space, so the
+ * arms rotate while the ellipse they fill stays put. White: the material
+ * carries the world's colour.
+ */
+function vortexTexture(): THREE.CanvasTexture {
+  if (vortexTex) return vortexTex;
+  const N = 256, c = N / 2;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const g = cv.getContext('2d')!;
+  g.lineCap = 'round';
+  // ragged, uneven arms and loose wisps: a current, not a galaxy. Fixed
+  // pseudo-random per arm so every run draws the same water.
+  const h = (n: number): number => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const strands = 9;
+  // a narrow glow round each arm, not a fog over the whole disc
+  for (const [blur, width, alpha] of [[7, 15, 0.2], [3, 7, 0.44], [1.2, 2.2, 0.6]] as const) {
+    g.filter = `blur(${blur}px)`;
+    for (let k = 0; k < strands; k++) {
+      const a0 = (k / strands) * Math.PI * 2 + h(k) * 0.6;
+      const r0 = 0.98 - h(k + 10) * 0.3;
+      const len = 0.35 + h(k + 20) * 0.6;
+      const wob = 0.1 + h(k + 30) * 0.2;
+      g.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const t = (i / 40) * len;
+        const r = c * (r0 - t * 0.86);
+        const a = a0 + t * 3.1 + Math.sin(t * 9 + k * 2.3) * wob;
+        const x = c + Math.cos(a) * r, y = c + Math.sin(a) * r;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.lineWidth = width * (0.5 + h(k + 40) * 0.9);
+      g.strokeStyle = `rgba(255,255,255,${alpha * (0.6 + h(k + 50) * 0.4)})`;
+      g.stroke();
+    }
+  }
+  g.filter = 'none';
+  // real dark between the arms: steepen the falloff so the blur's tails
+  // drop to nothing instead of washing the gaps grey-green
+  const img = g.getImageData(0, 0, N, N), px = img.data;
+  for (let i = 3; i < px.length; i += 4) px[i] = Math.round(255 * Math.pow(px[i] / 255, 1.7));
+  g.putImageData(img, 0, 0);
+  // fade the rim to nothing and calm the eye
+  g.globalCompositeOperation = 'destination-in';
+  const fade = g.createRadialGradient(c, c, 0, c, c, c);
+  fade.addColorStop(0, 'rgba(255,255,255,0.25)');
+  fade.addColorStop(0.2, 'rgba(255,255,255,1)');
+  fade.addColorStop(0.6, 'rgba(255,255,255,0.7)');
+  fade.addColorStop(0.92, 'rgba(255,255,255,0)');
+  g.fillStyle = fade;
+  g.fillRect(0, 0, N, N);
+  vortexTex = new THREE.CanvasTexture(cv);
+  return vortexTex;
+}
 
 export class Riptide implements Creature {
   alive = false;
@@ -40,41 +139,72 @@ export class Riptide implements Creature {
   private woke = false;
   private spin = 0;
 
-  private motes: THREE.Points;
+  /** the current made visible: short streaks along the spiral, head bright, tail dark */
+  private motes: THREE.LineSegments;
   private motePos: Float32Array;
+  private moteCol: Float32Array;
   private moteSeed: Float32Array;
-  private moteMat: THREE.PointsMaterial;
-  private shadow: THREE.Mesh;
-  private shadowMat: THREE.MeshBasicMaterial;
+  private moteMat: THREE.LineBasicMaterial;
+  /** the churn behind the rock: two hazy layers turning at different rates */
+  private flow: THREE.Mesh[] = [];
+  private flowMats: THREE.MeshBasicMaterial[] = [];
+  private flowOpacity = 0;
+  /** its light on the stone inside the field */
+  private spill: Spill;
   private eye: THREE.Group;
   private iris: THREE.Mesh;
   private lidTop: THREE.Mesh;
   private lidBot: THREE.Mesh;
   private pupil: THREE.Mesh;
   private eyeLight: THREE.PointLight;
+  /** the heart of the vortex: a faceted eye that is always there, turning with
+   *  the current, looking at you, blooming as it takes hold */
+  private core: THREE.Group;
+  private coreIris: THREE.Mesh;
+  private coreIrisMat: THREE.MeshBasicMaterial;
+  private corePupil: THREE.Mesh;
+  private coreHaloMat: THREE.MeshBasicMaterial;
+  /** the heart's light on the stone around it */
+  private coreSpill: Spill;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField) {
     // motes: the visible current. Each has a radius, an angle and a depth
     // it drifts along; the field is re-seeded each time the Riptide arrives.
-    this.motePos = new Float32Array(MOTES * 3);
+    // Drawn as streaks (a bright head and a dark tail each), so the field
+    // reads as water moving, never as a sky full of stars.
+    this.motePos = new Float32Array(MOTES * 6);
+    this.moteCol = new Float32Array(MOTES * 6);
     this.moteSeed = new Float32Array(MOTES * 3);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.motePos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.moteMat = new THREE.PointsMaterial({
-      color: 0x9ef0d0, size: 0.07, transparent: true, opacity: 0, depthWrite: false,
+    geo.setAttribute('color', new THREE.BufferAttribute(this.moteCol, 3).setUsage(THREE.DynamicDrawUsage));
+    this.moteMat = new THREE.LineBasicMaterial({
+      color: 0x9ef0d0, vertexColors: true, transparent: true, opacity: 0, depthWrite: false,
       blending: THREE.AdditiveBlending, toneMapped: false,
     });
-    this.motes = new THREE.Points(geo, this.moteMat);
+    this.motes = new THREE.LineSegments(geo, this.moteMat);
     this.motes.frustumCulled = false;
     this.motes.visible = false;
     scene.add(this.motes);
 
-    // the shadow: a vast ellipsoid behind the rock plane, only ever glimpsed
-    this.shadowMat = new THREE.MeshBasicMaterial({ color: 0x02060a, transparent: true, opacity: 0, depthWrite: false });
-    this.shadow = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14), this.shadowMat);
-    this.shadow.scale.set(11, 2.6, 0.6);
-    this.shadow.visible = false;
-    scene.add(this.shadow);
+    // the current: pale sea-green haze in slow spiral arms, behind the rock
+    // plane, so it is only ever glimpsed through the open water. Never a
+    // dark mass: black is the void, and this is something alive in it.
+    for (let k = 0; k < 2; k++) {
+      const map = vortexTexture().clone();
+      map.center.set(0.5, 0.5);
+      const mat = new THREE.MeshBasicMaterial({
+        map, color: 0x3ce6c8, transparent: true, opacity: 0, depthWrite: false,
+        blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+      mesh.position.z = -0.58 - k * 0.02;
+      mesh.visible = false;
+      scene.add(mesh);
+      this.flow.push(mesh);
+      this.flowMats.push(mat);
+    }
+    this.spill = new Spill(scene, 0x3ce6c8);
 
     // the eye
     this.eye = new THREE.Group();
@@ -98,12 +228,35 @@ export class Riptide implements Creature {
     this.eye.add(this.iris, this.pupil, this.lidTop, this.lidBot, this.eyeLight);
     this.eye.visible = false;
     scene.add(this.eye);
+
+    // the heart: in the open water at the vortex centre, behind the rock
+    // plane like the haze, so a wall between you and it hides it
+    this.core = new THREE.Group();
+    this.coreHaloMat = new THREE.MeshBasicMaterial({
+      map: spillTexture(), color: 0x3ce6c8, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
+    });
+    // wide enough to catch the inner arms of the swirl
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 4.6), this.coreHaloMat);
+    halo.position.z = -0.03;
+    this.coreIrisMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false });
+    this.coreIris = new THREE.Mesh(irisGeometry(), this.coreIrisMat);
+    this.coreIris.scale.set(1.0, 0.86, 1);
+    // a slit, not a dot: a dark faceted diamond that the current's light rings
+    this.corePupil = new THREE.Mesh(new THREE.CircleGeometry(0.34, 4), new THREE.MeshBasicMaterial({ color: 0x010806, fog: false }));
+    this.corePupil.position.z = 0.01;
+    this.core.add(halo, this.coreIris, this.corePupil);
+    this.core.visible = false;
+    scene.add(this.core);
+    this.coreSpill = new Spill(scene, 0x3ce6c8);
   }
 
   reset(): void {
     this.alive = false;
-    this.motes.visible = false; this.shadow.visible = false; this.eye.visible = false;
-    this.moteMat.opacity = 0; this.shadowMat.opacity = 0;
+    this.motes.visible = false; this.eye.visible = false; this.core.visible = false;
+    for (const f of this.flow) f.visible = false;
+    this.spill.off(); this.coreSpill.off();
+    this.moteMat.opacity = 0; this.flowOpacity = 0;
     this.rumble = 0; this.grip = 0; this.entered = false;
   }
 
@@ -129,7 +282,8 @@ export class Riptide implements Creature {
       this.life = 0; this.retarget = 0; this.eyeCooldown = 9 + Math.random() * 6; this.eyeT = 0; this.eyeOpen = 0;
       this.entered = false; this.woke = false; this.grip = 0;
       this.seed();
-      this.motes.visible = true; this.shadow.visible = true;
+      this.motes.visible = true;
+      for (const f of this.flow) f.visible = true;
       return true;
     }
     return false;
@@ -137,7 +291,9 @@ export class Riptide implements Creature {
 
   private die(): void {
     this.alive = false;
-    this.motes.visible = false; this.shadow.visible = false; this.eye.visible = false;
+    this.motes.visible = false; this.eye.visible = false; this.core.visible = false;
+    for (const f of this.flow) f.visible = false;
+    this.spill.off(); this.coreSpill.off();
     this.entered = false;
   }
 
@@ -276,12 +432,63 @@ export class Riptide implements Creature {
       this.animateMotes(dt, strength);
     }
 
-    // ---- the shadow behind the rock ----
-    this.shadow.position.set(this.x, this.y + Math.sin(time * 0.3) * 0.6, -0.58);
-    this.shadow.rotation.z = Math.sin(time * 0.17) * 0.25;
+    // ---- the current behind the rock, and its light on the stone ----
+    this.flowOpacity = lerp(this.flowOpacity, clamp01(1.3 - dist / 22), Math.min(1, dt * 1.5));
     const breathe = 1 + Math.sin(time * 0.5) * 0.06;
-    this.shadow.scale.set(11 * breathe, 2.6 / breathe, 0.6);
-    this.shadowMat.opacity = lerp(this.shadowMat.opacity, clamp01(1.3 - dist / 22) * 0.92, Math.min(1, dt * 1.5));
+    const fx = this.x, fy = this.y + Math.sin(time * 0.3) * 0.6;
+    for (let k = 0; k < 2; k++) {
+      const f = this.flow[k];
+      // the field the motes fill is 1.25r × 0.75r: the haze fills the same
+      const w = RADIUS * 2.6 * (k === 0 ? 1 : 0.72) * breathe;
+      f.position.set(fx, fy, f.position.z);
+      f.scale.set(w, w * 0.6 / breathe, 1);
+      f.rotation.z = Math.sin(time * 0.17) * 0.12;
+      // turning with the motes (inner layer faster), harder as it grips
+      this.flowMats[k].map!.rotation = -this.spin * (k === 0 ? 0.55 : 0.95) - k * 1.3;
+      this.flowMats[k].opacity = this.flowOpacity * (k === 0 ? 0.64 : 0.5) * (1 + strength * 0.6);
+      f.visible = this.flowOpacity > 0.01;
+    }
+    this.flowMats[0].color.setHex(ACTIVE.gemTint);
+    this.flowMats[1].color.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.25);
+    // its light on the stone, kept low: the haze is in the arms, not the air
+    this.spill.set(fx, fy, RADIUS * 2, RADIUS * 1.3, this.flowOpacity * (0.11 + strength * 0.2), ACTIVE.gemTint, 1.2);
+
+    // ---- the heart: the eye at the centre of the current ----
+    const seen = this.flowOpacity;
+    this.core.visible = seen > 0.01;
+    if (this.core.visible) {
+      // a slow breath, quickening and swelling as it grips you; it flares
+      // with the wall eye when that one opens
+      const beat = 0.5 + 0.5 * Math.sin(time * (1.3 + strength * 3));
+      const bloom = seen * (1 + strength * 1.2 + this.eyeOpen * 0.8);
+      this.core.position.set(fx, fy, -0.52);
+      const sc = 1.1 + strength * 0.25 + beat * 0.05;
+      this.core.scale.set(sc, sc, 1);
+      // the iris turns with the arms; the pupil stays upright and looks at you
+      this.coreIris.rotation.z = -this.spin * 0.35;
+      const lx = Math.max(-1, Math.min(1, (podX - fx) / 6)) * 0.22;
+      const ly = Math.max(-1, Math.min(1, (podY - fy) / 6)) * 0.16;
+      this.corePupil.position.set(lx, ly, 0.01);
+      // the slit narrows as it focuses on you
+      this.corePupil.scale.set(0.42 - strength * 0.16, 1.25 + strength * 0.2, 1);
+      // HDR gain past the bloom threshold: the eye is the brightest thing here
+      this.coreIrisMat.color.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.12)
+        .multiplyScalar((1.5 + beat * 0.35 + strength * 0.8) * seen);
+      this.coreHaloMat.color.setHex(ACTIVE.gemTint).multiplyScalar(1.4);
+      this.coreHaloMat.opacity = Math.min(1, 0.26 * bloom + beat * 0.06);
+      // and its light lands on the rock around it: stretched down through
+      // the swirl to the first floor under the heart (within eight tiles),
+      // so the floor and the arms between catch it, not the dark above
+      tmpCol.setHex(ACTIVE.gemTint).lerp(tmpWhite, 0.1);
+      const col = Math.floor(fx), row = Math.floor(-fy);
+      let k = 1;
+      while (k <= 8 && !this.terrain.solidAt(col, row + k)) k++;
+      const drop = k <= 8 ? k - (-fy - row) : 0;
+      this.coreSpill.set(fx, fy - drop * 0.55, 8 + drop * 0.5, 6.5 + drop * 1.3,
+        Math.min(0.7, (0.24 + beat * 0.05 + drop * 0.025) * bloom), tmpCol.getHex(), 1.35);
+    } else {
+      this.coreSpill.off();
+    }
   }
 
   private animateMotes(dt: number, strength: number): void {
@@ -296,12 +503,24 @@ export class Riptide implements Creature {
       const a = a0 + this.spin * (1.6 - r / RADIUS) + depth * 2;
       const px = this.x + Math.cos(a) * r * 1.25;
       const py = this.y + Math.sin(a) * r * 0.75;
+      // the tail trails back along the spiral (behind in angle, a little
+      // further out), longer where the current runs fast near the heart
+      const trail = (0.22 + strength * 0.2) / Math.max(1.5, r);
+      const ta = a - trail, tr = r + 0.12;
+      const qx = this.x + Math.cos(ta) * tr * 1.25;
+      const qy = this.y + Math.sin(ta) * tr * 0.75;
       // motes only live in water: the ones inside rock are hidden away
       const hidden = this.terrain.solidAt(Math.floor(px), Math.floor(-py));
-      this.motePos[i * 3] = hidden ? 9999 : px;
-      this.motePos[i * 3 + 1] = py;
-      this.motePos[i * 3 + 2] = 0.2 + depth * 0.5;
+      const z = 0.2 + depth * 0.5;
+      const o = i * 6;
+      this.motePos[o] = hidden ? 9999 : px; this.motePos[o + 1] = py; this.motePos[o + 2] = z;
+      this.motePos[o + 3] = hidden ? 9999 : qx; this.motePos[o + 4] = qy; this.motePos[o + 5] = z;
+      // bright in the spiral, gone toward the rim: the current, not a sky
+      const fade = Math.pow(clamp01(1 - r / (RADIUS * 1.05)), 1.6) * (0.5 + depth * 0.5);
+      this.moteCol[o] = this.moteCol[o + 1] = this.moteCol[o + 2] = fade;
+      this.moteCol[o + 3] = this.moteCol[o + 4] = this.moteCol[o + 5] = 0;
     }
     (this.motes.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (this.motes.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
   }
 }
