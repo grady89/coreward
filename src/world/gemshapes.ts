@@ -360,54 +360,44 @@ const VEIN_FRONDS = (() => {
   return merge(parts);
 })();
 
-// 9 FROSTBLOOM — the trap that passes for veinlight: a cold flower of
-// faceted ice petals standing proud of the face, cupped toward the viewer
-// around a white-hot heart, with long needles reaching past the block's
-// edge. Ice-cyan with a few violet stamens at the heart. The tell is the
-// rime: a ring of frost flakes on the stone around it that no living
-// veinlight leaves. Built facing +z (it turns in the face plane, never
-// edge-on) and lifted clear of a jittered rock face.
+// 9 FROSTBLOOM — the trap that passes for veinlight: veinlight's own
+// fronds off a glowing root pad, in a colder cyan, its tile glowing the
+// same soft disc and its light on the stone beside it. The tell is small:
+// a few flat ice spines splayed low off the root like petals (no living
+// frond grows them) and a cold flicker every few seconds where veinlight
+// only breathes. The hue is baked in; it draws white.
 const FROST_BLOOM = (() => {
-  const Z = 0.14;
-  const ICE = 0x9ae2ff, CYAN = 0x1c96ff;
-  // a petal: a long flat bipyramid whose two front faces split light from
-  // shade down its spine, glowing at the root and cooling to cyan at the tip
-  const petal = (root: number, tip: number, eRoot: number, eTip: number) =>
-    paintFaces(new THREE.OctahedronGeometry(1, 0), 0.18, 0.08, (c, n) => {
-      const t = Math.max(0, Math.min(1, (c.y + 1) / 2));
-      const k = (n.x > 0 ? 1 : 0.5) * (n.y > 0 ? 1 : 0.85);
-      return [col(root).lerp(col(tip), t), (eRoot + (eTip - eRoot) * t) * k];
-    });
-  // out from the heart along angle a, tipped toward the viewer by tilt
-  const ray = (a: number, tilt: number, len: number, w: number, d: number, z = Z) =>
-    new THREE.Matrix4().makeTranslation(0, 0, z)
-      .multiply(new THREE.Matrix4().makeRotationZ(a))
-      .multiply(new THREE.Matrix4().makeRotationX(tilt))
-      .multiply(new THREE.Matrix4().makeTranslation(0, len / 2 + 0.03, 0))
-      .multiply(new THREE.Matrix4().makeScale(w, len / 2, d));
   const parts: Part[] = [
-    { geo: paint(new THREE.IcosahedronGeometry(0.085, 0), 0xf6fcff, 2.8, 0.2, 0), m: pose(0, 0, Z + 0.05) },
+    { geo: paint(lump(0.13, 0, 0.3, 103), 0xd8f8ff, 1.6, 0.4, 0), m: pose(0, -0.24, 0, 0, 0, 0, 1.6, 0.45, 1.3) },
   ];
-  for (let i = 0; i < 6; i++) {
-    const a = i * Math.PI / 3;
-    // the outer petals: wide, nearly flat to the face
-    parts.push({ geo: petal(ICE, CYAN, 0.95, 0.85), m: ray(a, 0.32, 0.46, 0.115, 0.05) });
-    // the inner petals, between them: shorter and cupped up toward you
-    parts.push({ geo: petal(0xe4f8ff, 0x48c0ff, 1.2, 0.8), m: ray(a + Math.PI / 6, 0.78, 0.3, 0.085, 0.045, Z + 0.02) });
-    // needles past the block's edge
-    parts.push({ geo: petal(0xb4ecff, 0x2eaaff, 1.0, 0.9), m: ray(a + Math.PI / 6, 0.1, 0.58, 0.026, 0.026, Z - 0.01) });
-  }
-  // the violet stamens: the old bloom's colour kept as an accent at the heart
-  for (let i = 0; i < 5; i++) {
-    const a = i * Math.PI * 2 / 5 + 0.3;
-    parts.push({ geo: paint(new THREE.OctahedronGeometry(0.034, 0), 0xb49cff, 2.2, 0.3, 0), m: pose(Math.cos(a) * 0.09, Math.sin(a) * 0.09, Z + 0.1) });
-  }
-  // the rime ring: flat frost flakes lying on the stone around it
-  for (let i = 0; i < 16; i++) {
-    const a = i * Math.PI * 2 / 16 + (i % 3) * 0.11;
-    const r = 0.4 + ((i * 7) % 5) * 0.018;
-    const s = 0.018 + ((i * 5) % 3) * 0.006;
-    parts.push({ geo: paint(new THREE.CircleGeometry(s, 6), 0xc8e8ff, 0.3, 0.5, 0), m: pose(Math.cos(a) * r, Math.sin(a) * r, Z - 0.04, 0, 0, a) });
+  const frond = (e0: number) =>
+    paintY(new THREE.OctahedronGeometry(1, 0), 0.4, 0, -1, 0xc4f4ff, e0, 1, 0x4cd4ff, e0 * 0.6);
+  const tip = () => paint(new THREE.IcosahedronGeometry(0.05, 0), 0xeefcff, 1.8, 0.3, 0);
+  // veinlight's frond layout, fanned a touch wider, as if grown in ice
+  const stems = [-0.8, -0.27, 0.27, 0.8];
+  stems.forEach((a, i) => {
+    const len = 0.34 + (i % 2) * 0.08;
+    const base = new THREE.Vector3(a * 0.12, -0.22, (i % 2 - 0.5) * 0.08);
+    const d = new THREE.Vector3(Math.sin(a), Math.cos(a), (i % 2 - 0.5) * 0.4).normalize();
+    parts.push({ geo: frond(0.85), m: along(d, len * 0.5, 0.06, len * 0.5, 0.06).premultiply(new THREE.Matrix4().makeTranslation(base.x, base.y, base.z)) });
+    const end = base.clone().addScaledVector(d, len);
+    parts.push({ geo: tip(), m: pose(end.x, end.y, end.z) });
+    for (const side of [-1, 1]) {
+      const at = base.clone().addScaledVector(d, len * (side < 0 ? 0.45 : 0.62));
+      const sd = d.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), side * 0.7).normalize();
+      const sl = len * 0.42;
+      parts.push({ geo: frond(0.7), m: along(sd, sl * 0.5, 0.046, sl * 0.5, 0.046).premultiply(new THREE.Matrix4().makeTranslation(at.x, at.y, at.z)) });
+    }
+  });
+  // the tell: flat ice spines splayed low off the root, split light from
+  // shade down the spine so they read cut, not grown
+  const spine = () => paintFaces(new THREE.OctahedronGeometry(1, 0), 0.15, 0.1, (c, n) => {
+    const t = Math.max(0, Math.min(1, (c.y + 1) / 2));
+    return [col(0xe8faff).lerp(col(0x2ab4ff), t), (1.2 - 0.5 * t) * (n.x > 0 ? 1 : 0.5)];
+  });
+  for (const [a, len] of [[-1.3, 0.3], [1.35, 0.28], [-2.15, 0.2], [2.1, 0.21]] as const) {
+    const d = new THREE.Vector3(Math.sin(a), Math.cos(a), 0.25).normalize();
+    parts.push({ geo: spine(), m: along(d, len * 0.5 + 0.08, 0.065, len * 0.5, 0.02).premultiply(new THREE.Matrix4().makeTranslation(0, -0.24, 0.02)) });
   }
   return merge(parts);
 })();
@@ -592,7 +582,7 @@ const HALO: [number, number][] = [
   [0xd8ecff, 0.22],  // diamond: a soft cool sparkle
   [0xff8030, 0.2],   // embershard: banked coals, dimmer than gold, never ruby's pink
   [0xffffff, 0.75],  // veinlight (tinted per world)
-  [0x9a7cff, 0.3],   // frostbloom: a violet heart (its cyan spills onto the stone around it)
+  [0x46d4ff, 0.9],   // frostbloom: veinlight's disc, colder and cyan
   [0x3cc8ff, 0.5],   // rime salt: cyan within
   [0xf4dcff, 0.16],  // nacre: a sheen, not a glow
   [0xff7034, 0.3],   // mimic: the cracks give it away
@@ -617,7 +607,7 @@ const MOTION: Motion[] = [
   { spin: 0.9, pulse: 0.05, wobble: 0.06 },   // diamond: catches light constantly
   { spin: 0.4, pulse: 0.13, wobble: 0.05 },   // embershard: banked fire, breathing
   { spin: 0.25, pulse: 0.17, wobble: 0.12 },  // veinlight: slow organic breathing
-  { spin: 0.05, pulse: 0.025, wobble: 0.04 }, // frostbloom: near still, waiting (it turns in the face plane)
+  { spin: 0.4, pulse: 0.17, wobble: 0.12, sway: true }, // frostbloom: veinlight's breathing, but it keeps its face to you (and flickers)
   { spin: 0.2, pulse: 0.03, wobble: 0 },      // rime salt: a crust, not a jewel
   { spin: 0.5, pulse: 0.05, wobble: 0.05, sway: true }, // nacre: a fan rocking, sheen sliding
   { spin: 1.25, pulse: 0.1, wobble: 0.28 },   // mimic: voidopal's motion, off a beat

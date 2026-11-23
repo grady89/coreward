@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Terrain } from '../terrain';
-import { oreValue } from '../tiles';
+import { oreValue, cellHash, T } from '../tiles';
 import { ACTIVE } from '../worlds';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
@@ -85,6 +85,55 @@ function crownGeometry(): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+let sheenTex: THREE.CanvasTexture | null = null;
+/**
+ * The polyps' light caught on one block face: its edges lit as bevels, the
+ * edge facing the light (local -y) brightest, the sides fading away from it,
+ * and a soft nacre band across the face. Drawn in its own hues (sea-green
+ * rims, lavender-to-pale-cyan sheen); the instance colour is only strength.
+ * Inset just inside the rock shader's dark crevice so a lit rim sits on it.
+ */
+function sheenTexture(): THREE.CanvasTexture {
+  if (sheenTex) return sheenTex;
+  const N = 128, cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const g = cv.getContext('2d')!;
+  // the nacre band, corner to corner
+  const band = g.createLinearGradient(0, N, N, 0);
+  band.addColorStop(0, 'rgba(0,0,0,0)');
+  band.addColorStop(0.3, 'rgba(120,230,200,0.07)');
+  band.addColorStop(0.46, 'rgba(215,185,255,0.17)');
+  band.addColorStop(0.58, 'rgba(255,200,235,0.11)');
+  band.addColorStop(0.72, 'rgba(150,235,255,0.05)');
+  band.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = band;
+  g.fillRect(0, 0, N, N);
+  const I = 4, W = 14;
+  // the near edge (canvas bottom = local -y): a hot line fading inward
+  const near = g.createLinearGradient(0, N - I, 0, N - I - W);
+  near.addColorStop(0, 'rgba(150,255,215,0.95)');
+  near.addColorStop(0.25, 'rgba(120,240,200,0.45)');
+  near.addColorStop(1, 'rgba(60,200,160,0)');
+  g.fillStyle = near;
+  g.fillRect(I, N - I - W, N - 2 * I, W);
+  // the side edges: lit at the near end, gone by the far one
+  for (const x0 of [I, N - I - 8]) {
+    const side = g.createLinearGradient(0, N - I, 0, I);
+    side.addColorStop(0, 'rgba(120,245,200,0.5)');
+    side.addColorStop(0.45, 'rgba(90,220,180,0.08)');
+    side.addColorStop(1, 'rgba(80,200,170,0)');
+    g.fillStyle = side;
+    const w = 8;
+    g.fillRect(x0, I, w, N - 2 * I);
+  }
+  // the far edge only glints
+  g.fillStyle = 'rgba(120,230,200,0.05)';
+  g.fillRect(I, I, N - 2 * I, 3);
+  sheenTex = new THREE.CanvasTexture(cv);
+  return sheenTex;
+}
+const MAX_SHEEN = 64;
+
 interface Polyp {
   alive: boolean;
   x: number; y: number;
@@ -106,6 +155,11 @@ export class Polyps implements Creature {
   private cores: THREE.InstancedMesh;
   /** the maw and tendril crown on each sac: the end that goes off */
   private crowns: THREE.InstancedMesh;
+  /** their light caught on the faces and edges of the blocks they grow from */
+  private sheen: THREE.InstancedMesh;
+  /** per frame: wall tile key -> how hard the polyps light it */
+  private sheenW = new Map<number, number>();
+  private sheenDir = new Map<number, number>();
   private glow: THREE.PointLight;
   /** each cluster's light on its wall */
   private spills: Spill[] = [];
@@ -162,6 +216,17 @@ export class Polyps implements Creature {
     this.crowns.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.crowns);
 
+    const sheenMat = new THREE.MeshBasicMaterial({
+      map: sheenTexture(), transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
+    });
+    this.sheen = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), sheenMat, MAX_SHEEN);
+    this.sheen.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.sheen.frustumCulled = false;
+    this.sheen.count = 0;
+    this.sheen.setColorAt(0, tmpC.setHex(0xffffff));
+    scene.add(this.sheen);
+
     this.glow = new THREE.PointLight(0x6affc8, 0, 9, 1.6);
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
@@ -178,7 +243,7 @@ export class Polyps implements Creature {
   reset(): void {
     for (const p of this.polyps) p.alive = false;
     for (const c of this.clusters) c.alive = false;
-    this.sacs.count = 0; this.cores.count = 0; this.crowns.count = 0;
+    this.sacs.count = 0; this.cores.count = 0; this.crowns.count = 0; this.sheen.count = 0;
     this.glow.intensity = 0;
     for (const sp of this.spills) sp.off();
     this.menace = 0;
@@ -327,6 +392,7 @@ export class Polyps implements Creature {
     let n = 0;
     let peak = 0, gx = 0, gy = 0, gw = 0;
     this.acc.fill(0);
+    this.sheenW.clear(); this.sheenDir.clear();
     for (const p of this.polyps) {
       if (!p.alive) continue;
       const c = this.clusters[p.cluster];
@@ -415,12 +481,49 @@ export class Polyps implements Creature {
       this.crowns.setColorAt(n, tmpC);
       n++;
 
+      // the block it grows from, and two either side along the wall, catch
+      // its light: strongest under it, breathing with it, hot as it swells
+      const ax = Math.floor(p.x) - p.nx, ay = Math.floor(-p.y) + p.ny;
+      const along = p.ny !== 0;
+      const face = Math.atan2(p.ny, p.nx) + Math.PI / 2;
+      for (let s = -2; s <= 2; s++) {
+        const wx = ax + (along ? s : 0), wy = ay + (along ? 0 : s);
+        if (!this.terrain.solidAt(wx, wy)) continue;
+        const w = (1 - Math.abs(s) * 0.3) * (0.7 + beat * 0.2 + f * 0.7);
+        const key = wy * 100000 + wx;
+        if (w > (this.sheenW.get(key) ?? 0)) { this.sheenW.set(key, w); this.sheenDir.set(key, face); }
+      }
+
       const a = this.acc, k = p.cluster * 6;
       a[k] += p.x; a[k + 1] += p.y; a[k + 2] += 1; a[k + 3] = Math.max(a[k + 3], f);
       a[k + 4] += p.nx; a[k + 5] += p.ny;
       if (d < 6) { peak = Math.max(peak, f); gx += p.x * f; gy += p.y * f; gw += f; }
     }
     this.sacs.count = n; this.cores.count = n; this.crowns.count = n;
+    // each lit block's sheen sits square on its face: the block's own
+    // in-plane jitter (chunks.ts: dressed stone has none), just proud of it
+    let ns = 0;
+    for (const [key, w] of this.sheenW) {
+      if (ns >= MAX_SHEEN) break;
+      const wy = Math.floor(key / 100000), wx = key - wy * 100000;
+      const t = this.terrain.get(wx, wy);
+      const built = t === T.CUSTODIAN || t === T.GLYPH;
+      const rz = built ? 0 : (cellHash(wx, wy, 13) - 0.5) * 0.09;
+      const z = built ? 0.535 : 0.535 + (cellHash(wx, wy, 3) - 0.5) * 0.09;
+      tmpP.set(wx + 0.5, -(wy + 0.5), z);
+      tmpE.set(0, 0, rz + (this.sheenDir.get(key) ?? 0));
+      tmpQ.setFromEuler(tmpE);
+      tmpS.set(1, 1, 1);
+      tmpM.compose(tmpP, tmpQ, tmpS);
+      this.sheen.setMatrixAt(ns, tmpM);
+      this.sheen.setColorAt(ns, tmpC.setScalar(w));
+      ns++;
+    }
+    this.sheen.count = ns;
+    if (ns > 0) {
+      this.sheen.instanceMatrix.needsUpdate = true;
+      if (this.sheen.instanceColor) this.sheen.instanceColor.needsUpdate = true;
+    }
     if (n > 0) {
       this.sacs.instanceMatrix.needsUpdate = true;
       this.cores.instanceMatrix.needsUpdate = true;
