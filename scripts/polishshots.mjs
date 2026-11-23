@@ -142,6 +142,12 @@ for (const f of CREATURES) {
     c.snap(box ? box.x : st.x, box ? box.y : st.y, z);
   }, [box, close]);
   let box = await measure();
+  // hold the creature where it was framed: a Long One burrows and a mimic
+  // skitters between the wide and the close frame (stills, so motion is moot)
+  await page.evaluate(key => {
+    const r = key && window.__game.threats[key];
+    if (r && typeof r.update === 'function') r.update = () => {};
+  }, THREAT_KEY[f]);
   await aim(box, false);
   await gameWait(page, 0.5);
   await aim(box = await measure(), false);
