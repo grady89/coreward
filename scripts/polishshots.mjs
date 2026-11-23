@@ -72,6 +72,17 @@ for (const f of CREATURES) {
     }
   });
   await page.keyboard.press('KeyH'); // hide the sandbox card
+  // the hit flash and low-hull wash are hit indicators, not the creature's
+  // look: keep the hull full and the flash muted for the whole shot
+  await page.evaluate(() => {
+    const g = window.__game;
+    g.hud.damageFlash = () => {};
+    setInterval(() => { g.state.hull = g.state.maxHull; g.state.fuel = g.state.maxFuel; }, 20);
+    const st = document.createElement('style');
+    st.textContent = '#damage-flash{opacity:0!important}';
+    document.head.appendChild(st);
+  });
+  await gameWait(page, 1.0);   // any wash already showing fades with the hull back to full
   // the frostbloom is staged under the pod (you cut it from above): stand the
   // pod a tile to the side so the bloom itself is in the frame
   if (f === 'frostbloom') await page.evaluate(() => { const c = window.__game.ctrl; c.px -= 2.2; c.vx = 0; });
