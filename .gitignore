@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Vercel
 .vercel
+
+# visual-pass review screenshots: kept on disk, out of git (report keeps pairs/ and final/)
+design-review/visual-pass-*/r*/**/*.png
