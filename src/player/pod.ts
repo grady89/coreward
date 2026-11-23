@@ -95,15 +95,21 @@ hdrEmissive(GLASS, 3.0, 0.4);
  * toward neutral on near-white surfaces only — weighted by how unsaturated
  * the albedo is, so Jadeworks or Gilt keep their colour — and adds a faint
  * cool fresnel rim so the silhouette separates from a warm or dark backdrop.
- * Adds no light to faces turned toward the camera. One program shared by
- * the pod hull and the suit (the rim colour is a per-material uniform).
+ * Adds no light to faces turned toward the camera. `lift` is a faint floor
+ * of self-light in the surface's own albedo (so a finish keeps its hue),
+ * weighted toward the silhouette: the pod is the one lit object in the dark,
+ * and without it the hull sinks to the rock's value wherever the lamp is not
+ * on it. 0 for the suit. One program shared by the pod hull and the suit
+ * (rim and lift are per-material uniforms).
  */
-export function holdWhite(mat: THREE.MeshStandardMaterial, rim: number, strength: number): void {
+export function holdWhite(mat: THREE.MeshStandardMaterial, rim: number, strength: number, lift = 0): void {
   const u = { value: new THREE.Color(rim).multiplyScalar(strength) };
+  const ul = { value: lift };
   mat.onBeforeCompile = sh => {
     sh.uniforms.uWhiteRim = u;
+    sh.uniforms.uWhiteLift = ul;
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uWhiteRim;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uWhiteRim;\nuniform float uWhiteLift;')
       .replace('#include <opaque_fragment>', `{
   vec3 alb = diffuseColor.rgb;
   float sat = max(max(alb.r, alb.g), alb.b) - min(min(alb.r, alb.g), alb.b);
@@ -112,6 +118,8 @@ export function holdWhite(mat: THREE.MeshStandardMaterial, rim: number, strength
   outgoingLight = mix(outgoingLight, vec3(lum) * vec3(0.97, 1.0, 1.05), pale * 0.5);
   float ndvW = saturate(abs(dot(normalize(vViewPosition), normal)));
   outgoingLight += uWhiteRim * pow(1.0 - ndvW, 2.4) * (0.35 + 0.65 * pale);
+  // the hull's value floor: an edge held against the dark, not a glow
+  outgoingLight = max(outgoingLight, alb * uWhiteLift * (0.5 + 0.5 * pow(1.0 - ndvW, 1.5)));
 }
 #include <opaque_fragment>`);
   };
@@ -284,8 +292,10 @@ export class Pod {
   private tiers: RigTiers = { drill: 0, engine: 0, tank: 0, cargo: 0, hull: 0, radiator: 0 };
   private lastFinish: [RigFinish, FlameStyle, LampTint] | null = null;
   // per-pod clones so a finish never bleeds onto another pod in a review scene
-  private hullMat = (() => { const m = HULL.clone(); holdWhite(m, 0xbfe4ff, 0.55); return m; })();
-  private accentMat = ACCENT.clone();
+  private hullMat = (() => { const m = HULL.clone(); holdWhite(m, 0xbfe4ff, 0.55, 0.26); return m; })();
+  // the belly band faces the floor: without its own floor of light it goes
+  // to mud in dark rock and the pod reads as a dark blob under its visor
+  private accentMat = (() => { const m = ACCENT.clone(); holdWhite(m, 0xbfe4ff, 0.2, 0.3); return m; })();
   private steelMat = STEEL.clone();
   // semantic emissives (per pod, persistent across refits): heat, money, work
   private finGlowMat = new THREE.MeshBasicMaterial({
