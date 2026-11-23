@@ -1,0 +1,22 @@
+{
+ "creatures-a": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "creatures-b": {
+  "A": "best",
+  "B": "candidate"
+ },
+ "quarters-room": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "furnishings": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "wings": {
+  "A": "best",
+  "B": "candidate"
+ }
+}

@@ -72,9 +72,12 @@ for (const f of CREATURES) {
     }
   });
   await page.keyboard.press('KeyH'); // hide the sandbox card
+  // the frostbloom is staged under the pod (you cut it from above): stand the
+  // pod a tile to the side so the bloom itself is in the frame
+  if (f === 'frostbloom') await page.evaluate(() => { const c = window.__game.ctrl; c.px -= 2.2; c.vx = 0; });
   // centre the frame on the creature itself: the union of its visible meshes,
   // measured again right before each shot because the creatures move
-  const measure = () => page.evaluate(key => {
+  let measure = () => page.evaluate(key => {
     const g = window.__game, root = key && g.threats[key];
     if (!root) return null;
     const objs = new Map();
@@ -118,6 +121,8 @@ for (const f of CREATURES) {
     const hi = [Math.max(...near.map(b => b[2])), Math.max(...near.map(b => b[3]))];
     return { x: (lo[0] + hi[0]) / 2, y: (lo[1] + hi[1]) / 2, size: Math.max(hi[0] - lo[0], hi[1] - lo[1]), parts: near.length };
   }, THREAT_KEY[f]);
+  // frostbloom is a tile, not a mesh: frame the tile the sandbox set (31, 256)
+  if (f === 'frostbloom') measure = async () => ({ x: 31.5, y: -256.5, size: 1.5 });
   const aim = (box, close) => page.evaluate(([box, close]) => {
     const c = window.__game.cam; c.follow = () => {};
     if (!c.__stage) c.__stage = { x: c.cx, y: c.cy, z: c.cz };

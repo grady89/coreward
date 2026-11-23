@@ -6,8 +6,8 @@ This adds to ART-DIRECTION.md (above). It covers two things the first pass never
 
 These are eight creatures:
 - VEIL-3: the Long One, a burrowing serpent; the Geode Mimic, an ore that bites.
-- CRYOS-2: Rimewings, Frostbloom.
-- MAELIS-6: the Brinewyrm, Pressure Polyps, the Riptide.
+- CRYOS-2: Rimewings; the Brinewyrm, which lives in CRYOS brine pools; Frostbloom, a trap disguised as glowing veinlight ore: a tile in the rock that should read as a beautiful ore with a subtle tell, not as an animal.
+- MAELIS-6: Pressure Polyps, the Riptide (a current with an eye; its swimmers are other creatures).
 - Anywhere: the Kindled, a pursuer made of light.
 
 Each is shown in its own habitat in a creature sandbox. Judge them against `10-creatures.png` and against the house style of the four creatures that were already polished (reference images below):
