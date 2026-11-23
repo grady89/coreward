@@ -51,3 +51,11 @@
 ## r6 K4 — per-world rock surface: CRYOS crystal catch-lights (hashed facet normals in specular), MAELIS nacre hue drift on lit diffuse (d1570f5) — reverted
 - Scores: rock fell (mostly K2's doing); the rock reviewer still saw "per-world material character is only a hue tint" on both sides, so K4 earned no rock credit; identity +0.2 (frost glints, faint nacre) — below the bar. The identity reviewer read the glints as "small dash marks" and the nacre as too faint.
 - Next time, differently: if retried, softer point-like glints only where the beam lands and a nacre strong enough to read — but it's a low-yield direction.
+
+## r7 L2 — topsoil graded darker below the surface line, calmer irregular per-block values near the surface (8b9eb7f) — reverted
+- Scores (paired, r7): rock 5.8 → 5.8 (0.0). The reviewer saw the rock as pixel-equivalent; the change only shows on veil3-surface/title, one shot of eleven in the rock set.
+- Next time: the surface checkerboard is a narrow complaint; the rock score is held down by the general "flat square tiles" read, which five attempts didn't crack without costing minerals or fissures.
+
+## r7 L3 — shellback body drawn after its own light pool (renderOrder), darker plates/legs; pod hull/belly self-lit value floor (764872f) — reverted
+- Scores (paired, r7): characters 6.2 → 6.4 (+0.2) — below the bar. The reviewer credited the shellback's restored shell plates, and the glimmerfly frame no longer flooding red (the harness fix, in both builds).
+- Next time: the shellback form fix is cheap and liked; it could ride along with a bigger characters change.
