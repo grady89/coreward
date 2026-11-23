@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { Particles } from '../../fx/particles';
+import { hdrEmissive } from '../../fx/post';
 import { FlareField } from './flares';
 import { Creature, ThreatCtx, ThreatLevel, air, onWall, tmpM, tmpP, tmpQ, tmpS, tmpC, tmpC2, Spill } from './types';
 
@@ -28,6 +29,8 @@ const COLD_CALM = 2.4;     // seconds of cold engine before they settle
 const SETTLE = 1.8;        // seconds of sinking before they lock
 // flap about the body's own axis first, then turn to the heading
 const pose = new THREE.Euler(0, 0, 0, 'ZYX');
+/** the swarm's own cold light: ice-cyan, off the lamp's white */
+const ICE = 0x5ad6ff;
 
 type Phase = 'frozen' | 'waking' | 'hunting' | 'settling';
 
@@ -88,9 +91,11 @@ export class Rimewings implements Creature {
         .replace('#include <common>', '#include <common>\nuniform vec3 uIce;\nvarying float vGlow;')
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance *= vColor.rgb * vGlow;
-totalEmissiveRadiance += uIce * (max(vGlow - 1.0, 0.0) * 0.5 + vGlow * 0.14);`);
+totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 0.0) * 0.35 + vGlow * 0.1);`);
     };
     mat.customProgramCacheKey = () => 'rimewing-glow';
+    // the edge strips and the eye run past white: they bloom, the glass doesn't
+    hdrEmissive(mat, 0.35, 1.3);
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_WINGS);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -383,7 +388,8 @@ totalEmissiveRadiance += uIce * (max(vGlow - 1.0, 0.0) * 0.5 + vGlow * 0.14);`);
       const k = this.sumN[ci];
       if (!this.clusters[ci].alive || k === 0) { this.spills[ci].off(); continue; }
       const heat = this.sumHeat[ci] / k;
-      this.spills[ci].set(this.sumX[ci] / k, this.sumY[ci] / k, 5, 4.2, 0.32 + heat * 0.35, ACTIVE.swarm.hunting, 1.4);
+      // ice-cyan, not the lamp's white, so it reads as their own light
+      this.spills[ci].set(this.sumX[ci] / k, this.sumY[ci] / k, 5.5, 4.6, 0.42 + heat * 0.3, ICE, 1.5);
     }
     this.mesh.count = n;
     if (n > 0) {
@@ -395,7 +401,22 @@ totalEmissiveRadiance += uIce * (max(vGlow - 1.0, 0.0) * 0.5 + vGlow * 0.14);`);
       this.glow.intensity = 6;
       this.glow.color.setHex(ACTIVE.swarm.hunting);
     } else {
-      this.glow.intensity = 0;
+      // none hunting: the cluster nearest the pod keeps a cold glow on its rock
+      let best = -1, bd = 1e9;
+      for (let ci = 0; ci < MAX_CLUSTERS; ci++) {
+        const k = this.sumN[ci];
+        if (!this.clusters[ci].alive || k === 0) continue;
+        const d = Math.hypot(this.sumX[ci] / k - podX, this.sumY[ci] / k - podY);
+        if (d < bd) { bd = d; best = ci; }
+      }
+      if (best >= 0) {
+        const k = this.sumN[best];
+        this.glow.position.set(this.sumX[best] / k, this.sumY[best] / k, 0.6);
+        this.glow.intensity = 1.6 + (this.sumHeat[best] / k) * 3;
+        this.glow.color.setHex(ICE);
+      } else {
+        this.glow.intensity = 0;
+      }
     }
     const target = anyHunt ? Math.max(0, 1 - closest / WAKE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);
@@ -434,13 +455,24 @@ function mothGeometry(): THREE.BufferGeometry {
       tri(tip, r2, ridge, 0.5);       // trailing membrane: glass
       tri(r2, r1, ridge, 0.65);
     }
+    // a burning strip along the leading edge, root to elbow to tip, proud
+    // of both faces: the moth's outline in ice-cyan even out of the beam
+    const w = 0.02;
+    for (const [a, b] of [[r1, elbow], [elbow, tip]] as [V, V][]) {
+      for (const z of [0.04, -0.04]) {
+        const a2: V = [a[0] - w, a[1] - w * 0.6 * s, z], b2: V = [b[0] - w, b[1] - w * 0.6 * s, z];
+        const a1: V = [a[0], a[1], z], b1: V = [b[0], b[1], z];
+        tri(a1, b1, b2, 2.4);
+        tri(a1, b2, a2, 2.4);
+      }
+    }
   }
   // the eye: a bright point at the nose, proud of the body toward the camera
-  const e = 0.045, ex = 0.15, ez = 0.05;
+  const e = 0.058, ex = 0.15, ez = 0.06;
   const eye: V[] = [[ex + e, 0, ez], [ex, e, ez], [ex - e, 0, ez], [ex, -e, ez]];
   for (let i = 0; i < 4; i++) {
-    tri([ex, 0, ez + e], eye[i], eye[(i + 1) % 4], 4);
-    tri([ex, 0, ez - e], eye[(i + 1) % 4], eye[i], 4);
+    tri([ex, 0, ez + e], eye[i], eye[(i + 1) % 4], 4.5);
+    tri([ex, 0, ez - e], eye[(i + 1) % 4], eye[i], 4.5);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

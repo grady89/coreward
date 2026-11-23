@@ -64,10 +64,27 @@ export class Kindled {
       blending: THREE.AdditiveBlending, toneMapped: false,
     });
     const coreGeo = figureGeometry();
-    // self-lit, the facets baked into vertex colours: brighter than anything
-    // near it, so it blooms against even the core's own orange
+    // self-lit, the facets baked into vertex colours. The faces sit just under
+    // display white, pale gold, so the facets survive; only the heart and the
+    // edge-on facets are pushed past it, and those are what bloom
     this.coreMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
-    hdrBasic(this.coreMat, 1.8);
+    this.coreMat.onBeforeCompile = sh => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vKPos;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvKPos = mvPosition.xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vKPos;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  // the facet's own normal from screen derivatives: a facet turned edge-on
+  // to the eye burns white, one facing it stays gold
+  vec3 fn = normalize( cross( dFdx( vKPos ), dFdy( vKPos ) ) );
+  float rim = pow( 1.0 - abs( dot( fn, normalize( -vKPos ) ) ), 1.6 );
+  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0, 0.96, 0.86 ) * 2.4, rim );
+}`);
+    };
+    this.coreMat.customProgramCacheKey = () => 'kindled-facets';
+    hdrBasic(this.coreMat, 1.3);
     const coreMat = this.coreMat;
     for (let i = 0; i < N; i++) {
       const seed = new Float32Array(PTS * 3);
@@ -134,8 +151,8 @@ export class Kindled {
     this.setVisible(true);
     this.mat.color.setHex(ACTIVE.core.light);
     this.mat.opacity = 0.85 * this.fade;
-    // white-hot, a breath of the core's own tint
-    this.coreMat.color.setHex(ACTIVE.core.body).lerp(WHITE, 0.3);
+    // pale gold: the core's own tint
+    this.coreMat.color.setHex(ACTIVE.core.body);
 
     let hit: KindledHit = null;
     let presence = 0;
@@ -191,14 +208,13 @@ export class Kindled {
       f.light.color.setHex(ACTIVE.core.body);
       const flick = Math.sin(time * 3 + i) * 0.3;
       f.light.intensity = (2.2 + f.arousal * 2.6 + flick) * this.fade;
-      f.spill.set(f.x, fy - 0.5, 3.4, 2.2, (0.3 + f.arousal * 0.15 + flick * 0.08) * this.fade, ACTIVE.core.body, 1.1);
+      // pooled under the feet, not over the legs: the spill draws in front
+      f.spill.set(f.x, fy - 0.72, 3.4, 1.7, (0.28 + f.arousal * 0.14 + flick * 0.07) * this.fade, ACTIVE.core.body, 1.1);
     }
     this.presence = lerp(this.presence, presence, Math.min(1, dt * 3));
     return hit;
   }
 }
-
-const WHITE = new THREE.Color(0xffffff);
 
 /**
  * A standing figure in a dozen facets — head, shoulders narrowing to the
@@ -224,16 +240,25 @@ function figureGeometry(): THREE.BufferGeometry {
     part(new THREE.CylinderGeometry(0.045, 0.03, 0.5, 5), -0.22, 0.34, -0.1),
     part(new THREE.CylinderGeometry(0.045, 0.03, 0.5, 5), 0.22, 0.34, 0.1),
   ])!;
-  geo.computeVertexNormals();
-  const nrm = geo.getAttribute('normal');
+  const facets = geo.getAttribute('position').count;
+  // the heart: a white-hot gem set proud of the chest, toward the eye
+  const heart = new THREE.OctahedronGeometry(0.09, 0).toNonIndexed();
+  heart.scale(0.85, 1.15, 0.8);
+  heart.translate(0, 0.46, 0.11);
+  heart.deleteAttribute('uv'); heart.deleteAttribute('normal');
+  const all = mergeGeometries([geo, heart])!;
+  all.computeVertexNormals();
+  const nrm = all.getAttribute('normal');
   const col = new Float32Array(nrm.count * 3);
   const key = new THREE.Vector3(0.5, 0.6, 0.65).normalize();
   const v = new THREE.Vector3();
   for (let i = 0; i < nrm.count; i++) {
     v.fromBufferAttribute(nrm, i);
-    const b = 0.5 + 0.5 * Math.max(0, v.dot(key));
+    // a wide spread, so neighbouring facets differ in value; the heart
+    // runs far past white
+    const b = i < facets ? 0.3 + 0.7 * Math.max(0, v.dot(key)) : 2.3;
     col[i * 3] = b; col[i * 3 + 1] = b; col[i * 3 + 2] = b;
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return geo;
+  all.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return all;
 }
