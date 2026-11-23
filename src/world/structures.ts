@@ -460,10 +460,13 @@ export function gantrySign(text: string, color: string, x: number, y: number, z:
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, yTop, 6), legMat);
     leg.position.set(x + s * span, yTop / 2, z);
     g.add(leg);
-    // gusset where the leg meets the crossbar
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.05), legMat);
-    brace.position.set(x + s * (span - 0.17), yTop - 0.26, z);
-    brace.rotation.z = s * 0.6;
+    // knee brace: from the leg, up and inward, into the crossbar's underside
+    const d = 0.3;
+    const ax = x + s * span, ay = yTop - d;          // on the leg
+    const bx = x + s * (span - d), by = yTop - 0.045; // under the crossbar
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(bx - ax, by - ay) + 0.05, 0.05, 0.05), legMat);
+    brace.position.set((ax + bx) / 2, (ay + by) / 2, z);
+    brace.rotation.z = Math.atan2(by - ay, bx - ax);
     g.add(brace);
   }
   const crossbar = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.16, 0.09, 0.09), legMat);
