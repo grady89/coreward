@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import { Suit, buildSuit, poseSuit, suitPoseYOffset } from '../player/suit';
 import { Input } from '../player/controller';
 import { Meta, Trophy } from './meta';
@@ -66,19 +67,12 @@ interface Station {
 
 // shared fixed-color materials (palette materials are per-instance fields)
 const GUNMETAL = new THREE.MeshStandardMaterial({ color: 0x4b545e, roughness: 0.45, metalness: 0.35 });
-const DARKPIPE = new THREE.MeshStandardMaterial({ color: 0x363d45, roughness: 0.5, metalness: 0.3 });
-const CREAM = new THREE.MeshStandardMaterial({ color: 0xe6dcc4, roughness: 0.55 });
-const ORANGE = new THREE.MeshStandardMaterial({ color: 0xc4571f, roughness: 0.5 });
-const TEAL_PAINT = new THREE.MeshStandardMaterial({ color: 0x2e6e64, roughness: 0.6 });
 const PLINTH = new THREE.MeshStandardMaterial({ color: 0x272b31, roughness: 0.8, metalness: 0.3 });
 const FERN = new THREE.MeshStandardMaterial({ color: 0x6e9668, roughness: 0.8 });
 const WARM_GLOW = new THREE.MeshBasicMaterial({ color: 0xffc06a, toneMapped: false });
 const TEAL_GLOW = new THREE.MeshBasicMaterial({ color: 0x3ce6c8, toneMapped: false });
 const AMBER_GLOW = new THREE.MeshBasicMaterial({ color: 0xff9a3c, toneMapped: false });
 const RED_GLOW = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
-/** what the palette's wall colour is pulled toward for the ceiling and the ribs */
-const CEIL_SHADOW = new THREE.Color(0x2e2620);
-const FRAME_METAL = new THREE.Color(0x23272d);
 
 function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -118,8 +112,11 @@ function hash01(a: number, b = 0): number {
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 const UNIT_ROD = new THREE.CylinderGeometry(1, 1, 1, 8).rotateZ(Math.PI / 2);   // runs along x
 const UNIT_QUAD = new THREE.PlaneGeometry(1, 1);
+const UNIT_ICO = new THREE.IcosahedronGeometry(1, 1);
+const UNIT_RING = new THREE.TorusGeometry(1, 0.14, 5, 14);   // in the xy plane: a handle seen side-on
 
-type Shade = number | ((p: THREE.Vector3) => number);
+/** a grey multiplier (shell), a fixed colour (props), or a multiplier by position */
+type Shade = number | THREE.Color | ((p: THREE.Vector3) => number);
 
 /**
  * Many parts baked into one vertex-shaded mesh: a whole wall of panels, seams,
@@ -141,22 +138,39 @@ class Kit {
   private s = new THREE.Vector3();
 
   add(src: THREE.BufferGeometry, sx: number, sy: number, sz: number,
-      x: number, y: number, z: number, shade: Shade, rotX = 0): void {
-    this.m.compose(this.v.set(x, y, z), this.q.setFromEuler(this.e.set(rotX, 0, 0)), this.s.set(sx, sy, sz));
+      x: number, y: number, z: number, shade: Shade, rotX = 0, rotY = 0, rotZ = 0): void {
+    this.m.compose(this.v.set(x, y, z), this.q.setFromEuler(this.e.set(rotX, rotY, rotZ)), this.s.set(sx, sy, sz));
     this.nm.getNormalMatrix(this.m);
     const p = src.getAttribute('position'), n = src.getAttribute('normal');
-    const t = src.getAttribute('uv'), ix = src.getIndex()!;
+    const t = src.getAttribute('uv'), ix = src.getIndex();
     const base = this.pos.length / 3;
     for (let i = 0; i < p.count; i++) {
       this.v.fromBufferAttribute(p, i).applyMatrix4(this.m);
       this.pos.push(this.v.x, this.v.y, this.v.z);
-      const k = typeof shade === 'number' ? shade : shade(this.v);
-      this.col.push(k, k, k);
+      if (shade instanceof THREE.Color) this.col.push(shade.r, shade.g, shade.b);
+      else {
+        const k = typeof shade === 'number' ? shade : shade(this.v);
+        this.col.push(k, k, k);
+      }
       this.v.fromBufferAttribute(n, i).applyMatrix3(this.nm).normalize();
       this.nor.push(this.v.x, this.v.y, this.v.z);
-      this.uv.push(t.getX(i), t.getY(i));
+      if (t) this.uv.push(t.getX(i), t.getY(i)); else this.uv.push(0, 0);
     }
-    for (let i = 0; i < ix.count; i++) this.idx.push(base + ix.getX(i));
+    if (ix) for (let i = 0; i < ix.count; i++) this.idx.push(base + ix.getX(i));
+    else for (let i = 0; i < p.count; i++) this.idx.push(base + i);
+  }
+
+  get empty(): boolean { return this.pos.length === 0; }
+
+  /** a box with its edges chamfered off, so it catches a highlight on every edge */
+  bev(w: number, h: number, d: number, x: number, y: number, z: number, shade: Shade, c = 0.02, rotY = 0): void {
+    this.add(bevelGeo(w, h, d, c), 1, 1, 1, x, y, z, shade, 0, rotY);
+  }
+
+  /** a (possibly tapered) faceted cylinder, upright unless tipped */
+  cyl(rTop: number, rBot: number, h: number, x: number, y: number, z: number, shade: Shade,
+      seg = 10, rotX = 0, rotZ = 0): void {
+    this.add(cylGeo(rTop, rBot, h, seg), 1, 1, 1, x, y, z, shade, rotX, 0, rotZ);
   }
 
   box(w: number, h: number, d: number, x: number, y: number, z: number, shade: Shade, rotX = 0): void {
@@ -197,6 +211,309 @@ function cells(x0: number, x1: number, step: number, origin: number): [number, n
   }
   return out;
 }
+
+// ---------------- the furniture's building blocks ----------------
+
+const C = (hex: number) => new THREE.Color(hex);
+
+const bevelCache = new Map<string, THREE.BufferGeometry>();
+/** a chamfered box as the hull of three crossed slabs: flat faces, cut edges, cut corners */
+function bevelGeo(w: number, h: number, d: number, c: number): THREE.BufferGeometry {
+  const key = `${w}|${h}|${d}|${c}`;
+  const had = bevelCache.get(key);
+  if (had) return had;
+  c = Math.min(c, w / 2 - 0.002, h / 2 - 0.002, d / 2 - 0.002);
+  const pts: THREE.Vector3[] = [];
+  for (const [a, b, e] of [[w / 2, h / 2 - c, d / 2 - c], [w / 2 - c, h / 2, d / 2 - c], [w / 2 - c, h / 2 - c, d / 2]]) {
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) pts.push(new THREE.Vector3(sx * a, sy * b, sz * e));
+  }
+  const geo = new ConvexGeometry(pts);
+  bevelCache.set(key, geo);
+  return geo;
+}
+
+const cylCache = new Map<string, THREE.BufferGeometry>();
+function cylGeo(rTop: number, rBot: number, h: number, seg: number): THREE.BufferGeometry {
+  const key = `${rTop}|${rBot}|${h}|${seg}`;
+  let geo = cylCache.get(key);
+  if (!geo) cylCache.set(key, geo = new THREE.CylinderGeometry(rTop, rBot, h, seg));
+  return geo;
+}
+
+/** the furniture's three surfaces: painted or woven, worked metal, and the bits that glow */
+const PROP_MATTE = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, flatShading: true });
+const PROP_SHEEN = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.36, metalness: 0.5, flatShading: true });
+const PROP_GLOW = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, side: THREE.DoubleSide });
+
+/**
+ * Every prop in a room section, baked into a handful of vertex-coloured
+ * meshes: a whole galley — cabinet, top, kettle, cups — costs no extra draw
+ * calls over a single box, so the props can afford their chamfers and trims.
+ */
+class PropKit {
+  matte = new Kit();
+  sheen = new Kit();
+  glow = new Kit();
+  private light = new Map<string, Kit>();
+
+  /** soft additive light laid on a surface: 'pool' is round, 'wash' fans down from its top edge */
+  land(kind: 'pool' | 'wash', color: number, opacity: number): Kit {
+    const key = `${kind}|${color}|${opacity}`;
+    let k = this.light.get(key);
+    if (!k) this.light.set(key, k = new Kit());
+    return k;
+  }
+
+  flush(g: THREE.Group): void {
+    for (const [k, mat] of [[this.matte, PROP_MATTE], [this.sheen, PROP_SHEEN], [this.glow, PROP_GLOW]] as const) {
+      if (!k.empty) g.add(k.mesh(mat));
+    }
+    for (const [key, k] of this.light) {
+      const [kind, color, opacity] = key.split('|');
+      g.add(k.mesh(glowMat(kind as 'pool' | 'wash', +color, +opacity)));
+    }
+  }
+}
+
+/** a texture drawn once per session, not once per rebuild */
+const texCache = new Map<string, THREE.CanvasTexture>();
+function onceTex(key: string, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
+  let t = texCache.get(key);
+  if (!t) texCache.set(key, t = canvasTex(w, h, draw));
+  return t;
+}
+
+/** trade-post wool in dusk colours: a stepped border round a row of nested diamonds */
+function rugTexture(): THREE.CanvasTexture {
+  return onceTex('rug', 512, 372, gg => {
+    const W = 512, H = 372;
+    const PLUM = '#3e2236', RUST = '#a4462a', AMBER = '#e39b3f', CREAM = '#efd9aa', WINE = '#6e2a30';
+    gg.fillStyle = PLUM; gg.fillRect(0, 0, W, H);
+    gg.fillStyle = AMBER; gg.fillRect(20, 20, W - 40, H - 40);
+    gg.fillStyle = PLUM; gg.fillRect(28, 28, W - 56, H - 56);
+    // the border's running teeth
+    gg.fillStyle = CREAM;
+    for (let x = 40; x < W - 40; x += 24) { gg.fillRect(x, 36, 12, 10); gg.fillRect(x + 6, H - 46, 12, 10); }
+    for (let y = 58; y < H - 50; y += 24) { gg.fillRect(36, y, 10, 12); gg.fillRect(W - 46, y + 6, 10, 12); }
+    gg.fillStyle = AMBER; gg.fillRect(54, 54, W - 108, H - 108);
+    gg.fillStyle = RUST; gg.fillRect(60, 60, W - 120, H - 120);
+    const diamond = (cx: number, cy: number, rx: number, ry: number, c: string) => {
+      gg.fillStyle = c;
+      gg.beginPath(); gg.moveTo(cx, cy - ry); gg.lineTo(cx + rx, cy); gg.lineTo(cx, cy + ry); gg.lineTo(cx - rx, cy); gg.fill();
+    };
+    // half-diamonds along the field's edges, so the pattern reads as repeating
+    for (let i = 0; i <= 8; i++) {
+      const cx = 60 + i * (W - 120) / 8;
+      diamond(cx, 60, 16, 22, WINE); diamond(cx, H - 60, 16, 22, WINE);
+    }
+    for (let i = 0; i < 4; i++) {
+      const cx = 60 + (W - 120) * (i + 0.5) / 4, cy = H / 2;
+      diamond(cx, cy, 46, 104, AMBER);
+      diamond(cx, cy, 34, 80, PLUM);
+      diamond(cx, cy, 22, 54, CREAM);
+      diamond(cx, cy, 10, 26, WINE);
+    }
+    // the weave: faint rows, so close up it is cloth and not paint
+    for (let y = 0; y < H; y += 4) {
+      gg.fillStyle = y % 8 ? 'rgba(0,0,0,0.07)' : 'rgba(255,240,210,0.05)';
+      gg.fillRect(0, y, W, 2);
+    }
+  });
+}
+
+/** the radio's tuning glass: amber, ticked, the stations printed along it */
+function dialTexture(): THREE.CanvasTexture {
+  return onceTex('dial', 256, 128, gg => {
+    const grad = gg.createRadialGradient(128, 70, 10, 128, 70, 150);
+    grad.addColorStop(0, '#ffe2a0'); grad.addColorStop(0.6, '#ffb350'); grad.addColorStop(1, '#c86a22');
+    gg.fillStyle = grad; gg.fillRect(0, 0, 256, 128);
+    gg.strokeStyle = 'rgba(70,32,10,0.85)'; gg.lineWidth = 3;
+    gg.beginPath(); gg.moveTo(18, 84); gg.lineTo(238, 84); gg.stroke();
+    for (let i = 0; i <= 22; i++) {
+      const x = 18 + i * 10;
+      gg.lineWidth = i % 5 ? 2 : 4;
+      gg.beginPath(); gg.moveTo(x, 84); gg.lineTo(x, i % 5 ? 70 : 60); gg.stroke();
+    }
+    gg.fillStyle = 'rgba(70,32,10,0.85)';
+    gg.font = '700 22px system-ui, sans-serif';
+    gg.textAlign = 'center';
+    ['55', '70', '90', '120', '160'].forEach((t, i) => gg.fillText(t, 18 + i * 50, 48));
+    gg.fillRect(18, 100, 220, 6);
+  });
+}
+
+/** the dispatch console's screen: a waveform, some traffic, scanlines */
+function screenTexture(): THREE.CanvasTexture {
+  return onceTex('screen', 256, 160, gg => {
+    gg.fillStyle = '#0b3a31'; gg.fillRect(0, 0, 256, 160);
+    gg.strokeStyle = '#5ff0c8'; gg.lineWidth = 3;
+    gg.beginPath();
+    for (let x = 0; x <= 256; x += 4) {
+      const y = 62 + Math.sin(x * 0.09) * 18 * Math.sin(x * 0.021 + 1) + Math.sin(x * 0.4) * 4;
+      if (x === 0) gg.moveTo(x, y); else gg.lineTo(x, y);
+    }
+    gg.stroke();
+    gg.fillStyle = 'rgba(95,240,200,0.55)';
+    for (const [y, w] of [[112, 150], [126, 96], [140, 124]]) gg.fillRect(16, y, w, 6);
+    gg.fillStyle = 'rgba(255,170,70,0.9)'; gg.fillRect(214, 112, 26, 26);
+    for (let y = 0; y < 160; y += 4) { gg.fillStyle = 'rgba(0,0,0,0.22)'; gg.fillRect(0, y, 256, 2); }
+  });
+}
+
+/** the outfitter's pinboard: cork, a few catalog pages and a dusk snapshot */
+function boardTexture(): THREE.CanvasTexture {
+  return onceTex('board', 320, 232, gg => {
+    gg.fillStyle = '#9c6c42'; gg.fillRect(0, 0, 320, 232);
+    let seed = 11;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 900; i++) {
+      gg.fillStyle = rnd() > 0.5 ? 'rgba(60,34,18,0.35)' : 'rgba(214,170,120,0.3)';
+      gg.fillRect(rnd() * 320, rnd() * 232, 2, 2);
+    }
+    const page = (x: number, y: number, w: number, h: number, rot: number, fill: string, draw: () => void) => {
+      gg.save(); gg.translate(x, y); gg.rotate(rot);
+      gg.fillStyle = 'rgba(30,16,8,0.35)'; gg.fillRect(-w / 2 + 4, -h / 2 + 5, w, h);
+      gg.fillStyle = fill; gg.fillRect(-w / 2, -h / 2, w, h);
+      draw();
+      gg.restore();
+    };
+    // a lamp, sketched
+    page(70, 90, 92, 120, -0.06, '#eee2c6', () => {
+      gg.strokeStyle = '#3a2a1c'; gg.lineWidth = 3;
+      gg.beginPath(); gg.moveTo(-14, 44); gg.lineTo(-14, -20); gg.quadraticCurveTo(-10, -42, 14, -30); gg.stroke();
+      gg.fillStyle = '#c4571f'; gg.beginPath(); gg.moveTo(4, -30); gg.lineTo(26, -30); gg.lineTo(20, -18); gg.lineTo(10, -18); gg.fill();
+      gg.fillRect(-26, 42, 24, 5);
+      gg.fillStyle = '#3a2a1c'; gg.fillRect(-36, -52, 50, 5);
+    });
+    // a fern, from the greenhouse list
+    page(168, 120, 84, 104, 0.05, '#e6dcc4', () => {
+      gg.strokeStyle = '#4d8a42'; gg.lineWidth = 4;
+      for (const a of [-0.7, -0.3, 0, 0.35, 0.7]) {
+        gg.beginPath(); gg.moveTo(0, 36); gg.quadraticCurveTo(Math.sin(a) * 30, -10, Math.sin(a) * 40, -36); gg.stroke();
+      }
+      gg.fillStyle = '#2e6e64'; gg.fillRect(-16, 30, 32, 14);
+    });
+    // a dusk snapshot, the one window that isn't a porthole
+    page(258, 78, 78, 74, -0.1, '#f2ead8', () => {
+      const gr = gg.createLinearGradient(0, -30, 0, 22);
+      gr.addColorStop(0, '#ffd89a'); gr.addColorStop(1, '#d9773a');
+      gg.fillStyle = gr; gg.fillRect(-32, -30, 64, 48);
+      gg.fillStyle = '#4a2a1c'; gg.fillRect(-32, 8, 64, 10);
+    });
+    // a teal order slip
+    page(254, 176, 90, 56, 0.08, '#3fae9c', () => {
+      gg.fillStyle = 'rgba(10,40,34,0.7)';
+      for (let i = 0; i < 3; i++) gg.fillRect(-34, -14 + i * 12, 56 - i * 10, 5);
+    });
+    for (const [x, y, c] of [[70, 36, '#d23a24'], [168, 74, '#e8c040'], [252, 46, '#d23a24'], [254, 152, '#e6dcc4']] as const) {
+      gg.fillStyle = 'rgba(0,0,0,0.35)'; gg.beginPath(); gg.arc(x + 2, y + 3, 6, 0, Math.PI * 2); gg.fill();
+      gg.fillStyle = c; gg.beginPath(); gg.arc(x, y, 6, 0, Math.PI * 2); gg.fill();
+    }
+  });
+}
+
+/** the arm as it was: rings, and every light still marked burning */
+function chartTexture(): THREE.CanvasTexture {
+  return onceTex('chart', 256, 160, gg => {
+    gg.fillStyle = '#141a26'; gg.fillRect(0, 0, 256, 160);
+    gg.strokeStyle = '#2a3448'; gg.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      gg.beginPath(); gg.arc(128, 80, 18 + i * 16, 0, Math.PI * 2); gg.stroke();
+    }
+    let seed = 3;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 60; i++) {
+      const a = rnd() * Math.PI * 2, r = rnd() * 74;
+      gg.fillStyle = i % 9 === 0 ? '#ffd9a0' : '#8fa3c8';
+      gg.fillRect(128 + Math.cos(a) * r, 80 + Math.sin(a) * r, i % 9 === 0 ? 3 : 1.5, i % 9 === 0 ? 3 : 1.5);
+    }
+  });
+}
+
+/** a lamp's beam, seen in the air: bright under the shade, gone by the floor */
+function beamTexture(): THREE.CanvasTexture {
+  return onceTex('beam', 16, 128, gg => {
+    const gr = gg.createLinearGradient(0, 0, 0, 128);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    gg.fillStyle = gr; gg.fillRect(0, 0, 16, 128);
+  });
+}
+
+/** a blanket thrown over a mattress: the top rumpled, the edges left where they fell */
+let blanket: THREE.BufferGeometry | null = null;
+function blanketGeo(): THREE.BufferGeometry {
+  if (blanket) return blanket;
+  const geo = new THREE.BoxGeometry(1.2, 0.06, 0.78, 8, 1, 4);
+  const p = geo.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    if (p.getY(i) <= 0) continue;
+    const x = p.getX(i), z = p.getZ(i);
+    p.setY(i, 0.03 + 0.018 * Math.sin(x * 9 + z * 4) * Math.cos(z * 7 - x * 3) + 0.012 * hash01(x * 10, z * 10));
+  }
+  return blanket = geo;
+}
+
+const JAR_GLASS = new THREE.MeshStandardMaterial({ color: 0xbfd8d2, roughness: 0.2, transparent: true, opacity: 0.35 });
+let rugMat: THREE.MeshStandardMaterial | null = null;
+const RUG_MAT = () => rugMat ??= new THREE.MeshStandardMaterial({ map: rugTexture(), roughness: 0.95 });
+let beamMat: THREE.MeshBasicMaterial | null = null;
+const BEAM_MAT = () => beamMat ??= new THREE.MeshBasicMaterial({
+  map: beamTexture(), color: 0xffb868, transparent: true, opacity: 0.13, side: THREE.DoubleSide,
+  depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+});
+
+// ---------------- palettes as moods ----------------
+
+/**
+ * A palette is more than its three swatches: each one also sets the trim
+ * metal, the temperature of the hab's own light, and a push on the wall's hue
+ * so the four rooms read apart in a thumbnail. Derived here from the palette
+ * id; the catalog's swatches in furnish.ts stay what they are.
+ */
+interface Mood {
+  /** the fixtures: lens, and the light they lay on ceiling, wall and floor */
+  lens: number; light: number; fill: number;
+  sky: number; ground: number;
+  /** what the ribs, pillars and bolts are made of, and how far toward it */
+  metal: number; metalMix: number;
+  ceil: number; ceilMix: number;
+  /** the lower wall band; null keeps it the wall colour */
+  wains: number | null;
+  /** handles, bookends, lamp brass */
+  hardware: number;
+  /** on the wall: hue turn (0..1), saturation and lightness multipliers */
+  hue: number; sat: number; lum: number;
+}
+
+const MOODS: Record<string, Mood> = {
+  // DUSK: the stock room, warm amber under worn gunmetal
+  '': {
+    lens: 0xffc77a, light: 0xffb36b, fill: 0xffd2a0, sky: 0xffd9b0, ground: 0x4a3b30,
+    metal: 0x23272d, metalMix: 0.72, ceil: 0x2e2620, ceilMix: 0.3, wains: null,
+    hardware: 0xb8925a, hue: 0, sat: 1, lum: 1,
+  },
+  // SLATEBED: cold-water blue-grey, steel ribs, a cooler white overhead —
+  // so the bought lamps and the radio glow warm against it
+  slate: {
+    lens: 0xe4f0ff, light: 0xa9c4e8, fill: 0xd6e4ff, sky: 0xd2def0, ground: 0x2a323c,
+    metal: 0x1a2430, metalMix: 0.7, ceil: 0x161e28, ceilMix: 0.42, wains: 0x3a5070,
+    hardware: 0xb4c2cc, hue: 0.02, sat: 1.55, lum: 0.94,
+  },
+  // DUST ROSE: plum wainscot, brass ribs, a pink-peach light
+  rose: {
+    lens: 0xffcab8, light: 0xffaa96, fill: 0xffcab6, sky: 0xffd8cc, ground: 0x4a2c34,
+    metal: 0x7a5a30, metalMix: 0.58, ceil: 0x3a1e2a, ceilMix: 0.4, wains: 0x7a3a4c,
+    hardware: 0xd4a85c, hue: -0.03, sat: 1.35, lum: 1.03,
+  },
+  // VERDANT: deep green over warm wood, dark bronze, a golden light
+  verdant: {
+    lens: 0xffe6a0, light: 0xffcf6e, fill: 0xffe2a8, sky: 0xf2eac0, ground: 0x2c3824,
+    metal: 0x3a2a18, metalMix: 0.68, ceil: 0x1a2618, ceilMix: 0.4, wains: 0x7a4a28,
+    hardware: 0xd8b45a, hue: 0.01, sat: 1.45, lum: 0.86,
+  },
+};
 
 /**
  * Light that lands without being a light: soft additive gradients laid on the
@@ -446,10 +763,15 @@ export class Interior {
   // vertex-shaded twins for the merged shell, retinted from the same palette:
   // the shade attribute steps the value, the palette keeps the hue
   private shellWall = new THREE.MeshStandardMaterial({ roughness: 0.8, vertexColors: true });
+  private shellWains = new THREE.MeshStandardMaterial({ roughness: 0.7, vertexColors: true });
   private shellCeil = new THREE.MeshStandardMaterial({ roughness: 0.85, vertexColors: true });
   private shellFloor = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.15, vertexColors: true });
   private shellFrame = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.35, vertexColors: true });
   private shellLens = new THREE.MeshBasicMaterial({ color: 0xffc77a, toneMapped: false });
+  private hemi = new THREE.HemisphereLight(0xffd9b0, 0x4a3b30, 0.85);
+  private mood: Mood = MOODS[''];
+  /** the palette's hardware, for the props' handles and brass */
+  private hardware = new THREE.Color();
 
   constructor(private ctx: InteriorCtx, aspect: number, ui: HTMLElement) {
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 60);
@@ -459,7 +781,7 @@ export class Interior {
     this.camera.lookAt(this.cx, 0.95, 0);
 
     this.scene.background = new THREE.Color(0x0e0b09);
-    this.scene.add(new THREE.HemisphereLight(0xffd9b0, 0x4a3b30, 0.85));
+    this.scene.add(this.hemi);
 
     this.applyPalette();
     this.suit = buildSuit();
@@ -518,13 +840,25 @@ export class Interior {
 
   applyPalette(): void {
     const p = wallPalette(this.ctx.meta.palette);
-    this.wallMat.color.setHex(p.wall);
+    const m = this.mood = MOODS[this.ctx.meta.palette] ?? MOODS[''];
+    const wall = C(p.wall);
+    if (m.hue !== 0 || m.sat !== 1 || m.lum !== 1) {
+      const hsl = { h: 0, s: 0, l: 0 };
+      wall.getHSL(hsl, THREE.SRGBColorSpace);
+      wall.setHSL((hsl.h + m.hue + 1) % 1, Math.min(1, hsl.s * m.sat), hsl.l * m.lum, THREE.SRGBColorSpace);
+    }
+    this.wallMat.color.copy(wall);
     this.trimMat.color.setHex(p.trim);
     this.floorMat.color.setHex(p.floor);
-    this.shellWall.color.setHex(p.wall);
-    this.shellCeil.color.setHex(p.wall).lerp(CEIL_SHADOW, 0.3);
+    this.shellWall.color.copy(wall);
+    this.shellWains.color.copy(m.wains === null ? wall : C(m.wains));
+    this.shellCeil.color.copy(wall).lerp(C(m.ceil), m.ceilMix);
     this.shellFloor.color.setHex(p.floor);
-    this.shellFrame.color.setHex(p.wall).lerp(FRAME_METAL, 0.72);
+    this.shellFrame.color.copy(wall).lerp(C(m.metal), m.metalMix);
+    this.shellLens.color.setHex(m.lens);
+    this.hemi.color.setHex(m.sky);
+    this.hemi.groundColor.setHex(m.ground);
+    this.hardware.setHex(m.hardware);
   }
 
   // ---------------- the room ----------------
@@ -595,7 +929,7 @@ export class Interior {
    * floor; the bays named in `lit` also carry a real light.
    */
   private buildShell(g: THREE.Group, x0: number, x1: number, lit: number[]): void {
-    const wall = new Kit(), ceil = new Kit(), floor = new Kit(), frame = new Kit(), lens = new Kit();
+    const wall = new Kit(), wains = new Kit(), ceil = new Kit(), floor = new Kit(), frame = new Kit(), lens = new Kit();
     const halo = new Kit(), wash = new Kit(), pool = new Kit();
     const W = x1 - x0, CX = (x0 + x1) / 2;
     // value falls away toward the camera, so the frame's edges stay dark
@@ -606,7 +940,7 @@ export class Interior {
     wall.box(W, 2.45, 0.15, CX, 1.125, WALL_Z - 0.075, 0.4);           // backing, seen in the seams
     frame.box(W, 0.14, 0.06, CX, 0.07, WALL_Z + 0.03, 0.8);            // kick plate
     for (const [a, b] of cells(x0, x1, PANEL / 2, GRID)) {               // wainscot
-      wall.box(b - a - 0.03, 0.46, 0.05, (a + b) / 2, 0.38, WALL_Z + 0.025, 0.58 + hash01(a, 1) * 0.07);
+      wains.box(b - a - 0.03, 0.46, 0.05, (a + b) / 2, 0.38, WALL_Z + 0.025, 0.58 + hash01(a, 1) * 0.07);
     }
     g.add(box(W, 0.07, 0.07, this.trimMat, CX, 0.655, WALL_Z + 0.035)); // chair rail
     for (const [y0, y1] of [[0.69, 1.42], [1.42, 2.13]] as const) {
@@ -673,7 +1007,7 @@ export class Interior {
       pool.quad(3.2, 2.6, bx, 0.004, -0.55, 'up');
     }
     for (const lx of lit) {
-      const warm = new THREE.PointLight(0xffd2a0, 3.2, 7, 1.7);
+      const warm = new THREE.PointLight(this.mood.fill, 3.2, 7, 1.7);
       warm.position.set(lx, 2.2, FIX_Z + 0.2);
       g.add(warm);
     }
@@ -697,7 +1031,7 @@ export class Interior {
       const low: [number, number][] = [[WALL_Z, DZ - DW], [DZ + DW, 1.3]];
       for (const [za, zb] of low) {
         frame.box(0.06, 0.14, zb - za, WX + 0.03, 0.07, (za + zb) / 2, 0.8);
-        wall.box(0.05, 0.46, zb - za - 0.03, WX + 0.025, 0.38, (za + zb) / 2, 0.6);
+        wains.box(0.05, 0.46, zb - za - 0.03, WX + 0.025, 0.38, (za + zb) / 2, 0.6);
         g.add(box(0.07, 0.07, zb - za, this.trimMat, WX + 0.035, 0.655, (za + zb) / 2));
       }
       for (const [y0, y1] of [[0.69, 1.42], [1.42, 2.13]] as const) {
@@ -712,10 +1046,10 @@ export class Interior {
       frame.box(0.08, 0.08, DW * 2, WX + 0.04, 1.38, DZ, 0.9);
     }
 
-    g.add(wall.mesh(this.shellWall), ceil.mesh(this.shellCeil), floor.mesh(this.shellFloor),
-      frame.mesh(this.shellFrame), lens.mesh(this.shellLens));
-    g.add(halo.mesh(glowMat('pool', 0xffb36b, 0.45)), wash.mesh(glowMat('wash', 0xffb36b, 0.85)),
-      pool.mesh(glowMat('pool', 0xffb36b, 0.5)));
+    g.add(wall.mesh(this.shellWall), wains.mesh(this.shellWains), ceil.mesh(this.shellCeil),
+      floor.mesh(this.shellFloor), frame.mesh(this.shellFrame), lens.mesh(this.shellLens));
+    const L = this.mood.light;
+    g.add(halo.mesh(glowMat('pool', L, 0.45)), wash.mesh(glowMat('wash', L, 0.85)), pool.mesh(glowMat('pool', L, 0.5)));
   }
 
   /** dusk through a porthole lands: a glow on the wall round the glass, a patch on the floor below */
@@ -729,148 +1063,311 @@ export class Interior {
   }
 
   private buildStations(g: THREE.Group): void {
+    const k = new PropKit();
+    const hw = this.hardware;
+    const GUN = C(0x4b545e), GUN_L = C(0x5d6772), GUN_D = C(0x363d45), SOOT = C(0x23272d);
+
     // THE LEDGER — a standing desk, a strongbox, a caged lamp
-    g.add(box(1.15, 0.12, 0.6, DARKPIPE, 4, 0.62, -1.2));
-    g.add(box(1.0, 0.55, 0.5, GUNMETAL, 4, 0.28, -1.2));
-    const book = box(0.44, 0.05, 0.32, CREAM, 4.18, 0.71, -1.1);
-    book.rotation.z = -0.12;
-    g.add(book);
-    g.add(box(0.34, 0.3, 0.3, PLINTH, 3.62, 0.83, -1.32));
-    g.add(glowDot(AMBER_GLOW, 3.62, 0.83, -1.16, 0.028));
-    g.add(cyl(0.02, 0.5, DARKPIPE, 4.45, 0.95, -1.45, 6));
-    g.add(glowDot(WARM_GLOW, 4.45, 1.22, -1.45, 0.045));
+    k.matte.bev(1.0, 0.54, 0.5, 4, 0.29, -1.2, GUN, 0.025);
+    k.matte.box(0.94, 0.04, 0.44, 4, 0.02, -1.2, SOOT);
+    for (const dy of [0.44, 0.29]) {
+      k.matte.bev(0.44, 0.12, 0.02, 3.74, dy, -0.945, GUN_L, 0.008);
+      k.sheen.box(0.13, 0.018, 0.02, 3.74, dy, -0.93, hw);
+    }
+    k.matte.bev(0.44, 0.40, 0.02, 4.26, 0.31, -0.945, GUN_L, 0.008);
+    k.sheen.box(0.018, 0.13, 0.02, 4.07, 0.35, -0.93, hw);
+    k.matte.bev(1.15, 0.08, 0.6, 4, 0.6, -1.2, GUN_D, 0.02);                     // top, dark rim
+    k.matte.box(1.0, 0.012, 0.46, 4, 0.646, -1.2, C(0x3f5a49));                  // green leather inset
+    k.matte.bev(0.5, 0.02, 0.34, 4.12, 0.662, -1.1, C(0x7a2a20), 0.006);         // the ledger, open
+    for (const px of [4.0, 4.24]) k.matte.bev(0.22, 0.016, 0.31, px, 0.678, -1.1, C(0xefe6d0), 0.004);
+    k.matte.add(UNIT_BOX, 0.2, 0.012, 0.012, 4.2, 0.69, -0.98, C(0x23272d), 0, 0.4);   // a pen
+    k.matte.cyl(0.036, 0.032, 0.08, 4.5, 0.692, -1.0, C(0xc4571f), 10);          // the mug
+    k.matte.add(UNIT_RING, 0.024, 0.024, 0.024, 4.537, 0.692, -1.0, C(0xc4571f));
+    k.matte.cyl(0.031, 0.031, 0.004, 4.5, 0.73, -1.0, C(0x3a2214), 10);
+    k.matte.bev(0.34, 0.3, 0.3, 3.62, 0.8, -1.32, C(0x2c3036), 0.02);           // strongbox
+    k.sheen.cyl(0.045, 0.045, 0.02, 3.66, 0.8, -1.165, hw, 12, Math.PI / 2);
+    k.sheen.box(0.02, 0.1, 0.02, 3.76, 0.8, -1.165, hw);
+    k.glow.box(0.03, 0.03, 0.01, 3.5, 0.91, -1.168, C(0xff9a3c));
+    k.sheen.cyl(0.07, 0.08, 0.03, 4.45, 0.655, -1.45, GUN_D, 10);                // caged lamp
+    k.sheen.cyl(0.018, 0.018, 0.5, 4.45, 0.9, -1.45, GUN_D, 6);
+    k.glow.add(UNIT_ICO, 0.045, 0.045, 0.045, 4.45, 1.2, -1.45, C(0xffd08a));
+    for (const ry of [1.16, 1.24]) k.sheen.add(UNIT_RING, 0.062, 0.062, 0.062, 4.45, ry, -1.45, hw, Math.PI / 2);
+    k.sheen.cyl(0.03, 0.07, 0.03, 4.45, 1.28, -1.45, GUN_D, 10);
+    k.land('pool', 0xffb060, 0.5).quad(0.8, 0.5, 4.3, 0.656, -1.3, 'up');
+    k.land('pool', 0xffb060, 0.32).quad(0.9, 0.9, 4.45, 1.18, WALL_Z + 0.046, 'wall');
     this.stations.push({ x: 4, r: 0.9, label: 'THE LEDGER', panel: 'ledger' });
 
     // DISPATCH CONSOLE — a listening set with the dish's little brother
-    g.add(box(0.8, 0.9, 0.45, GUNMETAL, 8.5, 0.45, -1.35));
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.34),
-      new THREE.MeshBasicMaterial({ color: 0x0d4034, toneMapped: false }));
-    screen.position.set(8.5, 0.98, -1.32);
-    screen.rotation.x = -0.18;
+    k.matte.bev(0.8, 0.78, 0.45, 8.5, 0.41, -1.35, GUN, 0.025);
+    k.matte.box(0.74, 0.04, 0.4, 8.5, 0.02, -1.35, SOOT);
+    k.matte.bev(0.62, 0.5, 0.02, 8.5, 0.39, -1.12, GUN_L, 0.01);
+    for (let i = 0; i < 4; i++) k.matte.box(0.4, 0.022, 0.01, 8.5, 0.24 + i * 0.05, -1.107, SOOT);
+    k.matte.box(0.2, 0.06, 0.006, 8.5, 0.56, -1.108, C(0xd9cfb2));               // the set's plate
+    k.matte.bev(0.86, 0.05, 0.52, 8.5, 0.825, -1.33, GUN_D, 0.012);              // the deck
+    k.sheen.box(0.86, 0.016, 0.012, 8.5, 0.81, -1.068, hw);
+    const keys = [0xff9a3c, 0x3ce6c8, 0x3ce6c8, 0xff4d29, 0xffd08a];
+    keys.forEach((c, i) => k.glow.box(0.05, 0.012, 0.035, 8.24 + i * 0.13, 0.856, -1.17, C(c)));
+    k.matte.box(0.1, 0.04, 0.08, 8.5, 0.87, -1.43, GUN_D);
+    k.matte.bev(0.64, 0.42, 0.08, 8.5, 1.09, -1.42, GUN_D, 0.02);               // the monitor
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.54, 0.33),
+      new THREE.MeshBasicMaterial({ map: screenTexture(), color: 0xc8c8c8, toneMapped: false }));
+    screen.position.set(8.5, 1.09, -1.378);
     g.add(screen);
-    g.add(box(0.62, 0.4, 0.04, DARKPIPE, 8.5, 0.99, -1.35));
-    g.add(cyl(0.015, 0.6, DARKPIPE, 8.85, 1.5, -1.5, 5));
-    this.consoleDot = glowDot(AMBER_GLOW, 8.2, 1.24, -1.3, 0.035);
+    k.land('pool', 0x3ce6c8, 0.18).quad(0.9, 0.6, 8.5, 1.09, -1.375, 'wall');
+    k.sheen.cyl(0.012, 0.016, 0.8, 8.78, 1.2, -1.52, GUN_D, 6);                 // the mast and its dish
+    k.sheen.cyl(0.12, 0.02, 0.05, 8.78, 1.62, -1.52, GUN_L, 12, 0, 0.5);
+    k.glow.add(UNIT_ICO, 0.016, 0.016, 0.016, 8.74, 1.66, -1.52, C(0xff4d29));
+    this.consoleDot = glowDot(AMBER_GLOW, 8.24, 1.24, -1.37, 0.035);
     g.add(this.consoleDot);
     this.stations.push({ x: 8.5, r: 0.9, label: 'DISPATCH CONSOLE', panel: 'transcript' });
 
     // FAUNA DESK — specimen jars, a field ledger
-    g.add(box(1.2, 0.1, 0.55, CREAM, 12.5, 0.58, -1.25));
-    for (const s of [-1, 1]) g.add(box(0.08, 0.55, 0.4, DARKPIPE, 12.5 + s * 0.5, 0.28, -1.25));
+    k.matte.bev(1.22, 0.06, 0.56, 12.5, 0.585, -1.25, C(0x8a5a36), 0.015);        // wood edge
+    k.matte.box(1.14, 0.012, 0.48, 12.5, 0.618, -1.25, C(0xe6dcc4));             // cream laminate
+    for (const s of [-1, 1]) k.matte.bev(0.07, 0.555, 0.42, 12.5 + s * 0.5, 0.2775, -1.25, GUN_D, 0.015);
+    k.matte.box(0.94, 0.04, 0.04, 12.5, 0.12, -1.25, GUN_D);
+    k.matte.bev(0.52, 0.1, 0.42, 12.5, 0.5, -1.27, C(0xc9bea4), 0.012);
+    k.sheen.box(0.12, 0.018, 0.02, 12.5, 0.5, -1.05, hw);
     for (const [jx, jc] of [[12.15, 0xffe08a], [12.5, 0x5ad8e6], [12.85, 0x9ef0d0]] as const) {
-      g.add(cyl(0.085, 0.22, new THREE.MeshStandardMaterial({
-        color: 0xbfd8d2, roughness: 0.2, transparent: true, opacity: 0.35,
-      }), jx, 0.76, -1.2, 10));
-      g.add(glowDot(new THREE.MeshBasicMaterial({ color: jc, toneMapped: false }), jx, 0.72, -1.2, 0.035));
-      g.add(cyl(0.09, 0.03, GUNMETAL, jx, 0.88, -1.2, 10));
+      g.add(cyl(0.085, 0.22, JAR_GLASS, jx, 0.734, -1.2, 10));
+      k.glow.add(UNIT_ICO, 0.035, 0.035, 0.035, jx, 0.7, -1.2, C(jc));
+      k.sheen.cyl(0.09, 0.09, 0.03, jx, 0.857, -1.2, hw, 10);
+      k.land('pool', jc, 0.25).quad(0.32, 0.26, jx, 0.626, -1.2, 'up');
     }
     this.stations.push({ x: 12.5, r: 0.9, label: 'FAUNA DESK', panel: 'faunalog' });
 
     // WARDROBE — the paint locker
-    g.add(box(0.95, 1.85, 0.5, CREAM, 16, 0.93, -1.5));
-    g.add(box(1.02, 0.08, 0.56, GUNMETAL, 16, 1.9, -1.5));
-    g.add(box(0.95, 0.14, 0.51, ORANGE, 16, 1.45, -1.495));
-    g.add(box(0.03, 0.3, 0.03, DARKPIPE, 16.4, 0.95, -1.23));
-    g.add(glowDot(TEAL_GLOW, 15.62, 1.72, -1.23, 0.028));
+    k.matte.bev(0.95, 1.82, 0.5, 16, 0.93, -1.5, C(0xd8ceb4), 0.03);
+    k.matte.box(0.9, 0.04, 0.46, 16, 0.02, -1.5, SOOT);
+    k.matte.bev(0.86, 1.66, 0.012, 16, 0.94, -1.247, C(0xeae0c8), 0.005);        // the door, a shade lighter
+    k.matte.bev(1.02, 0.08, 0.56, 16, 1.88, -1.5, GUN, 0.015);
+    k.matte.bev(0.97, 0.14, 0.52, 16, 1.45, -1.5, C(0xc4571f), 0.03);
+    k.sheen.bev(0.03, 0.32, 0.03, 16.36, 0.95, -1.222, hw, 0.008);
+    for (const vy of [1.62, 1.67, 1.72, 0.16, 0.21, 0.26]) k.matte.box(0.34, 0.02, 0.01, 16.1, vy, -1.233, C(0x4a4438));
+    [0x64707c, 0x9c7e78, 0x74836e].forEach((c, i) => k.matte.box(0.08, 0.08, 0.006, 15.72 + i * 0.1, 1.24, -1.232, C(c)));
+    k.sheen.box(0.16, 0.05, 0.006, 16.14, 1.24, -1.232, hw);
+    k.glow.add(UNIT_ICO, 0.028, 0.028, 0.028, 15.62, 1.72, -1.23, C(0x3ce6c8));
     this.stations.push({ x: 16, r: 0.9, label: 'WARDROBE', panel: 'wardrobe' });
 
     // CATALOG — a pinboard and the crates things arrive in
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.8),
-      new THREE.MeshStandardMaterial({ color: 0x6a5a48, roughness: 0.9 }));
-    board.position.set(19.5, 1.35, -1.95);
+    k.matte.bev(1.18, 0.88, 0.04, 19.5, 1.35, -1.965, C(0x6e4a2e), 0.012);
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.78),
+      new THREE.MeshStandardMaterial({ map: boardTexture(), roughness: 0.9 }));
+    board.position.set(19.5, 1.35, -1.943);
     g.add(board);
-    for (const [px2, py2, pc] of [[19.2, 1.5, 0xe6dcc4], [19.7, 1.28, 0xc4571f], [19.95, 1.55, 0x3ce6c8]] as const) {
-      g.add(box(0.22, 0.28, 0.01, new THREE.MeshBasicMaterial({ color: pc, toneMapped: false }), px2, py2, -1.94));
+    const TEAL = C(0x2e6e64), TEAL_D = C(0x1f4b44), ORANGE = C(0xc4571f);
+    k.matte.bev(0.55, 0.45, 0.55, 19.2, 0.225, -1.3, TEAL, 0.02);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      k.matte.box(0.06, 0.45, 0.06, 19.2 + sx * 0.25, 0.225, -1.3 + sz * 0.25, TEAL_D);
     }
-    g.add(box(0.55, 0.45, 0.55, TEAL_PAINT, 19.2, 0.32, -1.3));
-    g.add(box(0.6, 0.05, 0.6, DARKPIPE, 19.2, 0.47, -1.3));
-    g.add(box(0.4, 0.35, 0.4, ORANGE, 19.85, 0.28, -1.15));
+    k.matte.box(0.565, 0.05, 0.565, 19.2, 0.225, -1.3, TEAL_D);
+    k.matte.bev(0.6, 0.05, 0.6, 19.2, 0.475, -1.3, GUN_D, 0.012);
+    k.matte.box(0.2, 0.1, 0.006, 19.1, 0.34, -1.024, C(0xe6dcc4));
+    k.matte.bev(0.22, 0.02, 0.16, 19.22, 0.51, -1.22, C(0xe6dcc4), 0.005, 0.3);   // this season's catalog
+    k.matte.bev(0.222, 0.022, 0.05, 19.25, 0.51, -1.16, C(0xc4571f), 0.005, 0.3);
+    k.matte.bev(0.4, 0.35, 0.4, 19.85, 0.175, -1.15, ORANGE, 0.018);
+    for (const sx of [-0.1, 0.1]) k.matte.box(0.04, 0.356, 0.406, 19.85 + sx, 0.175, -1.15, C(0x3a2a20));
+    k.matte.box(0.12, 0.08, 0.006, 19.85, 0.2, -0.948, C(0xe6dcc4));
     this.stations.push({ x: 19.5, r: 0.9, label: 'OUTFITTER CATALOG', panel: 'catalog' });
+
+    k.flush(g);
   }
 
   private buildFurnishings(g: THREE.Group, own: string[]): void {
+    const k = new PropKit();
+    const hw = this.hardware;
+    const DARK = C(0x2a2e34), WOOD = C(0x7a5236), WOOD_L = C(0x9a6a3e), CREAM = C(0xe9e0cc);
+
     if (own.includes('rug')) {
-      const rug = box(2.2, 0.03, 1.6, new THREE.MeshStandardMaterial({ color: 0x8a4a30, roughness: 0.95 }), 6.4, 0.02, -0.5);
-      g.add(rug);
-      g.add(box(2.2, 0.031, 0.12, this.trimMat, 6.4, 0.021, 0.24));
-      g.add(box(2.2, 0.031, 0.12, this.trimMat, 6.4, 0.021, -1.24));
+      // trade-post wool: a patterned top on a plum body, fringe at both ends
+      k.matte.box(2.2, 0.02, 1.6, 6.4, 0.012, -0.5, C(0x3e2236));
+      const top = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.6), RUG_MAT());
+      top.rotation.x = -Math.PI / 2;
+      top.position.set(6.4, 0.0225, -0.5);
+      g.add(top);
+      for (const sx of [-1, 1]) for (let z = -1.26; z <= 0.27; z += 0.06) {
+        k.matte.box(0.09, 0.008, 0.018, 6.4 + sx * 1.14, 0.008, z, C(0xe9d6ad), 0);
+      }
     }
     if (own.includes('lamp')) {
-      g.add(cyl(0.16, 0.05, PLINTH, 14, 0.03, -0.9, 12));
-      g.add(cyl(0.025, 1.3, DARKPIPE, 14, 0.68, -0.9, 8));
-      g.add(cyl(0.14, 0.16, GUNMETAL, 14, 1.4, -0.9, 12));
-      g.add(glowDot(WARM_GLOW, 14, 1.33, -0.9, 0.06));
-      const pt = new THREE.PointLight(0xffd9a0, 3, 5, 2);
-      pt.position.set(14, 1.3, -0.6);
+      // an arc lamp: a weighted foot, a pole, an arm sweeping east to a dome
+      // that throws a real cone of light down onto the floor and the wall
+      const SX = 14.6, SY = 1.6, Z = -0.9;
+      k.sheen.cyl(0.17, 0.19, 0.05, 14, 0.025, Z, DARK, 12);
+      k.sheen.cyl(0.12, 0.12, 0.012, 14, 0.056, Z, hw, 12);
+      k.sheen.cyl(0.02, 0.022, 1.62, 14, 0.87, Z, C(0x30353c), 8);
+      const P0 = [14, 1.66], P1 = [14.06, 2.14], P2 = [SX, SY + 0.22];
+      const at = (t: number) => [0, 1].map(i => (1 - t) ** 2 * P0[i] + 2 * (1 - t) * t * P1[i] + t * t * P2[i]);
+      for (let i = 0; i < 8; i++) {
+        const [ax, ay] = at(i / 8), [bx, by] = at((i + 1) / 8);
+        k.sheen.add(UNIT_ROD, Math.hypot(bx - ax, by - ay) + 0.012, 0.017, 0.017,
+          (ax + bx) / 2, (ay + by) / 2, Z, C(0x30353c), 0, 0, Math.atan2(by - ay, bx - ax));
+      }
+      k.sheen.cyl(0.05, 0.19, 0.17, SX, SY + 0.085, Z, hw, 14);          // the dome
+      k.sheen.cyl(0.03, 0.05, 0.04, SX, SY + 0.19, Z, C(0x30353c), 8);
+      k.glow.cyl(0.18, 0.18, 0.004, SX, SY - 0.004, Z, C(0xffd89a), 14);  // lit from inside
+      k.glow.add(UNIT_ICO, 0.05, 0.05, 0.05, SX, SY - 0.02, Z, C(0xfff2d0));
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.82, SY - 0.02, 18, 1, true), BEAM_MAT());
+      beam.position.set(SX, (SY - 0.02) / 2, Z);
+      g.add(beam);
+      k.land('pool', 0xffa04c, 0.8).quad(2.0, 1.7, SX, 0.008, Z + 0.1, 'up');
+      k.land('wash', 0xffa85a, 0.55).quad(1.5, 1.5, SX, SY - 0.75, WALL_Z + 0.047, 'wall');
+      k.land('pool', 0xffb060, 0.35).quad(1.4, 1.2, SX, SY + 0.05, WALL_Z + 0.046, 'wall');
+      const pt = new THREE.PointLight(0xffc27a, 3.4, 4.5, 1.6);
+      pt.position.set(SX, SY - 0.15, Z + 0.15);
       g.add(pt);
     }
     if (own.includes('plant')) {
-      g.add(box(0.5, 0.32, 0.4, TEAL_PAINT, 2.4, 0.18, -1.3));
-      g.add(box(0.54, 0.04, 0.44, DARKPIPE, 2.4, 0.36, -1.3));
+      // a glazed pot: saucer, a tapered body with a band, a lip, soil
+      k.matte.cyl(0.22, 0.2, 0.025, 2.4, 0.0125, -1.3, DARK, 10);
+      k.matte.cyl(0.235, 0.17, 0.3, 2.4, 0.175, -1.3, C(0x2c6660), 8);
+      k.matte.cyl(0.217, 0.209, 0.04, 2.4, 0.2, -1.3, C(0xd9a04a), 8);
+      k.matte.cyl(0.255, 0.245, 0.05, 2.4, 0.335, -1.3, C(0x3d8a80), 8);
+      k.matte.cyl(0.226, 0.226, 0.01, 2.4, 0.358, -1.3, C(0x3a2a1e), 8);
       g.add(fernPlant(2.4, 0.37, -1.3));
     }
     if (own.includes('bunk')) {
-      g.add(box(1.7, 0.16, 0.75, GUNMETAL, 21.4, 0.3, -1.35));
-      g.add(box(1.7, 0.12, 0.75, CREAM, 21.4, 0.44, -1.35));
-      g.add(box(0.4, 0.1, 0.5, ORANGE, 22.0, 0.55, -1.35));
-      for (const s of [-1, 1]) g.add(box(0.08, 0.3, 0.08, DARKPIPE, 21.4 + s * 0.78, 0.15, -1.35));
+      // a bunk with its bed made, nearly: frame, mattress, a plum wool blanket
+      // turned down over the sheet, a pillow, a cloth folded at the foot, and
+      // a reading light on the wall
+      const X = 21.4, Z = -1.35, FRAME = C(0x4b545e);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.matte.bev(0.06, 0.22, 0.06, X + sx * 0.8, 0.11, Z + sz * 0.33, C(0x363d45), 0.01);
+      k.matte.bev(1.74, 0.1, 0.78, X, 0.27, Z, FRAME, 0.02);
+      k.sheen.box(1.6, 0.02, 0.01, X, 0.27, Z + 0.392, hw);
+      k.matte.bev(0.06, 0.5, 0.8, X + 0.85, 0.47, Z, FRAME, 0.015);              // headboard
+      k.sheen.bev(0.09, 0.04, 0.84, X + 0.85, 0.74, Z, hw, 0.01);
+      k.matte.bev(0.06, 0.32, 0.8, X - 0.85, 0.38, Z, FRAME, 0.015);             // footboard
+      k.sheen.bev(0.09, 0.04, 0.84, X - 0.85, 0.56, Z, hw, 0.01);
+      k.matte.bev(1.62, 0.13, 0.72, X, 0.385, Z, C(0xcfc8b6), 0.035);           // mattress
+      k.matte.box(0.5, 0.012, 0.7, X + 0.58, 0.456, Z, C(0xf2ede2));             // the sheet
+      k.matte.add(blanketGeo(), 1, 1, 1, X - 0.22, 0.475, Z, C(0x6a3a58));
+      k.matte.bev(1.2, 0.1, 0.025, X - 0.22, 0.41, Z + 0.39, C(0x5e3250), 0.008); // the drape
+      k.matte.bev(0.16, 0.04, 0.8, X + 0.3, 0.51, Z, C(0xefe6d2), 0.015);        // turned down
+      k.matte.bev(0.03, 0.042, 0.805, X + 0.235, 0.512, Z, C(0xd99a3e), 0.008);
+      k.matte.bev(0.16, 0.1, 0.025, X + 0.3, 0.43, Z + 0.4, C(0xefe6d2), 0.008);
+      k.matte.add(UNIT_ICO, 0.19, 0.07, 0.29, X + 0.6, 0.53, Z, C(0xf6f1e6), 0, 0.08, 0.05);  // pillow
+      k.matte.bev(0.22, 0.05, 0.3, X - 0.62, 0.535, Z + 0.08, C(0xc98a3a), 0.012);   // folded cloth
+      k.matte.bev(0.224, 0.014, 0.304, X - 0.62, 0.535, Z + 0.08, C(0xe9d6ad), 0.004);
+      // the reading light
+      const LX = X + 0.22;
+      k.sheen.bev(0.08, 0.14, 0.03, LX, 0.98, -1.975, hw, 0.008);
+      k.sheen.add(UNIT_ROD, 0.012, 0.1, 0.012, LX, 0.98, -1.92, DARK, 0, Math.PI / 2);
+      k.sheen.cyl(0.035, 0.075, 0.08, LX, 0.95, -1.86, hw, 10);
+      k.glow.cyl(0.07, 0.07, 0.004, LX, 0.908, -1.86, C(0xffd89a), 10);
+      k.glow.add(UNIT_ICO, 0.03, 0.03, 0.03, LX, 0.905, -1.86, C(0xfff2d0));
+      k.land('wash', 0xffb060, 0.85).quad(1.1, 0.65, LX, 0.6, WALL_Z + 0.046, 'wall');
+      k.land('pool', 0xffb060, 0.45).quad(0.7, 0.7, LX, 0.92, WALL_Z + 0.047, 'wall');
+      k.land('pool', 0xffb060, 0.25).quad(0.9, 0.6, LX, 0.53, Z, 'up');
     }
     if (own.includes('galley')) {
-      g.add(box(1.0, 0.55, 0.45, TEAL_PAINT, 17.8, 0.28, -1.7));
-      g.add(box(1.05, 0.06, 0.5, GUNMETAL, 17.8, 0.58, -1.7));
-      g.add(cyl(0.09, 0.14, CREAM, 17.6, 0.68, -1.65, 10));
-      g.add(cyl(0.05, 0.05, CREAM, 17.98, 0.64, -1.6, 8));
-      g.add(cyl(0.05, 0.05, CREAM, 18.1, 0.64, -1.72, 8));
+      // a cabinet with a wood top, tiles behind, a shelf with a warm strip
+      // under it, and on the counter: a copper kettle on its hob, two cups
+      const X = 17.8, Z = -1.7, TEAL = C(0x2e6e64), TEAL_L = C(0x3a8276);
+      k.matte.bev(1.0, 0.52, 0.45, X, 0.29, Z, TEAL, 0.02);
+      k.matte.box(0.94, 0.04, 0.4, X, 0.02, Z + 0.02, C(0x23272d));
+      for (const s of [-1, 1]) {
+        k.matte.bev(0.46, 0.42, 0.02, X + s * 0.24, 0.29, Z + 0.23, TEAL_L, 0.008);
+        k.sheen.bev(0.02, 0.12, 0.02, X + s * 0.06, 0.4, Z + 0.245, hw, 0.005);
+      }
+      k.matte.bev(1.06, 0.05, 0.5, X, 0.575, Z, WOOD_L, 0.012);
+      for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) {
+        k.matte.bev(0.155, 0.135, 0.012, X - 0.4 + c * 0.16, 0.675 + r * 0.14, -1.935,
+          C((r + c) % 2 ? 0xe4dac2 : 0xd2c6aa), 0.004);
+      }
+      // the shelf, clear of the porthole and the pillar
+      const SX = 17.9;
+      k.matte.bev(0.76, 0.035, 0.2, SX, 1.13, -1.88, WOOD, 0.008);
+      for (const s of [-1, 1]) k.sheen.bev(0.025, 0.1, 0.15, SX + s * 0.3, 1.07, -1.9, hw, 0.005);
+      k.glow.box(0.6, 0.012, 0.03, SX, 1.106, -1.83, C(0xffd79a));
+      k.matte.cyl(0.045, 0.045, 0.1, SX - 0.18, 1.2, -1.88, C(0xc4571f), 10);
+      k.sheen.cyl(0.047, 0.047, 0.02, SX - 0.18, 1.255, -1.88, hw, 10);
+      k.matte.cyl(0.04, 0.04, 0.08, SX - 0.06, 1.19, -1.88, CREAM, 10);
+      k.sheen.cyl(0.042, 0.042, 0.02, SX - 0.06, 1.235, -1.88, hw, 10);
+      k.land('wash', 0xffb060, 0.75).quad(0.95, 0.5, SX, 0.85, -1.926, 'wall');
+      k.land('pool', 0xffb060, 0.5).quad(1.0, 0.45, SX - 0.05, 0.603, Z, 'up');
+      // the hob, the kettle
+      const KX = 17.52;
+      k.sheen.cyl(0.11, 0.11, 0.012, KX, 0.606, Z, C(0x23272d), 14);
+      const COPPER = C(0xc0703c);
+      k.sheen.cyl(0.085, 0.118, 0.17, KX, 0.697, Z, COPPER, 12);
+      k.sheen.cyl(0.056, 0.085, 0.034, KX, 0.799, Z, COPPER, 12);
+      k.matte.add(UNIT_ICO, 0.025, 0.025, 0.025, KX, 0.825, Z, C(0x2a2018));
+      k.sheen.cyl(0.016, 0.027, 0.15, KX - 0.125, 0.75, Z, COPPER, 8, 0, 0.75);
+      k.matte.add(UNIT_RING, 0.08, 0.08, 0.08, KX + 0.09, 0.765, Z, C(0x2a2018));
+      // two cups, in case anyone ever comes
+      for (const [cx, cz, band] of [[17.9, Z + 0.08, 0xb04a26], [18.1, Z - 0.02, 0x2e6e64]] as const) {
+        k.matte.cyl(0.052, 0.042, 0.098, cx, 0.649, cz, CREAM, 10);
+        k.matte.cyl(0.0515, 0.049, 0.021, cx, 0.669, cz, C(band), 10);
+        k.matte.cyl(0.046, 0.046, 0.004, cx, 0.689, cz, C(0x4a2a14), 10);
+        k.matte.add(UNIT_RING, 0.03, 0.03, 0.03, cx + 0.058, 0.652, cz, CREAM);
+      }
+      k.matte.bev(0.14, 0.2, 0.012, 18.2, 0.47, Z + 0.255, C(0xefe6d2), 0.004);   // tea towel
+      k.matte.bev(0.142, 0.025, 0.014, 18.2, 0.42, Z + 0.255, C(0xb04a26), 0.004);
     }
     if (own.includes('shelf')) {
       // hung in the clear bay west of the x=11 window — a plank across the
       // glass reads as a mistake, and the ribs at 8 and 11.5 box it in
-      g.add(box(1.1, 0.05, 0.3, this.trimMat, 9.55, 1.55, -1.85));
+      k.matte.bev(1.1, 0.045, 0.28, 9.55, 1.55, -1.86, WOOD, 0.01);
+      g.add(box(1.1, 0.02, 0.012, this.trimMat, 9.55, 1.545, -1.714));
       for (const s of [-1, 1]) {
-        const bracket = box(0.04, 0.16, 0.22, DARKPIPE, 9.55 + s * 0.48, 1.45, -1.87);
-        bracket.rotation.x = -0.5;
-        g.add(bracket);
+        k.sheen.box(0.035, 0.2, 0.02, 9.55 + s * 0.46, 1.44, -1.99, hw);
+        k.sheen.add(UNIT_BOX, 0.03, 0.24, 0.02, 9.55 + s * 0.46, 1.44, -1.89, hw, 0.75);
       }
-      for (const [bx, bh, bc] of [[9.2, 0.24, 0x2e6e64], [9.37, 0.28, 0xa83a24], [9.55, 0.22, 0xe6dcc4], [9.77, 0.26, 0x4b545e]] as const) {
-        g.add(box(0.12, bh, 0.2, new THREE.MeshStandardMaterial({ color: bc, roughness: 0.8 }), bx, 1.58 + bh / 2, -1.82));
+      const BOOK_Y = 1.5725;
+      for (const [bx, bh, bc, band] of [[9.2, 0.24, 0x2e6e64, 0xd8b45a], [9.37, 0.28, 0xa83a24, 0xe6dcc4],
+        [9.55, 0.22, 0xe6dcc4, 0x3a3028], [9.77, 0.26, 0x4b545e, 0xe39b3f]] as const) {
+        k.matte.bev(0.12, bh, 0.2, bx, BOOK_Y + bh / 2, -1.82, C(bc), 0.008);
+        for (const f of [0.18, 0.78]) k.matte.box(0.124, 0.02, 0.004, bx, BOOK_Y + bh * f, -1.719, C(band));
       }
-      const flat = box(0.26, 0.1, 0.2, new THREE.MeshStandardMaterial({ color: 0x9c431c, roughness: 0.8 }), 9.98, 1.63, -1.82);
-      g.add(flat);
+      k.sheen.bev(0.03, 0.16, 0.12, 9.115, BOOK_Y + 0.08, -1.82, hw, 0.005);       // bookend
+      k.matte.bev(0.26, 0.05, 0.2, 9.98, BOOK_Y + 0.025, -1.82, C(0x9c431c), 0.006);
+      k.matte.bev(0.22, 0.045, 0.18, 9.97, BOOK_Y + 0.0725, -1.82, C(0x3a4a6a), 0.006, 0.15);  // the novel
     }
     if (own.includes('radio')) {
-      // the set sits on its own side cabinet — it was floating at desk height
-      // with nothing under it
-      for (const s of [-1, 1]) g.add(box(0.07, 0.08, 0.3, DARKPIPE, 5.1 + s * 0.19, 0.04, -1.4));
-      g.add(box(0.52, 0.5, 0.38, GUNMETAL, 5.1, 0.33, -1.4));
-      g.add(box(0.58, 0.04, 0.42, DARKPIPE, 5.1, 0.6, -1.4));
-      g.add(box(0.42, 0.025, 0.01, DARKPIPE, 5.1, 0.42, -1.205));
-      g.add(box(0.06, 0.05, 0.03, GUNMETAL, 5.1, 0.28, -1.205));
-      g.add(box(0.4, 0.24, 0.2, GUNMETAL, 5.1, 0.74, -1.4));
-      g.add(cyl(0.012, 0.4, DARKPIPE, 5.24, 1.05, -1.4, 4));
-      g.add(glowDot(TEAL_GLOW, 4.98, 0.78, -1.28, 0.02));
+      // a valve set on a walnut side cabinet: grille, lit dial, two knobs, a whip
+      const X = 5.1;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.matte.bev(0.05, 0.06, 0.05, X + sx * 0.2, 0.03, -1.4 + sz * 0.14, C(0x2a1c14), 0.008);
+      k.matte.bev(0.52, 0.48, 0.38, X, 0.3, -1.4, C(0x5a3a26), 0.02);
+      k.matte.bev(0.56, 0.035, 0.41, X, 0.5575, -1.4, C(0x8a5c38), 0.01);
+      k.matte.bev(0.44, 0.13, 0.02, X, 0.44, -1.205, C(0x6a4630), 0.008);
+      k.sheen.box(0.1, 0.018, 0.02, X, 0.44, -1.19, hw);
+      k.matte.bev(0.44, 0.24, 0.02, X, 0.215, -1.205, C(0x6a4630), 0.008);
+      k.sheen.add(UNIT_ICO, 0.018, 0.018, 0.018, X + 0.16, 0.25, -1.19, hw);
+      k.matte.bev(0.48, 0.27, 0.22, X, 0.71, -1.43, C(0x7a3424), 0.04);          // the set
+      k.matte.bev(0.42, 0.21, 0.012, X, 0.71, -1.318, C(0xe4d6b6), 0.01);
+      k.matte.box(0.15, 0.15, 0.006, X - 0.12, 0.71, -1.31, C(0x2a1c14));
+      for (let i = 0; i < 5; i++) k.sheen.box(0.15, 0.012, 0.006, X - 0.12, 0.66 + i * 0.025, -1.306, hw);
+      k.sheen.box(0.205, 0.11, 0.004, X + 0.1, 0.74, -1.313, hw);
+      const dial = new THREE.Mesh(new THREE.PlaneGeometry(0.19, 0.095),
+        new THREE.MeshBasicMaterial({ map: dialTexture(), toneMapped: false }));
+      dial.position.set(X + 0.1, 0.74, -1.3105);
+      g.add(dial);
+      k.matte.add(UNIT_BOX, 0.006, 0.085, 0.004, X + 0.13, 0.74, -1.306, C(0xb0241a), 0, 0, 0.25);  // needle
+      for (const kx of [X + 0.05, X + 0.15]) {
+        k.matte.cyl(0.022, 0.024, 0.025, kx, 0.652, -1.3, C(0x2a1c14), 10, Math.PI / 2);
+        k.sheen.cyl(0.01, 0.01, 0.006, kx, 0.652, -1.286, hw, 8, Math.PI / 2);
+      }
+      k.matte.add(UNIT_RING, 0.08, 0.08, 0.08, X, 0.845, -1.43, C(0x2a1c14));       // carry strap
+      const tilt = -0.35, AL = 0.5, ax = X + 0.17, ay = 0.845;
+      k.sheen.cyl(0.006, 0.01, AL, ax - Math.sin(tilt) * AL / 2, ay + Math.cos(tilt) * AL / 2, -1.5, C(0xc8ccd0), 6, 0, tilt);
+      k.sheen.add(UNIT_ICO, 0.014, 0.014, 0.014, ax - Math.sin(tilt) * AL, ay + Math.cos(tilt) * AL, -1.5, C(0xc8ccd0));
+      k.land('pool', 0xffa040, 0.6).quad(0.42, 0.28, X + 0.1, 0.74, -1.3, 'wall');
+      k.land('pool', 0xff9a40, 0.32).quad(1.0, 0.8, X, 0.85, WALL_Z + 0.046, 'wall');
+      k.land('pool', 0xff9a40, 0.3).quad(0.8, 0.9, X, 0.009, -0.95, 'up');
     }
     if (own.includes('chart')) {
-      const tex = canvasTex(256, 160, gg => {
-        gg.fillStyle = '#141a26'; gg.fillRect(0, 0, 256, 160);
-        gg.strokeStyle = '#2a3448'; gg.lineWidth = 1;
-        for (let i = 0; i < 6; i++) {
-          gg.beginPath(); gg.arc(128, 80, 18 + i * 16, 0, Math.PI * 2); gg.stroke();
-        }
-        let seed = 3;
-        const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-        for (let i = 0; i < 60; i++) {
-          const a = rnd() * Math.PI * 2, r = rnd() * 74;
-          gg.fillStyle = i % 9 === 0 ? '#ffd9a0' : '#8fa3c8';
-          gg.fillRect(128 + Math.cos(a) * r, 80 + Math.sin(a) * r, i % 9 === 0 ? 3 : 1.5, i % 9 === 0 ? 3 : 1.5);
-        }
-      });
       const chart = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.82),
-        new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+        new THREE.MeshBasicMaterial({ map: chartTexture(), toneMapped: false }));
       chart.position.set(13.25, 1.5, -1.92);
       g.add(chart);
-      g.add(box(1.38, 0.05, 0.04, DARKPIPE, 13.25, 1.93, -1.91));
-      g.add(box(1.38, 0.05, 0.04, DARKPIPE, 13.25, 1.07, -1.91));
+      for (const sy of [-1, 1]) k.matte.bev(1.4, 0.05, 0.04, 13.25, 1.5 + sy * 0.435, -1.925, DARK, 0.01);
+      for (const sx of [-1, 1]) k.matte.bev(0.05, 0.82, 0.04, 13.25 + sx * 0.675, 1.5, -1.925, DARK, 0.01);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        k.sheen.bev(0.07, 0.07, 0.045, 13.25 + sx * 0.675, 1.5 + sy * 0.435, -1.922, hw, 0.01);
+      }
+      k.sheen.bev(0.24, 0.035, 0.01, 13.25, 1.065, -1.902, hw, 0.004);
     }
+    k.flush(g);
   }
 
   private buildWingDoor(g: THREE.Group, atX: number, open: boolean, name: string, hidden = false): void {
