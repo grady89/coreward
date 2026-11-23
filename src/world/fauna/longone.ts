@@ -158,16 +158,19 @@ export class LongOne implements Creature {
     this.jawL.position.set(0.55, 0.16, 0);
     this.jawR.position.set(0.55, -0.16, 0);
     // white-hot fang tips hooked inward, and a tooth halfway down each jaw:
-    // the hottest value on the creature marks the end that hurts
-    const fangMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8, toneMapped: false });
-    hdrBasic(fangMat, 2.4);
+    // the tips are the hottest value on the creature — hotter than the maw —
+    // so the end that hurts is the brightest thing on it
+    const fangMat = new THREE.MeshBasicMaterial({ color: 0xfff6e6, toneMapped: false });
+    hdrBasic(fangMat, 3.4);
+    const toothMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8, toneMapped: false });
+    hdrBasic(toothMat, 2.0);
     const fangGeo = new THREE.ConeGeometry(0.07, 0.3, 4);
     fangGeo.rotateZ(-Math.PI / 2);
     for (const [jaw, s] of [[this.jawL, -1], [this.jawR, 1]] as const) {
       const tip = new THREE.Mesh(fangGeo, fangMat);
       tip.position.set(0.86, s * 0.03, 0);
       tip.rotation.z = s * 0.55;
-      const tooth = new THREE.Mesh(fangGeo, fangMat);
+      const tooth = new THREE.Mesh(fangGeo, toothMat);
       tooth.position.set(0.42, s * 0.07, 0);
       tooth.rotation.z = s * 1.2;
       tooth.scale.setScalar(0.7);
@@ -182,14 +185,16 @@ export class LongOne implements Creature {
     // the gullet seen from the side: a furnace between the jaw roots that
     // swells as the mouth opens
     // swells as the mouth opens. Set proud of the jaw roots, toward the
-    // camera, so the skull never hides it
-    const gulletMat = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
-    hdrBasic(gulletMat, 2.4);
+    // camera, so the skull never hides it. Held below clipping: a deep
+    // orange furnace with an amber core, so it glows without blowing out
+    // the jaw and the fangs keep the hottest value
+    const gulletMat = new THREE.MeshBasicMaterial({ color: 0xff7a24, toneMapped: false });
+    hdrBasic(gulletMat, 1.5);
     this.gullet = new THREE.Mesh(new THREE.IcosahedronGeometry(0.25, 0), gulletMat);
     this.gullet.position.set(0.6, 0, 0.2);
     const gulletCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 0),
-      new THREE.MeshBasicMaterial({ color: 0xfff0c8, toneMapped: false }));
-    hdrBasic(gulletCore.material as THREE.MeshBasicMaterial, 2.8);
+      new THREE.MeshBasicMaterial({ color: 0xffb45a, toneMapped: false }));
+    hdrBasic(gulletCore.material as THREE.MeshBasicMaterial, 1.5);
     gulletCore.position.set(0.06, 0, 0.12);
     this.gullet.add(gulletCore);
     this.throatLight = new THREE.PointLight(0xff6a2a, 0, 5, 1.8);
@@ -465,7 +470,7 @@ export class LongOne implements Creature {
         const heat = 0.85 + Math.sin(time * 6) * 0.08;
         this.gullet.scale.set(1.35 + g * 0.5, (0.75 + g * 0.9) * heat, 0.9);
         this.throatLight.intensity = 1.8 + g * 3 + (this.stunT > 0 ? 2 : 0);
-        this.gulletHalo.set(0.6, 0, 1.25 + g * 0.5, 1.0 + g * 0.5, (0.38 + g * 0.25) * heat, 0xff9a3c, 1.35);
+        this.gulletHalo.set(0.6, 0, 1.25 + g * 0.5, 1.0 + g * 0.5, (0.22 + g * 0.18) * heat, 0xff7a2a, 1.15);
         // instance 0 belongs to the head group — collapse it
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
@@ -521,7 +526,10 @@ export class LongOne implements Creature {
     const mid = SEGS >> 1;
     const stunGlow = this.stunT > 0 ? 0.3 : 0;
     this.bodySpill.set(this.chain.x[mid], this.chain.y[mid], 8.5, 6, (hunting ? 0.68 : 0.45) + stunGlow, 0xff6a2a, 1.3);
-    this.headSpill.set(this.head.position.x, this.head.position.y, 5, 5, 0.5 + this.gape * 0.4 + stunGlow, 0xffa050, 1.4);
+    // the maw's pool, set back on the neck: it washes the rock round the head
+    // without stacking more light on the head itself
+    const hb = this.chain.heading(0);
+    this.headSpill.set(this.head.position.x - Math.cos(hb) * 0.9, this.head.position.y - Math.sin(hb) * 0.9, 5.5, 5, 0.42 + this.gape * 0.35 + stunGlow, 0xff8a40, 1.35);
     this.body.instanceMatrix.needsUpdate = true;
     this.sinew.instanceMatrix.needsUpdate = true;
     this.lights.instanceMatrix.needsUpdate = true;
