@@ -4,7 +4,8 @@ import { oreValue } from '../tiles';
 import { ACTIVE } from '../worlds';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, onWall, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2, Spill } from './types';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Creature, ThreatCtx, ThreatLevel, onWall, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2, Spill, AXIS_X, AXIS_Z } from './types';
 
 // PRESSURE POLYPS — MAELIS-6's swarm tier. Keyed on SPACE.
 //
@@ -29,6 +30,61 @@ const NOTICE = 4.2;
 const BAND_LO = 150;
 const BAND_HI = 470;
 
+/** the dome's crown, in its own space: where the maw sits */
+const CROWN = 0.5 + 0.5 * -Math.cos(Math.PI * 0.62);
+const qTilt = new THREE.Quaternion();
+const qSway = new THREE.Quaternion();
+
+/**
+ * The maw at the crown of each sac, in a space where +Y is out of the wall:
+ * a dark faceted mouth inside a glowing lip, and a ring of short four-sided
+ * tendrils splayed round it, lit at the tips. Every face carries its own
+ * shade (vertex colours, non-indexed), so it reads cut, not smooth.
+ */
+function crownGeometry(): THREE.BufferGeometry {
+  const h = (n: number): number => { const v = Math.sin(n * 57.3 + 9.1) * 43758.5453; return v - Math.floor(v); };
+  const parts: THREE.BufferGeometry[] = [];
+  const shade = (g: THREE.BufferGeometry, seed: number, lo: number, hi: number, y0: number, y1: number): THREE.BufferGeometry => {
+    const ng = g.index ? g.toNonIndexed() : g;
+    const pos = ng.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i += 3) {
+      const f = 0.8 + h(seed + i) * 0.35;
+      for (let k = 0; k < 3; k++) {
+        const t = Math.max(0, Math.min(1, (pos.getY(i + k) - y0) / (y1 - y0 || 1)));
+        const v = (lo + (hi - lo) * t * t) * f;
+        col.set([v, v, v], (i + k) * 3);
+      }
+    }
+    ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    ng.deleteAttribute('normal'); ng.deleteAttribute('uv');
+    return ng;
+  };
+  // the lip: a chunky seven-sided ring, the brightest edge on the creature
+  const lip = new THREE.TorusGeometry(0.19, 0.055, 3, 7);
+  lip.rotateX(Math.PI / 2);
+  parts.push(shade(lip, 1, 1.0, 1.0, 0, 1));
+  // the maw inside it: near black, so the lip rings a hole
+  const maw = new THREE.CircleGeometry(0.17, 7);
+  maw.rotateX(-Math.PI / 2);
+  maw.translate(0, -0.01, 0);
+  parts.push(shade(maw, 2, 0.03, 0.03, 0, 1));
+  // the tendrils: dim at the root, hot at the tip, leaning out round the lip
+  const N = 7;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + 0.3;
+    const len = 0.26 + h(i + 20) * 0.14;
+    const t = new THREE.ConeGeometry(0.05, len, 4);
+    t.translate(0, len / 2, 0);
+    const st = shade(t, 30 + i * 7, 0.3, 1.25, 0, len);
+    st.rotateZ(-(0.5 + h(i + 40) * 0.35));   // lean out (+X before the turn)
+    st.rotateY(-a);
+    st.translate(Math.cos(a) * 0.2, 0.01, Math.sin(a) * 0.2);
+    parts.push(st);
+  }
+  return mergeGeometries(parts);
+}
+
 interface Polyp {
   alive: boolean;
   x: number; y: number;
@@ -48,6 +104,8 @@ export class Polyps implements Creature {
   readonly clusters: Cluster[] = [];
   private sacs: THREE.InstancedMesh;
   private cores: THREE.InstancedMesh;
+  /** the maw and tendril crown on each sac: the end that goes off */
+  private crowns: THREE.InstancedMesh;
   private glow: THREE.PointLight;
   /** each cluster's light on its wall */
   private spills: Spill[] = [];
@@ -96,6 +154,14 @@ export class Polyps implements Creature {
     this.cores.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.cores);
 
+    const crownMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+    this.crowns = new THREE.InstancedMesh(crownGeometry(), crownMat, MAX_POLYPS);
+    this.crowns.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.crowns.frustumCulled = false;
+    this.crowns.count = 0;
+    this.crowns.setColorAt(0, tmpC.setHex(0xffffff));
+    scene.add(this.crowns);
+
     this.glow = new THREE.PointLight(0x6affc8, 0, 9, 1.6);
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
@@ -112,7 +178,7 @@ export class Polyps implements Creature {
   reset(): void {
     for (const p of this.polyps) p.alive = false;
     for (const c of this.clusters) c.alive = false;
-    this.sacs.count = 0; this.cores.count = 0;
+    this.sacs.count = 0; this.cores.count = 0; this.crowns.count = 0;
     this.glow.intensity = 0;
     for (const sp of this.spills) sp.off();
     this.menace = 0;
@@ -323,7 +389,7 @@ export class Polyps implements Creature {
       // the heart sits mid-dome along the normal, proud of its front face
       const h = 0.5 * s * lean * 0.62;
       tmpP.set(bx + p.nx * h, by + p.ny * h, tmpP.z + 0.5 * s * 0.95 * 0.72);
-      tmpS.setScalar((1.15 + f * 1.1 + beat * 0.16) * p.size);
+      tmpS.setScalar((0.9 + f * 1.1 + beat * 0.16) * p.size);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.cores.setMatrixAt(n, tmpM);
       // pearl-green at rest (nacre over sea-glow), white-hot when it is about to go
@@ -331,6 +397,22 @@ export class Polyps implements Creature {
         .lerp(tmpC2.setHex(0xffffff), Math.min(1, f * 1.2))
         .multiplyScalar(1.25 + beat * 0.7 + f * 2.2);
       this.cores.setColorAt(n, tmpC);
+
+      // the maw on the crown, turned a little toward you so you see into it;
+      // the tendrils sway at rest and clench in as the pressure builds
+      const ch = CROWN * s * lean;
+      tmpP.set(bx + p.nx * ch * 0.93, by + p.ny * ch * 0.93, 0.12 + f * 0.08 + 0.1 * s);
+      tmpQ.setFromEuler(tmpE)
+        .multiply(qSway.setFromAxisAngle(AXIS_Z, Math.sin(p.phase * 0.9 + p.size * 7) * 0.12 * (1 - f)))
+        .multiply(qTilt.setFromAxisAngle(AXIS_X, 0.62));
+      const cs = s * 1.05;
+      tmpS.set(cs * (1 - f * 0.25), cs * (1 - f * 0.45), cs * (1 - f * 0.25));
+      tmpM.compose(tmpP, tmpQ, tmpS);
+      this.crowns.setMatrixAt(n, tmpM);
+      // the lip pulses with the heartbeat and runs white-hot before it goes
+      tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xffffff), 0.15 + f * 0.8)
+        .multiplyScalar(1.0 + beat * 0.9 + f * 2.4 + (f > 0.6 ? (f - 0.6) * 3 * beat : 0));
+      this.crowns.setColorAt(n, tmpC);
       n++;
 
       const a = this.acc, k = p.cluster * 6;
@@ -338,10 +420,12 @@ export class Polyps implements Creature {
       a[k + 4] += p.nx; a[k + 5] += p.ny;
       if (d < 6) { peak = Math.max(peak, f); gx += p.x * f; gy += p.y * f; gw += f; }
     }
-    this.sacs.count = n; this.cores.count = n;
+    this.sacs.count = n; this.cores.count = n; this.crowns.count = n;
     if (n > 0) {
       this.sacs.instanceMatrix.needsUpdate = true;
       this.cores.instanceMatrix.needsUpdate = true;
+      this.crowns.instanceMatrix.needsUpdate = true;
+      if (this.crowns.instanceColor) this.crowns.instanceColor.needsUpdate = true;
       if (this.sacs.instanceColor) this.sacs.instanceColor.needsUpdate = true;
       if (this.cores.instanceColor) this.cores.instanceColor.needsUpdate = true;
     }

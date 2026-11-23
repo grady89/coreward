@@ -28,6 +28,14 @@ const NOTICE = 7.5;
 const GRAV = 14;
 const BITE = 22;
 const qRoll = new THREE.Quaternion();
+/** the head is drawn this much over the body's scale: the biting end reads at
+ *  play size. Visual only: the bite still measures from the chain's head. */
+const HEAD = 1.75;
+/** points on each jaw's mouth face, near its tip, in that jaw's own space */
+const JAW_U_TIP = new THREE.Vector2(0.64, -0.065);
+const JAW_L_TIP = new THREE.Vector2(0.52, 0.052);
+const tmpV2 = new THREE.Vector2();
+const ORIGIN2 = new THREE.Vector2();
 
 type Phase = 'cruise' | 'churn' | 'breach' | 'fall' | 'sinking';
 
@@ -60,6 +68,9 @@ export class Brinewyrm implements Creature {
   private jawL: THREE.Group;
   private throat: THREE.Mesh;
   private throatMat: THREE.MeshBasicMaterial;
+  /** the lit mouth lining filling the gap between the jaws, reshaped each frame */
+  private gullet: THREE.Mesh;
+  private gulletMat: THREE.MeshBasicMaterial;
   private eyeMat: THREE.MeshBasicMaterial;
   private light: THREE.PointLight;
   /** its light on the pool and the stone: one at the head, one down the body */
@@ -158,17 +169,27 @@ export class Brinewyrm implements Creature {
     this.jawU.position.set(0.12, 0.05, 0);
     this.jawL = jaw(0.6, 0.22, -1);
     this.jawL.position.set(0.1, -0.08, 0);
-    this.throatMat = new THREE.MeshBasicMaterial({ color: 0x9ae8ff, toneMapped: false });
+    this.throatMat = new THREE.MeshBasicMaterial({ color: 0xece4ff, toneMapped: false });
     this.throat = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), this.throatMat);
     this.throat.position.set(0.36, -0.02, 0);
+    // the mouth lining: one triangle from the hinge to the two jaw tips, set
+    // in the jaws' mid-plane so the wedges hide it except in the gap. White-hot
+    // at the hinge, violet out to the teeth: an accent against the cyan brine,
+    // so the biting end is the first thing you read
+    const gulletGeo = new THREE.BufferGeometry();
+    gulletGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3).setUsage(THREE.DynamicDrawUsage));
+    gulletGeo.setAttribute('color', new THREE.Float32BufferAttribute([1, 0.8, 1, 0.42, 0.2, 1, 0.4, 0.18, 0.95], 3));
+    this.gulletMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, side: THREE.DoubleSide });
+    this.gullet = new THREE.Mesh(gulletGeo, this.gulletMat);
+    this.gullet.frustumCulled = false;
     this.eyeMat = new THREE.MeshBasicMaterial({ color: 0xeef8ff, toneMapped: false });
-    const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), this.eyeMat);
+    const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), this.eyeMat);
     eye.position.set(0.06, 0.12, 0.4);
     this.light = new THREE.PointLight(0x8ae4ff, 0, 7, 1.6);
     // out in front of the head, not inside it: it lights the pool and the
     // stone without burning the jaws to white
     this.light.position.set(0.5, 0, 1.1);
-    this.head.add(skull, this.jawU, this.jawL, this.throat, eye, this.light);
+    this.head.add(skull, this.jawU, this.jawL, this.throat, this.gullet, eye, this.light);
     this.head.visible = false;
     scene.add(this.head);
 
@@ -449,16 +470,26 @@ export class Brinewyrm implements Creature {
         this.head.rotation.set(0, 0, h);
         // keep the skull on top and the eye on the near side whichever way it swims
         // (and a size up on the body: the dangerous end reads at play scale)
-        this.head.scale.set(1.4, Math.cos(h) < 0 ? -1.4 : 1.4, 1.4);
+        this.head.scale.set(HEAD, Math.cos(h) < 0 ? -HEAD : HEAD, HEAD);
         // never quite shut: a lit seam of throat shows between the jaws
-        this.jawU.rotation.z = 0.15 + this.gape * 0.5;
-        this.jawL.rotation.z = -(0.2 + this.gape * 0.6);
-        this.throat.scale.set(1.5 + this.gape * 0.4, 0.7 + this.gape * 1.4, 1.25);
+        this.jawU.rotation.z = 0.2 + this.gape * 0.5;
+        this.jawL.rotation.z = -(0.27 + this.gape * 0.6);
+        // the lining follows the jaws: hinge, upper tip, lower tip
+        const gp = this.gullet.geometry.attributes.position as THREE.BufferAttribute;
+        gp.setXYZ(0, 0.0, -0.02, 0);
+        tmpV2.copy(JAW_U_TIP).rotateAround(ORIGIN2, this.jawU.rotation.z);
+        gp.setXYZ(1, this.jawU.position.x + tmpV2.x, this.jawU.position.y + tmpV2.y, 0);
+        tmpV2.copy(JAW_L_TIP).rotateAround(ORIGIN2, this.jawL.rotation.z);
+        gp.setXYZ(2, this.jawL.position.x + tmpV2.x, this.jawL.position.y + tmpV2.y, 0);
+        gp.needsUpdate = true;
+        this.gulletMat.color.setScalar(1.3 + glow * 0.5 + this.gape * 1.0);
+        // small and white-hot at the back of the mouth, so the violet lining shows round it
+        this.throat.scale.set(0.9 + this.gape * 0.4, 0.45 + this.gape * 1.1, 0.5);
         // capped so the jaw's facets still read inside the bloom
-        this.throatMat.color.setHex(0x9ae8ff).multiplyScalar(1.2 + glow * 0.7 + this.gape * 1.3);
+        this.throatMat.color.setHex(0xece4ff).multiplyScalar(1.2 + glow * 0.7 + this.gape * 1.3);
         this.eyeMat.color.setHex(0xe0f4ff).multiplyScalar(2 + glow * 0.7 + this.gape);
         this.light.intensity = 1 + glow * 3 + this.gape * 2;
-        this.spillHead.set(px, py, 3.2, 3.2, 0.24 + glow * 0.18 + this.gape * 0.3, 0x8ae4ff, 1.2);
+        this.spillHead.set(px, py, 3.8, 3.8, 0.24 + glow * 0.18 + this.gape * 0.3, 0x8ae4ff, 1.2);
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
         this.spots.setMatrixAt(0, tmpM);
