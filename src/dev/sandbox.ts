@@ -51,6 +51,9 @@ export interface FaunaStage {
   alive(t: ThreatField): boolean;
 }
 
+/** a Stillwalker on the lamp side of the stillwalkers stage, at hall-floor height (pod parked at 31.5, row 346) */
+const walkerAhead = (w: { x: number; y: number }): boolean => w.x > 34 && -w.y < 349;
+
 export const STAGES: FaunaStage[] = [
   // ---------------- VEIL-3 ----------------
   {
@@ -176,8 +179,18 @@ export const STAGES: FaunaStage[] = [
       c.park(31.5, 346, 17);
       c.lamp(true);
     },
-    pick: t => t.stillwalkers,
-    alive: t => !!t.stillwalkers?.walkers.some(w => w.alive),
+    // ...but the seed's own caves and the two Lamplighter halls under this
+    // floor are faces too. One behind you sends it in unlit to stand on the
+    // pod; one in a hall wall leaves it held under the floor. Which one it
+    // takes rides on the random stream, so it moved with every build: retire
+    // any that is not in the hall floor ahead (its own lifespan rule ends it
+    // next frame) and let the window ask again.
+    pick: t => {
+      const sw = t.stillwalkers;
+      for (const w of sw?.walkers ?? []) if (w.alive && !walkerAhead(w)) w.life = Infinity;
+      return sw;
+    },
+    alive: t => !!t.stillwalkers?.walkers.some(w => w.alive && walkerAhead(w)),
   },
   {
     id: 'frostbloom',
