@@ -25,6 +25,18 @@ async function newPage() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await ctx.addInitScript(() => {
     let a = 0x2545f491;
+    // re-seed right before a sandbox stage, so a build that draws a different
+    // number of randoms while loading still stages its creature identically
+    let g0;
+    Object.defineProperty(window, '__game', {
+      configurable: true,
+      get: () => g0,
+      set: v => {
+        g0 = v;
+        const stage = v.devStage?.bind(v);
+        if (stage) v.devStage = (...x) => { a = 0x2545f491; return stage(...x); };
+      },
+    });
     Math.random = () => {
       a = (a + 0x6d2b79f5) | 0;
       let t = Math.imul(a ^ (a >>> 15), 1 | a);
