@@ -188,3 +188,81 @@ export function limb(mesh: THREE.Object3D, ax: number, ay: number, az: number, b
 export const lerp = (a: number, b: number, f: number): number => a + (b - a) * f;
 export const clamp01 = (v: number): number => v < 0 ? 0 : v > 1 ? 1 : v;
 export const ease = (v: number): number => v * v * (3 - 2 * v);
+
+/**
+ * A fresnel rim folded into a lit material's emissive: faces turning away
+ * from the camera glow in `color`, so a creature's silhouette separates from
+ * dark rock without lifting its lit faces. One shared program for every
+ * creature (the colour is a per-material uniform); the meshes sit in the
+ * scene from construction, so the boot prewarm compiles it.
+ */
+export function rimLight(mat: THREE.MeshStandardMaterial, color: number, strength: number): { value: THREE.Color } {
+  const u = { value: new THREE.Color(color).multiplyScalar(strength) };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uRim = u;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  float rimNdv = saturate(abs(dot(normalize(vViewPosition), normal)));
+  totalEmissiveRadiance += uRim * pow(1.0 - rimNdv, 2.2);
+}`);
+  };
+  mat.customProgramCacheKey = () => 'fauna-rim';
+  return u;
+}
+
+let spillTex: THREE.CanvasTexture | null = null;
+/**
+ * A pool of light, not a dot: a soft shoulder that holds most of its weight
+ * out to half the radius and dips a little at the centre, so the stone
+ * around a creature brightens more than the creature itself does.
+ */
+export function spillTexture(): THREE.CanvasTexture {
+  if (spillTex) return spillTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(0.22, 'rgba(255,255,255,0.72)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.36)');
+  grad.addColorStop(0.72, 'rgba(255,255,255,0.09)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  spillTex = new THREE.CanvasTexture(cv);
+  return spillTex;
+}
+
+/**
+ * A creature's own light landing on the rock around it. One additive quad
+ * just proud of the block faces (so it lands on stone as well as the back
+ * wall), depth-write off: a draw call, never a real light. Off is opacity 0
+ * and hidden, so a dark creature costs nothing.
+ */
+export class Spill {
+  readonly mesh: THREE.Mesh;
+  private mat: THREE.MeshBasicMaterial;
+  constructor(parent: THREE.Object3D, color: number) {
+    this.mat = new THREE.MeshBasicMaterial({
+      map: spillTexture(), color, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    });
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.mat);
+    // faces stand proud of 0.5 by up to ~0.12: clear them all
+    this.mesh.position.z = 0.7;
+    this.mesh.visible = false;
+    parent.add(this.mesh);
+  }
+  /** x/y in the parent's space; w/h in tiles; a = 0..1 strength; gain > 1
+   *  drives the colour past white for a creature whose hue is dim (teal, amber) */
+  set(x: number, y: number, w: number, h: number, a: number, color?: number, gain = 1): void {
+    this.mesh.position.x = x; this.mesh.position.y = y;
+    this.mesh.scale.set(w, h, 1);
+    if (color !== undefined) this.mat.color.setHex(color).multiplyScalar(gain);
+    this.mat.opacity = a;
+    this.mesh.visible = a > 0.004;
+  }
+  off(): void { this.mat.opacity = 0; this.mesh.visible = false; }
+}

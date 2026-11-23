@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SPILL_TTL, SPILL_WARN } from '../config';
-import { GEM_GEOS, gemClassOf, gemScaleOf } from './gemshapes';
+import { GEM_GEOS, gemClassOf, gemScaleOf, gemMaterial, gemTintOf, DISPLAY_CUT } from './gemshapes';
 import { def } from './tiles';
 
 // The spill: what is left where a pod burst. The crew tows the hull and files
@@ -77,10 +77,8 @@ export class SpillSite {
 
     // ore heaped in the bin, with the last two spilled over the lip
     for (let i = 0; i < MAX_SHARDS; i++) {
-      const m = new THREE.Mesh(GEM_GEOS[0], new THREE.MeshStandardMaterial({
-        color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.6,
-        roughness: 0.22, metalness: 0.1, flatShading: true, vertexColors: true,
-      }));
+      // the in-world ore material: colours and glow are baked into each geometry
+      const m = new THREE.Mesh(GEM_GEOS[0], gemMaterial());
       m.visible = false;
       this.group.add(m);
       this.shards.push(m);
@@ -207,17 +205,17 @@ export class SpillSite {
       // one crystal, standing up out of the skip, lit from inside
       this.shards.forEach((s, i) => { s.visible = i === 0; });
       const s = this.shards[0];
-      s.geometry = GEM_GEOS[0];
+      // the pale display cut takes the fragment's colour cleanly
+      s.geometry = GEM_GEOS[DISPLAY_CUT];
       const mat = s.material as THREE.MeshStandardMaterial;
       mat.color.setHex(c.fragment);
-      mat.emissive.setHex(c.fragment);
-      mat.emissiveIntensity = 1.1;
+      mat.emissiveIntensity = 2;
       s.position.set(0.14, 0.55, 0);
       s.rotation.set(0.2, 0, 0.1);
       s.scale.setScalar(1.15);
       return;
     }
-    (this.shards[0].material as THREE.MeshStandardMaterial).emissiveIntensity = 0.6;
+    (this.shards[0].material as THREE.MeshStandardMaterial).emissiveIntensity = 1;
     const kinds = [...c.cargo]
       .filter(([, n]) => n > 0)
       .sort((a, b) => def(b[0]).value - def(a[0]).value);
@@ -229,8 +227,7 @@ export class SpillSite {
       const [t] = kinds[i % kinds.length];
       s.geometry = GEM_GEOS[gemClassOf(t)];
       const mat = s.material as THREE.MeshStandardMaterial;
-      mat.color.setHex(def(t).gem);
-      mat.emissive.setHex(def(t).gem);
+      mat.color.setHex(gemTintOf(t));
       // deterministic heap: the same spill looks the same on a reload. The
       // last two ride over the lip, because a full skip is a spilled one.
       const a = i * 2.399;

@@ -150,8 +150,10 @@ export function rockColor(t: number, x: number, y: number): number {
     const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
     base = (r << 16) | (Math.min(255, Math.round(g * 1.14)) << 8) | Math.round(b * 0.9);
   } else if ((def(t).ore && t !== T.FUNGUS && t !== T.NACRE) || t === T.MIMIC) {
-    // ore body = host rock, slightly dark so the gem pops (the mimic copies this)
-    base = lighten(bandColor(strataSolidForRow(y)), 0.82);
+    // ore body = the host rock itself, unshaded: the ore sits in stone, and
+    // its glow lands on that stone (the chunk halo). Darkening it read as a
+    // black square with a gem floating in it. The mimic copies this.
+    base = bandColor(strataSolidForRow(y));
   } else if (t === T.FUNGUS) {
     base = lighten(ACTIVE.gemTint, 0.2);
   } else if (t === T.FROSTBLOOM) {

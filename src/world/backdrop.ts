@@ -1,18 +1,51 @@
 import * as THREE from 'three';
 import { WORLD_W, WORLD_ROWS, CORE_ROW, PAD_X0, PAD_X1 } from '../config';
-import { backwallColor } from './tiles';
-import { ACTIVE } from './worlds';
+import { backwallColor, T } from './tiles';
+import type { Terrain } from './terrain';
+import { ACTIVE, worldById } from './worlds';
 import { STRUCTURE_BUILDERS } from './structures';
+import { hdrBasic } from '../fx/post';
 
 // Backwall, sky, surface rig set-dressing, the Ember, and depth-graded atmosphere.
 
 // ---------- backwall: carved-cave interior behind the tile field ----------
-export function createBackwall(scene: THREE.Scene): void {
+/**
+ * The cave's far wall sits a value step behind the rock and in front of true
+ * void: the light that lands on it takes the world's own hue (a cold world's
+ * cavity never goes beige under the warm lamp), and the open cavity's air
+ * hazes it in that hue, thickest deep in a cavern and thinning toward its rim,
+ * so the space reads as depth rather than a flat plane. Kept dark: the lamp
+ * still does the work. Atmosphere drives the hue with depth.
+ *
+ * Only the lit pocket holds that haze: past a few tiles in from the rim, and
+ * toward the frame's edges, the haze and the ambient fill fall away to black
+ * (direct light — the lamp, pools, fissures — is left alone), so black means
+ * void and the pocket around the pod pops. The core's chamber keeps its flood.
+ */
+const backwallU = {
+  uCavity: { value: new THREE.Color(0, 0, 0) },
+  uCool: { value: 0 },
+  /** v (uv) where the core's chamber starts: its light keeps its own hue */
+  uCoreV: { value: 0 },
+  /** the fragment on the wall (uv) and the wall's size in tiles: the
+   * chamber's light falls off from it into dark far walls */
+  uCoreUv: { value: new THREE.Vector2() },
+  uSpan: { value: new THREE.Vector2(1, 1) },
+  uDepth: { value: null as THREE.Texture | null },
+  /** tiles the distance field in uDepth spans (texel 1.0) */
+  uReach: { value: 1 },
+};
+/** linear luminance the cavity's haze is held to, deep in an open cavern */
+const CAVITY_LUM = 0.024;
+const LUMW = [0.2126, 0.7152, 0.0722] as const;
+
+export function createBackwall(scene: THREE.Scene, terrain: Terrain): void {
   const EXTRA = 30; // rows past the world bottom so the camera never sees void
+  const H = WORLD_ROWS + EXTRA;
   const cv = document.createElement('canvas');
-  cv.width = WORLD_W; cv.height = WORLD_ROWS + EXTRA;
+  cv.width = WORLD_W; cv.height = H;
   const g = cv.getContext('2d')!;
-  for (let y = 0; y < WORLD_ROWS + EXTRA; y++) {
+  for (let y = 0; y < H; y++) {
     for (let x = 0; x < WORLD_W; x++) {
       g.fillStyle = backwallColor(x, Math.min(y, WORLD_ROWS - 1));
       g.fillRect(x, y, 1, 1);
@@ -21,12 +54,95 @@ export function createBackwall(scene: THREE.Scene): void {
   const tex = new THREE.CanvasTexture(cv);
   tex.magFilter = THREE.NearestFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD_W, WORLD_ROWS + 30),
-    new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })
-  );
+
+  // how far each open cell lies from the cavity's rim (rock), in tiles, out to
+  // REACH; stored as d / REACH, rows bottom-up to match the plane's uvs
+  const REACH = 8;
+  const R2 = REACH * REACH;
+  const depth = new Uint8Array(WORLD_W * H);
+  const open = (x: number, y: number) => y >= 0 && y < WORLD_ROWS && terrain.get(x, y) === T.AIR;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
+      if (!open(x, y)) continue;
+      let d2 = R2;
+      for (let dy = -REACH; dy <= REACH; dy++) {
+        for (let dx = -REACH; dx <= REACH; dx++) {
+          const e2 = dx * dx + dy * dy;
+          if (e2 >= d2) continue;
+          const sx = x + dx, sy = y + dy;
+          // the sky above the field is open air, the world's sides are rock
+          if (sy < 0) continue;
+          if (sx < 0 || sx >= WORLD_W || !open(sx, sy)) d2 = e2;
+        }
+      }
+      depth[(H - 1 - y) * WORLD_W + x] = Math.round(255 * Math.sqrt(d2) / REACH);
+    }
+  }
+  const dtex = new THREE.DataTexture(depth, WORLD_W, H, THREE.RedFormat, THREE.UnsignedByteType);
+  dtex.magFilter = THREE.LinearFilter;
+  dtex.minFilter = THREE.LinearFilter;
+  dtex.needsUpdate = true;
+  backwallU.uDepth.value = dtex;
+  backwallU.uReach.value = REACH;
+  // a cold world re-hues more of the warm lamp's light on its far wall
+  backwallU.uCool.value = ACTIVE.hazard.cold ? 0.6 : 0.3;
+  backwallU.uCoreV.value = 1 - (CORE_ROW - 12) / H;
+  backwallU.uCoreUv.value.set(0.5, 1 - (CORE_ROW + 5) / H);
+  backwallU.uSpan.value.set(WORLD_W, H);
+
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
+  mat.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, backwallU);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+varying vec2 vNdc;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+	vNdc = gl_Position.xy / gl_Position.w;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uCavity;
+uniform float uCool;
+uniform float uCoreV;
+uniform vec2 uCoreUv;
+uniform vec2 uSpan;
+uniform float uReach;
+uniform sampler2D uDepth;
+varying vec2 vNdc;`)
+      .replace('#include <opaque_fragment>', `{
+		const vec3 LW = vec3(0.2126, 0.7152, 0.0722);
+		float tiles = texture2D(uDepth, vMapUv).r * uReach;
+		float dep = smoothstep(0.5, 4.0, tiles);
+		// the light landing here takes the world's hue (luminance kept)
+		vec3 hue = uCavity / max(dot(uCavity, LW), 1e-5);
+		float above = smoothstep(uCoreV - 0.02, uCoreV + 0.01, vMapUv.y);
+		float cool = uCool * above;
+		outgoingLight = mix(outgoingLight, dot(outgoingLight, LW) * hue, cool);
+		vec3 direct = reflectedLight.directDiffuse + reflectedLight.directSpecular;
+		direct = mix(direct, dot(direct, LW) * hue, cool);
+		vec3 fill = outgoingLight - direct;
+		// the pocket holds the air: deep in a cavern and toward the frame's
+		// edges the haze and ambient fill fall to black; light reaching the
+		// far wall from fixtures thins toward the edges too, but the pocket
+		// around the pod (frame centre) keeps all of the lamp
+		float far = smoothstep(3.0, 7.5, tiles);
+		float edge = smoothstep(0.2, 1.2, length(vNdc * vec2(1.0, 1.15)));
+		float fade = mix(1.0, (1.0 - 0.8 * far) * (1.0 - 0.8 * edge), above);
+		float lit = mix(1.0, 1.0 - 0.45 * edge, above);
+		// farther back reads hazier: less of the lamp's contrast, more of the air
+		outgoingLight = direct * (1.0 - 0.35 * dep) * lit
+			+ (fill * (1.0 - 0.35 * dep) + uCavity * (0.35 + 0.65 * dep)) * fade;
+		// the chamber: lit hardest round the fragment, its far walls and
+		// ceiling a step darker
+		float cr = length((vMapUv - uCoreUv) * uSpan * vec2(1.0, 1.25));
+		float cf = 1.0 / (1.0 + pow(max(0.0, cr - 4.0) / 7.0, 2.0));
+		outgoingLight *= mix(1.0, mix(0.28, 1.0, cf), 1.0 - above);
+	}
+	#include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'backwall-cavity-v3';
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W, H), mat);
   // extra height so the camera never sees past the world's bottom edge
-  mesh.position.set(WORLD_W / 2, -(WORLD_ROWS + 30) / 2, -0.62);
+  mesh.position.set(WORLD_W / 2, -H / 2, -0.62);
   scene.add(mesh);
 }
 
@@ -76,11 +192,16 @@ export function createSky(scene: THREE.Scene): void {
   createSkyline(scene);
 }
 
+/** skyline mast beacons: hot enough to bloom */
+const BEACON = new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false });
+hdrBasic(BEACON, 2.2);
+
 function createSkyline(scene: THREE.Scene): void {
   // flat painterly silhouettes: unlit, hazed toward the sky by distance
   const near = new THREE.MeshBasicMaterial({ color: 0x342647, toneMapped: false });
   const far = new THREE.MeshBasicMaterial({ color: 0x453454, toneMapped: false });
   const winMat = new THREE.MeshBasicMaterial({ color: 0xffb066, toneMapped: false });
+  hdrBasic(winMat, 1.7);
   const g = new THREE.Group();
 
   interface S { kind: 'dome' | 'tank' | 'slab' | 'mast'; x: number; s: number; z: number; win?: number; }
@@ -115,8 +236,7 @@ function createSkyline(scene: THREE.Scene): void {
     bigDish.position.set(relayX, 7.2, relayZ);
     bigDish.rotation.x = -2.35;
     g.add(bigDish);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6),
-      new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false }));
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6), BEACON);
     beacon.position.set(relayX, 8.4, relayZ);
     g.add(beacon);
   }
@@ -136,8 +256,7 @@ function createSkyline(scene: THREE.Scene): void {
     } else {
       m = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, it.s, 6), mat);
       m.position.set(it.x, it.s / 2, it.z);
-      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false }));
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), BEACON);
       beacon.position.set(it.x, it.s + 0.1, it.z);
       g.add(beacon);
     }
@@ -282,10 +401,7 @@ export function createSurface(scene: THREE.Scene): void {
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, mh, 6), mastMat);
     mast.position.set(mx, mh / 2, -2.5);
     g.add(mast);
-    const beacon = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff4d29, toneMapped: false })
-    );
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), BEACON);
     beacon.position.set(mx, mh + 0.1, -2.5);
     g.add(beacon);
   }
@@ -326,19 +442,121 @@ function haloTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(cv);
 }
 
+const smooth = (e0: number, e1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+
+/** a soft white alpha field, `fn(u, v)` 0..1 with v = 0 at the bottom */
+function fieldTexture(w: number, h: number, fn: (u: number, v: number) => number): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = Math.min(1, Math.max(0, fn((x + 0.5) / w, 1 - (y + 0.5) / h)));
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(a * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(cv);
+}
+
+/**
+ * The fragment's body: a low-poly crystal, not a ball. A detail-2
+ * icosahedron pulled taller than wide and tapered to its tips, every corner
+ * pushed in or out a little (shared corners move together, so it stays
+ * closed), and a fixed value per facet that turns with it.
+ */
+function crystalGeometry(r: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(r, 2);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const h = (a: number, b: number, c: number, k: number): number => {
+    const v = Math.sin(a * 12.9898 + b * 78.233 + c * 37.719 + k * 4.31) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const q = (n: number) => Math.round(n * 100);
+    const j = 1 + (h(q(v.x), q(v.y), q(v.z), 1) - 0.5) * 0.2;
+    const ny = v.y / r;
+    const taper = 1 - 0.32 * ny * ny;
+    v.set(v.x * j * taper * 0.86, v.y * j * 1.12, v.z * j * taper * 0.86);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  // non-indexed: each run of three vertices is one facet
+  const facet = new Float32Array(p.count);
+  for (let f = 0; f < p.count / 3; f++) {
+    const t = h(f, 3.1, 7.7, 2);
+    facet[f * 3] = facet[f * 3 + 1] = facet[f * 3 + 2] = t;
+  }
+  g.setAttribute('facet', new THREE.BufferAttribute(facet, 1));
+  return g;
+}
+
+/**
+ * The crystal's light: facets turned to the viewer burn the core's white-hot
+ * body, facets turning away fall through its light to the shell's hue at the
+ * rim, and each facet keeps its own value on top, so the body reads as cut
+ * stone with an inside rather than a disc. Only the hottest facets cross
+ * the bloom threshold.
+ */
+function crystalMaterial(excite: { value: number }): THREE.MeshBasicMaterial {
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const u = {
+    uBody: { value: new THREE.Color(ACTIVE.core.body) },
+    uShell: { value: new THREE.Color(ACTIVE.core.shell) },
+    uLight: { value: new THREE.Color(ACTIVE.core.light) },
+    uExcite: excite,
+  };
+  m.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, u);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float facet;\nvarying float vFacet;\nvarying vec3 vVP;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvVP = mvPosition.xyz; vFacet = facet;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uBody;
+uniform vec3 uShell;
+uniform vec3 uLight;
+uniform float uExcite;
+varying float vFacet;
+varying vec3 vVP;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+	{
+		vec3 fN = normalize(cross(dFdx(vVP), dFdy(vVP)));
+		float ndv = abs(dot(fN, normalize(-vVP)));
+		vec3 c = mix(uShell * 0.45, uLight, smoothstep(0.15, 0.55, ndv));
+		c = mix(c, uBody, smoothstep(0.8, 0.98, ndv) * (0.3 + 0.7 * vFacet));
+		float fv = mix(0.55, 1.15, vFacet * vFacet) * mix(0.75, 1.0, smoothstep(0.3, 0.9, ndv));
+		// the hottest facets, square to the viewer, go past white and bloom
+		fv += smoothstep(0.84, 0.99, ndv) * step(0.5, vFacet) * 0.45;
+		diffuseColor.rgb = c * fv * (1.0 + uExcite * 0.35);
+	}`);
+  };
+  m.customProgramCacheKey = () => 'core-crystal-v1';
+  return m;
+}
+
 export function createEmber(scene: THREE.Scene): Ember {
   const x = WORLD_W / 2, y = -(CORE_ROW + 5);
   const group = new THREE.Group();
   // the burning heart spins; halo, ring and shaft stay world-oriented
   const spin = new THREE.Group();
-  const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(2.6, 1),
-    new THREE.MeshBasicMaterial({ color: ACTIVE.core.body, toneMapped: false })
-  );
+  const exciteU = { value: 0 };
+  const coreMat = crystalMaterial(exciteU);
+  hdrBasic(coreMat, 1.2);
+  const core = new THREE.Mesh(crystalGeometry(2.6), coreMat);
+  // the shell glows only past the crystal's edge (its back faces, hidden
+  // behind the body), so it rims the silhouette instead of washing the facets
   const shell = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(3.3, 1),
+    crystalGeometry(3.1),
     new THREE.MeshBasicMaterial({
-      color: ACTIVE.core.shell, transparent: true, opacity: 0.3,
+      color: ACTIVE.core.shell, transparent: true, opacity: 0.22, side: THREE.BackSide,
       blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     })
   );
@@ -361,26 +579,114 @@ export function createEmber(scene: THREE.Scene): Ember {
   shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shards.frustumCulled = false;
 
-  // light shaft: the fragment's glow reaching up the dig
-  const shaftCv = document.createElement('canvas');
-  shaftCv.width = 2; shaftCv.height = 128;
-  const sg = shaftCv.getContext('2d')!;
-  const sGrad = sg.createLinearGradient(0, 128, 0, 0);
-  sGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
-  sGrad.addColorStop(1, 'rgba(255,255,255,0)');
-  sg.fillStyle = sGrad;
-  sg.fillRect(0, 0, 2, 128);
+  // light shaft: the fragment's glow reaching up the dig, soft at every
+  // edge so it never shows as a box against the back wall
   const shaft = new THREE.Mesh(
     new THREE.PlaneGeometry(5.5, 18),
     new THREE.MeshBasicMaterial({
-      map: new THREE.CanvasTexture(shaftCv), color: ACTIVE.core.light,
+      map: fieldTexture(32, 128, (u, v) => {
+        const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+        return 0.5 * across * across * smooth(0, 0.12, v) * (1 - v);
+      }), color: ACTIVE.core.light,
       transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending,
       depthWrite: false, toneMapped: false,
     })
   );
   shaft.position.set(0, 11.5, -0.3);
 
-  group.add(spin, light, halo, shards, shaft);
+  // the chamber's air and back wall washed in the fragment's light: a wide
+  // soft gradient just in front of the backwall, so it only shows where the
+  // chamber is open and the rock in front of it still reads as rock
+  // (a broad falloff so the whole vault reads as lit space, not a glow
+  // pinned to the fragment; every core at one brightness)
+  const chamber = !ACTIVE.husk && ACTIVE === worldById(ACTIVE.id);
+  const airC = new THREE.Color(ACTIVE.core.light);
+  const airLum = 0.2126 * airC.r + 0.7152 * airC.g + 0.0722 * airC.b;
+  airC.multiplyScalar(Math.min(1, 0.45 / Math.max(airLum, 1e-3)));
+  const airMat = (map: THREE.Texture, opacity: number) => new THREE.MeshBasicMaterial({
+    map, color: chamber ? airC : ACTIVE.core.light, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+  });
+  const flood = new THREE.Mesh(
+    new THREE.PlaneGeometry(chamber ? 46 : 44, 30),
+    airMat(chamber ? fieldTexture(128, 96, (u, v) => {
+      // the vault: brightest round the fragment, still lit at the walls
+      const r = Math.hypot((u - 0.5) * 2, (v - 0.5) * 2);
+      // (falling off fast enough that the far walls go a step darker)
+      return Math.max(0, 1 - r) ** 2.4 * 0.75 + Math.max(0, 1 - r * 2.2) ** 2 * 0.3;
+    }) : haloTexture(), 0.5)
+  );
+  flood.position.set(0, 0.5, -0.58);
+  group.add(spin, light, halo, shards, shaft, flood);
+
+  // The chamber's air holds the light (G2 lit the stone and the back wall;
+  // this is the volume between): a fan of soft rays from the fragment down
+  // across the floor, a haze lying on the floor, and a dim glow in the void
+  // under the floor ledge. All static additive sheets in the air plane
+  // (depth-tested, so rock in front hides them); nothing moves, they only
+  // breathe in opacity with the pulse. None in a spent world or the husk.
+  const air: { mat: THREE.MeshBasicMaterial; base: number }[] = [];
+  const addAir = (mesh: THREE.Mesh, base: number) => {
+    group.add(mesh);
+    air.push({ mat: mesh.material as THREE.MeshBasicMaterial, base });
+  };
+  if (chamber) {
+    const rayTex = fieldTexture(128, 32, (u, v) => {
+      // bright at the fragment, widening and thinning out along its length
+      const along = smooth(0.0, 0.14, u) * (1 - u) ** 1.7;
+      const half = 0.3 + 0.7 * u;
+      const a = Math.abs(v - 0.5) * 2 / half;
+      return a >= 1 ? 0 : along * Math.cos(a * Math.PI / 2) ** 2;
+    });
+    // [angle° (0 = +x, world up = +y), length, width, opacity]; the floor-
+    // ward rays end in the floor slab (7 below the fragment) so none pokes
+    // into the void under it
+    const RAYS: readonly (readonly [number, number, number, number])[] = [
+      [-160, 17, 4.2, 0.16], [-134, 9, 3.2, 0.2], [-104, 6.8, 2.6, 0.14],
+      [-76, 6.8, 2.6, 0.14], [-46, 9, 3.2, 0.2], [-20, 17, 4.2, 0.16],
+      [168, 15, 5.0, 0.1], [12, 15, 5.0, 0.1],
+    ];
+    for (const [deg, len, wid, op] of RAYS) {
+      const ray = new THREE.Mesh(new THREE.PlaneGeometry(len, wid).translate(len / 2, 0, 0), airMat(rayTex, op));
+      ray.rotation.z = deg * Math.PI / 180;
+      ray.position.set(0, 0, -0.45);
+      addAir(ray, op);
+    }
+    // haze on the floor: thickest at the fragment's foot, out to the walls
+    const floorHaze = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 3.6),
+      airMat(fieldTexture(128, 32, (u, v) => {
+        const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+        return (0.35 + 0.65 * across * across) * smooth(0, 0.12, u) * smooth(1, 0.88, u)
+          * (1 - v) ** 2.2;
+      }), 0.3)
+    );
+    floorHaze.position.set(0, -5 + 1.8, -0.05);   // its foot on the floor top
+    addAir(floorHaze, 0.3);
+    // the hot pool right under the fragment: a narrow, brighter haze whose
+    // foot sits on the floor, in the core's own light warmed toward its body
+    const poolC = airC.clone().lerp(new THREE.Color(ACTIVE.core.body), 0.35);
+    const poolMat = airMat(fieldTexture(64, 32, (u, v) => {
+      const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+      return across ** 1.6 * (1 - v) ** 1.8;
+    }), 0.55);
+    poolMat.color.copy(poolC);
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(11, 3.2), poolMat);
+    pool.position.set(0, -5 + 1.6, -0.04);
+    addAir(pool, 0.55);
+    // the void under the floor ledge: a dim gradient, not dead black
+    const under = new THREE.Mesh(
+      new THREE.PlaneGeometry(48, 10),
+      airMat(fieldTexture(128, 32, (u, v) => {
+        const across = Math.max(0, 1 - Math.abs(u - 0.5) * 2);
+        return Math.sqrt(across) * v ** 2.4;
+      }), 0.32)
+    );
+    under.position.set(0, -7 - 5, -0.3);            // top edge at the world's floor
+    addAir(under, 0.32);
+  }
+
+
   group.position.set(x, y, 0);
   scene.add(group);
 
@@ -400,8 +706,11 @@ export function createEmber(scene: THREE.Scene): Ember {
       core.scale.setScalar(1 + pulse * (0.06 + ex * 0.07));
       shell.scale.setScalar(1 + Math.sin(t * 1.3 + 1) * 0.1 + ex * 0.12);
       halo.scale.setScalar(11 + pulse * 1.5 + ex * 6);
-      (halo.material as THREE.SpriteMaterial).opacity = 0.3 + pulse * 0.08 + ex * 0.35;
+      (halo.material as THREE.SpriteMaterial).opacity = 0.22 + pulse * 0.06 + ex * 0.35;
+      exciteU.value = ex;
       (shaft.material as THREE.MeshBasicMaterial).opacity = 0.1 + ex * 0.3;
+      (flood.material as THREE.MeshBasicMaterial).opacity = 0.5 + pulse * 0.04 + ex * 0.2;
+      for (const a of air) a.mat.opacity = a.base * (1 + pulse * 0.06 + ex * 0.5);
 
       for (let i = 0; i < SHARDS; i++) {
         const ring = i % 2;                      // two inclined orbits
@@ -473,5 +782,10 @@ export class Atmosphere {
       this.fog.color.lerp(this.ash, this.drain);
       this.amb.color.lerp(this.ash, this.drain * 0.7);
     }
+
+    // the cavity's air: the ambient's hue, most of its saturation, held dark
+    const cav = backwallU.uCavity.value.copy(this.amb.color);
+    const l = cav.r * LUMW[0] + cav.g * LUMW[1] + cav.b * LUMW[2];
+    cav.lerp(this.a.setRGB(l, l, l), 0.2).multiplyScalar(CAVITY_LUM / Math.max(l, 1e-4));
   }
 }

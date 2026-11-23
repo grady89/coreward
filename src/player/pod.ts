@@ -1,5 +1,46 @@
 import * as THREE from 'three';
+import { hdrEmissive } from '../fx/post';
 import { RigFinish, FlameStyle, LampTint } from '../game/cosmetics';
+import { ACTIVE, worldById } from '../world/worlds';
+import { softDot } from '../fx/particles';
+import { LAMP_RAYS, lampUniforms } from '../world/chunks';
+
+const BEAM_LEN = 8.5;      // world units the visible beam reaches before it fades
+const BEAM_HALF = 0.42;    // half-angle of the visible wedge (the light's cone is wider)
+const BEAM_DUST = 16;
+const HIT_HALF = 0.6;      // half-angle of the wedge whose stone the beam lights
+const HIT_MAX = 12;        // how far a lamp ray is followed
+const HIT_GAIN = 3;
+const hitO = new THREE.Vector3();
+
+/**
+ * The visible beam, apex at the top centre: alpha falls off along its length
+ * and across it, with a brighter core, so the wedge has no hard edge.
+ */
+function beamTexture(): THREE.CanvasTexture {
+  const W = 64, H = 128;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(W, H);
+  for (let py = 0; py < H; py++) {
+    const v = (py + 0.5) / H;                       // 0 at the lamp
+    for (let px = 0; px < W; px++) {
+      const u = ((px + 0.5) / W) * 2 - 1;           // -1..1 across the plane
+      const e = Math.abs(u) / Math.max(v, 0.02);    // 1 at the cone's edge
+      const across = Math.max(0, 1 - e);
+      const soft = across * across * (3 - 2 * across);
+      const core = Math.exp(-e * e * 6) * 0.6;
+      const along = Math.min(1, v / 0.14) * Math.pow(1 - v, 1.6);
+      const a = Math.min(1, (soft * 0.7 + core) * along);
+      const k = (py * W + px) * 4;
+      img.data[k] = 255; img.data[k + 1] = 255; img.data[k + 2] = 255;
+      img.data[k + 3] = Math.round(a * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(cv);
+}
 
 // The mining pod: hero object built from primitives, two-tone dusty cream +
 // amber accents, teal visor, animated drill and thruster flames, headlamp.
@@ -24,10 +65,91 @@ export interface RigTiers {
 const FIN_WARM = new THREE.Color(0xff9a3c);
 const FIN_HOT = new THREE.Color(0xff4d29);
 
-const HULL = new THREE.MeshStandardMaterial({ color: 0xd8c9a4, roughness: 0.55, metalness: 0.25 });
-const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3 });
+// flat-shaded, low-segment shells: the hull reads as rows of armour plates
+// catching the lamp facet by facet, not as a glossy ball
+const HULL_SEGS = 12;
+const HULL_RINGS = 8;
+const HULL = new THREE.MeshStandardMaterial({ color: 0xe8e0cb, roughness: 0.72, metalness: 0.1, flatShading: true });
+const ACCENT = new THREE.MeshStandardMaterial({ color: 0xff9a3c, roughness: 0.5, metalness: 0.3, flatShading: true });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.4, metalness: 0.8 });
-const GLASS = new THREE.MeshStandardMaterial({ color: 0x1d4a52, roughness: 0.1, metalness: 0.6, emissive: 0x0d3a40, emissiveIntensity: 0.5 });
+// the visor is the pod's eye: lit from inside, so it reads at any distance —
+// but as a glass DOME, not a neon disc: the inner light is strongest where
+// the glass faces you and falls to deep teal toward the rim, with a hot
+// lens-spot high on one side
+const GLASS = new THREE.MeshStandardMaterial({ color: 0x0b2a30, roughness: 0.1, metalness: 0.5, emissive: 0x16c4c0, emissiveIntensity: 0.95 });
+GLASS.onBeforeCompile = sh => {
+  sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  float ndv = saturate(dot(normalize(vViewPosition), normal));
+  totalEmissiveRadiance *= 0.12 + 0.95 * smoothstep(0.4, 0.9, ndv);
+}`);
+};
+GLASS.customProgramCacheKey = () => 'pod-visor';
+// the glass's lit centre (after the rim falloff above) crosses white and
+// blooms teal; the deep rim stays under it, so the dome keeps its form
+hdrEmissive(GLASS, 3.0, 0.4);
+
+/**
+ * Keep a pale paint pale. Warm light (sunset, headlamp, magma) multiplied
+ * into a near-white albedo turns it tan; this pulls the LIGHT's hue back
+ * toward neutral on near-white surfaces only — weighted by how unsaturated
+ * the albedo is, so Jadeworks or Gilt keep their colour — and adds a faint
+ * cool fresnel rim so the silhouette separates from a warm or dark backdrop.
+ * Adds no light to faces turned toward the camera. One program shared by
+ * the pod hull and the suit (the rim colour is a per-material uniform).
+ */
+export function holdWhite(mat: THREE.MeshStandardMaterial, rim: number, strength: number): void {
+  const u = { value: new THREE.Color(rim).multiplyScalar(strength) };
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWhiteRim = u;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uWhiteRim;')
+      .replace('#include <opaque_fragment>', `{
+  vec3 alb = diffuseColor.rgb;
+  float sat = max(max(alb.r, alb.g), alb.b) - min(min(alb.r, alb.g), alb.b);
+  float pale = (1.0 - smoothstep(0.1, 0.3, sat)) * smoothstep(0.35, 0.7, max(max(alb.r, alb.g), alb.b));
+  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  outgoingLight = mix(outgoingLight, vec3(lum) * vec3(0.97, 1.0, 1.05), pale * 0.5);
+  float ndvW = saturate(abs(dot(normalize(vViewPosition), normal)));
+  outgoingLight += uWhiteRim * pow(1.0 - ndvW, 2.4) * (0.35 + 0.65 * pale);
+}
+#include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'hold-white';
+}
+
+/**
+ * Square a sphere off toward a rounded box: every vertex pushed out along
+ * its own direction by how far that direction sits from the nearest axis.
+ * Flat-shaded, the low-segment ball becomes a few big armour panels with
+ * hard shoulders — the chunky hull of the reference — while every part
+ * mounted on the sphere (band, seams, visor) still meets it, because the
+ * band and seams take the same push.
+ */
+const BOX = 0.85;
+/** how far the squared hull stands out along the direction (x, y, z) */
+function boxPush(x: number, y: number, z: number): number {
+  const r = Math.hypot(x, y, z);
+  if (r < 1e-6) return 1;
+  const ax = Math.abs(x / r), ay = Math.abs(y / r), az = Math.abs(z / r);
+  const box = 1 / Math.cbrt(ax * ax * ax + ay * ay * ay + az * az * az);
+  return 1 + (box - 1) * BOX;
+}
+/** a part mounted on the hull at (x, y, z) rides out with the squared hull */
+function onHull(o: THREE.Object3D, x: number, y: number, z: number): void {
+  const f = boxPush(x, y, z);
+  o.position.set(x * f, y * f, z * f);
+}
+function chunky<G extends THREE.BufferGeometry>(g: G): G {
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const f = boxPush(x, y, z);
+    p.setXYZ(i, x * f, y * f, z * f);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
 /**
  * The Diamondplate quilt (reference-art/cosmetics): rotated-square cells,
@@ -140,14 +262,29 @@ export class Pod {
   private nozzles: THREE.Mesh[] = [];
   private flameLen = 1;
   private headlamp: THREE.SpotLight;
+  private lampTarget: THREE.Object3D;
   private glow: THREE.PointLight;
+  /** the beam in the air: a soft additive wedge plus the dust drifting in it */
+  private beamPivot = new THREE.Group();
+  private beamMat: THREE.MeshBasicMaterial;
+  private dust: THREE.Points;
+  private dustSeed = new Float32Array(BEAM_DUST * 4);
+  private lampAim = 0;
+  /** the lamp's reach this frame (0 = off), for castLamp() */
+  private beamK = 0;
+  /** set by the host: dust holds still for prefers-reduced-motion */
+  reducedMotion = false;
+  private fillFor: unknown = null;
+  /** the world the visible beam was last tinted for (null: re-tint) */
+  private beamFor: unknown = null;
+  private beamAir = new THREE.Color();
   private drillSpin = 0;
   private drillStow = 0;
   private facetOn = false;
   private tiers: RigTiers = { drill: 0, engine: 0, tank: 0, cargo: 0, hull: 0, radiator: 0 };
   private lastFinish: [RigFinish, FlameStyle, LampTint] | null = null;
   // per-pod clones so a finish never bleeds onto another pod in a review scene
-  private hullMat = HULL.clone();
+  private hullMat = (() => { const m = HULL.clone(); holdWhite(m, 0xbfe4ff, 0.55); return m; })();
   private accentMat = ACCENT.clone();
   private steelMat = STEEL.clone();
   // semantic emissives (per pod, persistent across refits): heat, money, work
@@ -172,7 +309,7 @@ export class Pod {
     if (tiers) this.tiers = { ...tiers };
     const HULL = this.hullMat, STEEL = this.steelMat;
     // body
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 24, 18), HULL);
+    const body = new THREE.Mesh(chunky(new THREE.SphereGeometry(0.42, HULL_SEGS, HULL_RINGS)), HULL);
     body.scale.set(1, 1.06, 0.92);
     this.group.add(body);
 
@@ -180,14 +317,26 @@ export class Pod {
 
     // visor
     const visor = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 14), GLASS);
-    visor.position.set(0, 0.1, 0.24);
+    visor.position.set(0, 0.1, 0.28);
     visor.scale.set(1, 0.82, 0.7);
     this.group.add(visor);
+    // a dark bezel the dome sits in: the frame that keeps the glow a shape
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 20), STEEL);
+    bezel.position.set(0, 0.1, 0.31);
+    bezel.scale.set(1, 0.82, 0.9);
+    this.group.add(bezel);
+    // a soft halo over the visor: the glow spilling past the glass
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.85), new THREE.MeshBasicMaterial({
+      map: softDot(), color: 0x16c4c0, transparent: true, opacity: 0.2,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }));
+    halo.position.set(0, 0.1, 0.53);
+    this.group.add(halo);
 
     // side intakes
     for (const s of [-1, 1]) {
       const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.26), STEEL);
-      fin.position.set(s * 0.42, 0.05, 0);
+      onHull(fin, s * 0.42, 0.05, 0);
       fin.rotation.z = s * -0.2;
       this.group.add(fin);
     }
@@ -222,15 +371,53 @@ export class Pod {
     this.group.add(this.para);
 
     // lights
-    this.headlamp = new THREE.SpotLight(0xffe6c0, 0, 22, 0.82, 0.5, 1.1);
+    // a harder penumbra than the old 0.5: stone inside the cone separates
+    // from stone outside it instead of fading into one soft disc
+    this.headlamp = new THREE.SpotLight(0xffe6c0, 0, 22, 0.82, 0.2, 1.1);
     this.headlamp.position.set(0, 0.3, 0.3);
-    const target = new THREE.Object3D();
-    target.position.set(0, -5, 0.5);
-    this.group.add(target);
-    this.headlamp.target = target;
+    this.lampTarget = new THREE.Object3D();
+    this.lampTarget.position.set(0, -5, 0.5);
+    this.group.add(this.lampTarget);
+    this.headlamp.target = this.lampTarget;
     this.glow = new THREE.PointLight(0xffd9a0, 0, 10, 1.5);
     this.glow.position.set(0, 0, 0.6);
     this.group.add(this.headlamp, this.glow);
+
+    // the beam itself, visible in the air: apex at the lamp, pointing down
+    // its local -y; it sits just proud of the rock face so it reads as light
+    // landing on the stone it crosses. Additive and faint: it only ever
+    // brightens what is under it, never hides an ore or a hazard.
+    this.beamMat = new THREE.MeshBasicMaterial({
+      map: beamTexture(), color: 0xffe6c0, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    });
+    const bw = BEAM_LEN * Math.tan(BEAM_HALF) * 2;
+    const beamGeo = new THREE.PlaneGeometry(bw, BEAM_LEN);
+    beamGeo.translate(0, -BEAM_LEN / 2, 0);
+    const beam = new THREE.Mesh(beamGeo, this.beamMat);
+    beam.renderOrder = 2;
+    const dpos = new Float32Array(BEAM_DUST * 3);
+    const dcol = new Float32Array(BEAM_DUST * 3);
+    for (let i = 0; i < BEAM_DUST; i++) {
+      const h = (k: number) => { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
+      this.dustSeed[i * 4] = 0.12 + h(1) * 0.8;        // along the beam
+      this.dustSeed[i * 4 + 1] = h(2) * 1.6 - 0.8;     // across it
+      this.dustSeed[i * 4 + 2] = 0.5 + h(3);           // drift speed
+      this.dustSeed[i * 4 + 3] = h(4) * Math.PI * 2;   // phase
+    }
+    const dgeo = new THREE.BufferGeometry();
+    dgeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3).setUsage(THREE.DynamicDrawUsage));
+    dgeo.setAttribute('color', new THREE.BufferAttribute(dcol, 3).setUsage(THREE.DynamicDrawUsage));
+    this.dust = new THREE.Points(dgeo, new THREE.PointsMaterial({
+      map: softDot(), size: 0.2, vertexColors: true, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
+    }));
+    this.dust.frustumCulled = false;
+    this.dust.renderOrder = 2;
+    this.beamPivot.position.set(0, 0.05, 0.62);
+    this.beamPivot.add(beam, this.dust);
+    this.beamPivot.visible = false;
+    this.group.add(this.beamPivot);
 
     // landing skids at the collision base
     for (const s of [-1, 1]) {
@@ -289,13 +476,16 @@ export class Pod {
 
     // ---- HULL: the accent belly band widens per tier, gains plate seams ----
     const bandTop = Math.PI * (0.62 - t.hull * 0.03);
+    // wide enough that even its own facet planes (0.445·cos(π/12) ≈ 0.43)
+    // clear the hull's corners: the band sits on the plates as a lip of
+    // armour instead of z-fighting through them
     const belly = new THREE.Mesh(
-      new THREE.SphereGeometry(0.43, 24, 12, 0, Math.PI * 2, bandTop, Math.PI - bandTop), ACCENT);
+      chunky(new THREE.SphereGeometry(0.445, HULL_SEGS, 5, 0, Math.PI * 2, bandTop, Math.PI - bandTop)), ACCENT);
     belly.scale.set(1, 1.06, 0.92);
     this.para.add(belly);
     for (let j = 0; j < t.hull; j++) {
       const seam = new THREE.Mesh(
-        new THREE.SphereGeometry(0.442, 24, 1, 0, Math.PI * 2, bandTop + 0.06 + j * 0.085, 0.035), ACCENT);
+        chunky(new THREE.SphereGeometry(0.452, HULL_SEGS, 1, 0, Math.PI * 2, bandTop + 0.06 + j * 0.085, 0.035)), ACCENT);
       seam.scale.set(1, 1.06, 0.92);
       this.para.add(seam);
     }
@@ -367,11 +557,11 @@ export class Pod {
       const th = (i - (t.radiator - 1) / 2) * 0.3;
       const dx = Math.sin(th), dy = Math.cos(th);
       const fin = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.19, 0.11), STEEL);
-      fin.position.set(dx * 0.47, dy * 0.47, 0);
+      onHull(fin, dx * 0.47, dy * 0.47, 0);
       fin.rotation.z = -th;
       this.para.add(fin);
       const face = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.12, 0.118), this.finGlowMat);
-      face.position.set(dx * 0.5, dy * 0.5, 0);
+      onHull(face, dx * 0.5, dy * 0.5, 0);
       face.rotation.z = -th;
       this.para.add(face);
     }
@@ -381,19 +571,19 @@ export class Pod {
       const r = 0.1 + t.tank * 0.016;
       for (const s of [-1, 1] as const) {
         const cell = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), STEEL);
-        cell.position.set(s * 0.35, -0.245, 0.03);
+        onHull(cell, s * 0.35, -0.245, 0.03);
         cell.scale.set(1.15, 0.72, 1.25);
         this.para.add(cell);
         if (t.tank >= 2) {
           const strap = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.015, r + 0.015, 0.05, 14), ACCENT);
-          strap.position.set(s * 0.35, -0.245, 0.03);
+          onHull(strap, s * 0.35, -0.245, 0.03);
           strap.rotation.x = Math.PI / 2;
           strap.scale.set(1.15, 1, 0.72);
           this.para.add(strap);
         }
         if (t.tank >= 4) {
           const fore = new THREE.Mesh(new THREE.SphereGeometry(r * 0.66, 14, 10), STEEL);
-          fore.position.set(s * 0.33, -0.26, 0.03 + r * 1.05);
+          onHull(fore, s * 0.33, -0.26, 0.03 + r * 1.05);
           fore.scale.set(1.1, 0.72, 1.1);
           this.para.add(fore);
         }
@@ -403,7 +593,7 @@ export class Pod {
     // ---- CARGO: flank panniers, amber fill strips (opacity = cargoFrac) ----
     const pannier = (w: number, h: number, d: number, x: number, y: number, z: number, rz: number): void => {
       const g = new THREE.Group();
-      g.position.set(x, y, z);
+      onHull(g, x, y, z);
       g.rotation.z = rz;
       const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), STEEL);
       const lid = new THREE.Mesh(new THREE.BoxGeometry(w + 0.016, h * 0.24, d + 0.016), ACCENT);
@@ -433,8 +623,8 @@ export class Pod {
     this.hullMat.map = rig.facet ? this.facetTex : this.camoTex;
     this.hullMat.color.setHex(rig.camo || rig.facet ? 0xffffff : rig.hull);
     // the quilt is chrome; everything else is painted steel
-    this.hullMat.metalness = rig.facet ? 0.85 : 0.25;
-    this.hullMat.roughness = rig.facet ? 0.22 : 0.55;
+    this.hullMat.metalness = rig.facet ? 0.85 : 0.1;
+    this.hullMat.roughness = rig.facet ? 0.22 : 0.72;
     if (!this.glints.length) {
       const gtex = glintTexture();
       for (const [ox, oy, sc] of [
@@ -459,6 +649,36 @@ export class Pod {
     (this.flameL.material as THREE.MeshBasicMaterial).color.setHex(flame.inner);
     (this.flameR.material as THREE.MeshBasicMaterial).color.setHex(flame.outer);
     this.headlamp.color.setHex(lamp.color);
+    this.beamMat.color.setHex(lamp.color);
+    this.beamFor = null;
+  }
+
+  /**
+   * Follow the beam through the tile grid (`solid(tx, ty)`, terrain rows
+   * downward) and hand the rock shader where it lands. Call after update().
+   */
+  castLamp(solid: (tx: number, ty: number) => boolean): void {
+    const col = lampUniforms.uLampCol.value;
+    if (this.beamK <= 0.01) { col.setRGB(0, 0, 0); return; }
+    this.beamPivot.updateWorldMatrix(true, false);
+    this.beamPivot.getWorldPosition(hitO);
+    const aim = this.lampAim + this.group.rotation.z;
+    lampUniforms.uLampO.value.set(hitO.x, hitO.y, aim, HIT_HALF);
+    const hits = lampUniforms.uLampHit.value;
+    const tiles = lampUniforms.uLampTile.value;
+    for (let i = 0; i < LAMP_RAYS; i++) {
+      const a = aim + HIT_HALF * (i / (LAMP_RAYS - 1) * 2 - 1);
+      const dx = Math.sin(a), dy = -Math.cos(a);
+      let d = 0.05, tx = 0, ty = 0, hit = false;
+      for (; d < HIT_MAX; d += 0.08) {
+        tx = Math.floor(hitO.x + dx * d); ty = Math.floor(-(hitO.y + dy * d));
+        if (solid(tx, ty)) { hit = true; break; }
+      }
+      hits[i] = d;
+      // tile row ty spans world y -ty-1 .. -ty: its cell is floor(-ty - 0.5)
+      if (hit) tiles[i].set(tx, -ty - 1); else tiles[i].set(-1e4, -1e4);
+    }
+    col.copy(this.headlamp.color).multiplyScalar(this.beamK * HIT_GAIN);
   }
 
   update(dt: number, opts: {
@@ -471,6 +691,8 @@ export class Pod {
     cargoFrac?: number;
     /** parked and idle: the drill retracts into the hull until asked for */
     stow?: boolean;
+    /** -1 / 1: which way the pilot last faced — the lamp leans that way */
+    facing?: number;
   }): void {
     const { vx, thrust, sideThrust, drilling, drillDir, depthRow, time } = opts;
     const lampOn = opts.lampOn !== false;
@@ -543,5 +765,67 @@ export class Pod {
     // running dark: the lamp dies, only the instrument glow remains
     this.headlamp.intensity = lampOn ? lamp * 260 : 0;
     this.glow.intensity = lampOn ? lamp * 20 + 2 : 1.6;
+
+    // the lamp leans the way the pilot faces: parked, it looks out across
+    // the cave ahead; in flight it leans down the way you are going; a cut
+    // pulls it onto the face being cut (drilling down swings it to plumb).
+    // The instrument glow still lights the ground right under the skids.
+    const face = (opts.facing ?? 1) < 0 ? -1 : 1;
+    const wantAim = drilling && drillDir === 'left' ? -1.2 : drilling && drillDir === 'right' ? 1.2
+      : drilling && drillDir === 'down' ? face * 0.1
+      : opts.stow ? face * 1.36 : face * 0.34;
+    this.lampAim += (wantAim - this.lampAim) * Math.min(1, dt * 4);
+    this.lampTarget.position.set(Math.sin(this.lampAim) * 5, 0.3 - Math.cos(this.lampAim) * 5, 0.5);
+    this.beamPivot.rotation.z = this.lampAim;
+    // the beam leaves from the hull's edge on the side it points to
+    this.beamPivot.position.x = Math.sin(this.lampAim) * 0.3;
+    this.beamPivot.position.y = 0.05 - Math.cos(this.lampAim) * 0.3;
+    const beamK = lampOn ? lamp : 0;
+    this.beamK = beamK;
+    this.beamPivot.visible = beamK > 0.01;
+    if (this.beamPivot.visible) {
+      this.beamMat.opacity = beamK * 0.34;
+      // a cold world's air takes some of the lamp's warmth out of the beam you
+      // see (the light it throws is untouched), so its cavity never goes beige
+      if (this.beamFor !== ACTIVE) {
+        this.beamFor = ACTIVE;
+        const lampHex = this.lastFinish ? this.lastFinish[2].color : 0xffe6c0;
+        this.beamMat.color.setHex(lampHex);
+        const spent = !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
+        if (ACTIVE.hazard.cold && !spent) {
+          const air = this.beamAir.setHex(ACTIVE.fogStops[Math.min(2, ACTIVE.fogStops.length - 1)].amb);
+          air.multiplyScalar(1 / Math.max(air.r, air.g, air.b, 1e-4));
+          this.beamMat.color.lerp(air, 0.35);
+        }
+      }
+      // dust: a few slow motes adrift in the beam, brightest near the lamp
+      const tt = this.reducedMotion ? 0 : time;
+      const pos = this.dust.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const col = this.dust.geometry.getAttribute('color') as THREE.BufferAttribute;
+      const c = this.beamMat.color;
+      const tanH = Math.tan(BEAM_HALF);
+      for (let i = 0; i < BEAM_DUST; i++) {
+        const a0 = this.dustSeed[i * 4], s0 = this.dustSeed[i * 4 + 1];
+        const sp = this.dustSeed[i * 4 + 2], ph = this.dustSeed[i * 4 + 3];
+        let a = a0 + tt * 0.018 * sp;
+        a -= Math.floor(a);
+        const y = a * BEAM_LEN * 0.9;
+        const x = (s0 + Math.sin(tt * 0.31 * sp + ph) * 0.12) * y * tanH * 0.85
+          + Math.sin(tt * 0.5 + ph * 2) * 0.06;
+        pos.setXYZ(i, x, -y + Math.sin(tt * 0.23 + ph) * 0.1, 0.02);
+        const fadeIn = Math.min(1, a / 0.12), fadeOut = 1 - a;
+        const tw = 0.65 + 0.35 * Math.sin(tt * 0.9 * sp + ph);
+        const b = beamK * fadeIn * fadeOut * tw * 1.1;
+        col.setXYZ(i, c.r * b, c.g * b, c.b * b);
+      }
+      pos.needsUpdate = true;
+      col.needsUpdate = true;
+    }
+    // the close fill takes the world's air (a spent world's is the stock warm)
+    if (this.fillFor !== ACTIVE) {
+      this.fillFor = ACTIVE;
+      const spent = !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
+      this.glow.color.setHex(!spent && ACTIVE.podFill !== undefined ? ACTIVE.podFill : 0xffd9a0);
+    }
   }
 }

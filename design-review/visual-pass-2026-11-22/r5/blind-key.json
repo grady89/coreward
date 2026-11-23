@@ -1,0 +1,34 @@
+{
+ "rock": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "lighting": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "identity": {
+  "A": "best",
+  "B": "candidate"
+ },
+ "fluids": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "characters": {
+  "A": "best",
+  "B": "candidate"
+ },
+ "vaults": {
+  "A": "best",
+  "B": "candidate"
+ },
+ "ui": {
+  "A": "candidate",
+  "B": "best"
+ },
+ "minerals": {
+  "A": "candidate",
+  "B": "best"
+ }
+}

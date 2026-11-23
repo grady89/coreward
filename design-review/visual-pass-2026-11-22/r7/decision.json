@@ -1,0 +1,16 @@
+{
+ "round": 7,
+ "best_before": "9f29607 (r7/best, GPU)",
+ "candidate": "764872f (L1 c955a78, L2 8b9eb7f, L3 764872f)",
+ "deltas": {"rock": 0.0, "lighting": -0.1, "identity": 0.1, "fluids": 0.3, "characters": 0.2, "vaults": 0.0, "ui": 0.0, "minerals": 0.0},
+ "fixes": {
+  "L1 fluid bodies + core falloff": {"commit": "c955a78", "target": "fluids", "delta": 0.3, "decision": "keep"},
+  "L2 surface topsoil": {"commit": "8b9eb7f", "target": "rock", "delta": 0.0, "decision": "revert (1d7bd11)"},
+  "L3 shellback form + pod rim": {"commit": "764872f", "target": "characters", "delta": 0.2, "decision": "revert (a7950d8)"}
+ },
+ "other_drops_over_0.3": [],
+ "new_best": "1d7bd11 = final state; shots final/ (GPU)",
+ "best_scores": {"rock": 6.4, "lighting": 6.8, "identity": 7.0, "fluids": 6.6, "characters": 6.3, "vaults": 6.6, "ui": 6.8, "minerals": 7.2},
+ "goal_met": false,
+ "note": "Round cap (7) reached; goal not met on the paired-tracked numbers. A final absolute scoring by fresh reviewers follows (final/reviews.json)."
+}

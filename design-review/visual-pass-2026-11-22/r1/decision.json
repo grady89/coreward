@@ -1,0 +1,17 @@
+{
+ "round": 1,
+ "best_before": "r0 build (62ea3a6), shots r0s/ (seed-pinned re-shoot of r0)",
+ "candidate": "ce022f3 (F1 bd4954d, F2 e1fea19, F3 d49516e, F4 8a82786+ce022f3; F5 ea3072d reverted at gate as 6bafda9)",
+ "deltas": {"rock": 2.0, "lighting": 2.1, "identity": 2.8, "fluids": 2.6, "characters": 0.3, "vaults": 1.5, "ui": -0.2, "minerals": 3.8},
+ "fixes": {
+  "F1 minerals": {"commit": "bd4954d", "target": "minerals", "delta": 3.8, "decision": "keep"},
+  "F2 fluids": {"commit": "e1fea19", "target": "fluids", "delta": 2.6, "decision": "keep"},
+  "F3 identity": {"commit": "d49516e", "target": "identity", "delta": 2.8, "decision": "keep"},
+  "F4 vaults": {"commit": "8a82786 + ce022f3", "target": "vaults", "delta": 1.5, "decision": "keep"},
+  "F5 lighting (bloom)": {"commit": "ea3072d", "target": "lighting", "decision": "rejected at GATE before scoring (REJECTED.md)"}
+ },
+ "other_drops_over_0.3": [],
+ "new_best": "ce022f3; shots r1/shots",
+ "best_scores": {"rock": 6.0, "lighting": 6.4, "identity": 7.0, "fluids": 6.2, "characters": 5.0, "vaults": 6.3, "ui": 6.2, "minerals": 7.2},
+ "goal_met": false
+}

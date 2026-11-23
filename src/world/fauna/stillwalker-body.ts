@@ -111,9 +111,9 @@ const frostShader = (shader: THREE.WebGLProgramParametersWithUniforms): void => 
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
   float ndv = saturate(dot(normalize(vViewPosition), normal));
-  float fr = pow(1.0 - ndv, 3.0);
-  float rim = mix(fr, 0.16, uFlat);
-  totalEmissiveRadiance += uFrostColor * uFrost * (rim * 1.8 + 0.06);
+  float fr = pow(1.0 - ndv, 2.4);
+  float rim = mix(fr, 0.22, uFlat);
+  totalEmissiveRadiance += uFrostColor * uFrost * (rim * 2.4 + 0.08);
 }`);
 };
 

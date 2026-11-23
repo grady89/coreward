@@ -198,6 +198,7 @@ export class Hud {
 
   /** re-sync per-world gauge fiction (called again after in-place travel) */
   applyWorld(): void {
+    document.body.dataset.world = ACTIVE.id;
     this.heatLabel.textContent = ACTIVE.hazard.label;
     this.heatFill.classList.toggle('cold', ACTIVE.hazard.cold);
     this.hazeEl.classList.toggle('cold', ACTIVE.hazard.cold);

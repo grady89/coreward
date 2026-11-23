@@ -13,7 +13,7 @@ import {
 import { T, def, oreValue, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
 import { Terrain } from './world/terrain';
-import { ChunkField, lavaMat } from './world/chunks';
+import { ChunkField, lavaMat, fluidUniforms } from './world/chunks';
 import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock, DOCKS } from './world/backdrop';
 import { WreckField } from './world/wrecks';
 import { ThreatField, FaunaEvent } from './world/entities';
@@ -24,7 +24,7 @@ import { Pod } from './player/pod';
 import { PodController, Input } from './player/controller';
 import { Pilot } from './player/pilot';
 import { GameState } from './game/state';
-import { loadSettings, saveSettings } from './game/settings';
+import { loadSettings, saveSettings, bloomEnabled, setBloomDefault } from './game/settings';
 import { faunaForEvent } from './game/bestiary';
 import {
   evaluate, timeLeft, fuelLeft, accept as acceptContract, POOL as CONTRACT_POOL,
@@ -32,6 +32,7 @@ import {
 import { Particles } from './fx/particles';
 import { FollowCam } from './fx/camera';
 import { Finale } from './fx/finale';
+import { Post, softwareRenderer } from './fx/post';
 import { buildFoldThroat, FoldThroat } from './fx/fold';
 import { Hud } from './ui/hud';
 import { Comms } from './ui/comms';
@@ -114,6 +115,8 @@ function disposeSceneDeep(scene: THREE.Scene): void {
 
 class Game {
   renderer: THREE.WebGLRenderer;
+  /** the mine and vault frames go through this: bloom, or the plain render */
+  post: Post;
   scene = new THREE.Scene();
   cam: FollowCam;
   state = new GameState();
@@ -248,6 +251,9 @@ class Game {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // the husk keeps its old, unbloomed look
+    this.post = new Post(this.renderer, () => !!ACTIVE.husk);
+    setBloomDefault(!softwareRenderer(this.renderer));
 
     this.cam = new FollowCam(innerWidth / innerHeight);
     this.cam.reducedMotion = this.reducedMotion;
@@ -869,7 +875,10 @@ class Game {
     // a world you have never dug is unsurveyed, no matter how deep you have
     // been elsewhere — the fog is per site, not per driller
     this.state.worldBestRow = ws?.bestRow ?? 0;
-    this.buildWorld(ws?.seed ?? ((Math.random() * 0xffffffff) >>> 0));
+    // dev harness: ?seed=N pins a never-dug world's seed, so screenshot
+    // passes (scripts/visualshots.mjs) see the same rock build after build
+    const devSeed = Number(new URLSearchParams(location.search).get('seed'));
+    this.buildWorld(ws?.seed ?? (devSeed > 0 ? devSeed >>> 0 : (Math.random() * 0xffffffff) >>> 0));
     if (ws) {
       this.terrain.applyDug(ws.dug);
       // shafts that had skinned over stay skinned over — and stay rammable
@@ -930,11 +939,12 @@ class Game {
     this.terrain = new Terrain(seed);
     this.chunks = new ChunkField(this.scene, this.terrain);
     this.chunks.animated = !this.reducedMotion;
-    createBackwall(this.scene);
+    createBackwall(this.scene, this.terrain);
     createSky(this.scene);
     createSurface(this.scene);
     this.ember = createEmber(this.scene);
     this.ember.taken = this.state.extracted.has(ACTIVE.id);
+    this.chunks.setCoreLit(!this.ember.taken);
     this.finale = new Finale(this.scene, this.ember, this.audio, this.ui,
       this.reducedMotion,
       this.state.endedWorlds.has(ACTIVE.id) && !this.state.extracted.has(ACTIVE.id));
@@ -942,6 +952,7 @@ class Game {
     this.atmosphere = new Atmosphere(this.scene);
     this.particles = new Particles(this.scene);
     this.pod = new Pod(this.scene);
+    this.pod.reducedMotion = this.reducedMotion;
     this.pilot = new Pilot(this.scene, this.terrain);
     this.threats = new ThreatField(this.scene, this.terrain, this.particles);
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
@@ -1798,6 +1809,7 @@ class Game {
     this.cam.reducedMotion = this.reducedMotion || !s.shake;
     this.pad.rumbleOn = s.rumble && !this.reducedMotion;
     this.hud.setFps(s.showFps ? 0 : null);
+    this.post.setBloom(bloomEnabled(s));
     if (this.threats) this.threats.level = this.faunaDead ? 'off' : s.threats;
     saveSettings(s);
   }
@@ -2203,7 +2215,7 @@ class Game {
     // inside a stone: the world outside is frozen, the suit stops counting
     if (this.mode === 'vault' && this.vault) {
       this.vault.frame(Math.min(0.05, raw), this.input(), this.lampOn);
-      this.vault.render(this.renderer);
+      this.vault.render(this.post.render);
       if (this.vault.closed) this.closeVault();
       return;
     }
@@ -2234,7 +2246,7 @@ class Game {
         });
         this.particles.update(raw2);
       }
-      this.renderer.render(this.scene, this.cam.camera);
+      this.post.render(this.scene, this.cam.camera);
       return;
     }
 
@@ -2246,8 +2258,12 @@ class Game {
       dt = 0;
     }
 
-    // fluid pulse (shared material)
-    lavaMat.color.setHex(Math.sin(this.time * 2.6) > 0 ? ACTIVE.fluid.pulseA : ACTIVE.fluid.pulseB);
+    // fluid shimmer (shared material): a slow travelling sheen, still when
+    // the player prefers reduced motion
+    lavaMat.color.setHex(ACTIVE.fluid.base);
+    fluidUniforms.uFluidTime.value = this.time;
+    fluidUniforms.uFluidAmp.value = this.reducedMotion ? 0 : 1;
+    fluidUniforms.uFluidLive.value = ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id) ? 0 : 1;
 
     const waking = this.mode === 'eva' && !this.finale.isCommunion
       ? this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1) : null;
@@ -2258,7 +2274,7 @@ class Game {
       // the fold's last frame IS the cut: render the vault's first frame now
       if (this.mode === 'vault' && this.vault) {
         this.vault.frame(0, this.input(), this.lampOn);
-        this.vault.render(this.renderer);
+        this.vault.render(this.post.render);
         return;
       }
     }
@@ -2325,10 +2341,11 @@ class Game {
     this.wrecks.update(this.time, dt, (x, y) => this.bodyOccupies(x, y));
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
+    this.chunks.setCoreLit(!this.ember.taken);
     this.finale.frame(dt, this.time, camRow);
     if (this.staging) this.tickSandbox(dt);
     this.cullLights();
-    this.renderer.render(this.scene, this.cam.camera);
+    this.post.render(this.scene, this.cam.camera);
   }
 
   /**
@@ -2581,6 +2598,7 @@ class Game {
       depthRow: this.ctrl.row,
       time: this.time,
       lampOn: this.lampOn,
+      facing: this.ctrl.facing,
       heatFrac: this.ctrl.heatFrac,
       cargoFrac: this.state.cargoCap > 0 ? this.state.cargoCount / this.state.cargoCap : 0,
       // parked with no drill intent, the arm tucks away — airborne it is
@@ -2588,6 +2606,7 @@ class Game {
       stow: this.ctrl.grounded && this.ctrl.drilling === null
         && !stowInp.down && !stowInp.left && !stowInp.right,
     });
+    this.pod.castLamp((tx, ty) => this.terrain.solidAt(tx, ty));
 
     if (!paused && dt > 0) {
       this.updateCharges(dt);

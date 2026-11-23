@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { CHUNK, WORLD_W, WORLD_ROWS } from '../config';
+import { bloomOn } from '../fx/post';
+import { CHUNK, WORLD_W, WORLD_ROWS, CORE_ROW } from '../config';
 import { Terrain } from './terrain';
 import { T, def, rockColor, cellHash } from './tiles';
-import { ACTIVE } from './worlds';
+import { ACTIVE, worldById } from './worlds';
 import {
   GEM_GEOS, CRACK_CLASS_0, CRACK_VARIANTS, gemClassOf, gemScaleOf, motionOf,
+  gemMaterial, gemTintOf, haloOf,
 } from './gemshapes';
 
 // Terrain renderer: one 16×16 chunk = one InstancedMesh per material class.
@@ -14,10 +16,14 @@ import {
 const CHUNKS_X = WORLD_W / CHUNK;
 const CAP = CHUNK * CHUNK;
 const GEM_CAP = 48; // per shape class, per chunk
+const HAZE_CAP = 32; // pool surface runs per chunk
 const VIEW_ROWS = 30; // rows above/below camera kept alive
 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const lavaGeo = new THREE.BoxGeometry(0.94, 0.9, 0.94);
+// full-width so a pool reads as one body of liquid, not a row of boxes; it
+// sits a little behind the rock face, and the surface tile is lowered below
+// the rim, so the basin edge stays crisp
+const lavaGeo = new THREE.BoxGeometry(1, 1, 0.94);
 
 // Per-face shade baked ONCE into the shared rock box. Every cube used to be
 // flat on all six sides, so a wall of them read as a quilt of tinted squares
@@ -50,29 +56,342 @@ bakeFaceShade(boxGeo);
 const rockMat = new THREE.MeshStandardMaterial({
   roughness: 0.93, metalness: 0.04, vertexColors: true,
 });
-
-// Ore is lit AND self-glowing: flat shading makes every facet read, while the
-// emissive term is patched to follow each instance's colour so a gem still
-// shines in a pitch-dark tunnel instead of flattening into a silhouette.
-const gemMat = new THREE.MeshStandardMaterial({
-  // vertexColors multiplies the tint every gem geometry now bakes in (crusts
-  // dark, fissures bright) with the per-instance ore colour — and because the
-  // emissive patch below rides vColor, a dark crust also glows less. Every
-  // GEM_GEOS entry ships a color attribute; one without would render black.
-  vertexColors: true,
-  flatShading: true,
-  roughness: 0.16,
-  metalness: 0.55,
-  emissive: 0xffffff,
-  emissiveIntensity: 0.55,
-});
-gemMat.onBeforeCompile = shader => {
-  shader.fragmentShader = shader.fragmentShader.replace(
-    '#include <emissivemap_fragment>',
-    '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;'
-  );
+// Ore light that lands: every chunk's rock carries a per-instance `glow`
+// colour (zero for plain rock), drawn as a soft emissive disc centred on the
+// tile's front face. The stone around a ruby goes pink, around veinlight
+// teal, with no extra light and no extra draw call. The disc fades out
+// before the corners so an ore tile never reads as a lit square.
+// The world's hue in its stone: each band's strataGlow colour, blended
+// across band edges by world row and pulled most of the way to grey, laid
+// down as crisp per-block value steps over per-three-row beds. An unlit
+// wall reads as dark world-tinted stone rather than neutral black, and the
+// lamp still does all the real lighting. Zero in a spent world.
+// The blocks read chunky from shadow, not light: a thin dark crevice at
+// every face border and a slight darkening toward the edges. Off (uStone 0)
+// in a spent world, which keeps its old flat look.
+const strataUniforms = {
+  uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
+  uStone: { value: 1 },
 };
+/**
+ * Where the headlamp lands: the pod casts LAMP_RAYS rays across the beam's
+ * wedge through the tile grid each frame and stores how far each one gets
+ * before it meets rock. Stone inside the wedge and no deeper than the first
+ * solid tile along it brightens (front faces most, faces turned to the lamp
+ * too), with a hotspot where the beam's axis strikes; everything outside the
+ * wedge or behind that first face is untouched. Zero colour = lamp off.
+ */
+export const LAMP_RAYS = 15;
+export const lampUniforms = {
+  /** origin x, y (world), beam angle (0 = straight down, +x side positive), half-angle */
+  uLampO: { value: new THREE.Vector4() },
+  uLampHit: { value: new Float32Array(LAMP_RAYS) },
+  /** the block each ray stopped in, as the shader's cell (x, floor of world y); far away when none */
+  uLampTile: { value: Array.from({ length: LAMP_RAYS }, () => new THREE.Vector2(-1e4, -1e4)) },
+  uLampCol: { value: new THREE.Color(0) },
+};
+let strataFor: unknown = null;
+function syncStrata(): void {
+  if (strataFor === ACTIVE) return;
+  strataFor = ACTIVE;
+  const g = spentWorld() ? undefined : ACTIVE.strataGlow;
+  strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
+  strataUniforms.uStone.value = spentWorld() ? 0 : 1;
+}
+/** the haze carries the world's fluid hue at the wash's even brightness */
+let hazeFor: unknown = null;
+function syncHaze(): void {
+  if (hazeFor === ACTIVE) return;
+  hazeFor = ACTIVE;
+  hazeMat.color.setHex(ACTIVE.fluid.base);
+  const c = hazeMat.color;
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  c.multiplyScalar(HAZE_GAIN * Math.min(1, 0.26 / Math.max(lum, 1e-3)));
+}
+rockMat.onBeforeCompile = shader => {
+  shader.uniforms.uFluidTime = fluidUniforms.uFluidTime;
+  shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
+  shader.uniforms.uStrata = strataUniforms.uStrata;
+  shader.uniforms.uStone = strataUniforms.uStone;
+  shader.uniforms.uLampO = lampUniforms.uLampO;
+  shader.uniforms.uLampHit = lampUniforms.uLampHit;
+  shader.uniforms.uLampTile = lampUniforms.uLampTile;
+  shader.uniforms.uLampCol = lampUniforms.uLampCol;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+attribute vec3 glow;
+attribute vec3 wash;
+attribute vec2 washDir;
+attribute float matte;
+varying vec3 vGlow;
+varying vec3 vWash;
+varying vec2 vWashDir;
+varying vec3 vBox;
+varying vec3 vBoxN;
+varying vec2 vWXY;
+varying vec2 vCell;
+varying float vMatte;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vGlow = glow; vWash = wash; vWashDir = washDir; vMatte = matte;
+	vBox = position; vBoxN = normal;
+	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;
+	// block centres sit at k + 0.5, so floor() never straddles an integer
+	vCell = floor((modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xy);`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+uniform float uStone;
+varying vec3 vGlow;
+varying vec3 vWash;
+varying vec2 vWashDir;
+varying vec3 vBox;
+varying vec3 vBoxN;
+varying vec2 vWXY;
+varying vec2 vCell;
+varying float vMatte;
+uniform vec3 uStrata[5];
+uniform vec4 uLampO;
+uniform float uLampHit[${LAMP_RAYS}];
+uniform vec2 uLampTile[${LAMP_RAYS}];
+uniform vec3 uLampCol;
+float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	// shadow at the block's borders: distance to the nearest edge of the
+	// face this fragment lies on, a thin dark crevice right at the border
+	// and a slight falloff toward it
+	vec3 stE = abs(vBox) * (1.0 - abs(vBoxN));
+	float stD = 0.5 - max(max(stE.x, stE.y), stE.z);
+	float stShade = mix(0.4, 1.0, smoothstep(0.012, 0.045, stD))
+		* mix(0.84, 1.0, smoothstep(0.045, 0.3, stD));
+	stShade = mix(1.0, stShade, uStone);
+	vec3 stAlbedo = diffuseColor.rgb;
+	diffuseColor.rgb *= stShade;`)
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+	{
+		float row = -vWXY.y;
+		vec3 acc = uStrata[0];
+		acc = mix(acc, uStrata[1], smoothstep(10.0, 22.0, row));
+		acc = mix(acc, uStrata[2], smoothstep(50.0, 70.0, row));
+		acc = mix(acc, uStrata[3], smoothstep(145.0, 175.0, row));
+		acc = mix(acc, uStrata[4], smoothstep(280.0, 320.0, row));
+		// low saturation: dark world-tinted stone, not glowing stone
+		acc = mix(vec3(dot(acc, vec3(0.2126, 0.7152, 0.0722))), acc, 0.5);
+		// crisp per-block value over per-bed (three-row) bands
+		float blk = floor(stHash(vCell) * 4.0) / 3.0;
+		float bed = stHash(vec2(41.0, floor(vCell.y / 3.0)));
+		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
+		totalEmissiveRadiance += acc * face * stShade * (0.14 + 0.12 * blk + 0.1 * bed);
+	}
+	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
+	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
+	// light from a nearby pool or fissure: the front face shades toward the
+	// source, a side face turned to it catches it whole; the stone's own
+	// albedo still shows through so it reads as lit rock, not paint
+	float wl = length(vWashDir);
+	vec2 wd = wl > 1e-3 ? vWashDir / wl : vec2(0.0);
+	float wf = vBoxN.z > 0.5 ? 0.6 + 0.8 * dot(vBox.xy, wd) : 0.15 + max(0.0, dot(vBoxN.xy, wd));
+	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
+	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(stAlbedo, vec3(0.333)));
+	// the beam lands: stone inside the lamp's wedge, up to the first face it
+	// meets along each ray, catches the lamp; the axis' hit is a hotspot
+	if (uLampCol.r + uLampCol.g + uLampCol.b > 0.0) {
+		vec2 ld = vWXY - uLampO.xy;
+		float ll = max(length(ld), 1e-3);
+		vec2 dir = vec2(sin(uLampO.z), -cos(uLampO.z));
+		float la = atan(dir.x * ld.y - dir.y * ld.x, dot(dir, ld));
+		float inC = 1.0 - smoothstep(uLampO.w * 0.7, uLampO.w, abs(la));
+		if (inC > 0.0) {
+			float lt = clamp((la / uLampO.w * 0.5 + 0.5) * float(${LAMP_RAYS - 1}), 0.0, float(${LAMP_RAYS - 1}));
+			int l0 = int(floor(lt));
+			int l1 = min(l0 + 1, ${LAMP_RAYS - 1});
+			float hd = mix(uLampHit[l0], uLampHit[l1], fract(lt));
+			// the skin the rays reach, and (dimmer) every whole block a ray
+			// stopped in: a grazing ray lights only a sliver of the face it lands on
+			float skin = 1.0 - smoothstep(hd + 0.1, hd + 0.6, ll);
+			float blk = 0.0;
+			for (int i = 0; i < ${LAMP_RAYS}; i++) {
+				vec2 tc = abs(vCell - uLampTile[i]);
+				if (max(tc.x, tc.y) < 0.5) blk = 1.0;
+			}
+			float reach = max(skin, blk);
+			float fall = 1.0 / (1.0 + ll * ll * 0.03);
+			float face = vBoxN.z > 0.5 ? 1.0 : 0.5 * max(0.0, dot(vBoxN.xy, -ld / ll));
+			float ha = uLampHit[${(LAMP_RAYS - 1) / 2}];
+			vec2 hv = vWXY - (uLampO.xy + dir * ha);
+			float hot = exp(-dot(hv, hv) / (0.35 + 0.04 * ha * ha));
+			float lk = inC * face * fall * (0.45 * skin + 0.25 * blk + 1.2 * hot * reach);
+			// lit stone keeps its own hue (a floor under near-black rock so it
+			// can catch the light at all), soft-capped so pale ice or a hotspot
+			// never goes to a flat white square
+			vec3 lE = uLampCol * (stAlbedo + 0.02) * lk * (1.0 - 0.75 * vMatte);
+			totalEmissiveRadiance += lE / (1.0 + 2.0 * dot(lE, vec3(0.2126, 0.7152, 0.0722)));
+		}
+	}`)
+    .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+	// stone at and around an ore stays matte and dark so the ore's halo is
+	// the brightest thing there: lamp light on it is soft-capped and greyed
+	// (a top face is footing, so it keeps more of its light)
+	if (vMatte > 0.0) {
+		float mm = vMatte * (vBoxN.y > 0.5 ? 0.4 : 1.0);
+		float ml = dot(reflectedLight.directDiffuse, vec3(0.2126, 0.7152, 0.0722));
+		float mk = 1.0 / (1.0 + mm * ml / 0.05);
+		reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, vec3(ml), 0.5 * mm) * mk;
+		reflectedLight.directSpecular *= 1.0 - 0.8 * mm;
+	}`);
+};
+rockMat.customProgramCacheKey = () => 'rock-glow-v7';
+
+// Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
+// metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
+// burning seam share this one material and this one draw call per class.
+const gemMat = gemMaterial();
+
+/** shared clock for the fluid shimmer and the light it throws; amp 0 = still */
+export const fluidUniforms = {
+  uFluidTime: { value: 0 },
+  uFluidAmp: { value: 1 },
+  uFluidLive: { value: 1 },
+};
+/**
+ * Pools glow: an emissive body that darkens with depth below the surface,
+ * a hot meniscus band on the tile that meets air, and a slow shimmer that
+ * runs along the pool in world x so neighbouring tiles read as one liquid.
+ * Per instance `fl` = (depth at the tile's top-left and top-right corners,
+ * 1 if this tile meets air, world x). The corner depths are shared with the
+ * fluid tile beside, so a fall or a ragged blob darkens as one body instead
+ * of column by column. A spent (husk) world gets the old flat colour back.
+ */
 export const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false });
+/** with bloom on, the hot meniscus (only) is pushed past white so it blooms;
+ * the body below it stays under the threshold */
+const MENIS_HDR = 1.6;
+lavaMat.onBeforeCompile = shader => {
+  Object.assign(shader.uniforms, fluidUniforms);
+  shader.uniforms.uBloomOn = bloomOn;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+attribute vec4 fl;
+varying vec4 vFl;
+varying vec3 vFP;
+varying vec3 vFN;
+varying vec2 vFW;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vFl = fl; vFP = position; vFN = normal;
+	vFW = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+uniform float uFluidLive;
+uniform float uBloomOn;
+varying vec4 vFl;
+varying vec3 vFP;
+varying vec3 vFN;
+varying vec2 vFW;
+float flBit(float m, float b) { return mod(floor(m / b), 2.0); }`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	{
+		vec3 base = diffuseColor.rgb;
+		float m = floor(vFl.z + 0.5);
+		float airU = flBit(m, 1.0), airL = flBit(m, 2.0), airR = flBit(m, 4.0), airD = flBit(m, 8.0);
+		float rockL = flBit(m, 16.0), rockR = flBit(m, 32.0), rockU = flBit(m, 64.0);
+		float depth = mix(vFl.x, vFl.y, clamp(vFP.x + 0.5, 0.0, 1.0)) + (0.5 - vFP.y);
+		float wx = vFl.w + vFP.x;
+		// a body sealed under rock has no surface: it starts a step down
+		// and sinks to dark further below, so a fall or a side body has a
+		// top-to-bottom falloff instead of one flat value
+		float sealed = rockU * (1.0 - airU);
+		float body = mix(0.95 - 0.33 * sealed, 0.26 - 0.1 * sealed, smoothstep(0.0, 2.2 + 0.3 * sealed, depth));
+		float sh = uFluidAmp * (0.09 * sin(wx * 1.9 + uFluidTime * 1.1 - depth * 2.3)
+			+ 0.05 * sin(wx * 0.7 - uFluidTime * 0.6) + 0.04 * sin(uFluidTime * 1.6));
+		// slow currents: thin brighter bands drifting through the body, so
+		// a big mass reads as moving liquid, not a fill
+		float cw = sin(vFW.x * 1.7 + vFW.y * 0.8 + uFluidTime * 0.35 * uFluidAmp
+			+ 1.6 * sin(vFW.y * 1.3 - vFW.x * 0.5 - uFluidTime * 0.22 * uFluidAmp));
+		float cur = smoothstep(0.78, 0.97, cw) * smoothstep(0.3, 1.6, depth);
+		vec3 c = base * (body + sh + 0.22 * cur);
+		// rock holds the liquid: a soft contact shade along a basin wall
+		float ex = vFP.x + 0.5, ey = 0.5 - vFP.y;
+		float front = step(0.5, vFN.z);
+		float contact = front * max(rockL * (1.0 - smoothstep(0.0, 0.22, ex)),
+			max(rockR * (1.0 - smoothstep(0.0, 0.22, 1.0 - ex)), sealed * (1.0 - smoothstep(0.0, 0.2, ey))));
+		c *= 1.0 - 0.45 * contact;
+		// every face that meets air carries the hot surface line: the
+		// meniscus on top, a bright edge down a side open to the cavity,
+		// and the open faces themselves
+		float menis = airU * max(1.0 - smoothstep(0.0, 0.17, ey), step(0.5, vFN.y));
+		float side = front * max(airL * (1.0 - smoothstep(0.0, 0.1, ex)), airR * (1.0 - smoothstep(0.0, 0.1, 1.0 - ex)));
+		side = max(side, max(airL * step(0.5, -vFN.x), airR * step(0.5, vFN.x)) * 0.5);
+		side = max(side, airD * (front * (1.0 - smoothstep(0.0, 0.08, 1.0 - ey)) + step(0.5, -vFN.y)) * 0.6);
+		float edge = max(menis, side * 0.85);
+		vec3 hot = base * (1.5 + sh * 1.5) + vec3(0.16, 0.16, 0.12);
+		hot *= mix(1.0, ${MENIS_HDR.toFixed(2)}, uBloomOn);
+		c = mix(c, hot, edge * 0.9);
+		diffuseColor.rgb = mix(base, c, uFluidLive);
+	}`);
+};
+lavaMat.customProgramCacheKey = () => 'fluid-glow-v4';
+
+/**
+ * The air over a pool holds its light: one additive sheet per surface run,
+ * standing in the cavity just behind the pod, brightest at the meniscus and
+ * gone about three tiles up, faded in from both ends of the run. It sits
+ * inside the rock's depth, so a low ceiling or the rim simply hides it.
+ * Per instance `hz` = (run's first x, run's last x + 1, surface y), world.
+ */
+const HAZE_H = 3.2, HAZE_Z = -0.3, HAZE_GAIN = 0.6;
+const hazeGeo = new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, 0);
+const hazeMat = new THREE.MeshBasicMaterial({
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  toneMapped: false, fog: false,
+});
+hazeMat.onBeforeCompile = shader => {
+  Object.assign(shader.uniforms, fluidUniforms);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+attribute vec3 hz;
+varying vec3 vHz;
+varying vec2 vHW;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vHz = hz;
+	vHW = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform float uFluidTime;
+uniform float uFluidAmp;
+varying vec3 vHz;
+varying vec2 vHW;`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+	{
+		float up = max(0.0, vHW.y - vHz.z) / ${HAZE_H.toFixed(2)};
+		float fy = exp(-3.2 * up) * (1.0 - smoothstep(0.7, 1.0, up));
+		float fx = smoothstep(vHz.x - 0.4, vHz.x + 1.1, vHW.x) * (1.0 - smoothstep(vHz.y - 1.1, vHz.y + 0.4, vHW.x));
+		float sh = 1.0 + uFluidAmp * 0.12 * sin(vHW.x * 1.3 - uFluidTime * 0.7 + up * 2.0);
+		diffuseColor.rgb *= fx * fy * sh;
+	}`);
+};
+hazeMat.customProgramCacheKey = () => 'fluid-haze-v1';
+
+/**
+ * The fragment floods its chamber: every rock tile within reach of the core
+ * takes a wash in the core's own light, strongest beside it and still there
+ * at the chamber mouth, turned toward it so floor tops, pillar flanks and the
+ * faces looking at the fragment catch it hardest. It lands on the chamber's
+ * skin and dies a few tiles into the rock mass. Off once the fragment is taken.
+ */
+const CORE_TX = WORLD_W / 2 - 0.5, CORE_TY = CORE_ROW + 4.5;
+const CORE_REACH = 30, CORE_INNER = 3.5, CORE_KNEE = 5.5, CORE_GAIN = 0.62, CORE_POOL = 0.9;
+const smooth01 = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
+let coreLit = true;
+
+/** a spent world (the husk, or a world whose fragment was taken) throws no light */
+const spentWorld = (): boolean => !!ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id);
+/** heat fissure in a deep-band face: a fixed share of emberrock cells */
+const isFissure = (t: number, x: number, y: number): boolean =>
+  t === T.EMBERROCK && cellHash(x, y, 3) > 0.82;
+/** a seam burns in its world's own hue (the fluid's unless the world names one) */
+const fissureHue = (): number => (spentWorld() ? undefined : ACTIVE.fissure) ?? ACTIVE.fluid.base;
 
 const tmpM = new THREE.Matrix4();
 const tmpP = new THREE.Vector3();
@@ -82,46 +401,127 @@ const DIRTY_RING: readonly (readonly [number, number])[] = [[0, 0], [-1, 0], [1,
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
 
+interface Spill { r: Float32Array; g: Float32Array; b: Float32Array; dx: Float32Array; dy: Float32Array; w: Float32Array; wf: Float32Array }
+const SPILL: Spill = {
+  r: new Float32Array(CAP), g: new Float32Array(CAP), b: new Float32Array(CAP),
+  dx: new Float32Array(CAP), dy: new Float32Array(CAP), w: new Float32Array(CAP),
+  wf: new Float32Array(CAP),
+};
+
+/**
+ * A seam's trunk runs along its local x from edge to edge, so turning it
+ * square to a fissure next door joins the two into one vein; a lone seam
+ * takes any eighth turn.
+ */
+function seamRoll(terrain: Terrain, x: number, y: number): number {
+  const at = (dx: number, dy: number) => isFissure(terrain.get(x + dx, y + dy), x + dx, y + dy);
+  const flip = cellHash(x, y, 29) > 0.5 ? Math.PI : 0;
+  if (at(-1, 0) || at(1, 0)) return flip;
+  if (at(0, -1) || at(0, 1)) return Math.PI / 2 + flip;
+  return Math.floor(cellHash(x, y, 29) * 8) * (Math.PI / 4);
+}
+
+const glows = (t: number) => def(t).ore || t === T.MIMIC || t === T.FROSTBLOOM;
+/** 1 on an ore (or a tile beside one), 0.7 diagonal to one, else 0 */
+function nearOre(terrain: Terrain, x: number, y: number): number {
+  let m = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!glows(terrain.get(x + dx, y + dy))) continue;
+      if (dx === 0 || dy === 0) return 1;
+      m = 0.7;
+    }
+  }
+  return m;
+}
+
 interface GemAnim {
   id: number; wx: number; wy: number; s: number; phase: number;
   spin: number; pulse: number; wobble: number; tilt: number; roll: number;
-  z: number; dim: number; flat: boolean;
+  z: number; dim: number; flat: boolean; sway: boolean;
 }
 
 class Chunk {
   rock: THREE.InstancedMesh;
+  glow: THREE.InstancedBufferAttribute;              // per rock instance: halo colour from its ore
+  wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
+  washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
+  matte: THREE.InstancedBufferAttribute;             // per rock instance: 1 at/next to an ore (lit value capped)
+  fl: THREE.InstancedBufferAttribute;                // per fluid instance: corner depths, surface, world x
+  hz: THREE.InstancedBufferAttribute;                // per haze sheet: run ends, surface y
   gems: THREE.InstancedMesh[];
   lava: THREE.InstancedMesh;
+  haze: THREE.InstancedMesh;
   group = new THREE.Group();
   rockIds = new Map<number, number>();              // local tile idx -> rock instance id
   gemIds = new Map<number, { c: number; i: number }>(); // local tile idx -> class + instance id
   gemAnim: GemAnim[][] = GEM_GEOS.map(() => []);
   cx = -1; cy = -1;
   chewLocal = -1;                                    // tile being drilled; animate skips it
+  /**
+   * The whole chunk in one sphere, shared by all its meshes: the 16×16
+   * block's half-diagonal plus a margin for jitter, protruding gems and a
+   * chewed tile's shake. About ±30 rows of chunks stay live but only the
+   * ones on screen are drawn. The fold throws bricks far outside it, so a
+   * chunk it touches stops culling until its rebuild puts them home.
+   */
+  bounds = new THREE.Sphere(new THREE.Vector3(), Math.SQRT2 * CHUNK / 2 + 1.5);
 
   constructor() {
-    this.rock = new THREE.InstancedMesh(boxGeo, rockMat, CAP);
-    this.lava = new THREE.InstancedMesh(lavaGeo, lavaMat, CAP);
+    // own copy of the shared box so it can carry this chunk's glow column
+    const rockGeo = boxGeo.clone();
+    this.glow = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    rockGeo.setAttribute('glow', this.glow);
+    this.wash = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    this.washDir = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
+    rockGeo.setAttribute('wash', this.wash);
+    rockGeo.setAttribute('washDir', this.washDir);
+    this.matte = new THREE.InstancedBufferAttribute(new Float32Array(CAP), 1);
+    rockGeo.setAttribute('matte', this.matte);
+    this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
+    const fluidGeo = lavaGeo.clone();
+    this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
+    fluidGeo.setAttribute('fl', this.fl);
+    this.lava = new THREE.InstancedMesh(fluidGeo, lavaMat, CAP);
+    const hazeG = hazeGeo.clone();
+    this.hz = new THREE.InstancedBufferAttribute(new Float32Array(HAZE_CAP * 3), 3);
+    hazeG.setAttribute('hz', this.hz);
+    this.haze = new THREE.InstancedMesh(hazeG, hazeMat, HAZE_CAP);
+    this.haze.renderOrder = 1;
     this.gems = GEM_GEOS.map(geo => new THREE.InstancedMesh(geo, gemMat, GEM_CAP));
-    for (const m of [this.rock, this.lava, ...this.gems]) {
+    for (const m of [this.rock, this.lava, this.haze, ...this.gems]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;
+      // culled against one fixed sphere per chunk, set in build()
+      m.boundingSphere = this.bounds;
       this.group.add(m);
     }
     // allocate color buffers up front
     this.rock.setColorAt(0, tmpC.setHex(0xffffff));
-    this.lava.setColorAt(0, tmpC.setHex(0xffffff));
     for (const m of this.gems) m.setColorAt(0, tmpC.setHex(0xffffff));
   }
 
   build(terrain: Terrain, cx: number, cy: number): void {
     this.cx = cx; this.cy = cy;
+    this.bounds.center.set(cx * CHUNK + CHUNK / 2, -(cy * CHUNK + CHUNK / 2), 0);
+    this.setCulled(true);
     this.rockIds.clear(); this.gemIds.clear();
     for (const a of this.gemAnim) a.length = 0;
     this.chewLocal = -1;
-    let nr = 0, nl = 0;
+    let nr = 0, nl = 0, nh = 0;
+    (this.glow.array as Float32Array).fill(0);
     const ng = GEM_GEOS.map(() => 0);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
+    const spent = spentWorld();
+    syncStrata();
+    const lit = this.spill(terrain, x0, y0, spent);
+    if (!spent) syncHaze();
+    const isFl = (x: number, y: number) => terrain.get(x, y) === T.LAVA;
+    // unbroken rows of liquid above this cell (to 6)
+    const colDepth = (x: number, y: number) => {
+      let r = 0;
+      while (r < 6 && isFl(x, y - r - 1)) r++;
+      return r;
+    };
 
     for (let ly = 0; ly < CHUNK; ly++) {
       for (let lx = 0; lx < CHUNK; lx++) {
@@ -132,12 +532,40 @@ class Chunk {
         const local = ly * CHUNK + lx;
 
         if (t === T.LAVA) {
-          tmpM.makeTranslation(wx, wy, 0);
+          // rows of liquid above this one; the tile that meets air carries
+          // the meniscus and sits a little below the rim
+          const rows = colDepth(x, y);
+          const top = rows === 0 && terrain.get(x, y - 1) === T.AIR;
+          if (top) tmpM.makeScale(1, 0.86, 1).setPosition(wx, wy - 0.07, 0);
+          else tmpM.makeTranslation(wx, wy, 0);
           this.lava.setMatrixAt(nl, tmpM);
-          // vary from deep red to hot orange so pools read as molten, not flat
-          const lh = 0.55 + cellHash(x, y, 9) * 0.55;
-          this.lava.setColorAt(nl, tmpC.setRGB(lh, lh * 0.42, lh * 0.16));
+          // each top corner meets the liquid beside at the same depth
+          const dl = isFl(x - 1, y) ? (rows + colDepth(x - 1, y)) / 2 : rows;
+          const dr = isFl(x + 1, y) ? (rows + colDepth(x + 1, y)) / 2 : rows;
+          // which sides meet air (surface lines) or rock (contact shade);
+          // bit 1 = air above, 2/4 = air left/right, 8 = air below,
+          // 16/32 = rock left/right, 64 = rock above
+          const tl = terrain.get(x - 1, y), tr = terrain.get(x + 1, y), tu = terrain.get(x, y - 1);
+          const sides = (top ? 1 : 0) | (tl === T.AIR ? 2 : 0) | (tr === T.AIR ? 4 : 0)
+            | (terrain.get(x, y + 1) === T.AIR ? 8 : 0)
+            | (tl !== T.AIR && tl !== T.LAVA ? 16 : 0) | (tr !== T.AIR && tr !== T.LAVA ? 32 : 0)
+            | (tu !== T.AIR && tu !== T.LAVA ? 64 : 0);
+          this.fl.setXYZW(nl, dl, dr, sides, wx);
           nl++;
+          // the first surface cell of a run in this chunk lays the run's haze
+          const surf = (sx: number) => isFl(sx, y) && terrain.get(sx, y - 1) === T.AIR;
+          if (top && !spent && nh < HAZE_CAP && (lx === 0 || !surf(x - 1))) {
+            let a = x, b = x + 1;
+            while (surf(a - 1)) a--;
+            while (surf(b)) b++;
+            const sy = wy + 0.36;
+            const h0 = lx === 0 && a < x ? x : x - 0.6;
+            const h1 = Math.min(x0 + CHUNK, b + 0.6);
+            tmpM.makeScale(h1 - h0, HAZE_H, 1).setPosition(h0, sy, HAZE_Z);
+            this.haze.setMatrixAt(nh, tmpM);
+            this.hz.setXYZ(nh, a, b, sy);
+            nh++;
+          }
           continue;
         }
 
@@ -161,6 +589,9 @@ class Chunk {
         tmpC.setHex(rockColor(t, x, y));
         if (exposed) tmpC.multiplyScalar(1.22);
         this.rock.setColorAt(nr, tmpC);
+        this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
+        this.washDir.setXY(nr, lit.dx[local], lit.dy[local]);
+        this.matte.setX(nr, spent ? 0 : nearOre(terrain, x, y));
         this.rockIds.set(local, nr);
         nr++;
 
@@ -172,16 +603,23 @@ class Chunk {
         let harvestable = true;
         if (d.ore || t === T.MIMIC || t === T.FROSTBLOOM) {
           cls = gemClassOf(t);
-          gemColor = t === T.FUNGUS ? ACTIVE.gemTint
-            : t === T.NATIVE ? (ACTIVE.native?.color ?? d.gem) : d.gem;
+          gemColor = gemTintOf(t);
+          haloOf(t, tmpC);
+          this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
-        } else if (t === T.EMBERROCK && h > 0.82) {
-          // heat fissure in the rock face: one of four branching patterns,
-          // rotated per cell, lying flush — never mistakable for a pickup
+        } else if (isFissure(t, x, y)) {
+          // heat fissure in the rock face: a seam running edge to edge with
+          // branches, lying flush — never mistakable for a pickup. It turns
+          // to meet a fissure next door so neighbouring seams join up.
           cls = CRACK_CLASS_0 + Math.floor(cellHash(x, y, 23) * CRACK_VARIANTS) % CRACK_VARIANTS;
-          gemColor = ACTIVE.core.shell;
-          gemScale = 0.8 + cellHash(x, y, 17) * 0.5;
+          gemColor = fissureHue();
+          gemScale = 1;
           harvestable = false;
+          if (!spent) {
+            // the seam's own stone burns behind it, out to the block's edges
+            tmpC.setHex(gemColor).multiplyScalar(0.3);
+            this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
+          }
         }
         if (gemColor && ng[cls] < GEM_CAP) {
           const i = ng[cls]++;
@@ -194,14 +632,17 @@ class Chunk {
             pulse: harvestable ? mo.pulse : 0.04,
             wobble: harvestable ? mo.wobble : 0,
             tilt: (cellHash(x, y, 7) - 0.5) * 0.9,
-            roll: cellHash(x, y, 29) * Math.PI * 2,
+            roll: !harvestable ? seamRoll(terrain, x, y)
+              : mo.sway ? (cellHash(x, y, 29) - 0.5) * 0.8 : cellHash(x, y, 29) * Math.PI * 2,
             // a fissure rides the face of its own cube, which the jitter
             // above pushes forward (h > 0.82 puts it at z ≥ 0.529, tilted
             // ±0.045): at a flat 0.505 every one of them was inside the rock
             z: harvestable ? 0.46 : built ? 0.505 : 0.5 + (h - 0.5) * 0.09 + 0.04,
-            // fissures glow like banked embers; carvings burn brighter
-            dim: harvestable ? 1 : t === T.GLYPH ? 1.3 : 0.9,
+            // fissures burn hot (the seam's emit is baked high); a spent
+            // world's stay as dim as they always were
+            dim: harvestable ? 1 : spent ? 0.22 : 1,
             flat: !harvestable,
+            sway: !!mo.sway,
           };
           this.gemAnim[cls].push(anim);
           this.poseGem(cls, anim, 0);
@@ -211,16 +652,124 @@ class Chunk {
       }
     }
 
-    this.rock.count = nr; this.lava.count = nl;
+    this.rock.count = nr; this.lava.count = nl; this.haze.count = nh;
+    this.haze.visible = nh > 0;
     this.rock.instanceMatrix.needsUpdate = true;
     this.lava.instanceMatrix.needsUpdate = true;
+    this.haze.instanceMatrix.needsUpdate = true;
+    this.hz.needsUpdate = true;
     if (this.rock.instanceColor) this.rock.instanceColor.needsUpdate = true;
-    if (this.lava.instanceColor) this.lava.instanceColor.needsUpdate = true;
+    this.fl.needsUpdate = true;
+    this.glow.needsUpdate = true;
+    this.wash.needsUpdate = true;
+    this.washDir.needsUpdate = true;
+    this.matte.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     });
+  }
+
+  /**
+   * Light that lands: every pool tile and heat fissure within reach of this
+   * chunk throws its hue onto the rock around it (about two and a half tiles
+   * for a pool, under two for a seam), baked per rock instance at build. A pool's
+   * surface also throws its light up the cavity: the walls and ceiling over
+   * it catch it to about four tiles above the meniscus. No light, no draw
+   * call; darkness away from them is untouched.
+   */
+  private spill(terrain: Terrain, x0: number, y0: number, spent: boolean): Spill {
+    const o = SPILL;
+    o.r.fill(0); o.g.fill(0); o.b.fill(0); o.dx.fill(0); o.dy.fill(0); o.w.fill(0); o.wf.fill(0);
+    if (spent) return o;
+    const R = 5;
+    for (let sy = y0 - 3; sy < y0 + CHUNK + R; sy++) {
+      for (let sx = x0 - 3; sx < x0 + CHUNK + 3; sx++) {
+        const st = terrain.get(sx, sy);
+        const pool = st === T.LAVA;
+        if (!pool && !isFissure(st, sx, sy)) continue;
+        // a surface cell lights upward much further than sideways or down
+        const surf = pool && terrain.get(sx, sy - 1) === T.AIR;
+        // a seam lights its stone: the blocks touching it take its hue hard,
+        // gone two tiles off so the rock between clusters stays dark
+        const reach = pool ? 2.6 : 1.9, inner = pool ? 0.6 : 0.4;
+        const k = pool ? 1 : 0.6;
+        const acc = pool ? o.w : o.wf;
+        for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
+          for (let tx = Math.max(x0, sx - 3); tx <= Math.min(x0 + CHUNK - 1, sx + 3); tx++) {
+            if (tx === sx && ty === sy) continue;
+            const d = Math.hypot(tx - sx, ty - sy);
+            const de = surf && ty < sy ? Math.hypot((tx - sx) * 0.85, (ty - sy) * 0.62) : d;
+            if (de >= reach) continue;
+            const u = (de - inner) / (reach - inner);
+            const w = k * (1 - (u <= 0 ? 0 : u * u * (3 - 2 * u)));
+            const i = (ty - y0) * CHUNK + (tx - x0);
+            acc[i] += w;
+            // world y runs up while rows run down
+            o.dx[i] += (sx - tx) * w / d;
+            o.dy[i] += (ty - sy) * w / d;
+          }
+        }
+      }
+    }
+    // even out the hues: cyan is three times as bright as molten orange,
+    // and a pale wash beside a pale pool would blur the hazard's edge
+    const pc = tmpC.setHex(ACTIVE.fluid.base);
+    const lum = 0.2126 * pc.r + 0.7152 * pc.g + 0.0722 * pc.b;
+    pc.multiplyScalar(Math.min(1, 0.26 / Math.max(lum, 1e-3)));
+    const pr = pc.r, pg = pc.g, pb = pc.b;
+    const fc = tmpC.setHex(fissureHue());
+    const fl = 0.2126 * fc.r + 0.7152 * fc.g + 0.0722 * fc.b;
+    fc.multiplyScalar(Math.min(1, 0.26 / Math.max(fl, 1e-3)));
+    for (let i = 0; i < CAP; i++) {
+      // saturating: a whole basin next door is brighter than one cell, not 8×
+      const s = o.w[i] > 0 ? 0.3 * (1 - Math.exp(-o.w[i])) : 0;
+      const f = o.wf[i] > 0 ? 0.32 * (1 - Math.exp(-o.wf[i])) : 0;
+      o.r[i] = pr * s + fc.r * f; o.g[i] = pg * s + fc.g * f; o.b[i] = pb * s + fc.b * f;
+      o.w[i] += o.wf[i];
+    }
+    if (coreLit && y0 + CHUNK > CORE_TY - CORE_REACH && y0 < CORE_TY + CORE_REACH) {
+      // every core at one brightness: a pale cyan heart must not out-wash amber
+      tmpC.setHex(ACTIVE.core.light);
+      const lum = 0.2126 * tmpC.r + 0.7152 * tmpC.g + 0.0722 * tmpC.b;
+      tmpC.multiplyScalar(Math.min(1, 0.45 / Math.max(lum, 1e-3)));
+      for (let ly = 0; ly < CHUNK; ly++) {
+        for (let lx = 0; lx < CHUNK; lx++) {
+          const tx = x0 + lx, ty = y0 + ly;
+          const d = Math.hypot(tx - CORE_TX, ty - CORE_TY);
+          if (d >= CORE_REACH) continue;
+          // inverse-square-ish with a soft knee, faded out well before the reach
+          const f = 1 / (1 + (Math.max(0, d - CORE_INNER) / CORE_KNEE) ** 2)
+            * (1 - smooth01((d - CORE_REACH * 0.6) / (CORE_REACH * 0.4)));
+          // the light lands on the chamber's skin and dies into the rock mass:
+          // count solid cells on the way to the fragment (the tile itself excluded)
+          const steps = Math.ceil(d * 2);
+          let solid = 0;
+          for (let s = 1; s < steps; s++) {
+            const q = s / steps;
+            const st = terrain.get(Math.round(tx + (CORE_TX - tx) * q), Math.round(ty + (CORE_TY - ty) * q));
+            if (st !== T.AIR && st !== T.LAVA) solid++;
+          }
+          const occ = Math.exp(-0.55 * solid * 0.5);
+          if (occ < 0.02) continue;
+          // the floor straight under the fragment runs hotter: a narrow pool
+          // across the few columns below it, on the chamber's floor skin
+          const below = ty - CORE_TY - 4;
+          const pool = below > 0
+            ? CORE_POOL * Math.exp(-((tx - CORE_TX) ** 2) / 14) * Math.exp(-Math.max(0, below - 1.5) * 0.9)
+            : 0;
+          const w = CORE_GAIN * f * occ + pool * occ;
+          const i = ly * CHUNK + lx;
+          o.r[i] += tmpC.r * w; o.g[i] += tmpC.g * w; o.b[i] += tmpC.b * w;
+          // the core outweighs a seam next door in setting which way light comes from
+          const k = 4 * f * occ / Math.max(d, 0.5);
+          o.dx[i] += (CORE_TX - tx) * k;
+          o.dy[i] += (ty - CORE_TY) * k;
+        }
+      }
+    }
+    return o;
   }
 
   private poseGem(cls: number, a: GemAnim, time: number): void {
@@ -231,7 +780,7 @@ class Chunk {
     } else {
       tmpE.set(
         a.tilt + Math.sin(time * 0.9 + a.phase) * a.wobble,
-        a.roll + time * a.spin,
+        a.sway ? a.roll + Math.sin(time * a.spin + a.phase) * 0.45 : a.roll + time * a.spin,
         Math.cos(time * 0.7 + a.phase) * a.wobble
       );
     }
@@ -295,10 +844,18 @@ class Chunk {
       if (gid) this.gems[gid.c].setMatrixAt(gid.i, tmpM);
     }
     if (touched) {
+      this.setCulled(false);
       this.rock.instanceMatrix.needsUpdate = true;
       for (const m of this.gems) m.instanceMatrix.needsUpdate = true;
     }
     return touched;
+  }
+
+  private setCulled(on: boolean): void {
+    this.rock.frustumCulled = on;
+    this.lava.frustumCulled = on;
+    this.haze.frustumCulled = on;
+    for (const m of this.gems) m.frustumCulled = on;
   }
 
   /** shrink + jitter the tile being drilled */
@@ -343,6 +900,13 @@ export class ChunkField {
   }
 
   private key(cx: number, cy: number): number { return cy * CHUNKS_X + cx; }
+
+  /** the fragment's chamber wash: off once it is taken, rebuilt on change */
+  setCoreLit(on: boolean): void {
+    if (coreLit === on) return;
+    coreLit = on;
+    this.invalidateAll();
+  }
 
   markDirty(x: number, y: number): void {
     // neighbors too: edge-highlighting of adjacent tiles can cross chunk seams

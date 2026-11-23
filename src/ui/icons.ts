@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { def } from '../world/tiles';
-import { GEM_GEOS, gemClassOf, gemScaleOf } from '../world/gemshapes';
+import { GEM_GEOS, gemClassOf, gemScaleOf, gemMaterial, gemTintOf } from '../world/gemshapes';
 
 // Real 3D ore icons: each gem is rendered once by a tiny offscreen renderer
 // and cached as a data URL, then used as a plain <img> anywhere in the UI.
@@ -22,7 +22,8 @@ function setup(): void {
   camera = new THREE.PerspectiveCamera(32, 1, 0.1, 10);
   camera.position.set(1.5, 1.2, 2.3);
   camera.lookAt(0, 0, 0);
-  mat = new THREE.MeshStandardMaterial({ roughness: 0.18, metalness: 0.5, flatShading: true, vertexColors: true });
+  // the in-world material: each ore's colours, glow and finish are baked into its geometry
+  mat = gemMaterial({ emissiveIntensity: 0.6 });
   gem = new THREE.Mesh(GEM_GEOS[0], mat);
   gem.rotation.set(0.45, 0.55, 0.1);
   scene.add(gem);
@@ -37,10 +38,7 @@ export function oreIcon(t: number): string {
   const hit = cache.get(t);
   if (hit) return hit;
   if (!renderer) setup();
-  const color = def(t).gem || 0x999999;
-  mat.color.setHex(color);
-  mat.emissive.setHex(color);
-  mat.emissiveIntensity = 0.22;
+  mat.color.setHex(gemTintOf(t));
   // each resource keeps its in-world shape and proportions
   gem.geometry = GEM_GEOS[gemClassOf(t)];
   gem.rotation.set(0.4, 0.7, 0.15);

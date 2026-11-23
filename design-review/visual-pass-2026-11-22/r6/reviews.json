@@ -1,0 +1,1855 @@
+{
+ "rock": {
+  "A": {
+   "category": "rock",
+   "score": 5.7,
+   "per_shot": [
+    {
+     "shot": "veil3-surface.png",
+     "score": 5,
+     "note": "Flat orange checkerboard topsoil; reads as tiles, not faceted rock, and has no value structure"
+    },
+    {
+     "shot": "veil3-shallow.png",
+     "score": 6,
+     "note": "Lit face vs dark face works and the beam lands warm on cave walls; blocks are plain flat-shaded cubes"
+    },
+    {
+     "shot": "veil3-mid.png",
+     "score": 6,
+     "note": "Good dark, ore glows into it, but rock is uniform brown cubes with no facet variation"
+    },
+    {
+     "shot": "veil3-deep.png",
+     "score": 5,
+     "note": "Fissure rock blocks render as flat bright orange fills; the fissures don't read as the light source and the dark is flattened"
+    },
+    {
+     "shot": "veil3-fissures.png",
+     "score": 5,
+     "note": "Whole wall is saturated orange with decal-like crack lines; no dark stone for the fissures to light"
+    },
+    {
+     "shot": "cryos2-shallow.png",
+     "score": 6,
+     "note": "Clear cold-blue world identity, glowing pool, lit ice edges; ice is just blue cubes with no crystal glint"
+    },
+    {
+     "shot": "cryos2-mid.png",
+     "score": 6,
+     "note": "Nice navy dark, lamp washes the walls; rock still flat and repetitive"
+    },
+    {
+     "shot": "cryos2-deep.png",
+     "score": 5.5,
+     "note": "Cracked blocks flood flat cyan instead of glowing from the cracks; walls lose depth"
+    },
+    {
+     "shot": "maelis6-shallow.png",
+     "score": 6,
+     "note": "Sea-green identity reads; no nacre or iridescence, just green-grey cubes"
+    },
+    {
+     "shot": "maelis6-mid.png",
+     "score": 6,
+     "note": "Dark and readable, brine pool glows; background is near-black with little haze separation"
+    },
+    {
+     "shot": "maelis6-deep.png",
+     "score": 5.5,
+     "note": "Vein blocks become saturated green fills; flat, and the light doesn't land on the stone"
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Fissure/vein blocks are lit as uniformly bright, saturated fills, not dark stone lit by its cracks",
+     "shots": [
+      "veil3-deep.png",
+      "veil3-fissures.png",
+      "cryos2-deep.png",
+      "maelis6-deep.png"
+     ],
+     "why": "Ref 04 is near-black stone with hot cracks that light only what is around them; flat fills kill both the darkness and the 'light lands' read",
+     "suggested_direction": "Keep the base albedo of fissure rock dark and make the glow fall off radially from the crack lines across the face and onto neighbouring faces"
+    },
+    {
+     "issue": "Rock is identical flat-shaded cubes with a visible grid",
+     "shots": [
+      "veil3-surface.png",
+      "veil3-mid.png",
+      "cryos2-mid.png",
+      "maelis6-shallow.png"
+     ],
+     "why": "Ref 03 has chunky, faceted, irregular cubic rock; the uniform grid reads as tiles and makes the material look generic",
+     "suggested_direction": "Add per-block low-poly facet jitter/chamfers and small per-face value variation so faces catch the lamp differently; keep it low-poly"
+    },
+    {
+     "issue": "Surface topsoil is a bright, flat orange checkerboard",
+     "shots": [
+      "veil3-surface.png"
+     ],
+     "why": "No lit-vs-shadow structure, and the alternating tile values read as a pattern rather than as rock",
+     "suggested_direction": "Darken it and grade by depth below the surface line; break up the alternating light/dark tile pattern"
+    },
+    {
+     "issue": "Per-world material character is only a hue tint",
+     "shots": [
+      "cryos2-shallow.png",
+      "cryos2-mid.png",
+      "maelis6-shallow.png",
+      "maelis6-mid.png"
+     ],
+     "why": "Refs 05/06 call for ice that catches the lamp in crystal glints and for nacre iridescence; here it's the same cube with a different colour",
+     "suggested_direction": "Add a world-specific specular response: sharp crystal glints on Cryos, a subtle hue-shifting sheen on Maelis"
+    },
+    {
+     "issue": "Background wall has little haze separation from the foreground",
+     "shots": [
+      "maelis6-mid.png",
+      "veil3-mid.png"
+     ],
+     "why": "The 'depth' principle needs cooler, hazier backdrops so the foreground rock separates",
+     "suggested_direction": "Lift the back wall slightly toward the world hue with distance haze, while keeping true void black"
+    }
+   ],
+   "protect": [
+    "Strong darkness with the lamp as the main light; lit face vs black face",
+    "Lamp beam visibly washing the cave walls in world colour",
+    "Clear one-hue-per-world identity (amber/blue/green)",
+    "Glowing pools and ore blooming into the dark",
+    "Clean readable footing edges"
+   ]
+  },
+  "B": {
+   "category": "rock",
+   "score": 6.3,
+   "per_shot": [
+    {
+     "shot": "veil3-surface.png",
+     "score": 5,
+     "note": "Identical to A: flat orange checkerboard topsoil"
+    },
+    {
+     "shot": "veil3-shallow.png",
+     "score": 6,
+     "note": "Identical to A; good lit/dark structure, plain cubes"
+    },
+    {
+     "shot": "veil3-mid.png",
+     "score": 6,
+     "note": "Essentially the same as A; slightly more warm haze on the back wall"
+    },
+    {
+     "shot": "veil3-deep.png",
+     "score": 6.5,
+     "note": "Fissure rock is darker red with glow centred on the cracks; much closer to ref 04, though the left mass is still flat orange"
+    },
+    {
+     "shot": "veil3-fissures.png",
+     "score": 6.5,
+     "note": "Dark stone with cracks that bloom locally; light lands. Still decal-like crack lines on uniform cubes"
+    },
+    {
+     "shot": "cryos2-shallow.png",
+     "score": 6,
+     "note": "Identical to A"
+    },
+    {
+     "shot": "cryos2-mid.png",
+     "score": 6,
+     "note": "Slightly more blue haze in the background; otherwise the same"
+    },
+    {
+     "shot": "cryos2-deep.png",
+     "score": 6.5,
+     "note": "Cracks glow cyan out of darker ice; better value range, and the back wall is a touch hazier"
+    },
+    {
+     "shot": "maelis6-shallow.png",
+     "score": 6,
+     "note": "Marginally greener back wall; still no nacre"
+    },
+    {
+     "shot": "maelis6-mid.png",
+     "score": 6.5,
+     "note": "Green haze on the back wall improves depth separation"
+    },
+    {
+     "shot": "maelis6-deep.png",
+     "score": 6.5,
+     "note": "Veins glow from dark green stone; reads as light-in-rock, though the big left block is still a flat fill"
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Rock is identical flat-shaded cubes with a visible grid",
+     "shots": [
+      "veil3-surface.png",
+      "veil3-mid.png",
+      "cryos2-mid.png",
+      "maelis6-shallow.png"
+     ],
+     "why": "Ref 03's faceted, chunky rock is the material target; uniform cubes read as tiles",
+     "suggested_direction": "Per-block low-poly facet jitter/chamfers and per-face value variation so the lamp picks out planes"
+    },
+    {
+     "issue": "Surface topsoil is a bright, flat orange checkerboard",
+     "shots": [
+      "veil3-surface.png"
+     ],
+     "why": "No value structure; unchanged from A",
+     "suggested_direction": "Darken it, grade by depth, and break up the alternating tile values"
+    },
+    {
+     "issue": "Large exposed fissure masses still render as flat saturated fills",
+     "shots": [
+      "veil3-deep.png",
+      "maelis6-deep.png",
+      "cryos2-deep.png"
+     ],
+     "why": "The left-side open blocks stay a uniform bright colour, which contradicts the improved dark-stone treatment elsewhere",
+     "suggested_direction": "Apply the same dark base with crack-centred falloff to these large faces and pool/opening edges"
+    },
+    {
+     "issue": "Per-world material character is only a hue tint",
+     "shots": [
+      "cryos2-shallow.png",
+      "maelis6-mid.png"
+     ],
+     "why": "Missing the ice crystal glints and nacre iridescence called for by refs 05/06",
+     "suggested_direction": "World-specific specular: crystal glints on Cryos, an iridescent sheen on Maelis"
+    },
+    {
+     "issue": "Crack lines read as thin decals on the cube faces",
+     "shots": [
+      "veil3-fissures.png",
+      "cryos2-deep.png"
+     ],
+     "why": "Ref 04 fissures are wider, branching and hot-cored; thin lines look painted on",
+     "suggested_direction": "Make the crack cores thicker and hotter at the centre, with a soft wide bloom, and let them continue across block seams"
+    }
+   ],
+   "protect": [
+    "Dark fissure stone with glow centred on the cracks (the key gain over A)",
+    "Subtle world-hued haze on back walls for depth",
+    "Lamp beam washing walls; lit face vs black face",
+    "One-hue-per-world identity",
+    "Readable footing edges and glowing pools"
+   ]
+  },
+  "preference": "B",
+  "why": "Shallow and surface shots are identical. In the deep and fissure shots B keeps the stone dark and lets the cracks light it, and it adds slight back-wall haze. That fits the brief's 'fissures light the stone' and 'depth' goals much better than A's flat saturated fills."
+ },
+ "lighting": {
+  "A": {
+   "category": "lighting",
+   "score": 6.4,
+   "per_shot": [
+    {
+     "shot": "title.png",
+     "score": 6,
+     "note": "Warm underground fill is fairly even top to bottom; reads as lit dirt rather than a dark shaft with glow rising from far below."
+    },
+    {
+     "shot": "veil3-surface.png",
+     "score": 7,
+     "note": "Good dusk palette, sun disc and warm lit windows; haze on the far domes separates the layers."
+    },
+    {
+     "shot": "veil3-shallow.png",
+     "score": 7,
+     "note": "Beam cone visible, lava pool washes nearby blocks red, lit and black faces contrast well; the backdrop wall is a flat mid-brown."
+    },
+    {
+     "shot": "veil3-mid.png",
+     "score": 6,
+     "note": "Ore glows nicely, but the upper backdrop is a hazy brown plane that weakens the void, and the beam barely lands on the wall."
+    },
+    {
+     "shot": "veil3-deep.png",
+     "score": 7,
+     "note": "Fissures glow and lava lights its basin; the stone around the fissures is only lightly washed."
+    },
+    {
+     "shot": "veil3-fissures.png",
+     "score": 6,
+     "note": "Fissure lines are crisp but read like decals; little light spills onto the surrounding stone compared with ref 04."
+    },
+    {
+     "shot": "cryos2-mid.png",
+     "score": 7,
+     "note": "Strong cyan pool glow and cold palette; the backdrop's ambient blue lifts the dark slightly."
+    },
+    {
+     "shot": "maelis6-mid.png",
+     "score": 6,
+     "note": "Sea-green hue is right, but the backdrop is a murky green haze with weak depth separation."
+    },
+    {
+     "shot": "veil3-core.png",
+     "score": 7,
+     "note": "The core floods the chamber amber with floor glow and motes; the falloff into dark corners is soft."
+    },
+    {
+     "shot": "cryos2-core.png",
+     "score": 6,
+     "note": "Cyan flood reads, but the whole chamber sits at one even mid value with no dark frame."
+    },
+    {
+     "shot": "maelis6-core.png",
+     "score": 6,
+     "note": "The pearl is lavender on a grey chamber, so the sea-green world hue is weak; the light pooling is flat."
+    },
+    {
+     "shot": "pod-pilot-eva.png",
+     "score": 6,
+     "note": "Visor glows and the pad gets a spot of light, but overall it is flat dusk fill."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Backdrop walls sit at a flat mid value instead of falling off to void",
+     "shots": [
+      "veil3-mid.png",
+      "maelis6-mid.png",
+      "cryos2-core.png",
+      "maelis6-core.png"
+     ],
+     "why": "The brief reserves black for true void and wants cooler, hazier depth. The flat lit planes behind the play area flatten the dark that makes the lamp matter.",
+     "suggested_direction": "Darken the backdrop with a radial or vertical falloff away from the light sources, keep a little cool haze only near lit areas, and push the far corners to near-black."
+    },
+    {
+     "issue": "Fissures do not light the stone around them",
+     "shots": [
+      "veil3-fissures.png",
+      "veil3-deep.png"
+     ],
+     "why": "Ref 04's defining trait is fissures washing the adjacent rock. Here they read as glowing line decals on uniformly dim tiles.",
+     "suggested_direction": "Add a per-tile emissive halo or vertex-light falloff from each fissure into neighbouring faces, plus softer bloom on the lines."
+    },
+    {
+     "issue": "The headlamp beam is a uniform additive cone that barely lands",
+     "shots": [
+      "veil3-shallow.png",
+      "veil3-mid.png",
+      "veil3-deep.png"
+     ],
+     "why": "Ref 03 shows dust in the beam and a bright hit where it strikes the rock. Here the cone fades evenly and the wall it reaches is only slightly brighter.",
+     "suggested_direction": "Add more visible dust motes inside the cone, a brighter falloff core, and a stronger light pool where the beam hits terrain."
+    },
+    {
+     "issue": "The title's underground does not read as a dark shaft with glow from below",
+     "shots": [
+      "title.png"
+     ],
+     "why": "Ref 01's mood of descent depends on darkness above and warmth rising from the bottom. Here the dirt is evenly warm.",
+     "suggested_direction": "Darken the mid-band under the logo and concentrate the warm glow at the bottom edge."
+    },
+    {
+     "issue": "MAELIS core chamber loses its world hue",
+     "shots": [
+      "maelis6-core.png"
+     ],
+     "why": "One hue per world: the chamber reads grey and lavender rather than sea-green or nacre.",
+     "suggested_direction": "Tint the core flood and ambient towards sea-green and nacre and keep lavender as a highlight."
+    }
+   ],
+   "protect": [
+    "Lava and brine pools washing nearby blocks with their colour",
+    "Lit-face vs black-face contrast on cubic rock",
+    "Ore and plant glow halos reading clearly in the dark",
+    "Core floods with floating motes",
+    "Surface dusk palette and lit windows",
+    "Strong world hue in VEIL amber and CRYOS cyan mid-depth shots"
+   ]
+  },
+  "B": {
+   "category": "lighting",
+   "score": 6.8,
+   "per_shot": [
+    {
+     "shot": "title.png",
+     "score": 7,
+     "note": "Underground darkens under the logo, with warm glow concentrated at the bottom; much closer to ref 01's descent mood."
+    },
+    {
+     "shot": "veil3-surface.png",
+     "score": 7,
+     "note": "Identical to A: good dusk, haze and lit windows."
+    },
+    {
+     "shot": "veil3-shallow.png",
+     "score": 7,
+     "note": "Same as A; beam cone and lava wash work, and the backdrop is still flat-ish."
+    },
+    {
+     "shot": "veil3-mid.png",
+     "score": 7,
+     "note": "Upper backdrop falls off to near-black, so the beam and ore glow read stronger against real dark."
+    },
+    {
+     "shot": "veil3-deep.png",
+     "score": 7,
+     "note": "Fissure tiles carry a stronger red wash and the lower-left void is properly black."
+    },
+    {
+     "shot": "veil3-fissures.png",
+     "score": 7,
+     "note": "Fissures now light their surrounding stone with a warm red wash, close in spirit to ref 04; the field gets slightly uniform in the mid-right."
+    },
+    {
+     "shot": "cryos2-mid.png",
+     "score": 7,
+     "note": "Backdrop darker at the top for a better void, and the cyan pool still glows."
+    },
+    {
+     "shot": "maelis6-mid.png",
+     "score": 7,
+     "note": "Darker upper backdrop improves depth; the sea-green hue holds."
+    },
+    {
+     "shot": "veil3-core.png",
+     "score": 7,
+     "note": "Near-identical to A; fissures in the left wall glow a touch more."
+    },
+    {
+     "shot": "cryos2-core.png",
+     "score": 6,
+     "note": "Near-identical to A; flat even chamber value."
+    },
+    {
+     "shot": "maelis6-core.png",
+     "score": 6,
+     "note": "Fissures on the left wall wash greener, but the chamber is still grey and lavender."
+    },
+    {
+     "shot": "pod-pilot-eva.png",
+     "score": 6,
+     "note": "Same as A."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Core chambers sit at one even mid value with no dark frame",
+     "shots": [
+      "cryos2-core.png",
+      "maelis6-core.png",
+      "veil3-core.png"
+     ],
+     "why": "Ref 07 has the core flooding a chamber that falls away to black at the edges. Here the fill is uniform, so it lacks the sacred, focused quality.",
+     "suggested_direction": "Add a radial falloff from the core so the walls and ceiling far from it go dark, and keep the brightest pool on the floor beneath it."
+    },
+    {
+     "issue": "The headlamp beam is a uniform additive cone that barely lands",
+     "shots": [
+      "veil3-shallow.png",
+      "veil3-mid.png",
+      "veil3-deep.png"
+     ],
+     "why": "Ref 03 shows dust in the beam and a bright hit on the rock it strikes.",
+     "suggested_direction": "Add more dust in the cone, a brighter falloff core, and a stronger light pool where the beam hits terrain."
+    },
+    {
+     "issue": "Fissure wash can make large fields uniformly red",
+     "shots": [
+      "veil3-fissures.png"
+     ],
+     "why": "When every tile is washed, the dark between fissures shrinks and the darkness-as-mechanic weakens.",
+     "suggested_direction": "Keep the wash local, with a tighter falloff radius, so the gaps between fissure clusters stay dark."
+    },
+    {
+     "issue": "MAELIS core chamber loses its world hue",
+     "shots": [
+      "maelis6-core.png"
+     ],
+     "why": "One hue per world: the chamber reads grey and lavender.",
+     "suggested_direction": "Tint the flood and ambient towards sea-green and nacre."
+    },
+    {
+     "issue": "Shallow VEIL backdrop is still a flat lit plane",
+     "shots": [
+      "veil3-shallow.png"
+     ],
+     "why": "The cavern's back wall sits at even mid-brown, which reduces depth.",
+     "suggested_direction": "Apply the same darker backdrop falloff used at mid depth."
+    }
+   ],
+   "protect": [
+    "Darker title underground with glow rising from below",
+    "Fissures washing their surrounding stone",
+    "Backdrop fall-off to near-black at mid depth",
+    "Lava and brine pools tinting neighbouring blocks",
+    "Ore and plant glow halos",
+    "Per-world hue at mid depth (amber, cyan, sea-green)"
+   ]
+  },
+  "preference": "B",
+  "why": "B keeps everything A does well and adds a darker title shaft with glow from below, fissures that light their stone, and backdrops that fall to true black at mid depth. The gain is moderate: cores, beam and surface are effectively unchanged."
+ },
+ "identity": {
+  "A": {
+   "category": "identity",
+   "score": 7.0,
+   "per_shot": [
+    {
+     "shot": "veil3-shallow",
+     "score": 7,
+     "note": "Terracotta rock, an orange lava pool and a warm beam. Reads as VEIL, but the rock is more brick-brown than amber."
+    },
+    {
+     "shot": "veil3-mid",
+     "score": 7,
+     "note": "The warm pool and gold ore carry the hue. The brown haze backdrop is muddy and a little flat."
+    },
+    {
+     "shot": "veil3-deep",
+     "score": 8,
+     "note": "Branching glowing fissures in red-orange stone. Strongest VEIL identity, close to the 04 mood."
+    },
+    {
+     "shot": "cryos2-shallow",
+     "score": 8,
+     "note": "Navy blocks, white-lit faces and a cyan pool. Clearly the ice world."
+    },
+    {
+     "shot": "cryos2-mid",
+     "score": 7,
+     "note": "Blue palette holds and the frost-fungus glows are on theme. The hazy blue backdrop is slightly lifted."
+    },
+    {
+     "shot": "cryos2-deep",
+     "score": 7,
+     "note": "Cyan fissures and the pool read as CRYOS. Teal-leaning blocks start drifting toward Maelis green."
+    },
+    {
+     "shot": "maelis6-shallow",
+     "score": 7,
+     "note": "Sea-green rock and brine pool. Clear, but plain green with no nacre or iridescence."
+    },
+    {
+     "shot": "maelis6-mid",
+     "score": 7,
+     "note": "Glowing green growths and the brine pool work. The rock is near-black and generic."
+    },
+    {
+     "shot": "maelis6-deep",
+     "score": 7,
+     "note": "Green fissures and the brine wall read Maelis. Still no pearl or nacre material."
+    },
+    {
+     "shot": "veil3-core",
+     "score": 8,
+     "note": "Amber core floods the chamber warm. Closest match to 07."
+    },
+    {
+     "shot": "cryos2-core",
+     "score": 6,
+     "note": "Mint-teal heart and green-teal chamber. Reads closer to Maelis green than ice-cyan/blue."
+    },
+    {
+     "shot": "maelis6-core",
+     "score": 6,
+     "note": "Lavender pearl in a grey chamber. The sea-green identity is lost apart from the left wall fissures."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Cryos and Maelis converge at depth and in the cores",
+     "shots": [
+      "cryos2-deep",
+      "cryos2-core",
+      "maelis6-core"
+     ],
+     "why": "The Cryos heart is mint/teal, close to Maelis green, and the Maelis core chamber goes grey-violet. The one-hue-per-world rule breaks exactly where it matters most.",
+     "suggested_direction": "Push the Cryos heart and chamber wash toward ice-cyan/pale blue. Tint the Maelis core chamber's ambient and bounce sea-green so the pearl sits in green brine light."
+    },
+    {
+     "issue": "Maelis lacks nacre/iridescent material",
+     "shots": [
+      "maelis6-shallow",
+      "maelis6-mid",
+      "maelis6-deep"
+     ],
+     "why": "The 06 reference's signature is iridescent nacre. Here Maelis is just green-tinted cubes.",
+     "suggested_direction": "Add a subtle view- or face-dependent sheen (pink/violet/cyan shift) on lit faces of Maelis rock."
+    },
+    {
+     "issue": "VEIL shallow and mid read brown/muddy rather than amber",
+     "shots": [
+      "veil3-shallow",
+      "veil3-mid"
+     ],
+     "why": "The backdrop haze is a desaturated brown, which weakens the amber hue and depth separation.",
+     "suggested_direction": "Warm the haze toward amber and keep the backdrop darker and cooler in value so the lit stone and lava carry the orange."
+    },
+    {
+     "issue": "Identity relies on pools and fissures; mid-depth body rock is near-black and generic",
+     "shots": [
+      "veil3-mid",
+      "cryos2-mid",
+      "maelis6-mid"
+     ],
+     "why": "With emissives cropped out, unlit rock from all three worlds looks similar.",
+     "suggested_direction": "Give each world's unlit rock a faint hue in its rim and edge light (amber, blue, green) without raising ambient."
+    }
+   ],
+   "protect": [
+    "VEIL-deep and VEIL-core warm fissure and core light that washes the stone",
+    "Cryos cyan pool and blue-white lit faces",
+    "Per-world fissure colour (orange/cyan/green) and matching pool colour",
+    "Black reserved for unlit rock; the dark stays real"
+   ]
+  },
+  "B": {
+   "category": "identity",
+   "score": 7.2,
+   "per_shot": [
+    {
+     "shot": "veil3-shallow",
+     "score": 7,
+     "note": "Effectively identical to A."
+    },
+    {
+     "shot": "veil3-mid",
+     "score": 7,
+     "note": "Darker backdrop, so the warm pool and ore pop a bit more. The brown cast remains."
+    },
+    {
+     "shot": "veil3-deep",
+     "score": 8,
+     "note": "Same as A, with slightly darker void below that improves contrast."
+    },
+    {
+     "shot": "cryos2-shallow",
+     "score": 8,
+     "note": "Adds frost sparkle on lit blocks, a small ice-identity gain."
+    },
+    {
+     "shot": "cryos2-mid",
+     "score": 7,
+     "note": "Frost glints on lit faces and a deeper blue-black backdrop. Slightly better than A."
+    },
+    {
+     "shot": "cryos2-deep",
+     "score": 7,
+     "note": "Frost sparkle helps say ice. Teal drift toward Maelis is unchanged."
+    },
+    {
+     "shot": "maelis6-shallow",
+     "score": 7,
+     "note": "Faint sheen on lit blocks. Otherwise the same as A."
+    },
+    {
+     "shot": "maelis6-mid",
+     "score": 7,
+     "note": "Darker backdrop, with faint violet nacre tint on lit faces."
+    },
+    {
+     "shot": "maelis6-deep",
+     "score": 7,
+     "note": "Subtle iridescent tint on the lit floor and pillar is a start on nacre, but barely visible."
+    },
+    {
+     "shot": "veil3-core",
+     "score": 8,
+     "note": "Same as A."
+    },
+    {
+     "shot": "cryos2-core",
+     "score": 6,
+     "note": "Frost glints on the floor, but the heart is still mint-teal, not ice-blue."
+    },
+    {
+     "shot": "maelis6-core",
+     "score": 6,
+     "note": "Same grey-violet chamber. The sea-green identity is still lost."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Cryos and Maelis converge at depth and in the cores",
+     "shots": [
+      "cryos2-deep",
+      "cryos2-core",
+      "maelis6-core"
+     ],
+     "why": "The mint/teal Cryos heart and the grey-violet Maelis chamber blur the one-hue-per-world rule.",
+     "suggested_direction": "Shift the Cryos core toward ice-cyan/blue. Give the Maelis core chamber a sea-green ambient and bounce."
+    },
+    {
+     "issue": "Nacre sheen on Maelis is too faint to register",
+     "shots": [
+      "maelis6-mid",
+      "maelis6-deep"
+     ],
+     "why": "The direction is right, but at this strength it reads as noise rather than identity.",
+     "suggested_direction": "Strengthen the iridescent shift on lit Maelis faces while keeping unlit faces dark."
+    },
+    {
+     "issue": "VEIL shallow and mid haze still brown and muddy",
+     "shots": [
+      "veil3-shallow",
+      "veil3-mid"
+     ],
+     "why": "The amber identity is carried only by the lava and ore.",
+     "suggested_direction": "Warm the haze toward amber and push the backdrop value darker."
+    },
+    {
+     "issue": "Frost sparkle reads as small dash marks on blocks",
+     "shots": [
+      "cryos2-shallow",
+      "cryos2-mid",
+      "cryos2-core"
+     ],
+     "why": "It could be mistaken for UI or debris. It helps identity only if it reads as glinting ice.",
+     "suggested_direction": "Make the glints softer and point-like, and confine them to faces the lamp lights."
+    }
+   ],
+   "protect": [
+    "Darker mid-depth backdrops (better separation than A)",
+    "Cryos frost glints on lit faces",
+    "Start of the Maelis nacre tint",
+    "VEIL-deep and core warm light that washes the stone"
+   ]
+  },
+  "preference": "B",
+  "why": "B is nearly identical but adds world-specific material cues (frost glints on Cryos, a faint nacre tint on Maelis) and slightly darker backdrops. These are small but real identity gains. Both share the Cryos/Maelis core convergence."
+ },
+ "fluids": {
+  "A": {
+   "category": "fluids",
+   "score": 6.4,
+   "per_shot": [
+    {
+     "shot": "veil3-shallow.png",
+     "score": 7,
+     "note": "Lava pool glows hot with embers and washes the right wall warm; strong amber read, though the pool surface is a flat rectangle"
+    },
+    {
+     "shot": "veil3-deep.png",
+     "score": 6,
+     "note": "Pool is good, but the fissure cubes are flooded uniformly orange, so the cracks barely stand out from their stone; flat orange slab at left"
+    },
+    {
+     "shot": "veil3-fissures.png",
+     "score": 6,
+     "note": "Whole rock field sits at one mid-orange value; fissures read as lines on bright blocks rather than light sources in dark stone"
+    },
+    {
+     "shot": "cryos2-shallow.png",
+     "score": 7,
+     "note": "Cyan pool blooms and lights the white ice rim; cold palette is clear"
+    },
+    {
+     "shot": "cryos2-deep.png",
+     "score": 6,
+     "note": "Pool is nice, but the fissure blocks are evenly lit cyan with little local falloff; flat cyan slab at left reads as a fill, not a fluid"
+    },
+    {
+     "shot": "maelis6-mid.png",
+     "score": 7,
+     "note": "Sea-green brine pool glows and lights the mist; good value structure against the dark rock"
+    },
+    {
+     "shot": "maelis6-deep.png",
+     "score": 6,
+     "note": "Green fissure cubes are uniformly bright with weak crack contrast; large flat green slab at left"
+    },
+    {
+     "shot": "veil3-core.png",
+     "score": 7,
+     "note": "Faceted ember floods the chamber warm with sparks and shards; the backdrop box edge is visible top-right and the walls are lit flatly"
+    },
+    {
+     "shot": "cryos2-core.png",
+     "score": 7,
+     "note": "Glacier heart casts a cyan wash with frost motes; reads as cold and quiet"
+    },
+    {
+     "shot": "maelis6-core.png",
+     "score": 6,
+     "note": "Lavender pearl clashes with the sea-green world hue; the chamber looks grey rather than nacre-lit"
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Fissure blocks are lit as whole uniform cubes, not as bright cracks lighting dark stone",
+     "shots": [
+      "veil3-deep.png",
+      "veil3-fissures.png",
+      "cryos2-deep.png",
+      "maelis6-deep.png"
+     ],
+     "why": "The reference 04 shows thin branching veins that are the brightest thing and pool light into dark rock. Here the host block is almost as bright as the crack, which flattens the value structure",
+     "suggested_direction": "Darken the fissure host stone and keep a radial glow centred on the crack, so the crack is the light source and its surroundings fall off"
+    },
+    {
+     "issue": "Fissure light stays inside its own cube",
+     "shots": [
+      "veil3-fissures.png",
+      "veil3-deep.png"
+     ],
+     "why": "The brief says fissures 'LIGHT THE STONE AROUND THEM'; neighbouring cubes get no spill",
+     "suggested_direction": "Add a soft additive glow that bleeds 0.5 to 1 tile into adjacent faces, or tint neighbour faces by fissure proximity"
+    },
+    {
+     "issue": "Large off-screen fluid bodies render as flat, unshaded colour slabs",
+     "shots": [
+      "veil3-deep.png",
+      "cryos2-deep.png",
+      "maelis6-deep.png",
+      "maelis6-core.png"
+     ],
+     "why": "The flat orange, cyan and green rectangles at the left edge read as missing geometry rather than lava or brine, with no surface line, depth gradient or bloom",
+     "suggested_direction": "Give pools a bright surface edge, a vertical falloff to dark, and bloom, as the main pool on screen already has"
+    },
+    {
+     "issue": "MAELIS core is off-hue",
+     "shots": [
+      "maelis6-core.png"
+     ],
+     "why": "A lavender pearl in a grey chamber breaks 'one hue per world'; reference 06 is sea-green and nacre",
+     "suggested_direction": "Keep the pearl nacreous but shift its light wash and floor spill toward sea-green with iridescent highlights"
+    },
+    {
+     "issue": "Core chambers are evenly lit, not dramatically lit",
+     "shots": [
+      "veil3-core.png",
+      "cryos2-core.png",
+      "maelis6-core.png"
+     ],
+     "why": "In reference 07 the light falls off from the core into dark edges and comes down as a shaft. Here the walls and backdrop are a uniform mid-tone and the backdrop rectangle shows",
+     "suggested_direction": "Use a stronger radial falloff from the core, darker chamber edges and a soft vertical light shaft, and hide the backdrop box edge"
+    }
+   ],
+   "protect": [
+    "Glowing pool surfaces with rising embers and motes that light the surrounding rim",
+    "Distinct per-world fluid hue in the pools (amber, cyan, sea-green)",
+    "Faceted low-poly core with floating shards and a floor glow line",
+    "Pod headlamp beam staying visible over the fluids"
+   ]
+  },
+  "B": {
+   "category": "fluids",
+   "score": 6.8,
+   "per_shot": [
+    {
+     "shot": "veil3-shallow.png",
+     "score": 7,
+     "note": "Same as A: hot glowing lava pool that lights the right wall"
+    },
+    {
+     "shot": "veil3-deep.png",
+     "score": 6.5,
+     "note": "Fissure cubes are darker with a glow centred on the crack, so the cracks now pop; flat orange slab at left remains"
+    },
+    {
+     "shot": "veil3-fissures.png",
+     "score": 7,
+     "note": "Dark red stone with glowing crack cores gives a clear value structure, much closer to the 04 reference"
+    },
+    {
+     "shot": "cryos2-shallow.png",
+     "score": 7,
+     "note": "Same as A: cyan pool blooms and lights the ice rim"
+    },
+    {
+     "shot": "cryos2-deep.png",
+     "score": 6.5,
+     "note": "Fissures glow locally against darker ice and read better; flat cyan slab at left remains"
+    },
+    {
+     "shot": "maelis6-mid.png",
+     "score": 7,
+     "note": "Same as A: sea-green brine glow with good contrast"
+    },
+    {
+     "shot": "maelis6-deep.png",
+     "score": 6.5,
+     "note": "Green fissures read as light sources in darker stone; flat green slab at left remains"
+    },
+    {
+     "shot": "veil3-core.png",
+     "score": 7,
+     "note": "Same flood of warm light; floor fissures are slightly punchier; backdrop box edge is still visible"
+    },
+    {
+     "shot": "cryos2-core.png",
+     "score": 7,
+     "note": "Cold heart wash; floor and wall cracks glow locally"
+    },
+    {
+     "shot": "maelis6-core.png",
+     "score": 6,
+     "note": "Same lavender-versus-sea-green hue clash"
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Fissure glow still does not spill onto neighbouring stone",
+     "shots": [
+      "veil3-fissures.png",
+      "veil3-deep.png",
+      "cryos2-deep.png"
+     ],
+     "why": "Cracks now light their own cube well, but adjacent cubes stay dark, so the reference's veins of light running through rock are not there yet",
+     "suggested_direction": "Bleed a soft additive halo across tile borders, or connect cracks across adjacent fissure tiles so they branch"
+    },
+    {
+     "issue": "Large off-screen fluid bodies render as flat, unshaded colour slabs",
+     "shots": [
+      "veil3-deep.png",
+      "cryos2-deep.png",
+      "maelis6-deep.png",
+      "maelis6-core.png"
+     ],
+     "why": "They read as missing geometry rather than glowing fluid",
+     "suggested_direction": "Add a surface highlight, depth falloff and bloom to match the on-screen pools"
+    },
+    {
+     "issue": "MAELIS core is off-hue",
+     "shots": [
+      "maelis6-core.png"
+     ],
+     "why": "Lavender and grey break the sea-green world identity",
+     "suggested_direction": "Shift the chamber wash and floor spill toward sea-green, and keep the iridescence as highlights"
+    },
+    {
+     "issue": "Core chambers lack falloff and drama",
+     "shots": [
+      "veil3-core.png",
+      "cryos2-core.png",
+      "maelis6-core.png"
+     ],
+     "why": "Lighting is even and the backdrop box is visible, so the chamber lacks the sacred glow-to-dark of reference 07",
+     "suggested_direction": "Use a radial falloff from the core, dark chamber edges and a soft light shaft"
+    }
+   ],
+   "protect": [
+    "Darker fissure host stone with a crack-centred radial glow (the improvement over A)",
+    "Glowing pools with embers and motes that light their rims",
+    "Per-world fluid hues in the pools",
+    "Faceted core with shards and floor glow"
+   ]
+  },
+  "preference": "B",
+  "why": "The frames are nearly identical except the fissure tiles: in B the host stone is darker and the glow is centred on the crack. That gives real light-in-the-dark contrast and makes the cracks read as light sources, closer to reference 04. Pools and cores are unchanged."
+ },
+ "characters": {
+  "A": {
+   "category": "characters",
+   "score": 6.0,
+   "per_shot": [
+    {
+     "shot": "pod-pilot-eva.png",
+     "score": 7,
+     "note": "Chunky white pod with a big glowing teal visor reads well. The pilot's suit is all white, with no orange trim at hands or boots."
+    },
+    {
+     "shot": "hud-play.png",
+     "score": 6,
+     "note": "The pod reads at play scale, but it is a tiny mostly dark silhouette and the visor is its only glow."
+    },
+    {
+     "shot": "creature-glimmerflies.png",
+     "score": 6,
+     "note": "Yellow-green motes cluster around the pod and lean on the lamp glow. There is no ribbon and almost no light spills onto the rock."
+    },
+    {
+     "shot": "creature-warden.png",
+     "score": 6,
+     "note": "The warden's glowing hex head and lit alcove are a strong silhouette, but the hot fissure field around it competes with it."
+    },
+    {
+     "shot": "creature-stillwalkers.png",
+     "score": 7,
+     "note": "The ice-cyan antlered stillwalker is eerie and readable and fits the world hue. Its glow barely lands on the floor."
+    },
+    {
+     "shot": "creature-shellbacks.png",
+     "score": 6,
+     "note": "The segmented cyan shellback has legible legs and segments, but it lights little of the tunnel around it."
+    },
+    {
+     "shot": "vault-vault-spawn.png",
+     "score": 6,
+     "note": "The small white pilot with a teal visor reads against the green door frame. No orange trim, and the figure is small and low-contrast against the stone."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Creature light does not land on the rock",
+     "shots": [
+      "creature-glimmerflies.png",
+      "creature-shellbacks.png",
+      "creature-stillwalkers.png"
+     ],
+     "why": "In the reference, creature light spills onto the stone. Here the creatures glow as isolated sprites.",
+     "suggested_direction": "Give each creature or swarm a soft colored point light or a fake floor/wall wash scaled to its glow."
+    },
+    {
+     "issue": "Glimmerflies read as sparks around the pod, not a ribbon",
+     "shots": [
+      "creature-glimmerflies.png"
+     ],
+     "why": "The reference is a long flowing ribbon of light through dark space. A tight cluster gets lost in the headlamp glare.",
+     "suggested_direction": "String the swarm into a longer trailing band away from the lamp cone, in a hue distinct from the lamp."
+    },
+    {
+     "issue": "Pilot is missing the orange trim",
+     "shots": [
+      "pod-pilot-eva.png",
+      "vault-vault-spawn.png"
+     ],
+     "why": "The brief names a white suit, teal visor and orange trim. An all-white pilot is generic and lower in contrast.",
+     "suggested_direction": "Add orange gloves, boots and collar accents."
+    },
+    {
+     "issue": "The pod at play scale is a dark blob with a visor",
+     "shots": [
+      "hud-play.png",
+      "creature-shellbacks.png"
+     ],
+     "why": "The white faceted body is barely lit, so the reference's chunky white pod read is lost.",
+     "suggested_direction": "Add a small self-lit rim or key light on the pod body so its white facets read in the dark."
+    }
+   ],
+   "protect": [
+    "the big glowing teal pod visor",
+    "the stillwalker's ice silhouette and world-hue match",
+    "the shellback's readable segmented form",
+    "the warden's glowing hex head silhouette"
+   ]
+  },
+  "B": {
+   "category": "characters",
+   "score": 6.3,
+   "per_shot": [
+    {
+     "shot": "pod-pilot-eva.png",
+     "score": 7,
+     "note": "Same pod. The pilot now has orange gloves and boots, which matches the reference."
+    },
+    {
+     "shot": "hud-play.png",
+     "score": 6,
+     "note": "Identical to A."
+    },
+    {
+     "shot": "creature-glimmerflies.png",
+     "score": 6,
+     "note": "Same cluster at the pod, plus a faint distant ribbon trail top right. The scene is hazier and redder overall and the dark is less true."
+    },
+    {
+     "shot": "creature-warden.png",
+     "score": 6,
+     "note": "Effectively identical to A."
+    },
+    {
+     "shot": "creature-stillwalkers.png",
+     "score": 7,
+     "note": "Effectively identical to A."
+    },
+    {
+     "shot": "creature-shellbacks.png",
+     "score": 6,
+     "note": "The shellbacks are now a glowing cyan shell cluster that washes the floor green (light lands), but they read less clearly as creatures."
+    },
+    {
+     "shot": "vault-vault-spawn.png",
+     "score": 6,
+     "note": "The pilot's orange trim adds a warm accent against the teal visor, though the figure is still small."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Glimmerfly ribbon is too faint, and the haze lifts the dark",
+     "shots": [
+      "creature-glimmerflies.png"
+     ],
+     "why": "The new trail is the right idea but is barely visible, and the red haze flattens the darkness the brief protects.",
+     "suggested_direction": "Make the ribbon brighter and longer with soft bloom. Pull the ambient haze back so it sits on true dark."
+    },
+    {
+     "issue": "Shellback form traded for glow",
+     "shots": [
+      "creature-shellbacks.png"
+     ],
+     "why": "The floor wash is good, but the creature now reads as a crystal clump rather than an animal.",
+     "suggested_direction": "Keep the floor light but restore the segmented body and leg silhouette."
+    },
+    {
+     "issue": "Most creatures still do not light their surroundings",
+     "shots": [
+      "creature-stillwalkers.png",
+      "creature-warden.png"
+     ],
+     "why": "The reference's key trait is creature light spilling onto rock.",
+     "suggested_direction": "Add local colored light or a wash per creature."
+    },
+    {
+     "issue": "The pod at play scale is a dark blob with a visor",
+     "shots": [
+      "hud-play.png"
+     ],
+     "why": "The white faceted body does not read in the dark.",
+     "suggested_direction": "Add a self-lit rim or key on the pod body."
+    }
+   ],
+   "protect": [
+    "the pilot's orange trim",
+    "the shellback's floor light spill",
+    "the glimmerfly ribbon trail concept",
+    "the teal pod visor glow",
+    "the stillwalker silhouette"
+   ]
+  },
+  "preference": "B",
+  "why": "B adds the pilot's orange trim from the reference, a hint of a glimmerfly ribbon and creature light that lands on the floor. The cost is a less readable shellback body and slightly flatter dark in the glimmerfly shot. Otherwise the two are near-identical."
+ },
+ "vaults": {
+  "A": {
+   "category": "vaults",
+   "score": 6.3,
+   "per_shot": [
+    {
+     "shot": "vault-vault-spawn",
+     "score": 6,
+     "note": "Footing, laser and gate read clearly; dark brown pillars separate from the backdrop, but the sconce pools are small and the wall is flat and evenly lit."
+    },
+    {
+     "shot": "vault-vault-room",
+     "score": 6,
+     "note": "Pistons, lasers and glass ledges read well; the masonry has few warm pools and the backdrop's value is close to the footing."
+    },
+    {
+     "shot": "vault-ember-spawn",
+     "score": 6,
+     "note": "Fang strip and ice bridges read clearly; the lower sconce glow is faint and the lit spawn ledge is the only warm accent."
+    },
+    {
+     "shot": "vault-ember-room",
+     "score": 7,
+     "note": "The best of A: hanging lamps pool on brick, fangs read against dark blocks, and the laser is crisp."
+    },
+    {
+     "shot": "vault-debt-spawn",
+     "score": 7,
+     "note": "Cyan up-chevrons and amber down-chevrons are instantly legible; the dark solid blocks hold footing well."
+    },
+    {
+     "shot": "vault-debt-room",
+     "score": 7,
+     "note": "The whole puzzle reads at a glance with zones, fangs and gate distinct; the stone stays cold and lit evenly."
+    },
+    {
+     "shot": "vault-return-spawn",
+     "score": 6,
+     "note": "Platforms and pillars read, but the room is a flat blue-grey wall with a single warm patch at the spawn."
+    },
+    {
+     "shot": "vault-return-room",
+     "score": 5,
+     "note": "Sparse and murky: the dark pillars sink into the dim backdrop and nothing warm lands on the masonry."
+    },
+    {
+     "shot": "vault-kindled-spawn",
+     "score": 6,
+     "note": "Moody dark with violet haze; the platform edges read, but the backdrop is near-black and the far right side is hard to parse."
+    },
+    {
+     "shot": "vault-kindled-room",
+     "score": 6,
+     "note": "Hazards and pistons are legible; the large black field and dim ledges make footing harder to judge at a distance."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Sconces cast small, weak pools; the masonry is mostly lit flat and evenly",
+     "shots": [
+      "vault-vault-spawn",
+      "vault-vault-room",
+      "vault-return-spawn",
+      "vault-return-room"
+     ],
+     "why": "The reference's core look is bronze sconces washing warm light across dressed stone; here the warm pools are tiny halos.",
+     "suggested_direction": "Make each sconce pool larger and warmer so it visibly tints nearby blocks and footing, and keep the unlit wall darker between pools."
+    },
+    {
+     "issue": "The backdrop and foreground stone are too close in value and hue",
+     "shots": [
+      "vault-return-room",
+      "vault-vault-room",
+      "vault-kindled-room"
+     ],
+     "why": "The brief wants a cooler, hazier backdrop so platforms separate; the blue-grey wall competes with the footing.",
+     "suggested_direction": "Push the backdrop cooler and hazier with lower contrast, and give the walkable tops a consistent lit rim."
+    },
+    {
+     "issue": "Kindled reads as near-black void",
+     "shots": [
+      "vault-kindled-spawn",
+      "vault-kindled-room"
+     ],
+     "why": "Black should be reserved for true void, but here the backdrop masonry has vanished and distant ledges are hard to read.",
+     "suggested_direction": "Bring back a faint violet-hazed brick backdrop and add a few warm sconce pools along the route."
+    }
+   ],
+   "protect": [
+    "Gravity zone tints and chevrons (cyan up, amber down) are instantly legible",
+    "Fang strips glow orange against black and read as hazards",
+    "Lasers, pistons and gate frames are crisp",
+    "Spawn door glow and the teal visor read well"
+   ]
+  },
+  "B": {
+   "category": "vaults",
+   "score": 6.6,
+   "per_shot": [
+    {
+     "shot": "vault-vault-spawn",
+     "score": 6,
+     "note": "The overhead lamp pool is larger; the pillars are now cool grey with lit faces, slightly less separated from the backdrop."
+    },
+    {
+     "shot": "vault-vault-room",
+     "score": 6,
+     "note": "The hanging-lamp pool is bigger and warmer; the pillars are lighter and faceted, and readability is unchanged."
+    },
+    {
+     "shot": "vault-ember-spawn",
+     "score": 7,
+     "note": "The lower sconce pool is much stronger and lights the wall; the block side faces catch light, which gives depth."
+    },
+    {
+     "shot": "vault-ember-room",
+     "score": 7,
+     "note": "Larger warm pools around every lamp give a clear sense of light landing; hazards read as well as in A."
+    },
+    {
+     "shot": "vault-debt-spawn",
+     "score": 7,
+     "note": "Chevrons are as legible as in A; lit pillar faces add a little form."
+    },
+    {
+     "shot": "vault-debt-room",
+     "score": 7,
+     "note": "Same strong readability as A, with slight lit-face modelling on the walls."
+    },
+    {
+     "shot": "vault-return-spawn",
+     "score": 6,
+     "note": "The pillars are now pale and faceted and stand out from the wall better, but the room is still cold and flat."
+    },
+    {
+     "shot": "vault-return-room",
+     "score": 6,
+     "note": "Lighter, edge-lit pillars separate clearly from the dark backdrop; still no warm sconce light on the stone."
+    },
+    {
+     "shot": "vault-kindled-spawn",
+     "score": 6,
+     "note": "The violet haze is more visible and adds depth; otherwise the same as A."
+    },
+    {
+     "shot": "vault-kindled-room",
+     "score": 6,
+     "note": "The lit glass ledge pops and the haze is a little richer; large areas are still near-black."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "The warm sconce pools are better but still the exception on cold masonry",
+     "shots": [
+      "vault-return-spawn",
+      "vault-return-room",
+      "vault-vault-spawn"
+     ],
+     "why": "The references are dominated by warm pools on stone; several rooms have no warm light on their masonry.",
+     "suggested_direction": "Add or strengthen sconces along each route so each room has a warm-to-cool rhythm."
+    },
+    {
+     "issue": "The lighter grey pillars can match the backdrop's value",
+     "shots": [
+      "vault-vault-spawn"
+     ],
+     "why": "Where the pillar's grey-blue meets the same-value wall, the solid edge softens.",
+     "suggested_direction": "Keep the lit faces, but make the backdrop cooler and hazier, or darken the pillar's shadow face for a clear silhouette."
+    },
+    {
+     "issue": "Kindled is still mostly void",
+     "shots": [
+      "vault-kindled-spawn",
+      "vault-kindled-room"
+     ],
+     "why": "Black is used for space rather than true void, so distant footing is hard to read.",
+     "suggested_direction": "Keep a faint hazed brick backdrop and add a few warm pools near the ledges."
+    }
+   ],
+   "protect": [
+    "The larger, warmer lamp pools on the masonry (ember rooms especially)",
+    "Lit and shadow faces on pillars and blocks that give them 3D form",
+    "Gravity zone tints and chevrons, fang strips, lasers and gates stay as legible as before",
+    "The violet haze in Kindled"
+   ]
+  },
+  "preference": "B",
+  "why": "B matches A's gameplay readability and makes light land better: larger sconce pools and edge-lit pillars that model the stone. The difference is small, and in one spot the lighter pillars sit close to the backdrop's value."
+ },
+ "ui": {
+  "A": {
+   "category": "ui",
+   "score": 6.8,
+   "per_shot": [
+    {
+     "shot": "title.png",
+     "score": 7,
+     "note": "Wide-tracked logotype, glow and amber DESCEND button read well; darker scrim under the text sells the descent mood, though the rock is mostly lost to near-black and the warm rise from below is faint."
+    },
+    {
+     "shot": "veil3-surface.png",
+     "score": 6,
+     "note": "Clean, unobtrusive HUD; the thin fuel/hull bars and small labels are legible over the bright dusk sky but feel generic next to the stylised title."
+    },
+    {
+     "shot": "hud-play.png",
+     "score": 7,
+     "note": "The HUD stays out of the dark and leaves the lamp beam as the hero; the cargo list with ore icons reads clearly and its corner placement suits the mood."
+    },
+    {
+     "shot": "shop-trade.png",
+     "score": 7,
+     "note": "Warm dark panel with amber corner brackets, clear hierarchy and a well-placed red debt line; the blurred world behind keeps the context; strong and on tone."
+    },
+    {
+     "shot": "ending-page.png",
+     "score": 7,
+     "note": "Quiet, sacred ending: soft glow behind OUT and good restraint; the italic body text is a little dim and small for its length."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "The in-play HUD bars are flat, generic progress bars that share none of the title or shop's bracket/glow language",
+     "shots": [
+      "veil3-surface.png",
+      "hud-play.png"
+     ],
+     "why": "The menus have a strong identity (amber brackets, tracked caps, warm glow); the gameplay HUD looks like a debug overlay next to them.",
+     "suggested_direction": "Give fuel/hull a faceted or bracketed frame, a slight emissive edge and tracked labels that match the shop panel. Keep it small."
+    },
+    {
+     "issue": "The title scrim crushes the rock under the logo to near-black, so the warm glow from below barely reads",
+     "shots": [
+      "title.png"
+     ],
+     "why": "Reference 01 is about warm light rising up a dark shaft. Here the bottom glow is weak and the middle is uniform black.",
+     "suggested_direction": "Grade the scrim so it is darkest just behind the text and lets a stronger amber gradient rise from the bottom edge."
+    },
+    {
+     "issue": "On the surface the top-left bars sit on a bright sky with only a thin backing",
+     "shots": [
+      "veil3-surface.png"
+     ],
+     "why": "The bar labels and numbers are small and low-contrast against the dusk gradient.",
+     "suggested_direction": "Add a subtle dark plate or a text shadow behind the bars on bright backgrounds."
+    },
+    {
+     "issue": "The ending body copy is dim italic at a small size",
+     "shots": [
+      "ending-page.png"
+     ],
+     "why": "Six lines of narrative in light-grey italic on near-black are tiring to read at 1280 wide.",
+     "suggested_direction": "Raise its contrast slightly or set it upright with a bit more size or leading. Keep the glow on the headline only."
+    }
+   ],
+   "protect": [
+    "The shop panel: warm dark glass, amber corner brackets, red debt line, blurred world behind",
+    "The HUD stays minimal and never lights the dark; the beam stays the hero",
+    "The tracked-caps logotype with a soft glow on title and ending",
+    "The cargo list with ore icons in the lower-right corner"
+   ]
+  },
+  "B": {
+   "category": "ui",
+   "score": 6.7,
+   "per_shot": [
+    {
+     "shot": "title.png",
+     "score": 6.5,
+     "note": "Same layout, but the lighter scrim shows the orange block grid behind the text, which competes with the tagline and buttons and weakens the dark-shaft mood. The rock is more readable as a world."
+    },
+    {
+     "shot": "veil3-surface.png",
+     "score": 6,
+     "note": "Same as A."
+    },
+    {
+     "shot": "hud-play.png",
+     "score": 7,
+     "note": "Effectively the same as A. The top-left corner is a touch greyer behind the bars, which is negligible."
+    },
+    {
+     "shot": "shop-trade.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ending-page.png",
+     "score": 7,
+     "note": "Same as A."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "The title scrim is too light: the block grid shows through behind the tagline, DESCEND and the advance pill",
+     "shots": [
+      "title.png"
+     ],
+     "why": "Busy mid-value texture behind small tracked text lowers legibility and flattens the dark-to-glow descent the reference sets up.",
+     "suggested_direction": "Darken a soft vignette behind the text column only and let the rock stay visible at the edges and bottom."
+    },
+    {
+     "issue": "The in-play HUD bars are flat and generic compared with the menu styling",
+     "shots": [
+      "veil3-surface.png",
+      "hud-play.png"
+     ],
+     "why": "There is no shared visual language with the bracketed shop and title.",
+     "suggested_direction": "Give the bars bracketed or faceted frames and tracked labels with a faint emissive edge."
+    },
+    {
+     "issue": "The surface bars have low contrast against the bright sky",
+     "shots": [
+      "veil3-surface.png"
+     ],
+     "why": "The small labels wash out on the dusk gradient.",
+     "suggested_direction": "Add a subtle backing plate or shadow."
+    },
+    {
+     "issue": "The ending body copy is dim small italic",
+     "shots": [
+      "ending-page.png"
+     ],
+     "why": "It is a long passage that is hard to read.",
+     "suggested_direction": "Add slightly more contrast or size and set it upright."
+    }
+   ],
+   "protect": [
+    "The shop panel styling and hierarchy",
+    "The minimal gameplay HUD that respects the dark",
+    "The logotype and its glow treatment",
+    "The visible ore and rock texture on the title (keep it, but push it out from behind the text)"
+   ]
+  },
+  "preference": "A",
+  "why": "Only the title differs in any meaningful way. A's darker scrim keeps the text crisp and the mood closer to the dark-shaft reference, while B's lighter grid clutters the text column. The other shots are effectively identical."
+ },
+ "minerals": {
+  "A": {
+   "category": "minerals",
+   "score": 6.6,
+   "per_shot": [
+    {
+     "shot": "ore-lineup.png",
+     "score": 6,
+     "note": "Most ores read at tile size by hue, but iron nearly disappears into the dark rock and silver, diamond and frostbloom all show as pale halos."
+    },
+    {
+     "shot": "ore-copper.png",
+     "score": 7,
+     "note": "Teal shell with orange cells reads as copper; the warm halo is a square box that stops at the tile edge."
+    },
+    {
+     "shot": "ore-copper-close.png",
+     "score": 7,
+     "note": "Good two-tone cratered nodule; the crust is pale mint rather than verdigris, and the orange cells sit on the surface instead of glowing from inside."
+    },
+    {
+     "shot": "ore-iron.png",
+     "score": 5,
+     "note": "Dark blocky prisms have little specular, so iron barely separates from the host rock at gameplay size."
+    },
+    {
+     "shot": "ore-iron-close.png",
+     "score": 6,
+     "note": "Right-angle gunmetal blocks with small glints match the brief; the shapes are crude L-blocks and the values are too close to the rock."
+    },
+    {
+     "shot": "ore-silver.png",
+     "score": 6,
+     "note": "The needle fan reads, but the grey square glow tile makes it look like frostbloom and diamond."
+    },
+    {
+     "shot": "ore-silver-close.png",
+     "score": 6,
+     "note": "Thin blades fanning from a pebble are on-brief; the blades are sparse and disconnected, and one tile is just floating needles."
+    },
+    {
+     "shot": "ore-gold.png",
+     "score": 7,
+     "note": "Warm yellow wound clearly differs from ember orange and copper."
+    },
+    {
+     "shot": "ore-gold-close.png",
+     "score": 7,
+     "note": "Rock with a golden interior reads; the gold reads as a yellow blob more than light leaking from cracks."
+    },
+    {
+     "shot": "ore-ruby.png",
+     "score": 8,
+     "note": "The only saturated pink-red, and instantly legible."
+    },
+    {
+     "shot": "ore-ruby-close.png",
+     "score": 8,
+     "note": "Chunky faceted crystals on a rock base with a strong pink glow match the concept well."
+    },
+    {
+     "shot": "ore-voidopal.png",
+     "score": 7,
+     "note": "Violet ovoid with an iridescent pink-blue glow reads."
+    },
+    {
+     "shot": "ore-voidopal-close.png",
+     "score": 8,
+     "note": "Faceted egg in a rainbow violet, close to the concept; the dark base is a tiny sliver."
+    },
+    {
+     "shot": "ore-diamond.png",
+     "score": 7,
+     "note": "Single clean pale gem reads clearly."
+    },
+    {
+     "shot": "ore-diamond-close.png",
+     "score": 7,
+     "note": "Crisp faceted pointed prism, colourless with a cool glow; more leaf-shaped than octahedral, and it lacks any sparkle or caustic accent."
+    },
+    {
+     "shot": "ore-embershard.png",
+     "score": 7,
+     "note": "Black shards on orange glow, clearly angrier and darker than gold."
+    },
+    {
+     "shot": "ore-embershard-close.png",
+     "score": 7,
+     "note": "Obsidian slabs with glowing seams and sparks are on-brief; the slabs float detached from the rock, and the large orange square halo competes with copper."
+    },
+    {
+     "shot": "ore-veinlight.png",
+     "score": 7,
+     "note": "Strong teal glow and an organic shape make it the obvious plant."
+    },
+    {
+     "shot": "ore-veinlight-close.png",
+     "score": 7,
+     "note": "Branching stalks with bulb tips read as fungus or coral; the glow is a solid teal square that floods the tile instead of lighting the base rock."
+    },
+    {
+     "shot": "ore-mimic.png",
+     "score": 7,
+     "note": "Same family as voidopal, with a red glow and orange cracks as the tell."
+    },
+    {
+     "shot": "ore-mimic-close.png",
+     "score": 7,
+     "note": "Split husk with iridescent facets and orange crack lines; the cracks read orange rather than red."
+    },
+    {
+     "shot": "ore-frostbloom.png",
+     "score": 7,
+     "note": "Lavender starburst reads as a radial frost flower against the blue world."
+    },
+    {
+     "shot": "ore-frostbloom-close.png",
+     "score": 7,
+     "note": "Many thin points with a soft centre glow, on-brief; it is closer to white than periwinkle."
+    },
+    {
+     "shot": "ore-rime-salt.png",
+     "score": 7,
+     "note": "Glowing blue cubes are clearly the CRYOS native and read distinct from frostbloom."
+    },
+    {
+     "shot": "ore-rime-salt-close.png",
+     "score": 7,
+     "note": "Translucent blue cubes with cyan glow; the frosted top and internal fractures are missing."
+    },
+    {
+     "shot": "ore-nacre.png",
+     "score": 5,
+     "note": "Pale spiky clusters with a lilac halo read as another crystal, too close to frostbloom and silver."
+    },
+    {
+     "shot": "ore-nacre-close.png",
+     "score": 5,
+     "note": "Faceted petal cluster with faint iridescence; it lacks the ribbed scalloped-shell silhouette that defines nacre."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Glow is a hard square tile tint rather than bloom that lands on the rock around the ore.",
+     "shots": [
+      "ore-veinlight-close.png",
+      "ore-embershard-close.png",
+      "ore-ruby-close.png",
+      "ore-copper.png",
+      "ore-silver.png"
+     ],
+     "why": "The art direction says emissives bloom softly and light lands on nearby surfaces; clipped squares read as UI highlight tiles and flatten the dark.",
+     "suggested_direction": "Make the halo a radial falloff that is not clipped to the tile, and add a small point light or vertex tint so the adjacent rock faces pick up the ore colour."
+    },
+    {
+     "issue": "Nacre has a crystal-cluster silhouette rather than a ribbed shell or fan.",
+     "shots": [
+      "ore-nacre.png",
+      "ore-nacre-close.png"
+     ],
+     "why": "With a pale halo and spiky points it collides with frostbloom, silver and diamond in the pale group.",
+     "suggested_direction": "Build a scalloped fan from 3\u20135 stacked ribbed arcs on a slate base, with a pearly pink-teal sheen and a weaker glow."
+    },
+    {
+     "issue": "Iron is too dark and low-contrast against the host rock.",
+     "shots": [
+      "ore-iron.png",
+      "ore-lineup.png"
+     ],
+     "why": "Iron has no glow, so it must read through gunmetal-blue colour and specular; in the lineup it nearly vanishes.",
+     "suggested_direction": "Lift the blue-grey albedo, add a bright rim or specular edge on the cube faces and a couple of blue glints; keep the shape blocky."
+    },
+    {
+     "issue": "Ores float in the tile with tiny or missing host-rock bases.",
+     "shots": [
+      "ore-embershard-close.png",
+      "ore-silver-close.png",
+      "ore-voidopal-close.png",
+      "ore-diamond-close.png"
+     ],
+     "why": "The references always show ore erupting from matte dark rock; without a base the ore looks pasted on rather than embedded.",
+     "suggested_direction": "Give each ore a consistent dark matte rock seat that the ore grows from, and let the glow pool at that base."
+    },
+    {
+     "issue": "Pale ores are separated only by shape, because they share a similar white or grey halo.",
+     "shots": [
+      "ore-silver.png",
+      "ore-diamond.png",
+      "ore-lineup.png"
+     ],
+     "why": "Silver, diamond and frostbloom all use similar pale glows, so at 40\u201360 px the shape alone carries identity.",
+     "suggested_direction": "Drop silver's glow to near zero and rely on specular, push diamond to cool ice-blue with a sparkle glint, and push frostbloom further toward lavender."
+    }
+   ],
+   "protect": [
+    "Ruby's saturated pink with chunky facets",
+    "Voidopal's iridescent faceted egg and the mimic's split husk with crack tell",
+    "Copper's teal-shell-with-orange-cells two-tone",
+    "Gold yellow vs embershard black-and-orange vs copper teal separation",
+    "Rime salt's blue cube shape and frostbloom's starburst",
+    "Veinlight being the only organic teal shape"
+   ]
+  },
+  "B": {
+   "category": "minerals",
+   "score": 6.6,
+   "per_shot": [
+    {
+     "shot": "ore-lineup.png",
+     "score": 6,
+     "note": "Same as A: iron nearly vanishes and the pale ores rely on halo plus shape."
+    },
+    {
+     "shot": "ore-copper.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-copper-close.png",
+     "score": 7,
+     "note": "Identical to A: mint shell with orange cells and a square halo."
+    },
+    {
+     "shot": "ore-iron.png",
+     "score": 5,
+     "note": "Same as A: low separation from rock."
+    },
+    {
+     "shot": "ore-iron-close.png",
+     "score": 6,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-silver.png",
+     "score": 6,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-silver-close.png",
+     "score": 6,
+     "note": "Same as A: sparse floating needles."
+    },
+    {
+     "shot": "ore-gold.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-gold-close.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-ruby.png",
+     "score": 8,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-ruby-close.png",
+     "score": 8,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-voidopal.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-voidopal-close.png",
+     "score": 8,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-diamond.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-diamond-close.png",
+     "score": 7,
+     "note": "Same as A, with only minor rotation differences."
+    },
+    {
+     "shot": "ore-embershard.png",
+     "score": 7,
+     "note": "Same as A, with marginally more visible sparks."
+    },
+    {
+     "shot": "ore-embershard-close.png",
+     "score": 7,
+     "note": "Same as A; small spark and pose variation only."
+    },
+    {
+     "shot": "ore-veinlight.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-veinlight-close.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-mimic.png",
+     "score": 7,
+     "note": "Same as A; husk orientation differs slightly."
+    },
+    {
+     "shot": "ore-mimic-close.png",
+     "score": 7,
+     "note": "Slightly more of the husk shows over the facets with more crack lines; equivalent overall."
+    },
+    {
+     "shot": "ore-frostbloom.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-frostbloom-close.png",
+     "score": 7,
+     "note": "Identical to A."
+    },
+    {
+     "shot": "ore-rime-salt.png",
+     "score": 7,
+     "note": "Same as A."
+    },
+    {
+     "shot": "ore-rime-salt-close.png",
+     "score": 7,
+     "note": "Identical to A."
+    },
+    {
+     "shot": "ore-nacre.png",
+     "score": 5,
+     "note": "Same as A: reads as a crystal cluster."
+    },
+    {
+     "shot": "ore-nacre-close.png",
+     "score": 5,
+     "note": "Identical to A."
+    }
+   ],
+   "top_issues": [
+    {
+     "issue": "Glow is a hard square tile tint rather than bloom that lands on the rock around the ore.",
+     "shots": [
+      "ore-veinlight-close.png",
+      "ore-embershard-close.png",
+      "ore-ruby-close.png",
+      "ore-copper.png",
+      "ore-silver.png"
+     ],
+     "why": "Emissives should bloom softly and light their surroundings; clipped squares read as UI tiles.",
+     "suggested_direction": "Use a radial halo that is not clipped to the tile, plus a local light or tint on neighbouring rock faces."
+    },
+    {
+     "issue": "Nacre has a crystal-cluster silhouette rather than a ribbed shell or fan.",
+     "shots": [
+      "ore-nacre.png",
+      "ore-nacre-close.png"
+     ],
+     "why": "It collides with frostbloom, silver and diamond in the pale group.",
+     "suggested_direction": "Use a scalloped ribbed fan on slate with a pearly sheen and a weaker glow."
+    },
+    {
+     "issue": "Iron is too dark and low-contrast against the host rock.",
+     "shots": [
+      "ore-iron.png",
+      "ore-lineup.png"
+     ],
+     "why": "With no glow, iron must read through colour and specular.",
+     "suggested_direction": "Lift the gunmetal-blue albedo, add crisp specular edges and blue glints."
+    },
+    {
+     "issue": "Ores float in the tile with tiny or missing host-rock bases.",
+     "shots": [
+      "ore-embershard-close.png",
+      "ore-silver-close.png",
+      "ore-voidopal-close.png",
+      "ore-diamond-close.png"
+     ],
+     "why": "The references always erupt from matte dark rock.",
+     "suggested_direction": "Give every ore a consistent dark rock seat, with the glow pooling at its base."
+    },
+    {
+     "issue": "Pale ores are separated only by shape, because they share a similar white or grey halo.",
+     "shots": [
+      "ore-silver.png",
+      "ore-diamond.png",
+      "ore-lineup.png"
+     ],
+     "why": "At gameplay size the identical pale halos blur identity.",
+     "suggested_direction": "Give silver no glow and specular only, diamond an ice-blue tint with sparkle, and frostbloom a stronger lavender."
+    }
+   ],
+   "protect": [
+    "Ruby's saturated pink with chunky facets",
+    "Voidopal's iridescent egg and the mimic's crack tell",
+    "Copper's two-tone cratered shell",
+    "Warm-ore separation: gold yellow, embershard black and orange, copper teal",
+    "Rime salt cube and frostbloom starburst",
+    "Veinlight as the only organic teal glow"
+   ]
+  },
+  "preference": "same",
+  "why": "Every shot is visually identical between A and B apart from tiny pose and spark variation on the mimic and embershard, which changes no reading at gameplay size."
+ }
+}

@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 6.0,
+  "candidate": 6.4,
+  "delta": 0.4,
+  "preferred": "candidate",
+  "why": "B's per-block variation, the removal of the smear texture and the world-tinted backdrop haze give clearly better cubic rock and depth. Its ambient lift in the dense fissure and deep shots partly flattens the dark, so the gain is modest."
+ },
+ "lighting": {
+  "best": 6.0,
+  "candidate": 6.5,
+  "delta": 0.5,
+  "preferred": "candidate",
+  "why": "B adds world-tinted haze/backdrops and core chambers that actually flood with light, which hits the depth and light-lands goals. It loses some ground on title/surface checkerboard noise and slightly flatter dark in the Veil fissures."
+ },
+ "identity": {
+  "best": 6.4,
+  "candidate": 7.0,
+  "delta": 0.6,
+  "preferred": "candidate",
+  "why": "A's tinted backdrop haze and the world-coloured fill in its core chambers make every frame read as its world. B's near-black backdrops and the neutral or warm beam on the walls weaken the CRYOS and MAELIS hue, especially at mid depth and in the cores."
+ },
+ "fluids": {
+  "best": 6.0,
+  "candidate": 6.4,
+  "delta": 0.4,
+  "preferred": "candidate",
+  "why": "B's darker cavities help the pools, but the core chambers lose their flood of light and the new rock smear muddies the fissures. A better meets 'light lands' for this category overall."
+ },
+ "characters": {
+  "best": 5.8,
+  "candidate": 6.4,
+  "delta": 0.6,
+  "preferred": "candidate",
+  "why": "B's creatures cast their own coloured light onto the pod and stone: the green glimmerflies and the stillwalker beside the pod. Its pod is whiter and closer to the reference; the other shots are near-identical."
+ },
+ "vaults": {
+  "best": 5.9,
+  "candidate": 6.1,
+  "delta": 0.2,
+  "preferred": "candidate",
+  "why": "The builds are nearly identical. A's sconces spread broader, warmer amber washes across the masonry (most visible in the Ember room), which is closer to the warm pools in 08-vault. B's pools are tighter, whiter halos."
+ },
+ "ui": {
+  "best": 6.8,
+  "candidate": 6.8,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "The UI and HUD elements are pixel-identical across A and B. Only the world tiles behind them differ, and B's more visible grid makes text backdrops marginally busier, which is too small to change the UI score."
+ },
+ "minerals": {
+  "best": 7.0,
+  "candidate": 7.0,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "The ore meshes, colours and halos are effectively identical in both builds. Only the host-rock surface differs, and that neither helps nor hurts ore readability enough to separate them."
+ }
+}

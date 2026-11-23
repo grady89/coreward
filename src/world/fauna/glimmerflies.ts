@@ -1,14 +1,15 @@
 import * as THREE from 'three';
+import { hdrBasic } from '../../fx/post';
 import { Terrain } from '../terrain';
 import { ACTIVE } from '../worlds';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, air, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC } from './types';
+import { Creature, ThreatCtx, ThreatLevel, air, spillTexture, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2 } from './types';
 
 // GLIMMERFLIES — VEIL-3's swarm tier. Keyed on LIGHT.
 //
-// Not a cloud of dots: a murmuration. Each fly is a sliver of glass that only
-// shows itself when it turns edge-on to your lamp, so a resting swarm reads as
-// stray sparks in the dark. Lit, the ring collapses inward, then unfolds into
+// Not a cloud of dots: a murmuration. Each fly is a soft mote of light that
+// only flares when it catches your lamp, so a resting swarm reads as stray
+// sparks in the dark. Lit, the ring collapses inward, then unfolds into
 // a ribbon that pours toward the lamp. Go dark and they lose you within two
 // seconds — but they do not go home. They hang where they lost you, dim,
 // and wait for the light to come back.
@@ -32,6 +33,36 @@ interface Fly {
   glint: number;      // seconds of wing-flash left
   stunT: number;      // seconds of lance-daze left — flung, dim, harmless
   swarm: number;
+  /** render-only: three points easing after the fly, each a beat behind the
+   *  last — the ribbon it draws through the air. Never read by the flock. */
+  trail: Float32Array;
+}
+
+/** afterimages drawn behind each fly, and how much of the fly each keeps */
+const TRAIL = 3;
+const TRAIL_SIZE = [0.78, 0.6, 0.44];
+const TRAIL_GLOW = [0.5, 0.3, 0.16];
+/** furthest a fly's drawn mote may sit from its true (contact) position, tiles */
+const RIB_MAX = 0.6;
+
+let moteTex: THREE.CanvasTexture | null = null;
+/** a glass mote: a hot pinpoint core inside a wide, dim halo of its own light */
+function moteTexture(): THREE.CanvasTexture {
+  if (moteTex) return moteTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.1, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.2, 'rgba(255,255,255,0.32)');
+  grad.addColorStop(0.32, 'rgba(255,255,255,0.12)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.045)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  moteTex = new THREE.CanvasTexture(cv);
+  return moteTex;
 }
 
 interface Swarm {
@@ -43,6 +74,11 @@ interface Swarm {
   lash: number;       // the collapse-and-burst on first alert
   dazedT: number;     // lanced: the swarm cannot re-notice anything for a beat
   woke: boolean;      // the alert toast/stinger fires once per swarm, not per re-notice
+  /** render-only 0..1: how far the hunting swarm is drawn strung out as a
+   *  ribbon back along its approach, instead of knotted on its target */
+  rib: number;
+  /** render-only: the ribbon's lie — unit vector from the target back toward the swarm */
+  rux: number; ruy: number;
 }
 
 export class Glimmerflies implements Creature {
@@ -52,16 +88,20 @@ export class Glimmerflies implements Creature {
   readonly swarms: Swarm[] = [];
   private mesh: THREE.InstancedMesh;
   private glow: THREE.PointLight;
+  /** the hunting swarm's light on the rock: one soft additive quad, no extra light */
+  private wash: THREE.Mesh;
+  private washMat: THREE.MeshBasicMaterial;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField) {
-    // a sliver: long, thin, nearly flat — a wing seen from the side
-    const geo = new THREE.OctahedronGeometry(0.16, 0);
-    geo.scale(1, 0.38, 0.12);
+    // a mote: a soft round glow facing the camera, drawn out a little along
+    // its flight so a pouring swarm reads as a ribbon of light
+    const geo = new THREE.PlaneGeometry(0.85, 0.85);
     const mat = new THREE.MeshBasicMaterial({
-      toneMapped: false, transparent: true, opacity: 0.95,
+      map: moteTexture(), toneMapped: false, transparent: true, opacity: 0.95,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    this.mesh = new THREE.InstancedMesh(geo, mat, MAX_FLIES);
+    hdrBasic(mat, 1.3);
+    this.mesh = new THREE.InstancedMesh(geo, mat, MAX_FLIES * (1 + TRAIL));
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
@@ -69,18 +109,33 @@ export class Glimmerflies implements Creature {
     scene.add(this.mesh);
     this.glow = new THREE.PointLight(0xffe08a, 0, 9, 1.8);
     scene.add(this.glow);
+    this.washMat = new THREE.MeshBasicMaterial({
+      map: spillTexture(), fog: false, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
+    // proud of every block face (they stand out to ~0.62), so the spill
+    // lands on rock as well as air
+    this.wash = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.washMat);
+    this.wash.position.z = 0.7;
+    this.wash.visible = false;
+    scene.add(this.wash);
     for (let i = 0; i < MAX_SWARMS; i++) {
-      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, dazedT: 0, woke: false });
+      this.swarms.push({ alive: false, ax: 0, ay: 0, alerted: false, darkFor: 0, life: 0, lash: 0, dazedT: 0, woke: false, rib: 0, rux: 1, ruy: 0 });
     }
   }
 
-  get count(): number { return this.mesh.count; }
+  /** flies on screen this frame (not instances: each also draws its trail) */
+  private shown = 0;
+  get count(): number { return this.shown; }
 
   reset(): void {
     this.flies.length = 0;
     for (const s of this.swarms) s.alive = false;
     this.mesh.count = 0;
+    this.shown = 0;
     this.glow.intensity = 0;
+    this.washMat.opacity = 0;
+    this.wash.visible = false;
     this.menace = 0;
   }
 
@@ -103,9 +158,11 @@ export class Glimmerflies implements Creature {
       for (let i = 0; i < want && this.flies.length < MAX_FLIES; i++) {
         const a = Math.random() * Math.PI * 2;
         const r = 1 + Math.random() * 1.2;
+        const fx = s.ax + Math.cos(a) * r, fy = s.ay + Math.sin(a) * r;
         this.flies.push({
-          x: s.ax + Math.cos(a) * r, y: s.ay + Math.sin(a) * r,
+          x: fx, y: fy,
           vx: 0, vy: 0, phase: Math.random() * Math.PI * 2, glint: 0, stunT: 0, swarm: slot,
+          trail: new Float32Array([fx, fy, fx, fy, fx, fy]),
         });
       }
       return;
@@ -178,6 +235,7 @@ export class Glimmerflies implements Creature {
     for (const f of this.flies) {
       if (f.swarm !== slot) continue;
       f.x += s.ax - ox; f.y += s.ay - oy;
+      for (let k = 0; k < TRAIL; k++) { f.trail[k * 2] = f.x; f.trail[k * 2 + 1] = f.y; }
     }
   }
 
@@ -227,10 +285,37 @@ export class Glimmerflies implements Creature {
       if (s.alerted) { anyAlert = true; closest = Math.min(closest, dist); }
     }
 
+    // the ribbon (render only): a hunting swarm is DRAWN strung out from its
+    // target back toward where it came from, in a slow sway, so the eye
+    // reads a stream of living lights pouring at the lamp. The flock itself
+    // — positions, contact, damage — is untouched; each mote stays within
+    // RIB_MAX of its fly, and the fainter afterimages carry the length.
+    for (const s of this.swarms) {
+      if (!s.alive) continue;
+      const want = s.alerted && s.lash <= 0.5 ? 1 : 0;
+      s.rib += (want - s.rib) * Math.min(1, dt * 1.6);
+      if (s.alerted) {
+        const flare = this.flares.brightest(s.ax, s.ay, FLARE_PULL);
+        const tx = flare ? flare.x : podX, ty = flare ? flare.y : podY;
+        let ux = s.ax - tx, uy = s.ay - ty;
+        const ul = Math.hypot(ux, uy);
+        if (ul > 0.5) {
+          ux /= ul; uy /= ul;
+          // ease the lie so a moving target swings the ribbon, never snaps it
+          const k = Math.min(1, dt * 2);
+          s.rux += (ux - s.rux) * k; s.ruy += (uy - s.ruy) * k;
+          const rl = Math.hypot(s.rux, s.ruy) || 1;
+          s.rux /= rl; s.ruy /= rl;
+        }
+      }
+    }
+    const rank = [0, 0, 0, 0];
+    let wx = 0, wy = 0, wn = 0;
+
     // the flock: seek + separation + alignment. Cohesion comes free from the
     // shared target; the ribbon comes from separation fighting it.
     const dmgMul = level === 'reduced' ? 0.5 : 1;
-    let n = 0;
+    let n = 0, shown = 0;
     const flies = this.flies;
     for (let i = 0; i < flies.length; i++) {
       const f = flies[i];
@@ -298,36 +383,90 @@ export class Glimmerflies implements Creature {
         ctx.drain(0.5 * dmgMul * dt);
       }
 
-      // the sliver flies along its velocity; a resting fly barely shows
-      tmpP.set(f.x, f.y, 0.25);
+      // where the mote is DRAWN: the fly, pushed back along the ribbon by its
+      // rank in the swarm, swaying across it — the leaders stay on target
+      let rx = f.x, ry = f.y;
+      if (s.rib > 0.01 && f.stunT <= 0) {
+        const r = rank[f.swarm]++;
+        const along = (r + 0.4) * 0.3 * s.rib;
+        const sway = Math.sin(ctx.time * 1.4 - r * 0.6) * (0.12 + along * 0.14) + along * along * 0.05;
+        let ox = s.rux * along - s.ruy * sway, oy = s.ruy * along + s.rux * sway;
+        // the mote never strays far from the fly: contact is where the light
+        // is. The ribbon's length comes from the fainter afterimages.
+        const ol = Math.hypot(ox, oy);
+        if (ol > RIB_MAX) { ox *= RIB_MAX / ol; oy *= RIB_MAX / ol; }
+        rx += ox; ry += oy;
+      }
+
+      if (s.alerted) { wx += rx; wy += ry; wn++; }
+
+      // the mote stretches along its velocity; a resting fly barely shows
+      tmpP.set(rx, ry, 0.25);
       tmpE.set(0, 0, Math.atan2(f.vy, f.vx));
       tmpQ.setFromEuler(tmpE);
-      const flap = 0.85 + Math.abs(Math.sin(f.phase * 9)) * 0.35;
-      tmpS.set(1, flap, 1);
+      const flap = 0.85 + Math.abs(Math.sin(f.phase * 9)) * 0.3;
+      const stretch = 1 + Math.min(0.7, Math.hypot(f.vx, f.vy) * 0.12);
+      tmpS.set(stretch * flap, flap / Math.sqrt(stretch), 1);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.mesh.setMatrixAt(n, tmpM);
-      const bright = f.stunT > 0 ? 0.14 : s.alerted ? 1.25 : (f.glint > 0 ? 1.1 : 0.32);
+      const bright = f.stunT > 0 ? 0.14 : s.alerted ? 0.85 : (f.glint > 0 ? 1.0 : 0.32);
       tmpC.setHex(s.alerted ? ACTIVE.swarm.hunting : ACTIVE.swarm.color).multiplyScalar(bright);
       this.mesh.setColorAt(n, tmpC);
-      n++;
+      n++; shown++;
+
+      // the ribbon: afterimages easing along the path just flown, so a
+      // pouring swarm draws streams through the air instead of a knot of
+      // dots on the hull. Only a moving fly leaves one.
+      const ek = Math.min(1, dt * 5);
+      let lx = rx, ly = ry;
+      const sp = Math.hypot(f.vx, f.vy);
+      const tk = Math.min(1, Math.max(0, (sp - 0.6) / 2.4));
+      for (let k = 0; k < TRAIL; k++) {
+        const tx = f.trail[k * 2] += (lx - f.trail[k * 2]) * ek;
+        const ty = f.trail[k * 2 + 1] += (ly - f.trail[k * 2 + 1]) * ek;
+        lx = tx; ly = ty;
+        if (tk <= 0.02) continue;
+        const sc = TRAIL_SIZE[k] * flap;
+        tmpP.set(tx, ty, 0.24 - k * 0.01);
+        tmpS.set(sc, sc, 1);
+        tmpM.compose(tmpP, tmpQ, tmpS);
+        this.mesh.setMatrixAt(n, tmpM);
+        this.mesh.setColorAt(n, tmpC2.copy(tmpC).multiplyScalar(TRAIL_GLOW[k] * tk));
+        n++;
+      }
     }
     this.mesh.count = n;
+    this.shown = shown;
     if (n > 0) {
       this.mesh.instanceMatrix.needsUpdate = true;
       if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     }
 
-    if (anyAlert && n > 0) {
-      let cx = 0, cy = 0, c = 0;
+    let washTo = 0;
+    if (anyAlert && shown > 0) {
+      let cx = 0, cy = 0, c = 0, spread = 0;
       for (const f of this.flies) if (this.swarms[f.swarm]?.alerted) { cx += f.x; cy += f.y; c++; }
       if (c > 0) {
-        this.glow.position.set(cx / c, cy / c, 0.4);
+        cx /= c; cy /= c;
+        for (const f of this.flies) if (this.swarms[f.swarm]?.alerted) spread += Math.hypot(f.x - cx, f.y - cy);
+        // the light sits on the ribbon as drawn, so the stone under the
+        // stream is what brightens
+        if (wn > 0) { cx = wx / wn; cy = wy / wn; }
+        this.glow.position.set(cx, cy, 0.4);
         this.glow.intensity = 7;
         this.glow.color.setHex(ACTIVE.swarm.hunting);
+        // the wash follows the swarm and widens as it unfolds
+        const r = 7.5 + Math.min(3.5, (spread / c) * 2.2);
+        this.wash.position.x = cx; this.wash.position.y = cy;
+        this.wash.scale.set(r, r, 1);
+        this.washMat.color.setHex(ACTIVE.swarm.hunting);
+        washTo = 0.55;
       }
     } else {
       this.glow.intensity = 0;
     }
+    this.washMat.opacity += (washTo - this.washMat.opacity) * Math.min(1, dt * 4);
+    this.wash.visible = this.washMat.opacity > 0.005;
     const target = anyAlert ? Math.max(0, 1 - closest / NOTICE_RANGE) : 0;
     this.menace += (target - this.menace) * Math.min(1, dt * 3);
   }
