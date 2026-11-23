@@ -1,0 +1,57 @@
+{
+  "A": {
+    "category": "creatures-b",
+    "score": 6.2,
+    "per_shot": [
+      {"shot": "creature-brinewyrm.png", "score": 5.5, "note": "Glowing cyan pool lands well on its rim, but the wyrm is coiled into a closed ring that reads as a bracelet or necklace, not an animal; no readable head or mouth."},
+      {"shot": "creature-brinewyrm-close.png", "score": 5.5, "note": "Faceted pearl body with violet fin is pretty and on-palette, but the loop silhouette and blank octahedron head give no dangerous end."},
+      {"shot": "creature-frostbloom.png", "score": 5, "note": "Cyan halo tile bleeds nicely into the stone below, but the tiny white sprig is near-invisible at play size and reads as a plant icon, not a beautiful ore."},
+      {"shot": "creature-frostbloom-close.png", "score": 5, "note": "A thin sprig floating in a soft radial glow; too slight to read as veinlight ore or as a trap, and it does not match the cracked-vein ore look."},
+      {"shot": "creature-polyps.png", "score": 6.5, "note": "Spiky sea-green domes glow and catch light on the floor tops; a bright swimmer overhead competes for focus in a polyp shot."},
+      {"shot": "creature-polyps-close.png", "score": 7, "note": "Polyps light the tops of the tiles they sit on and the rock below; spikes and slit mouths read, MAELIS green is correct."},
+      {"shot": "creature-riptide.png", "score": 7.5, "note": "Volumetric swirl and glowing eye read clearly as a current with an eye; the swimmer is in frame so the riptide-carries-creatures idea reads."},
+      {"shot": "creature-riptide-close.png", "score": 7.5, "note": "Strong eye, streaking particles show flow direction, swimmer visible at left; sea-green haze fills the space without flattening the dark."}
+    ],
+    "top_issues": [
+      {"issue": "Brinewyrm silhouette is a closed ring with no head or mouth", "shots": ["creature-brinewyrm.png", "creature-brinewyrm-close.png"], "why": "A threat must read as a threat at play size; a looped torus reads as jewellery, and the octahedron head has no eye, jaw or fangs.", "suggested_direction": "Keep it in an open S or breaching arc and give the head a clear faceted jaw and a glowing eye so the dangerous end points at the player."},
+      {"issue": "Frostbloom is too slight to read as an ore", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "The brief wants a beautiful glowing veinlight ore with a subtle tell; a lone white sprig disappears in the gameplay frame.", "suggested_direction": "Build it from the veinlight tile language (cyan glow plus branching white veins) and add one small tell, such as a petal-like split or a slow pulse."},
+      {"issue": "Swimmer intrudes on the polyp shot", "shots": ["creature-polyps.png", "creature-polyps-close.png"], "why": "A bright cyan centipede at the top of the frame is the brightest object and pulls the eye from the polyps.", "suggested_direction": "Keep swimmers in riptide habitats or dim them when they are away from the current."},
+      {"issue": "Brinewyrm emissive is weak relative to its pool", "shots": ["creature-brinewyrm.png"], "why": "The pool, not the creature, is the light source; the wyrm is lit by the water rather than lighting it.", "suggested_direction": "Give the wyrm a cyan core or vent glow that brightens the water around it as it moves."}
+    ],
+    "protect": [
+      "Riptide's volumetric swirl, streak particles and glowing faceted eye",
+      "Polyp glow landing on the tops of adjacent floor tiles",
+      "Brinewyrm's glowing cyan brine pool and pearl/violet faceted body palette",
+      "Frostbloom's cyan halo bleeding into the tile below"
+    ]
+  },
+  "B": {
+    "category": "creatures-b",
+    "score": 6.5,
+    "per_shot": [
+      {"shot": "creature-brinewyrm.png", "score": 6.5, "note": "Stretched swimming pose reads as an eel/wyrm with a trailing tail; brighter, more saturated pool glows and washes its rim."},
+      {"shot": "creature-brinewyrm-close.png", "score": 6.5, "note": "Clear long-body silhouette and lovely brine light, but the head is still a featureless octahedron with no eye or jaw."},
+      {"shot": "creature-frostbloom.png", "score": 6, "note": "Starburst crystal reads at play size and looks like a valuable ore; the violet tile has little halo, so its glow barely lands on the stone."},
+      {"shot": "creature-frostbloom-close.png", "score": 6.5, "note": "Faceted ice star is beautiful and low-poly; the spikes hint at a bite, but it looks like its own ore type rather than veinlight with a subtle tell."},
+      {"shot": "creature-polyps.png", "score": 6.5, "note": "Polyps glow with a large soft green aura in the air; the floor tops catch less light than in A, but the shot is uncluttered."},
+      {"shot": "creature-polyps-close.png", "score": 6.5, "note": "Green light sinks into the rock column beneath; the tops of the neighbouring tiles stay dark, so the light lands less on the surface."},
+      {"shot": "creature-riptide.png", "score": 7, "note": "Same strong swirl and eye; the swimmer is cropped at the frame edge, so the carried-creatures idea reads less."},
+      {"shot": "creature-riptide-close.png", "score": 7, "note": "Eye and current read clearly and are well centred; no swimmer in frame."}
+    ],
+    "top_issues": [
+      {"issue": "Brinewyrm head has no dangerous end", "shots": ["creature-brinewyrm.png", "creature-brinewyrm-close.png"], "why": "The body now reads as a wyrm, but the head is a blank octahedron, so the threat does not point anywhere.", "suggested_direction": "Add a faceted jaw wedge and a glowing eye on the leading end; let the head be the brightest part."},
+      {"issue": "Frostbloom glow does not land", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "The violet tile reads as a flat panel; the glow does not spill onto the neighbouring rock the way ore and creatures should.", "suggested_direction": "Keep the starburst but sit it in a cyan bloom that washes the adjacent tiles, with violet only as the accent on the tell."},
+      {"issue": "Frostbloom does not read as veinlight ore", "shots": ["creature-frostbloom.png", "creature-frostbloom-close.png"], "why": "The brief calls for a trap disguised as veinlight ore; a distinct star crystal reads as a different item rather than a disguise.", "suggested_direction": "Start from the veinlight branching-vein tile and let the star facets be the subtle tell."},
+      {"issue": "Riptide swimmer cropped out", "shots": ["creature-riptide.png", "creature-riptide-close.png"], "why": "The riptide's identity is a current that carries other creatures; without a swimmer in frame it reads only as a vortex with an eye.", "suggested_direction": "Keep at least one swimmer orbiting inside the swirl near the eye."}
+    ],
+    "protect": [
+      "Brinewyrm's open, stretched swimming silhouette",
+      "The saturated, bright brine pool that lights its rim",
+      "Frostbloom's faceted starburst, which reads at play size",
+      "Riptide's volumetric swirl, streak particles and glowing eye",
+      "The polyps' soft sea-green aura in the dark"
+    ]
+  },
+  "preference": "B",
+  "why": "B fixes the two weakest creatures: the brinewyrm finally reads as a swimming wyrm and the frostbloom reads at play size. A keeps a slight edge on polyp light landing on the floor and on showing the riptide swimmer."
+}
