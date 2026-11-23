@@ -141,8 +141,8 @@ function lighten(c: number, f: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
-/** color of the cube body for a tile at (x, y) with per-cell variance (×spread) */
-export function rockColor(t: number, x: number, y: number, spread = 1): number {
+/** color of the cube body for a tile at (x, y) with per-cell variance */
+export function rockColor(t: number, x: number, y: number): number {
   let base: number;
   if (t === T.GAS) {
     // subtle greenish tell on the surrounding rock color
@@ -163,7 +163,7 @@ export function rockColor(t: number, x: number, y: number, spread = 1): number {
   } else {
     base = bandColor(t);
   }
-  const v = 1 + (cellHash(x, y) - 0.5) * 0.28 * spread; // ±14% variance
+  const v = 0.86 + cellHash(x, y) * 0.28; // ±14% variance
   return lighten(base, v);
 }
 

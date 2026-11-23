@@ -5,8 +5,7 @@ import { Terrain } from './terrain';
 import { T, def, rockColor, cellHash } from './tiles';
 import { ACTIVE, worldById } from './worlds';
 import {
-  GEM_GEOS, CRACK_CLASS_0, CRACK_LONE, CRACK_STUB, CRACK_STRAIGHT, CRACK_CORNER, CRACK_TEE,
-  CRACK_JOINTS, gemClassOf, gemScaleOf, motionOf,
+  GEM_GEOS, CRACK_CLASS_0, CRACK_VARIANTS, gemClassOf, gemScaleOf, motionOf,
   gemMaterial, gemTintOf, haloOf,
 } from './gemshapes';
 
@@ -70,20 +69,10 @@ const rockMat = new THREE.MeshStandardMaterial({
 // The blocks read chunky from shadow, not light: a thin dark crevice at
 // every face border and a slight darkening toward the edges. Off (uStone 0)
 // in a spent world, which keeps its old flat look.
-// Deep bands keep their unlit stone near black: the strata floor and the
-// band's ambient fill both fall away below row ~250, so the dark is the
-// lamp's and the fissures' to break.
-// Heat fissures light their stone as one vein: each fissure tile throws a
-// round glow (uVein, its world's hue) about a tile wide, drawn on its own
-// face and on the faces around it, so a run of seams reads as one lit crack
-// across block joints instead of a square decal per tile.
 const strataUniforms = {
   uStrata: { value: [0, 1, 2, 3, 4].map(() => new THREE.Color(0)) },
   uStone: { value: 1 },
-  uVein: { value: new THREE.Color(0) },
 };
-const VEIN_GAIN = 0.24;
-
 /**
  * Where the headlamp lands: the pod casts LAMP_RAYS rays across the beam's
  * wedge through the tile grid each frame and stores how far each one gets
@@ -108,10 +97,6 @@ function syncStrata(): void {
   const g = spentWorld() ? undefined : ACTIVE.strataGlow;
   strataUniforms.uStrata.value.forEach((c, i) => c.setHex(g ? g[i] : 0));
   strataUniforms.uStone.value = spentWorld() ? 0 : 1;
-  // every world's seams at one brightness: a pale cyan must not out-glow ember
-  const v = strataUniforms.uVein.value.setHex(spentWorld() ? 0 : fissureHue());
-  const lum = 0.2126 * v.r + 0.7152 * v.g + 0.0722 * v.b;
-  v.multiplyScalar(VEIN_GAIN * Math.min(1, 0.26 / Math.max(lum, 1e-3)));
 }
 /** the haze carries the world's fluid hue at the wash's even brightness */
 let hazeFor: unknown = null;
@@ -128,7 +113,6 @@ rockMat.onBeforeCompile = shader => {
   shader.uniforms.uFluidAmp = fluidUniforms.uFluidAmp;
   shader.uniforms.uStrata = strataUniforms.uStrata;
   shader.uniforms.uStone = strataUniforms.uStone;
-  shader.uniforms.uVein = strataUniforms.uVein;
   shader.uniforms.uLampO = lampUniforms.uLampO;
   shader.uniforms.uLampHit = lampUniforms.uLampHit;
   shader.uniforms.uLampTile = lampUniforms.uLampTile;
@@ -139,7 +123,6 @@ attribute vec3 glow;
 attribute vec3 wash;
 attribute vec2 washDir;
 attribute float matte;
-attribute vec2 vein;
 varying vec3 vGlow;
 varying vec3 vWash;
 varying vec2 vWashDir;
@@ -147,10 +130,9 @@ varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec2 vWXY;
 varying vec2 vCell;
-varying float vMatte;
-varying vec2 vVein;`)
+varying float vMatte;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-	vGlow = glow; vWash = wash; vWashDir = washDir; vMatte = matte; vVein = vein;
+	vGlow = glow; vWash = wash; vWashDir = washDir; vMatte = matte;
 	vBox = position; vBoxN = normal;
 	vWXY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xy;
 	// block centres sit at k + 0.5, so floor() never straddles an integer
@@ -168,9 +150,7 @@ varying vec3 vBoxN;
 varying vec2 vWXY;
 varying vec2 vCell;
 varying float vMatte;
-varying vec2 vVein;
 uniform vec3 uStrata[5];
-uniform vec3 uVein;
 uniform vec4 uLampO;
 uniform float uLampHit[${LAMP_RAYS}];
 uniform vec2 uLampTile[${LAMP_RAYS}];
@@ -185,14 +165,11 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 	float stShade = mix(0.4, 1.0, smoothstep(0.012, 0.045, stD))
 		* mix(0.84, 1.0, smoothstep(0.045, 0.3, stD));
 	stShade = mix(1.0, stShade, uStone);
-	float stRow = -vWXY.y;
-	// 0 above row ~250, 1 in the deep bands
-	float stDeep = smoothstep(250.0, 330.0, stRow) * uStone;
 	vec3 stAlbedo = diffuseColor.rgb;
 	diffuseColor.rgb *= stShade;`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	{
-		float row = stRow;
+		float row = -vWXY.y;
 		vec3 acc = uStrata[0];
 		acc = mix(acc, uStrata[1], smoothstep(10.0, 22.0, row));
 		acc = mix(acc, uStrata[2], smoothstep(50.0, 70.0, row));
@@ -204,9 +181,7 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		float blk = floor(stHash(vCell) * 4.0) / 3.0;
 		float bed = stHash(vec2(41.0, floor(vCell.y / 3.0)));
 		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
-		// the deep bands sit on a much lower floor with a calmer spread
-		float lift = mix(0.14, 0.04, stDeep) + mix(0.1, 0.05, stDeep) * blk + mix(0.1, 0.04, stDeep) * bed;
-		totalEmissiveRadiance += acc * face * stShade * lift;
+		totalEmissiveRadiance += acc * face * stShade * (0.14 + 0.12 * blk + 0.1 * bed);
 	}
 	float haloFace = vBox.z > 0.49 ? 1.0 : 0.4;
 	totalEmissiveRadiance += vGlow * haloFace * (1.0 - smoothstep(0.04, 0.62, length(vBox.xy)));
@@ -218,24 +193,6 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 	float wf = vBoxN.z > 0.5 ? 0.6 + 0.8 * dot(vBox.xy, wd) : 0.15 + max(0.0, dot(vBoxN.xy, wd));
 	float wp = 1.0 + uFluidAmp * 0.07 * sin(uFluidTime * 1.3);
 	totalEmissiveRadiance += vWash * wf * wp * min(1.0, 0.5 + 3.0 * dot(stAlbedo, vec3(0.333)));
-	// vein light: bit i of vVein marks a fissure at terrain offset
-	// (i % 3 - 1, i / 3 - 1), this tile being bit 4; each throws a round glow
-	// about a tile wide, so neighbouring seams merge along the vein and the
-	// glow crosses the block joint (the crevice only half-darkens it)
-	{
-		int vm = int(vVein.x + 0.5);
-		if (vm > 0) {
-			float vg = 0.0;
-			for (int i = 0; i < 9; i++) {
-				if ((vm & (1 << i)) == 0) continue;
-				vec2 off = vec2(float(i % 3) - 1.0, 1.0 - float(i / 3));
-				vec2 vd = vBox.xy - off;
-				vg += exp(-3.6 * dot(vd, vd));
-			}
-			float vf = vBoxN.z > 0.5 ? 1.0 : 0.45;
-			totalEmissiveRadiance += uVein * vf * wp * mix(1.0, stShade, 0.5) * (1.0 - exp(-1.5 * vg));
-		}
-	}
 	// the beam lands: stone inside the lamp's wedge, up to the first face it
 	// meets along each ray, catches the lamp; the axis' hit is a hotspot
 	if (uLampCol.r + uLampCol.g + uLampCol.b > 0.0) {
@@ -275,25 +232,15 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 	// stone at and around an ore stays matte and dark so the ore's halo is
 	// the brightest thing there: lamp light on it is soft-capped and greyed
 	// (a top face is footing, so it keeps more of its light)
-	// (in daylight near the surface the cap is gentler, so the stone round a
-	// shallow ore doesn't drop out as a dark 3×3 square in the sun)
 	if (vMatte > 0.0) {
-		float mSun = 1.0 - smoothstep(12.0, 26.0, stRow);
-		float mm = vMatte * (vBoxN.y > 0.5 ? 0.4 : 1.0) * (1.0 - 0.6 * mSun);
+		float mm = vMatte * (vBoxN.y > 0.5 ? 0.4 : 1.0);
 		float ml = dot(reflectedLight.directDiffuse, vec3(0.2126, 0.7152, 0.0722));
-		float mk = 1.0 / (1.0 + mm * ml / mix(0.05, 0.15, mSun));
+		float mk = 1.0 / (1.0 + mm * ml / 0.05);
 		reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, vec3(ml), 0.5 * mm) * mk;
 		reflectedLight.directSpecular *= 1.0 - 0.8 * mm;
-	}
-	// deep unlit stone: the band's ambient fill mostly falls away, and the
-	// pod's light lands on the cavity's skin and dies into the rock mass
-	// (vVein.y: 1 beside open space, less the further in the block sits)
-	reflectedLight.indirectDiffuse *= 1.0 - 0.5 * stDeep;
-	float stBury = mix(1.0, vVein.y, stDeep);
-	reflectedLight.directDiffuse *= stBury;
-	reflectedLight.directSpecular *= stBury;`);
+	}`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v6';
+rockMat.customProgramCacheKey = () => 'rock-glow-v7';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -432,58 +379,17 @@ const SPILL: Spill = {
   wf: new Float32Array(CAP),
 };
 
-/** joints a shape has after a quarter turn anticlockwise: left→down→right→up→left */
-const turnJoints = (m: number): number =>
-  (m & 1 ? 8 : 0) | (m & 8 ? 2 : 0) | (m & 2 ? 4 : 0) | (m & 4 ? 1 : 0);
-
 /**
- * Which seam shape a fissure takes and how it is turned. Its joints are the
- * fissures beside it (left, right, up, down): the shape whose strokes end on
- * exactly those edge midpoints, turned in quarter steps, so its strokes meet
- * the neighbours' at the shared point and a run of seams reads as one vein.
- * A lone seam tapers out inside its tile and takes any eighth turn; four
- * neighbours take a tee.
+ * A seam's trunk runs along its local x from edge to edge, so turning it
+ * square to a fissure next door joins the two into one vein; a lone seam
+ * takes any eighth turn.
  */
-function seamPose(terrain: Terrain, x: number, y: number): { cls: number; roll: number; joined: boolean } {
+function seamRoll(terrain: Terrain, x: number, y: number): number {
   const at = (dx: number, dy: number) => isFissure(terrain.get(x + dx, y + dy), x + dx, y + dy);
-  const m = (at(-1, 0) ? 1 : 0) | (at(1, 0) ? 2 : 0) | (at(0, -1) ? 4 : 0) | (at(0, 1) ? 8 : 0);
-  const spin = cellHash(x, y, 29);
-  if (m === 0) return { cls: CRACK_LONE, roll: Math.floor(spin * 8) * (Math.PI / 4), joined: false };
-  const n = (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
-  const cls = n === 1 ? CRACK_STUB
-    : n === 2 ? (m === 3 || m === 12 ? CRACK_STRAIGHT : CRACK_CORNER) : CRACK_TEE;
-  // every quarter turn that lands the shape's joints on this tile's
-  // (a subset, for the tee standing in for a cross); pick one of them
-  const fits: number[] = [];
-  for (let k = 0, j = CRACK_JOINTS[cls]; k < 4; k++, j = turnJoints(j)) if ((j & m) === j) fits.push(k);
-  return { cls, roll: fits[Math.floor(spin * fits.length)] * (Math.PI / 2), joined: true };
-}
-
-/** lamp light kept by a deep block 1, 2, 3+ tiles from open space (index 0 unused) */
-const BURY = [1, 1, 0.5, 0.25];
-/** tiles from (x, y) to the nearest air or pool, square rings, capped at 3 */
-function openDist(terrain: Terrain, x: number, y: number): number {
-  for (let r = 1; r < 3; r++) {
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        const t = terrain.get(x + dx, y + dy);
-        if (t === T.AIR || t === T.LAVA) return r;
-      }
-    }
-  }
-  return 3;
-}
-
-/** bit (dy + 1) * 3 + (dx + 1) set for each fissure in the 3×3 round (x, y) */
-function veinMask(terrain: Terrain, x: number, y: number): number {
-  let m = 0;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (isFissure(terrain.get(x + dx, y + dy), x + dx, y + dy)) m |= 1 << ((dy + 1) * 3 + dx + 1);
-    }
-  }
-  return m;
+  const flip = cellHash(x, y, 29) > 0.5 ? Math.PI : 0;
+  if (at(-1, 0) || at(1, 0)) return flip;
+  if (at(0, -1) || at(0, 1)) return Math.PI / 2 + flip;
+  return Math.floor(cellHash(x, y, 29) * 8) * (Math.PI / 4);
 }
 
 const glows = (t: number) => def(t).ore || t === T.MIMIC || t === T.FROSTBLOOM;
@@ -512,7 +418,6 @@ class Chunk {
   wash: THREE.InstancedBufferAttribute;              // per rock instance: light from nearby pools/fissures
   washDir: THREE.InstancedBufferAttribute;           // ...and which way it comes from
   matte: THREE.InstancedBufferAttribute;             // per rock instance: 1 at/next to an ore (lit value capped)
-  vein: THREE.InstancedBufferAttribute;              // per rock instance: fissures in its 3×3 round (bits), lamp reach by depth
   fl: THREE.InstancedBufferAttribute;                // per fluid instance: corner depths, surface, world x
   hz: THREE.InstancedBufferAttribute;                // per haze sheet: run ends, surface y
   gems: THREE.InstancedMesh[];
@@ -544,8 +449,6 @@ class Chunk {
     rockGeo.setAttribute('washDir', this.washDir);
     this.matte = new THREE.InstancedBufferAttribute(new Float32Array(CAP), 1);
     rockGeo.setAttribute('matte', this.matte);
-    this.vein = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
-    rockGeo.setAttribute('vein', this.vein);
     this.rock = new THREE.InstancedMesh(rockGeo, rockMat, CAP);
     const fluidGeo = lavaGeo.clone();
     this.fl = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
@@ -646,15 +549,12 @@ class Chunk {
         const exposed =
           terrain.get(x - 1, y) === T.AIR || terrain.get(x + 1, y) === T.AIR ||
           terrain.get(x, y - 1) === T.AIR || terrain.get(x, y + 1) === T.AIR;
-        // the topsoil's per-block spread is half the deep stone's, so the
-        // ground under the sky reads as cubes, not a light/dark checkerboard
-        tmpC.setHex(rockColor(t, x, y, 0.5 + 0.5 * smooth01((y - 14) / 16)));
+        tmpC.setHex(rockColor(t, x, y));
         if (exposed) tmpC.multiplyScalar(1.22);
         this.rock.setColorAt(nr, tmpC);
         this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
         this.washDir.setXY(nr, lit.dx[local], lit.dy[local]);
         this.matte.setX(nr, spent ? 0 : nearOre(terrain, x, y));
-        this.vein.setXY(nr, spent ? 0 : veinMask(terrain, x, y), spent ? 1 : BURY[openDist(terrain, x, y)]);
         this.rockIds.set(local, nr);
         nr++;
 
@@ -664,7 +564,6 @@ class Chunk {
         let gemScale = 1;
         let cls = 0;
         let harvestable = true;
-        let seam: ReturnType<typeof seamPose> | null = null;
         if (d.ore || t === T.MIMIC || t === T.FROSTBLOOM) {
           cls = gemClassOf(t);
           gemColor = gemTintOf(t);
@@ -672,15 +571,18 @@ class Chunk {
           this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
           gemScale = gemScaleOf(t) * (0.85 + cellHash(x, y, 17) * 0.3);
         } else if (isFissure(t, x, y)) {
-          // heat fissure in the rock face: a seam with branches, lying
-          // flush — never mistakable for a pickup. Its strokes run on into
-          // the fissures beside it (seamPose); its stone's light is the
-          // vein glow (veinMask), not a per-tile halo.
-          seam = seamPose(terrain, x, y);
-          cls = CRACK_CLASS_0 + seam.cls;
+          // heat fissure in the rock face: a seam running edge to edge with
+          // branches, lying flush — never mistakable for a pickup. It turns
+          // to meet a fissure next door so neighbouring seams join up.
+          cls = CRACK_CLASS_0 + Math.floor(cellHash(x, y, 23) * CRACK_VARIANTS) % CRACK_VARIANTS;
           gemColor = fissureHue();
           gemScale = 1;
           harvestable = false;
+          if (!spent) {
+            // the seam's own stone burns behind it, out to the block's edges
+            tmpC.setHex(gemColor).multiplyScalar(0.3);
+            this.glow.setXYZ(nr - 1, tmpC.r, tmpC.g, tmpC.b);
+          }
         }
         if (gemColor && ng[cls] < GEM_CAP) {
           const i = ng[cls]++;
@@ -690,11 +592,10 @@ class Chunk {
             s: gemScale,
             phase: h * Math.PI * 2,
             spin: harvestable ? mo.spin * (0.75 + cellHash(x, y, 5) * 0.5) : 0,
-            // a joined seam holds still so its joints stay closed
-            pulse: harvestable ? mo.pulse : seam?.joined ? 0 : 0.04,
+            pulse: harvestable ? mo.pulse : 0.04,
             wobble: harvestable ? mo.wobble : 0,
             tilt: (cellHash(x, y, 7) - 0.5) * 0.9,
-            roll: seam ? seam.roll
+            roll: !harvestable ? seamRoll(terrain, x, y)
               : mo.sway ? (cellHash(x, y, 29) - 0.5) * 0.8 : cellHash(x, y, 29) * Math.PI * 2,
             // a fissure rides the face of its own cube, which the jitter
             // above pushes forward (h > 0.82 puts it at z ≥ 0.529, tilted
@@ -726,7 +627,6 @@ class Chunk {
     this.wash.needsUpdate = true;
     this.washDir.needsUpdate = true;
     this.matte.needsUpdate = true;
-    this.vein.needsUpdate = true;
     this.gems.forEach((m, c) => {
       m.count = ng[c];
       m.instanceMatrix.needsUpdate = true;
@@ -754,9 +654,9 @@ class Chunk {
         if (!pool && !isFissure(st, sx, sy)) continue;
         // a surface cell lights upward much further than sideways or down
         const surf = pool && terrain.get(sx, sy - 1) === T.AIR;
-        // a seam's front-face light is the vein glow; this soft wash is what
-        // reaches the block sides round it, gone a tile and a half off
-        const reach = pool ? 2.6 : 1.6, inner = pool ? 0.6 : 0.4;
+        // a seam lights its stone: the blocks touching it take its hue hard,
+        // gone two tiles off so the rock between clusters stays dark
+        const reach = pool ? 2.6 : 1.9, inner = pool ? 0.6 : 0.4;
         const k = pool ? 1 : 0.6;
         const acc = pool ? o.w : o.wf;
         for (let ty = Math.max(y0, sy - R); ty <= Math.min(y0 + CHUNK - 1, sy + 3); ty++) {
@@ -788,7 +688,7 @@ class Chunk {
     for (let i = 0; i < CAP; i++) {
       // saturating: a whole basin next door is brighter than one cell, not 8×
       const s = o.w[i] > 0 ? 0.3 * (1 - Math.exp(-o.w[i])) : 0;
-      const f = o.wf[i] > 0 ? 0.18 * (1 - Math.exp(-o.wf[i])) : 0;
+      const f = o.wf[i] > 0 ? 0.32 * (1 - Math.exp(-o.wf[i])) : 0;
       o.r[i] = pr * s + fc.r * f; o.g[i] = pg * s + fc.g * f; o.b[i] = pb * s + fc.b * f;
       o.w[i] += o.wf[i];
     }
