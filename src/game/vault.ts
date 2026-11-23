@@ -666,26 +666,35 @@ export class VaultRun {
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.6, metalness: 0.2, flatShading: true, map: dressedFace(),
     });
+    // Every masonry fragment pays for this, and the vault clock under
+    // software GL is what the route suites time — so everything constant
+    // over a face (the top's glow, the side face's wash, the front's flat
+    // lift, the lip's colour) is worked out per vertex, and the fragment
+    // keeps only what varies across a face: the lip's band and the rims'.
     mat.onBeforeCompile = (sh): void => {
+      // two packed varyings: A = (lip band coordinate, distance in from a
+      // rimmed left / right edge — 9 where that edge has none — rim
+      // strength), B = (front lip, warmth, top glow, flat cool lift)
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec4 aLip;\nvarying float vLip;\nvarying float vTop;\nvarying float vWarm;\nvarying float vLipY;\nvarying float vLipX;\nvarying float vSideL;\nvarying float vSideR;\nvarying float vSideF;')
+        .replace('#include <common>', '#include <common>\nattribute vec4 aLip;\nvarying vec4 vLipA;\nvarying vec4 vLipB;')
         .replace('#include <begin_vertex>',
-          '#include <begin_vertex>\nvLip = aLip.x * step(0.5, normal.z);\nvTop = aLip.x * step(0.5, normal.y);\nvWarm = aLip.y;\nvLipY = uv.y;\n'
-          + 'vLipX = uv.x;\nvSideL = aLip.z * step(0.5, normal.z);\nvSideR = aLip.w * step(0.5, normal.z);\n'
-          + 'vSideF = aLip.z * step(0.5, -normal.x) + aLip.w * step(0.5, normal.x);');
+          '#include <begin_vertex>\n'
+          + 'float fr = step(0.5, normal.z);\n'
+          + 'float rs = max(aLip.z, aLip.w) * fr;\n'
+          + 'vLipA = vec4(uv.y, aLip.z > 0.0 ? uv.x : 9.0, aLip.w > 0.0 ? 1.0 - uv.x : 9.0, rs);\n'
+          + 'vLipB = vec4(aLip.x * fr, aLip.y, aLip.x * step(0.5, normal.y) * 0.42,\n'
+          + '  rs * 0.07 + (aLip.z * step(0.5, -normal.x) + aLip.w * step(0.5, normal.x)) * 0.3);');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying float vLip;\nvarying float vTop;\nvarying float vWarm;\nvarying float vLipY;\nvarying float vLipX;\nvarying float vSideL;\nvarying float vSideR;\nvarying float vSideF;')
+        .replace('#include <common>', '#include <common>\nvarying vec4 vLipA;\nvarying vec4 vLipB;')
         .replace('#include <emissivemap_fragment>',
           '#include <emissivemap_fragment>\n'
-          + 'vec3 lipCol = mix(vec3(0.22, 0.26, 0.33), vec3(0.38, 0.29, 0.18), vWarm);\n'
-          + 'totalEmissiveRadiance += lipCol * (vLip\n'
-          + '  * (smoothstep(0.80, 0.96, vLipY) * 0.6 + smoothstep(0.95, 0.985, vLipY) * 1.3) + vTop * 0.42);\n'
+          + 'vec3 lipCol = mix(vec3(0.22, 0.26, 0.33), vec3(0.38, 0.29, 0.18), vLipB.y);\n'
+          + 'float band = smoothstep(0.80, 0.96, vLipA.x) * 0.6 + smoothstep(0.95, 0.985, vLipA.x) * 1.3;\n'
           // the side rims stay cool whatever is near: they are the stone's
           // outline against the wall; the top lip is where the light lands
-          + 'float rimL = (1.0 - smoothstep(0.0, 0.16, vLipX)) * 0.22 + (1.0 - smoothstep(0.012, 0.045, vLipX)) * 0.85;\n'
-          + 'float rimR = (1.0 - smoothstep(0.0, 0.16, 1.0 - vLipX)) * 0.22 + (1.0 - smoothstep(0.012, 0.045, 1.0 - vLipX)) * 0.85;\n'
-          + 'totalEmissiveRadiance += vec3(0.13, 0.16, 0.23) * (vSideL * rimL + vSideR * rimR\n'
-          + '  + max(vSideL, vSideR) * 0.07 + vSideF * 0.3);');
+          + 'vec2 rim = clamp(1.0 - vLipA.yz * 6.25, 0.0, 1.0) * 0.22 + clamp((0.045 - vLipA.yz) * 30.0, 0.0, 1.0) * 0.85;\n'
+          + 'totalEmissiveRadiance += lipCol * (vLipB.x * band + vLipB.z)\n'
+          + '  + vec3(0.13, 0.16, 0.23) * (vLipA.w * (rim.x + rim.y) + vLipB.w);');
     };
     // the fixtures that warm an edge: sconces, braziers, censers, the entry
     const warmFrom: [number, number][] = [
@@ -1970,7 +1979,11 @@ export class VaultRun {
     // wall and only as large as the light reaches. A pool lights the baked
     // stone under it (the wall's colour less the void, back over its tint),
     // and adds the difference that makes to the displayed colour.
-    const quad = new THREE.PlaneGeometry(2, 2);
+    // a 16-gon just inside the unit circle rather than a 2×2 square: the
+    // pool's falloff is (1 − d²)², under 4% past r = 0.9, so the corners
+    // were pure overdraw — a third of the fill, which is what lets the
+    // pools spread wider at no cost to the vault clock
+    const quad = new THREE.CircleGeometry(0.92, 16);
     const geo = new THREE.InstancedBufferGeometry();
     geo.index = quad.index;
     geo.setAttribute('position', quad.getAttribute('position'));
