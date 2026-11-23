@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Terrain } from '../terrain';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, clamp01 } from './types';
+import { Creature, ThreatCtx, ThreatLevel, clamp01, Spill } from './types';
 import { StillwalkerBody, WALKER_HEIGHT } from './stillwalker-body';
 
 // STILLWALKERS — CRYOS-2's stalker tier. Keyed on the ABSENCE of light.
@@ -45,6 +45,8 @@ interface Walker {
   sinkT: number;
   inRock: boolean;
   body: StillwalkerBody;
+  /** frost-light on the rock around it — only while your light holds it */
+  spill: Spill;
 }
 
 export class Stillwalkers implements Creature {
@@ -60,13 +62,13 @@ export class Stillwalkers implements Creature {
       scene.add(body.group);
       this.walkers.push({
         alive: false, x: 0, y: 0, dirX: 1, gait: 0, lit: 0, walk: 1, freezeT: 0, seen: false, life: 0, sinkT: 0, inRock: true,
-        body,
+        body, spill: new Spill(scene, 0x9ad0ff),
       });
     }
   }
 
   reset(): void {
-    for (const w of this.walkers) { w.alive = false; w.body.group.visible = false; w.body.gaze.intensity = 0; }
+    for (const w of this.walkers) { w.alive = false; w.body.group.visible = false; w.body.gaze.intensity = 0; w.spill.off(); }
     this.dread = 0;
   }
 
@@ -99,6 +101,7 @@ export class Stillwalkers implements Creature {
 
   private die(w: Walker): void {
     w.alive = false;
+    w.spill.off();
     w.body.group.visible = false;
     w.body.gaze.intensity = 0;
   }
@@ -222,6 +225,10 @@ export class Stillwalkers implements Creature {
       // the gaze and the fractures: open only while it hunts, brighter the closer it gets
       const hunt = frozen || w.sinkT > 0 ? 0 : clamp01(1 - dist / 16);
       w.body.set({ gait: w.gait, walk: w.walk, lit: w.lit, hunt, flash, flat: inRock, time });
+      // seen only in light: the frost it catches throws a cold sheen on the
+      // stone around it while it is held, and nothing at all while it walks
+      const sink = w.sinkT > 0 ? clamp01(w.sinkT / 1.2) : 1;
+      w.spill.set(w.x, w.y, 4.4 * sink, 5.4 * sink, (Math.max(0, w.lit - 0.15) * 0.9 + flash * 0.4) * sink, flash > 0 ? 0xdcefff : 0x9ad0ff);
       // frost off the footfalls when it walks in the open
       if (!inRock && w.sinkT <= 0) {
         for (let s = 0; s < 2; s++) {

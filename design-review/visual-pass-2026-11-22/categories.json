@@ -1,0 +1,18 @@
+{
+ "rock": {"name": "Rock and terrain materials", "refs": ["03-veil-mid.png","04-veil-deep.png","05-cryos.png","06-maelis.png"],
+   "shots": ["veil3-surface","veil3-shallow","veil3-mid","veil3-deep","veil3-fissures","cryos2-shallow","cryos2-mid","cryos2-deep","maelis6-shallow","maelis6-mid","maelis6-deep"]},
+ "lighting": {"name": "Lighting and atmosphere: the lamp, bloom, light landing on surfaces, depth and haze", "refs": ["01-title.png","03-veil-mid.png","04-veil-deep.png","07-core.png","08-vault.png"],
+   "shots": ["title","veil3-surface","veil3-shallow","veil3-mid","veil3-deep","veil3-fissures","cryos2-mid","maelis6-mid","veil3-core","cryos2-core","maelis6-core","pod-pilot-eva"]},
+ "identity": {"name": "Per-world identity at every depth", "refs": ["03-veil-mid.png","04-veil-deep.png","05-cryos.png","06-maelis.png","07-core.png"],
+   "shots": ["veil3-shallow","veil3-mid","veil3-deep","cryos2-shallow","cryos2-mid","cryos2-deep","maelis6-shallow","maelis6-mid","maelis6-deep","veil3-core","cryos2-core","maelis6-core"]},
+ "fluids": {"name": "Fluids, fissures and core chambers", "refs": ["04-veil-deep.png","05-cryos.png","06-maelis.png","07-core.png"],
+   "shots": ["veil3-shallow","veil3-deep","veil3-fissures","cryos2-shallow","cryos2-deep","maelis6-mid","maelis6-deep","veil3-core","cryos2-core","maelis6-core"]},
+ "characters": {"name": "Characters and creatures: pod, pilot, fauna", "refs": ["09-pod-pilot.png","10-creatures.png"],
+   "shots": ["pod-pilot-eva","hud-play","creature-glimmerflies","creature-warden","creature-stillwalkers","creature-shellbacks","vault-vault-spawn"]},
+ "vaults": {"name": "Vaults: mood AND gameplay readability (footing, hazards, gates, gravity-zone tints and chevrons)", "refs": ["08-vault.png","08-vault-b.png"],
+   "shots": ["vault-vault-spawn","vault-vault-room","vault-ember-spawn","vault-ember-room","vault-debt-spawn","vault-debt-room","vault-return-spawn","vault-return-room","vault-kindled-spawn","vault-kindled-room"]},
+ "ui": {"name": "UI and HUD, against the brief's tone", "refs": ["01-title.png","02-surface.png"],
+   "shots": ["title","veil3-surface","hud-play","shop-trade","ending-page"]},
+ "minerals": {"name": "Minerals and ore: shape language, colour identity, glow, distinctness from each other and from the rock at gameplay size", "refs": ["03-veil-mid.png"],
+   "shots": ["ore-lineup","ore-copper","ore-copper-close","ore-iron","ore-iron-close","ore-silver","ore-silver-close","ore-gold","ore-gold-close","ore-ruby","ore-ruby-close","ore-voidopal","ore-voidopal-close","ore-diamond","ore-diamond-close","ore-embershard","ore-embershard-close","ore-veinlight","ore-veinlight-close","ore-mimic","ore-mimic-close","ore-frostbloom","ore-frostbloom-close","ore-rime-salt","ore-rime-salt-close","ore-nacre","ore-nacre-close"]}
+}

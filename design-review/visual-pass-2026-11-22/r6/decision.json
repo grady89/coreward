@@ -1,0 +1,18 @@
+{
+ "round": 6,
+ "best_before": "c5bced5 (r6/best, GPU; creature frames re-shot with the damage-flash wait and the d4a0831 sandbox staging)",
+ "candidate": "29c1897 (K1 f05374e + sandbox d4a0831, K2 35731ea, K3 a6370ee + 8c4c599, K4 d1570f5, K5 29c1897)",
+ "deltas": {"rock": -0.6, "lighting": 0.4, "identity": 0.2, "fluids": -0.4, "characters": 0.3, "vaults": 0.3, "ui": 0.1, "minerals": 0.0},
+ "fixes": {
+  "K1 characters": {"commit": "f05374e (+ d4a0831 dev sandbox)", "target": "characters", "delta": 0.3, "decision": "keep"},
+  "K2 fissure heat": {"commit": "35731ea", "target": "fluids/lighting/rock", "delta": "fluids -0.4, rock -0.6", "decision": "revert (9f29607)"},
+  "K3 vaults": {"commit": "a6370ee + 8c4c599", "target": "vaults", "delta": 0.3, "decision": "keep"},
+  "K4 rock surface": {"commit": "d1570f5", "target": "rock", "delta": "no rock credit; identity +0.2", "decision": "revert (a6a1fbb)"},
+  "K5 backwall depth + title": {"commit": "29c1897", "target": "lighting (+ui)", "delta": "0.4 / 0.1", "decision": "keep"}
+ },
+ "other_drops_over_0.3": ["rock -0.6, fluids -0.4 (attributed to K2)"],
+ "suite_note": "K3 first build failed 'dead surface' 4/9 vs base 5/5 under SwiftShader; follow-up 8c4c599 brought render cost to parity; full gate passed on 29c1897.",
+ "new_best": "9f29607; shots r7/best (GPU)",
+ "best_scores": {"rock": 6.4, "lighting": 6.8, "identity": 7.0, "fluids": 6.4, "characters": 6.3, "vaults": 6.6, "ui": 6.8, "minerals": 7.2},
+ "goal_met": false
+}

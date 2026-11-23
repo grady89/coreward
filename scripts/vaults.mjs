@@ -59,7 +59,7 @@ const stage = async (key, checks, fn) => {
   await fn();
 };
 
-await page.goto('http://localhost:4173');
+await page.goto(process.env.COREWARD_URL ?? 'http://localhost:4173');
 await page.waitForTimeout(2500);
 await page.evaluate(() => localStorage.clear());
 await page.click('#t-new');
@@ -581,103 +581,229 @@ await stage('vault', ['brazier doors'], async () => {
     doors.shut && doors.cheapOpen && doors.dearHeld && doors.dearOpen);
 });
 
-await stage('ember', ['the pursuit', 'censers swing'], async () => {
-  // --- the ember: pursuit arms on the trigger and consumes the shaft ---
+await stage('ember', ['the pursuit', 'censers swing', 'the descent commits'], async () => {
+  // --- the ember: the dark arms on the trigger, pours down, consumes, resets.
+  // Read off the room's own def, so a rewrite of the map moves the check with
+  // it instead of breaking it. Stepped on the game's own frame, not the clock.
   const pursuit = await page.evaluate(async () => {
     const { g, until } = window.__H();
     g.devVault('ember');
-    await until(() => g.mode === 'vault', 20);
+    await until(() => g.mode === 'vault' && g.vault?.glyphId === 'ember', 20);
     const v = g.vault;
+    const pu = v.def.pursuit;
+    const N = { left: false, right: false, up: false, down: false };
     const idle = !v.pursuitOn;
-    v.px = 22; v.py = -19; v.vx = 0; v.vy = 0; // the trigger band
-    const armed = await until(() => v.pursuitOn, 30);
+    const [tx0, ty0, tx1, ty1] = pu.trigger;
+    v.px = (tx0 + tx1 + 1) / 2; v.py = -((ty0 + ty1 + 1) / 2); v.vx = 0; v.vy = 0; v.invuln = 5;
+    v.frame(1 / 60, N, true);
+    const armed = v.pursuitOn;
     const edge0 = v.pursuitEdge;
-    await new Promise(r => setTimeout(r, 900));
-    const advanced = v.pursuitEdge > edge0 + 0.3;
-    // stand above the edge: consumed
+    for (let i = 0; i < 54; i++) v.frame(1 / 60, N, true);
+    const advanced = v.pursuitEdge > edge0 + 0.3 * pu.speed;
+    // stand above the edge, inside the zone: consumed. Halfway between the
+    // zone's top and the edge, so a slow dark (THE EMBER's is 0.77 t/s, only
+    // 0.7 rows in after 54 frames) is checked inside its zone, not above it
     const r0 = v.reforms;
-    v.px = 22; v.py = -(v.pursuitEdge - 1.5); v.invuln = 0;
-    const caught = await until(() => v.reforms > r0, 30);
-    const resetOff = await until(() => !v.pursuitOn, 20);
+    v.px = (pu.zone[0] + pu.zone[2] + 1) / 2; v.py = -((pu.zone[1] + v.pursuitEdge) / 2); v.vx = 0; v.vy = 0; v.invuln = 0;
+    v.frame(1 / 60, N, true);
+    const caught = v.reforms > r0;
+    const resetOff = !v.pursuitOn;
     return { idle, armed, advanced, caught, resetOff };
   });
   ok('the pursuit', pursuit, pursuit.idle && pursuit.armed && pursuit.advanced && pursuit.caught && pursuit.resetOff);
 
-  // --- censers swing through real arcs ---
+  // --- censers swing through real arcs: every one of them ---
   const censer = await page.evaluate(async () => {
-    const { g, until } = window.__H();
-    const v = g.vault; // ember has one censer
-    const xs = [];
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 180));
-      xs.push(v.censerPos(0).x);
+    const v = window.__game.vault;
+    const N = { left: false, right: false, up: false, down: false };
+    v.px = 1.5; v.py = -5.5; v.invuln = 999;
+    const n = v.def.censers.length;
+    const lo = Array(n).fill(1e9), hi = Array(n).fill(-1e9);
+    for (let f = 0; f < 160; f++) {
+      v.frame(1 / 60, N, true);
+      for (let i = 0; i < n; i++) { const x = v.censerPos(i).x; lo[i] = Math.min(lo[i], x); hi[i] = Math.max(hi[i], x); }
     }
-    const swings = Math.max(...xs) - Math.min(...xs) > 2;
-    return { swings, span: +(Math.max(...xs) - Math.min(...xs)).toFixed(1) };
+    const spans = lo.map((l, i) => +(hi[i] - l).toFixed(1));
+    return { n, spans, swings: n > 0 && spans.every(s2 => s2 > 2) };
   });
   ok('censers swing', censer, censer.swings);
+
+  // --- the descent commits. The room's rules, not its coordinates: every
+  // light is paid for ABOVE the first gate, so the chase is one unbroken run;
+  // the trigger sits under that gate, so nothing hunts you before you drop;
+  // every gate refuses the body back up; the shelves regrow (THE EMBER owns
+  // the cycle, THE WEATHER the one-shot); a brazier hangs inside the chase,
+  // and the stone is stood at outside the dark's zone ---
+  const commit = await page.evaluate(async () => {
+    const { g, vaultOf } = window.__H();
+    const v = g.vault;
+    const def = v.def;
+    const p = vaultOf('ember');
+    const N = { left: false, right: false, up: false, down: false };
+    const g0 = Math.min(...def.gates.map(x => x.y0));
+    const lightsAbove = p.sconces.every(s2 => s2.y < g0) && p.entry.y < g0;
+    const triggerBelow = def.pursuit.trigger[1] > g0;
+    const held = def.gates.map(gt => {
+      const plane = -(gt.y1 + 1);
+      v.invuln = 999; v.px = (gt.x0 + gt.x1 + 1) / 2; v.py = plane - 1.6; v.vx = 0; v.vy = 12;
+      let top = -1e9;
+      for (let i = 0; i < 12; i++) { v.frame(1 / 60, N, true); top = Math.max(top, v.py + 0.52); }
+      return top <= plane + 0.02;
+    });
+    const regrows = !def.rimeOnce && p.rime.length > 0;
+    const [zx0, zy0, zx1, zy1] = def.pursuit.zone;
+    const braziersInChase = p.braziers.filter(b => b.y > def.pursuit.trigger[1] && b.y <= zy1).length;
+    const stoneCalm = p.master.y > zy1 + 1;
+    return { lightsAbove, triggerBelow, gates: held.length, held: held.every(Boolean), regrows, braziersInChase, stoneCalm };
+  });
+  ok('the descent commits', commit, commit.lightsAbove && commit.triggerBelow && commit.gates >= 2
+    && commit.held && commit.regrows && commit.braziersInChase >= 2 && commit.stoneCalm);
 });
 
 await stage('debt', ['the debt'], async () => {
-  // --- the debt: crushers cycle; the right cell still falls up ---
+  // --- the debt: the ledger read both ways. Rules, not coordinates:
+  //   · every piston goes out its full stroke and comes home again
+  //   · the room really has two downs: a body let go under a ceiling in an
+  //     up-gravity course STANDS on that ceiling, and one let go over a floor
+  //     in a down-gravity course stands on the floor
+  //   · the door is priced across both halves — more lights than either
+  //     gravity alone can pay, counting only lights reachable before it.
+  //     A light belongs to the gravity of the air it is lit from ---
   const debt = await page.evaluate(async () => {
-    const { g, until } = window.__H();
+    const { g, until, vaultOf } = window.__H();
     g.devVault('debt');
     await until(() => g.mode === 'vault', 20);
     const v = g.vault;
-    const r0 = v.crusherRect(0);
-    let extended = false;
-    for (let i = 0; i < 25 && !extended; i++) {
-      await new Promise(r => setTimeout(r, 150));
-      extended = Math.abs(v.crusherRect(0).x0 - r0.x0) > 1 || Math.abs(v.crusherRect(0).x0 - (r0.x0 + 1)) < 4 && v.crusherRect(0).x0 > r0.x0 + 0.5;
+    const def = v.def;
+    const p = vaultOf('debt');
+    // pistons: sample one full period of the slowest at the frame clock
+    const ext = (i) => {
+      const c = def.crushers[i]; const r = v.crusherRect(i);
+      return Math.hypot(r.x0 - c.x, -r.y0 - c.y) / Math.hypot(c.dx, c.dy);
+    };
+    const n = (def.crushers ?? []).length;
+    const lo = Array(n).fill(9), hi = Array(n).fill(0);
+    const t0 = v.time;
+    for (let k = 0; k < 120; k++) {
+      v.time = t0 + k * (Math.max(...def.crushers.map(c => c.period)) / 120);
+      for (let i = 0; i < n; i++) { const e = ext(i); lo[i] = Math.min(lo[i], e); hi[i] = Math.max(hi[i], e); }
     }
-    // never teleport during a re-form: the reform snap would override it
+    v.time = t0;
+    const pistons = n > 0 && lo.every(e => e < 0.02) && hi.every(e => e > 0.98);
+    // two downs: find a ceiling over up-gravity air and a floor under
+    // down-gravity air, both with two clear courses, and let a body go there
+    const at = (x, y) => (x < 0 || y < 0 || x >= p.w || y >= p.h) ? -1 : y * p.w + x;
+    const air = (x, y) => at(x, y) >= 0 && !p.solid[at(x, y)] && !p.kill[at(x, y)];
+    const grav = (x, y) => p.gravity[at(x, y)];
+    const solid = (x, y) => at(x, y) >= 0 && !!p.solid[at(x, y)];
+    // (clear of every piston's columns: this is about gravity, not timing)
+    const pistonCol = (x) => (def.crushers ?? []).some(c => x >= c.x - 1 && x <= c.x + c.w);
+    let ceil = null, floor = null;
+    for (let y = 1; y < p.h - 2 && !(ceil && floor); y++) for (let x = 1; x < p.w - 1; x++) {
+      if (pistonCol(x)) continue;
+      if (!ceil && solid(x, y - 1) && air(x, y) && air(x, y + 1) && grav(x, y) === 1 && grav(x, y + 1) === 1) ceil = { x, y };
+      if (!floor && solid(x, y + 1) && air(x, y) && air(x, y - 1) && grav(x, y) === 0 && grav(x, y - 1) === 0) floor = { x, y };
+    }
     await until(() => v.phase === 'run', 20);
-    v.invuln = 3;
-    v.px = 32; v.py = -12; v.vx = 0; v.vy = 0;
-    const roseUp = await until(() => v.vy > 0.5 || v.py > -6, 30);
-    return { extended, roseUp };
+    await new Promise(r => setTimeout(r, 1500));   // past the entry, into live frames
+    const drop = async (x, y, bodyRow) => {
+      v.invuln = 3; v.px = x + 0.5; v.py = -bodyRow; v.vx = 0; v.vy = 0;
+      await new Promise(r => setTimeout(r, 900));
+      return { grounded: v.grounded, row: +(-v.py).toFixed(2) };
+    };
+    const up = ceil ? await drop(ceil.x, ceil.y, ceil.y + 0.9) : null;
+    const down = floor ? await drop(floor.x, floor.y, floor.y + 0.1) : null;
+    const stoodUp = !!up && up.grounded && Math.abs(up.row - (ceil.y + 0.52)) < 0.05;
+    const stoodDown = !!down && down.grounded && Math.abs(down.row - (floor.y + 0.48)) < 0.05;
+    // the price: flood the room from the entry with every door shut
+    const doorTile = new Set(p.doors.flatMap(d => d.tiles.map(t => t.x + ',' + t.y)));
+    const seen = new Uint8Array(p.w * p.h);
+    const q = [[p.entry.x, p.entry.y]]; seen[at(p.entry.x, p.entry.y)] = 1;
+    while (q.length) {
+      const [x, y] = q.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, i = at(nx, ny);
+        if (i < 0 || seen[i] || p.solid[i] || p.kill[i] || doorTile.has(nx + ',' + ny)) continue;
+        seen[i] = 1; q.push([nx, ny]);
+      }
+    }
+    // a light's gravity is its neighbourhood's: the air around it, by majority
+    const side = (s) => {
+      let upN = 0, downN = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if ((dx || dy) && air(s.x + dx, s.y + dy)) { if (grav(s.x + dx, s.y + dy) === 1) upN++; else downN++; }
+      }
+      return upN > downN ? 'up' : 'down';
+    };
+    const before = p.sconces.filter(s => seen[at(s.x, s.y)]);
+    const price = Math.max(...Object.values(def.doorNeeds ?? { x: 0 }));
+    const ups = before.filter(s => side(s) === 'up').length;
+    const downs = before.length - ups;
+    const priced = price <= before.length && price > ups && price > downs;
+    return { pistons, ceil, up, floor, down, stoodUp, stoodDown, price, ups, downs, priced };
   });
-  ok('the debt', debt, debt.extended && debt.roseUp);
+  ok('the debt', debt, debt.pistons && debt.stoodUp && debt.stoodDown && debt.priced);
   await page.screenshot({ path: OUT + '/v-debt.png' });
 });
 
 await stage('return', ['the return'], async () => {
-  // --- the return: the bottom corridor IS sideways-down, the door holds
-  // until the cameo sconce is standing with, and the U is walked in full.
-  //
-  // Addressed by what the room's own def says rather than by coordinates a
-  // rewrite invalidates: the corridor is found from its gravity zone, the
-  // door from its need, so the check follows the room instead of a snapshot
-  // of one.
+  // --- the return: miss once, and you return. The room's whole rule is that
+  // the entry is the ONLY place the body re-forms, so the check is that rule
+  // and not a census of furniture:
+  //   · nothing past the entry can move the checkpoint — no sconce, no door
+  //     that would need one;
+  //   · open sky, so a miss is a fall and never a floor;
+  //   · in the live runtime, a body that walks off the LAST footing before
+  //     the stone, toward it, re-forms exactly where it entered;
+  //   · and the stone is there to be reached — the body, set on its ledge,
+  //     takes it on foot (the golden route itself is scripts/routes/return.js).
+  // The last footing is found from the def rather than from coordinates: the
+  // standable tile nearest the stone that is not the stone's own ledge.
   const ret = await page.evaluate(async () => {
     const { g, until, vaultOf } = window.__H();
     g.devVault('return');
-    await until(() => g.mode === 'vault', 20);
+    await until(() => g.mode === 'vault' && g.vault && g.vault.glyphId === 'return' && g.vault.phase === 'run', 60);
     const v = g.vault;
     const p = vaultOf('return');
-    // find an open tile inside the right-gravity corridor, with room to fall
-    let spot = null;
-    for (let y = 0; y < p.h && !spot; y++) {
-      for (let x = 0; x < p.w - 3; x++) {
-        const i = y * p.w + x;
-        if (p.gravity[i] !== 2 || p.solid[i]) continue;
-        if (p.solid[i + 1] || p.solid[i + 2] || p.solid[i + 3]) continue;
-        spot = { x, y }; break;
-      }
+    const def = window.__VAULTS.find(x => x.glyph === 'return');
+    const N = { left: false, right: false, up: false, down: false };
+    const solid = (x, y) => x >= 0 && y >= 0 && x < p.w && y < p.h && !!p.solid[y * p.w + x];
+    const stand = (x, y) => solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2);
+    const m = p.master;
+    // the stone's ledge: the standable run under it
+    let ly = m.y + 1; while (ly < p.h && !solid(m.x, ly)) ly++;
+    let lx0 = m.x; while (stand(lx0 - 1, ly)) lx0--;
+    let late = null;
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < lx0 - 1; x++) {
+      if (!stand(x, y)) continue;
+      const d = Math.hypot(x - m.x, y - m.y);
+      if (!late || d < late.d) late = { x, y, d };
     }
-    v.px = spot.x + 0.5; v.py = -(spot.y + 0.5); v.vx = 0; v.vy = 0; v.invuln = 5;
-    const swept = await until(() => v.vx > 0.5, 30);
-    const d0 = p.doors[0].tiles[0];
-    const closed = v.solidTile(d0.x, d0.y);
-    const needs = window.__VAULTS.find(x => x.glyph === 'return').doorNeeds;
+    const entry = { x: p.entry.x + 0.5, y: -(p.entry.y + 0.5) - 0.2 };
+    const r0 = v.reforms;
+    v.px = late.x + 0.5; v.py = -late.y + 0.53; v.vx = 0; v.vy = 0; v.invuln = 0;
+    for (let i = 0; i < 20; i++) v.frame(1 / 60, N, true);
+    const stoodLate = v.grounded;
+    // walk off toward the stone without jumping: short of it, into the sky
+    const toward = m.x > late.x ? { right: true } : { left: true };
+    let f = 0;
+    for (; f < 900 && v.reforms === r0; f++) v.frame(1 / 60, { ...N, ...toward }, true);
+    const back = { x: +v.px.toFixed(2), y: +v.py.toFixed(2) };
+    const atEntry = v.reforms === r0 + 1 && Math.hypot(v.px - entry.x, v.py - entry.y) < 0.05;
+    // the stone, on foot, from its own ledge
+    v.px = m.x + 0.5; v.py = -ly + 0.53; v.vx = 0; v.vy = 0; v.invuln = 0;
+    let took = false;
+    for (let i = 0; i < 120 && !took; i++) { v.frame(1 / 60, N, true); took = v.phase === 'complete'; }
     return {
-      swept, closed, spot, figures: p.figures.length,
-      need: needs['1'], sconces: p.sconces.length,
+      open: !!def.openEdges, sconces: p.sconces.length, doors: p.doors.length,
+      late: [late.x, late.y], stoodLate, missFrames: f, back,
+      entry: [+entry.x.toFixed(2), +entry.y.toFixed(2)], atEntry, took,
+      figures: p.figures.length,
     };
   });
   ok('the return', ret,
-    ret.swept && ret.closed && ret.figures >= 1 && ret.need === ret.sconces);
+    ret.open && ret.sconces === 0 && ret.doors === 0 && ret.stoodLate
+    && ret.atEntry && ret.took && ret.figures >= 1);
 });
 
 await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 'the guild voice'], async () => {
@@ -750,9 +876,10 @@ await stage('kindled', ['the kindled', 'the sconce chord', 'the gutter phrase', 
     // THE SHAKE BAN (precision §5.2): jump, land, wall-jump, spark and the
     // gutter must add nothing to that channel. Only the chord did, and softly.
     // every sconce already burning and clear of them all, so nothing but the
-    // banned verbs can touch the channel from here
+    // banned verbs can touch the channel from here. The entry is that place in
+    // any map: the buffer lint keeps it clear of danger, and it is no sconce
     for (let i = 0; i < v.sconceLit.length; i++) v.sconceLit[i] = true;
-    v.px = 24.5; v.py = -39.5; v.vx = 0; v.vy = 0;
+    v.px = v.p.entry.x + 0.5; v.py = -(v.p.entry.y + 0.5); v.vx = 0; v.vy = 0;
     await new Promise(r => setTimeout(r, 200));
     const afterChord = shakes.length;
     v.jumpPress(); v.jumpRelease();

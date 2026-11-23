@@ -1,0 +1,11 @@
+# Round 4 plan
+
+Best = 9c8efe4 (r4/best, GPU; core shots re-framed). Scores: rock 6.0, characters 6.0, fluids 6.2, lighting 6.3, vaults 6.6, identity 7.0, ui 7.2, minerals 7.2.
+Lessons so far: two rock-relief attempts (G3 shader, H1 geometry) raised rock but cost minerals by making lit rock bright and world-hued next to ores. Minerals is the guard rail.
+
+Sequential, each its own commit:
+1. **I1 rock — crisp dark stone, no smears** (rock). Third approach, deliberately conservative: remove the smeary strata streak noise (every reviewer flags it) and replace it with crisp per-block value steps and per-bed bands that stay DARK and low-saturation; a thin dark crevice at block borders for chunkiness; lit faces get value contrast but not more world-hue saturation; rock within 1 tile of an ore is matte-dark. No geometry change, no facet split.
+2. **I2 fluids+lighting — the core floods its chamber** (fluids, lighting). The core's light reaches the whole chamber: floor tops, pillars and back wall graded by distance (G2's wash, stronger + longer), a soft volumetric haze/god-ray toward the core, the dead black under the ledge gets a dim gradient. Core colours unchanged.
+3. **I3 identity/lighting — world-tinted backdrops; fissures light their stone; MAELIS fissures sea-green** (lighting; also identity, fluids). Cavity backwall and haze get a dark desaturated world hue (cold blue CRYOS, sea-green MAELIS, amber VEIL), with a cooler distance-fog gradient so layers separate; fissure emissive spills onto neighbouring faces more; MAELIS fissure colour sea-green rather than teal-cyan.
+4. **I4 characters — glimmerflies in their own hue, a white pod, a lifted pilot** (characters). Glimmerflies a distinct cool hue off the lamp axis (keep 0.6-tile cap), pod hull holds white under warm light (cool fill/rim), pilot faint rim + visor spill in vaults, creature spill a touch stronger.
+5. **I5 vaults — haze that falls off from lights; gravity zones punch through** (vaults). Wall haze brightest near light sources and mid-distance, darker toward corners (not uniform fill); gravity tints/chevrons regain saturation/opacity against the lighter wall; foreground blocks use larger dressed stones distinct from the backdrop coursing; sconce pools wider onto adjacent blocks.

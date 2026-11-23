@@ -1,0 +1,23 @@
+{
+ "veil3-core": {
+  "calls": 101,
+  "triangles": 18170,
+  "lights": 55,
+  "lightsOn": 12,
+  "programs": 32
+ },
+ "cryos2-core": {
+  "calls": 101,
+  "triangles": 18170,
+  "lights": 54,
+  "lightsOn": 12,
+  "programs": 32
+ },
+ "maelis6-core": {
+  "calls": 102,
+  "triangles": 18756,
+  "lights": 54,
+  "lightsOn": 12,
+  "programs": 33
+ }
+}

@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 5.4,
+  "candidate": 6.4,
+  "delta": 1.0,
+  "preferred": "candidate",
+  "why": "B's faceted blocks give the lit-versus-dark plane read the brief asks for, and its pools and lava now light the stone around them. A's rock is flat squares with smeared noise. B's facets are somewhat repetitive."
+ },
+ "lighting": {
+  "best": 6.0,
+  "candidate": 6.3,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "A keeps the lava haze rising into the air, crisp faceted faces that catch light, and stronger world hues. B's darker rock helps the fissure shot, but its strata smudges and paler beam response muddy the rest."
+ },
+ "identity": {
+  "best": 7.0,
+  "candidate": 7.4,
+  "delta": 0.4,
+  "preferred": "candidate",
+  "why": "B's faceted rock carries each world's hue through lit and shadow faces, and its Maelis greens no longer read as Cryos cyan; otherwise the two builds are very close."
+ },
+ "fluids": {
+  "best": 5.6,
+  "candidate": 6.2,
+  "delta": 0.6,
+  "preferred": "candidate",
+  "why": "Every pool in B now glows upward with a bright surface lip and lights the walls behind it, and the Maelis brine finally reads sea-green. Core chambers and fissures are essentially unchanged in both builds."
+ },
+ "characters": {
+  "best": 5.2,
+  "candidate": 6.0,
+  "delta": 0.8,
+  "preferred": "candidate",
+  "why": "B's framed pod visor matches the reference better, and its creatures (shellback especially, also warden and stillwalker) glow and read as creatures where A's are dim silhouettes; glimmerflies and the pilot are about equal in both."
+ },
+ "vaults": {
+  "best": 5.8,
+  "candidate": 6.6,
+  "delta": 0.8,
+  "preferred": "candidate",
+  "why": "B separates footing from backdrop by value, as the 08-vault reference does, and adds warm sconce pools, which makes vault rooms much more legible. The cost is some flattening of the dark and slightly weaker gravity-zone contrast."
+ },
+ "ui": {
+  "best": 6.8,
+  "candidate": 6.7,
+  "delta": -0.1,
+  "preferred": "same",
+  "why": "The UI and HUD elements are pixel-identical in both builds. Only the world rendering behind them differs. B's more contrasty faceted rock makes small text over it marginally busier, but the difference is too small to prefer either."
+ },
+ "minerals": {
+  "best": 6.8,
+  "candidate": 6.3,
+  "delta": -0.5,
+  "preferred": "best",
+  "why": "The ore models are identical in both builds. A's near-black matte host rock lets every emissive ore pop, while B's bright orange/blue rock facets compete with same-hue ores (gold, embershard, copper, rime salt) and dilute their tells."
+ }
+}

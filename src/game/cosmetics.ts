@@ -25,7 +25,7 @@ export interface SparkStyle { id: string; name: string; cost: number; color: num
 // stock colors — must match the singletons in pod.ts / suit.ts
 export const STOCK_RIG: RigFinish = {
   id: '', name: 'Yard Cream', desc: 'The lease finish. Cindral owns the paint too.',
-  cost: 0, hull: 0xd8c9a4, accent: 0xff9a3c, steel: 0x3a3f4a,
+  cost: 0, hull: 0xe8e0cb, accent: 0xff9a3c, steel: 0x3a3f4a,
 };
 
 export const RIG_FINISHES: RigFinish[] = [
@@ -46,7 +46,7 @@ export const RIG_FINISHES: RigFinish[] = [
     hull: 0xe8f1fa, accent: 0x9fc6ea, steel: 0x8a98a8, facet: true },
 ];
 
-export const STOCK_SUIT: SuitFinish = { id: '', name: 'Yard Cream', cost: 0, suit: 0xd8c9a4, accent: 0xff9a3c };
+export const STOCK_SUIT: SuitFinish = { id: '', name: 'Yard Cream', cost: 0, suit: 0xe8e0cb, accent: 0xff9a3c };
 export const SUIT_FINISHES: SuitFinish[] = [
   { id: 'slate', name: 'Slatebed', cost: 150, suit: 0x6a7684, accent: 0x3ce6c8 },
   { id: 'emberline', name: 'Emberline', cost: 150, suit: 0x46403a, accent: 0xff4d29 },

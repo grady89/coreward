@@ -1,0 +1,72 @@
+{
+ "vault-vault-spawn": {
+  "calls": 317,
+  "triangles": 15614,
+  "lights": 9,
+  "lightsOn": 5,
+  "programs": 18
+ },
+ "vault-vault-room": {
+  "calls": 567,
+  "triangles": 21726,
+  "lights": 9,
+  "lightsOn": 5,
+  "programs": 19
+ },
+ "vault-ember-spawn": {
+  "calls": 457,
+  "triangles": 22496,
+  "lights": 15,
+  "lightsOn": 14,
+  "programs": 20
+ },
+ "vault-ember-room": {
+  "calls": 1204,
+  "triangles": 39444,
+  "lights": 15,
+  "lightsOn": 14,
+  "programs": 21
+ },
+ "vault-debt-spawn": {
+  "calls": 388,
+  "triangles": 38304,
+  "lights": 8,
+  "lightsOn": 4,
+  "programs": 20
+ },
+ "vault-debt-room": {
+  "calls": 659,
+  "triangles": 43346,
+  "lights": 8,
+  "lightsOn": 4,
+  "programs": 22
+ },
+ "vault-return-spawn": {
+  "calls": 134,
+  "triangles": 16732,
+  "lights": 6,
+  "lightsOn": 6,
+  "programs": 15
+ },
+ "vault-return-room": {
+  "calls": 146,
+  "triangles": 16756,
+  "lights": 6,
+  "lightsOn": 6,
+  "programs": 16
+ },
+ "vault-kindled-spawn": {
+  "calls": 409,
+  "triangles": 37308,
+  "lights": 14,
+  "lightsOn": 11,
+  "programs": 20
+ },
+ "vault-kindled-room": {
+  "calls": 1112,
+  "triangles": 64336,
+  "lights": 14,
+  "lightsOn": 11,
+  "programs": 23
+ }
+}

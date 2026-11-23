@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrBasic } from '../fx/post';
 
 // THE VAULT KIT'S DRESS (SPEC-VAULTS-2 §VI, phase V3.5).
 //
@@ -129,6 +130,119 @@ export function drankStain(): THREE.Texture {
   }
   _drank = new THREE.CanvasTexture(c);
   return _drank;
+}
+
+let _ashlar: THREE.Texture | null = null;
+/**
+ * The back wall's dressed stone: uneven courses of squared blocks laid in
+ * a running bond, a mortar joint round each, a lit arris along the top and a
+ * shadowed one along the bottom. Tiles seamlessly over 4×4 room tiles. The
+ * wall shader crushes it to a few steps above black, so what survives is the
+ * grain of masonry, not a texture.
+ */
+export function ashlar(): THREE.Texture {
+  if (_ashlar) return _ashlar;
+  const S = 512;
+  // courses of uneven height, the way a quarry delivers them
+  const COURSE_H = [64, 80, 48, 64, 80, 48, 64, 64];
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgb(104,107,115)';
+  g.fillRect(0, 0, S, S);
+  let seed = 0x9e3779b9;
+  const rnd = (): number => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const J = 3;   // half the mortar joint, px
+  let y0 = 0;
+  for (const CH of COURSE_H) {
+    // cut points round the course; the bond wraps, so the last block can
+    // straddle the seam and the texture repeats without a column of joints
+    const off = rnd() * S;
+    const cuts: number[] = [];
+    for (let x = 0; x < S - 90;) { cuts.push(x); x += 100 + rnd() * 150; }
+    for (let k = 0; k < cuts.length; k++) {
+      const a = cuts[k] + off, b = (k + 1 < cuts.length ? cuts[k + 1] : S) + off;
+      const v = 160 + rnd() * 55;
+      const cool = rnd() * 14;
+      for (const sh of [-S, 0]) {
+        const x0 = a + sh, x1 = b + sh;
+        if (x1 <= 0 || x0 >= S) continue;
+        g.fillStyle = `rgb(${v - cool | 0},${v - cool * 0.4 | 0},${v + cool * 0.5 | 0})`;
+        g.fillRect(x0 + J, y0 + J, x1 - x0 - 2 * J, CH - 2 * J);
+        // the dressed arris: light along the top, shadow along the bottom
+        g.fillStyle = 'rgba(255,255,255,0.16)';
+        g.fillRect(x0 + J, y0 + J, x1 - x0 - 2 * J, 4);
+        g.fillStyle = 'rgba(0,0,0,0.28)';
+        g.fillRect(x0 + J, y0 + CH - J - 6, x1 - x0 - 2 * J, 6);
+        g.fillStyle = 'rgba(0,0,0,0.14)';
+        g.fillRect(x1 - J - 4, y0 + J, 4, CH - 2 * J);
+        // tooling marks and wear
+        for (let s = 0; s < 6; s++) {
+          const sx = x0 + J + rnd() * (x1 - x0 - 2 * J), sy = y0 + J + rnd() * (CH - 2 * J);
+          g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)';
+          g.fillRect(sx, sy, 3 + rnd() * 14, 2 + rnd() * 5);
+        }
+      }
+    }
+    y0 += CH;
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  _ashlar = t;
+  return t;
+}
+
+let _dressed: THREE.Texture | null = null;
+/**
+ * The face of one footing tile: two courses in a running bond. Only the LEFT
+ * and TOP joints are cut, so neighbouring tiles share one joint instead of
+ * doubling it, and the lower course's joint sits half a tile over — a run of
+ * tiles reads as laid blocks, not a grid. Near-white, so the per-instance
+ * colour (and the dark ramp in it) still sets the value.
+ */
+export function dressedFace(): THREE.Texture {
+  if (_dressed) return _dressed;
+  const S = 128, J = 3, half = S / 2;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  let seed = 0x51ed27;
+  const rnd = (): number => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // the two courses, each a shade apart so the bond shows without the joint
+  g.fillStyle = 'rgb(236,234,230)'; g.fillRect(0, 0, S, half);
+  g.fillStyle = 'rgb(222,220,217)'; g.fillRect(0, half, S, half);
+  // tooling and wear
+  for (let s = 0; s < 22; s++) {
+    g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
+    g.fillRect(rnd() * S, rnd() * S, 4 + rnd() * 18, 2 + rnd() * 4);
+  }
+  // each course's arris: light just under its top joint, shade over the next
+  for (const y of [0, half]) {
+    g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(0, y + J, S, 3);
+    g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(0, y + half - 6, S, 6);
+  }
+  // the joints: top of each course, and a head joint per course, staggered
+  g.fillStyle = 'rgb(150,146,140)';
+  g.fillRect(0, 0, S, J); g.fillRect(0, half - 1, S, J);
+  g.fillRect(0, 0, J, half);
+  g.fillRect(half, half, J, half);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  _dressed = t;
+  return t;
 }
 
 /** stone carries — matte, lit, structural */
@@ -411,6 +525,7 @@ export function buildSconce(act: Act, mount: SconceMount, dead: boolean): Sconce
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.24, 10), flameMat);
   flame.position.set(cx, SCONCE_FLAME_Y, 0);
   const coreMat = glowMat(dead ? 0xdce8ff : 0xfff0c8, 0.9);
+  hdrBasic(coreMat, 1.8);
   const core = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.13, 8), coreMat);
   core.position.y = -0.045;
   const halo = bloom(0.85, dead ? 0x9db8ff : 0xffc98a, 0.5);
@@ -983,7 +1098,9 @@ export function buildCenser(topY: number): CenserParts {
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.34, 12), glassMat);
   glass.position.y = topY - 0.4;
   bob.add(glass);              // direct child, MeshBasic — the lint's handle
-  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), glowMat(0xfff2d0, 0.95));
+  const flameMat = glowMat(0xfff2d0, 0.95);
+  hdrBasic(flameMat, 1.8);
+  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), flameMat);
   flame.scale.set(0.8, 1.5, 0.8);
   flame.position.y = topY - 0.42;
   bob.add(flame);
@@ -1907,16 +2024,26 @@ export function buildStud(seed: number, down = false): StudParts {
   bed.position.set(0, baseY + ys * 0.04, 0);
   g.add(bed);
 
-  // the spikes: slender cones, uneven, a few leaning
-  const spikeMat = new THREE.MeshStandardMaterial({
-    color: 0x54332a, roughness: 0.85, metalness: 0.1, flatShading: true,
-    emissive: 0x1c0b06,
-  });
+  // the spikes: slender cones, uneven, a few leaning. Unlit and heated
+  // toward the point — dark rust at the root, a hot ember at the tip — so a
+  // fang reads at a glance whether or not any light reaches it (P2)
+  const spikeMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+  const root = new THREE.Color(0x3a1a12), tip = new THREE.Color(0xff8a3a);
   const n = 5 + Math.floor(rnd(1) * 2);
   for (let i = 0; i < n; i++) {
     const h = 0.2 + rnd(i * 3 + 2) * 0.32;
     const r = 0.028 + rnd(i * 5 + 3) * 0.03;
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(r, h, 5), spikeMat);
+    const cone = new THREE.ConeGeometry(r, h, 5);
+    const pos = cone.getAttribute('position');
+    const colors = new Float32Array(pos.count * 3);
+    const cc = new THREE.Color();
+    for (let v = 0; v < pos.count; v++) {
+      const u = pos.getY(v) / h + 0.5;          // 0 at the root, 1 at the point
+      cc.copy(root).lerp(tip, Math.pow(u, 2.2));
+      colors[v * 3] = cc.r; colors[v * 3 + 1] = cc.g; colors[v * 3 + 2] = cc.b;
+    }
+    cone.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const spike = new THREE.Mesh(cone, spikeMat);
     spike.position.set(
       -0.4 + (i + 0.5) / n * 0.8 + (rnd(i * 7 + 4) - 0.5) * 0.12,
       baseY + ys * (0.07 + h / 2),

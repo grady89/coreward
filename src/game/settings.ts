@@ -21,6 +21,9 @@ export interface Settings {
   /** the Nine Stones, gentler: hazards at six-tenths speed. The message
    * is the reward, not the reflex — KINDLE stays reachable with this on. */
   vaultAssist: boolean;
+  /** soft glow around lava, ore and lights. Unset means the machine's
+   * default (see bloomEnabled); a toggle in Settings saves an explicit value. */
+  bloom?: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -49,6 +52,14 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings): void {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+/** bloom when the player has not chosen: on for a hardware GPU, off for a
+ * software renderer (set once the renderer exists, see fx/post) */
+let bloomDefault = true;
+export function setBloomDefault(on: boolean): void { bloomDefault = on; }
+export function bloomEnabled(s: Settings): boolean {
+  return typeof s.bloom === 'boolean' ? s.bloom : bloomDefault;
 }
 
 export { DEFAULTS as DEFAULT_SETTINGS };

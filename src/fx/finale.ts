@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CORE_ROW, WORLD_W } from '../config';
-import { ACTIVE, WORLDS } from '../world/worlds';
+import { ACTIVE, WORLDS, worldById } from '../world/worlds';
 import { Ember } from '../world/backdrop';
 import { AudioEngine } from '../audio/audio';
 import { glyphs } from '../input/prompts';
@@ -55,6 +55,8 @@ export class Finale {
   private beatIn = 0;
   private sconces: Sconce[] = [];
   private sconceFlare: THREE.PointLight;
+  /** the fragment's rim light on the slabs: 1 while it is in its cradle */
+  private rim: { value: number } | null = null;
   private motes: THREE.Points;
   private moteSeed: Float32Array;   // per mote: baseX, span, speed, phase
   private moteTime = 0;
@@ -75,6 +77,50 @@ export class Finale {
     const slabMat = new THREE.MeshStandardMaterial({
       color: 0x241a20, roughness: 0.85, metalness: 0.2, flatShading: true,
     });
+    // the fragment's light on their faces: dark stone, not black cut-outs
+    // (a spent world's monoliths stay as dark as they were)
+    if (!ACTIVE.husk && ACTIVE === worldById(ACTIVE.id)) {
+      slabMat.emissive.setHex(ACTIVE.core.light).multiplyScalar(0.09);
+      // ...and rim-lit on the side that faces it: the flank turned to the
+      // fragment catches it whole, the front face brightens toward that
+      // edge, both falling off with distance. Off once the fragment is taken.
+      const rimC = new THREE.Color(ACTIVE.core.light);
+      const lum = 0.2126 * rimC.r + 0.7152 * rimC.g + 0.0722 * rimC.b;
+      rimC.multiplyScalar(Math.min(1, 0.45 / Math.max(lum, 1e-3)));
+      this.rim = { value: 1 };
+      const rim = this.rim;
+      slabMat.onBeforeCompile = shader => {
+        shader.uniforms.uRimOn = rim;
+        shader.uniforms.uRimC = { value: rimC };
+        shader.uniforms.uCoreXY = { value: new THREE.Vector2(WORLD_W / 2, -(CORE_ROW + 5)) };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vSlabP;\nvarying vec3 vSlabW;\nvarying vec3 vSlabN;')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+	vSlabP = position;
+	vSlabW = (modelMatrix * vec4(position, 1.0)).xyz;
+	vSlabN = normalize(mat3(modelMatrix) * normal);`);
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', `#include <common>
+uniform float uRimOn;
+uniform vec3 uRimC;
+uniform vec2 uCoreXY;
+varying vec3 vSlabP;
+varying vec3 vSlabW;
+varying vec3 vSlabN;`)
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+	{
+		vec2 toC = uCoreXY - vSlabW.xy;
+		float d = length(toC);
+		toC /= max(d, 1e-3);
+		float fall = 1.0 / (1.0 + pow(max(0.0, d - 3.0) / 6.0, 2.0));
+		float side = max(0.0, dot(vSlabN.xy, toC));
+		float edge = smoothstep(0.02, 0.27, vSlabP.x * sign(toC.x));
+		float front = vSlabN.z > 0.5 ? edge * edge * 0.75 : 0.0;
+		totalEmissiveRadiance += uRimC * uRimOn * fall * (side * 1.1 + front);
+	}`);
+      };
+      slabMat.customProgramCacheKey = () => 'sconce-rim-v1';
+    }
     const g = new THREE.Group();
     for (const sx of [21.5, 24.5, 27.5, 36.5, 39.5, 42.5]) {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.7, 0.5), slabMat);
@@ -147,6 +193,7 @@ export class Finale {
     if (this.phase === 'page') this.pageT += dt;
     const near = camRow > CORE_ROW - 120;
     this.motes.visible = near;
+    if (this.rim) this.rim.value = this.ember.taken ? 0 : 1;
     if (!near) return;
 
     this.moteTime += dt;

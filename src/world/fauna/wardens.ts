@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { hdrBasic } from '../../fx/post';
 import { Terrain } from '../terrain';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air, lineOfSight } from './types';
+import { Creature, ThreatCtx, ThreatLevel, limb, lerp, clamp01, ease, air, lineOfSight, rimLight, Spill } from './types';
 
 // WARDENS — the constant. Lamplighter machinery, still on post.
 //
@@ -44,7 +45,7 @@ interface Leg {
   fromX: number; fromY: number;
   toX: number; toY: number;
   stepT: number;   // >0 while swinging
-  upper: THREE.Mesh; lower: THREE.Mesh; pad: THREE.Mesh;
+  upper: THREE.Mesh; lower: THREE.Mesh; pad: THREE.Mesh; knee: THREE.Mesh;
 }
 
 export class Wardens implements Creature {
@@ -83,14 +84,29 @@ export class Wardens implements Creature {
   private beam: THREE.SpotLight;
   private beamTarget: THREE.Object3D;
   private glow: THREE.PointLight;
+  /** the lamp's own fire showing through the machine: knee lamps and the hip core */
+  private emberMat: THREE.MeshBasicMaterial;
+  /** the hex core's fire on the stone behind the machine */
+  private spill: Spill;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
-    const masonry = new THREE.MeshStandardMaterial({ color: 0x9a94ae, roughness: 0.55, metalness: 0.25, flatShading: true });
-    const verdigris = new THREE.MeshStandardMaterial({ color: 0x6f8f88, roughness: 0.4, metalness: 0.7, flatShading: true });
+    // a faint banked warmth in the stone and lamplight caught on every
+    // edge, so the machine reads against black rock even out of its beam
+    const masonry = new THREE.MeshStandardMaterial({ color: 0x9a94ae, roughness: 0.55, metalness: 0.25, flatShading: true, emissive: 0x5c3e26 });
+    const verdigris = new THREE.MeshStandardMaterial({ color: 0x6f8f88, roughness: 0.4, metalness: 0.7, flatShading: true, emissive: 0x24382e });
+    rimLight(masonry, 0xffc27a, 1.7);
+    rimLight(verdigris, 0xffc27a, 1.4);
+    this.emberMat = new THREE.MeshBasicMaterial({ color: 0xffb04a, toneMapped: false });
+    hdrBasic(this.emberMat, 1.8);
     this.group = new THREE.Group();
 
     this.hip = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.5, 0.5, 6), masonry);
     this.hip.rotation.x = Math.PI / 2;
+    // a hexagonal furnace port on the hip's face: the warden's heart
+    const furnace = new THREE.Mesh(new THREE.CircleGeometry(0.28, 6), this.emberMat);
+    furnace.rotation.x = -Math.PI / 2;
+    furnace.position.y = 0.26;
+    this.hip.add(furnace);
     this.neck = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.7, 6), verdigris);
     this.neck.position.y = 0.55;
 
@@ -159,13 +175,16 @@ export class Wardens implements Creature {
 
     this.group.add(this.hip, this.neck, this.lantern);
     const legGeo = new THREE.BoxGeometry(1, 1, 1);
+    const kneeGeo = new THREE.OctahedronGeometry(0.13, 0);
     for (let i = 0; i < 3; i++) {
       const upper = new THREE.Mesh(legGeo, masonry);
       const lower = new THREE.Mesh(legGeo, verdigris);
       const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.12, 6), masonry);
-      this.group.add(upper, lower, pad);
-      this.legs.push({ footX: 0, footY: 0, fromX: 0, fromY: 0, toX: 0, toY: 0, stepT: 0, upper, lower, pad });
+      const knee = new THREE.Mesh(kneeGeo, this.emberMat);
+      this.group.add(upper, lower, pad, knee);
+      this.legs.push({ footX: 0, footY: 0, fromX: 0, fromY: 0, toX: 0, toY: 0, stepT: 0, upper, lower, pad, knee });
     }
+    this.spill = new Spill(this.group, 0xffb04a);
     this.group.visible = false;
     scene.add(this.group);
   }
@@ -275,9 +294,11 @@ export class Wardens implements Creature {
       this.hipY = lerp(HIP_H, 0.5, ease(f));
       this.droop = -ease(f) * 1.1;
       this.lampMat.color.setHex(0x443a2a);
+      this.emberMat.color.setHex(0x3a2410);
       this.beam.intensity = (1 - f) * 20 * (Math.random() < 0.5 ? 1 : 0.2);
       this.beamMat.opacity = (1 - f) * 0.3 * (Math.random() < 0.5 ? 1 : 0.4);
       this.glow.intensity = (1 - f) * 2;
+      this.spill.set(0, -0.1, 5.2, 4.4, (1 - f) * 0.65 * (Math.random() < 0.5 ? 1 : 0.5), 0xffb04a);
       if (Math.random() < dt * 8) this.particles.sparkBurst(this.x + (Math.random() - 0.5), this.y + 1, 0xffe0a0, { count: 3, speed: 2.5, up: 1, life: 0.5, gravity: 8, spread: 0.3 });
       if (this.collapseT <= 0 && this.pendingDown) {
         this.pendingDown = false;
@@ -403,6 +424,7 @@ export class Wardens implements Creature {
     const blind = this.blindT > 0;
     const white = this.engaged ? 1 : 0;
     this.lampMat.color.setHex(blind ? 0x2a2418 : this.engaged ? 0xffffff : 0xfff2c8);
+    this.emberMat.color.setHex(blind ? 0x4a2a10 : this.engaged ? 0xffe0a0 : 0xffb04a);
     this.beam.intensity = blind ? 0 : this.engaged ? 110 : 45;
     this.beam.angle = lerp(this.beam.angle, this.engaged ? 0.24 : ENGAGE_ARC, Math.min(1, dt * 4));
     this.beam.color.setHex(this.engaged ? 0xffffff : 0xffe0a0);
@@ -417,6 +439,8 @@ export class Wardens implements Creature {
     this.beamCone.scale.y = lerp(this.beamCone.scale.y, narrow, ks);
     this.beamCone.scale.z = this.beamCone.scale.y;
     this.glow.intensity = blind ? 0.2 : 2.5 + white * 3;
+    // the furnace's light lands on the hall around the hip; engaged, it whitens with the beam
+    this.spill.set(0, -0.1, 5.2, 4.4, blind ? 0.13 : 0.8 + white * 0.25, this.engaged ? 0xffd890 : 0xffa040);
     this.beamTarget.position.set(8, 0, 0);
     // a blinded lantern droops
     this.droop = lerp(this.droop, blind ? -0.6 : 0, Math.min(1, dt * 3));
@@ -449,6 +473,7 @@ export class Wardens implements Creature {
       limb(l.upper, hx, hy, hz, kx, ky, kz, 0.16);
       limb(l.lower, kx, ky, kz, fx, fy + 0.06, fz, 0.11);
       l.pad.position.set(fx, fy + 0.06, fz);
+      l.knee.position.set(kx, ky, kz + 0.06);
     }
   }
 }

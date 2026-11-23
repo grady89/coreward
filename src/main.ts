@@ -13,18 +13,18 @@ import {
 import { T, def, oreValue, rockColor, TILE_DEFS } from './world/tiles';
 import { ACTIVE, setActiveWorld, WORLDS, worldById } from './world/worlds';
 import { Terrain } from './world/terrain';
-import { ChunkField, lavaMat } from './world/chunks';
+import { ChunkField, lavaMat, fluidUniforms } from './world/chunks';
 import { createBackwall, createSky, createSurface, createEmber, Atmosphere, Ember, Dock, DOCKS } from './world/backdrop';
 import { WreckField } from './world/wrecks';
 import { ThreatField, FaunaEvent } from './world/entities';
 import { wide } from './world/fauna/types';
 import { ArrestorField } from './world/arrestors';
-import { SpillSite } from './world/spill';
+import { SpillSite, type SpillClaim } from './world/spill';
 import { Pod } from './player/pod';
 import { PodController, Input } from './player/controller';
 import { Pilot } from './player/pilot';
 import { GameState } from './game/state';
-import { loadSettings, saveSettings } from './game/settings';
+import { loadSettings, saveSettings, bloomEnabled, setBloomDefault } from './game/settings';
 import { faunaForEvent } from './game/bestiary';
 import {
   evaluate, timeLeft, fuelLeft, accept as acceptContract, POOL as CONTRACT_POOL,
@@ -32,6 +32,7 @@ import {
 import { Particles } from './fx/particles';
 import { FollowCam } from './fx/camera';
 import { Finale } from './fx/finale';
+import { Post, softwareRenderer } from './fx/post';
 import { buildFoldThroat, FoldThroat } from './fx/fold';
 import { Hud } from './ui/hud';
 import { Comms } from './ui/comms';
@@ -114,6 +115,8 @@ function disposeSceneDeep(scene: THREE.Scene): void {
 
 class Game {
   renderer: THREE.WebGLRenderer;
+  /** the mine and vault frames go through this: bloom, or the plain render */
+  post: Post;
   scene = new THREE.Scene();
   cam: FollowCam;
   state = new GameState();
@@ -129,6 +132,8 @@ class Game {
   threats!: ThreatField;
   arrestors!: ArrestorField;
   spill!: SpillSite;
+  /** a beacon over each fragment lying on this world, with the drop it marks */
+  private fragSites: { site: SpillSite; claim: SpillClaim; drop: GameState['fragmentDrops'][number] }[] = [];
   glyphMarks!: GlyphMarks;
   particles!: Particles;
   lampOn = true;
@@ -246,6 +251,9 @@ class Game {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // the husk keeps its old, unbloomed look
+    this.post = new Post(this.renderer, () => !!ACTIVE.husk);
+    setBloomDefault(!softwareRenderer(this.renderer));
 
     this.cam = new FollowCam(innerWidth / innerHeight);
     this.cam.reducedMotion = this.reducedMotion;
@@ -288,9 +296,11 @@ class Game {
       toast: (m, c) => this.hud.toast(m, c),
       onRespawn: () => this.respawn(0.5),
       onRescued: () => {
+        const frag = this.dropFragment();
         this.ctrl.respawnAtSurface();
         this.cam.snap(this.ctrl.px, 2, 15.5);
-        this.hud.toast('TOWED TO THE SURFACE');
+        this.hud.toast(frag ? `TOWED TO THE SURFACE — ${frag} IS STILL DOWN THERE` : 'TOWED TO THE SURFACE',
+          frag ? 'stratum' : undefined);
         this.saveNow();
       },
       // after a core is met the crew winches the pod home for free — the
@@ -663,6 +673,7 @@ class Game {
       gutter: () => this.audio.gutterPhrase(),
       complete: () => this.audio.glyph(),
       duck: (to, hold) => this.audio.duckAmbience(to, hold),
+      flip: up => this.audio.gravityFlip(up),
     }, innerWidth / innerHeight, this.ui);
     this.mode = 'vault';
   }
@@ -864,12 +875,16 @@ class Game {
     // a world you have never dug is unsurveyed, no matter how deep you have
     // been elsewhere — the fog is per site, not per driller
     this.state.worldBestRow = ws?.bestRow ?? 0;
-    this.buildWorld(ws?.seed ?? ((Math.random() * 0xffffffff) >>> 0));
+    // dev harness: ?seed=N pins a never-dug world's seed, so screenshot
+    // passes (scripts/visualshots.mjs) see the same rock build after build
+    const devSeed = Number(new URLSearchParams(location.search).get('seed'));
+    this.buildWorld(ws?.seed ?? (devSeed > 0 ? devSeed >>> 0 : (Math.random() * 0xffffffff) >>> 0));
     if (ws) {
       this.terrain.applyDug(ws.dug);
       // shafts that had skinned over stay skinned over — and stay rammable
       for (const i of ws.rime ?? []) this.terrain.data[i] = T.RIME;
       for (const i of ws.nacre ?? []) this.terrain.data[i] = T.NACRE;
+      for (const i of ws.rubble ?? []) this.terrain.data[i] = T.RUBBLE;
       this.ctrl.px = ws.podX;
       this.ctrl.py = ws.podY;
     }
@@ -880,6 +895,8 @@ class Game {
     this.arrestors.load(ws?.arrestors ?? []);
     const claim = this.state.spill;
     if (claim && claim.world === this.state.activeWorld) this.spill.show(claim); else this.spill.hide();
+    this.fragSites = [];
+    this.showDrops();
     this.shaftlightField.load(ws?.shaftlights ?? []);
     this.depots.load(ws?.depots ?? []);
     this.charges.length = 0;
@@ -922,11 +939,12 @@ class Game {
     this.terrain = new Terrain(seed);
     this.chunks = new ChunkField(this.scene, this.terrain);
     this.chunks.animated = !this.reducedMotion;
-    createBackwall(this.scene);
+    createBackwall(this.scene, this.terrain);
     createSky(this.scene);
     createSurface(this.scene);
     this.ember = createEmber(this.scene);
     this.ember.taken = this.state.extracted.has(ACTIVE.id);
+    this.chunks.setCoreLit(!this.ember.taken);
     this.finale = new Finale(this.scene, this.ember, this.audio, this.ui,
       this.reducedMotion,
       this.state.endedWorlds.has(ACTIVE.id) && !this.state.extracted.has(ACTIVE.id));
@@ -934,6 +952,7 @@ class Game {
     this.atmosphere = new Atmosphere(this.scene);
     this.particles = new Particles(this.scene);
     this.pod = new Pod(this.scene);
+    this.pod.reducedMotion = this.reducedMotion;
     this.pilot = new Pilot(this.scene, this.terrain);
     this.threats = new ThreatField(this.scene, this.terrain, this.particles);
     this.threats.level = this.faunaDead ? 'off' : this.settings.threats;
@@ -999,14 +1018,20 @@ class Game {
           this.cam.addShake(0.18);
           this.pad.rumble(0.5, 0.35, 180);
         }
+        if (this.mode === 'eva' && this.time - this.podHitToastAt > 6) {
+          this.podHitToastAt = this.time;
+          this.hud.toast(`SOMETHING IS AT THE POD — HULL ${Math.round(this.state.hull)}`);
+        }
       },
       onDeath: (cause: string) => {
+        // the pod can die with nobody in it: the suit comes back to a wreck
+        if (this.mode === 'eva') this.exitEva();
         this.particles.explosion(this.ctrl.px, this.ctrl.py);
         this.audio.explosion();
         this.cam.addShake(0.55);
         this.pad.rumble(1, 1, 520);
         this.flagDied = true;
-        this.panels.open('death', { cause, spilled: this.fileSpill() });
+        this.panels.open('death', { cause, spilled: this.fileSpill(), fragment: this.dropFragment() });
       },
       onStranded: () => {
         this.flagStranded = true;
@@ -1192,12 +1217,86 @@ class Game {
     this.state.fuel = this.state.maxFuel * frac;
     this.cam.snap(this.ctrl.px, 2, 15.5);
     const claim = this.state.spill;
-    if (claim) {
+    const drop = this.state.fragmentDrops.at(-1);
+    if (drop) {
+      const m = Math.round(-drop.y * TILE_M);
+      this.hud.toast(`${worldById(drop.id)?.coreName ?? 'THE FRAGMENT'} IS STILL DOWN THERE — ${m}m`, 'stratum');
+      this.audio.stratum();
+    } else if (claim) {
       const m = Math.round(-claim.y * TILE_M);
       this.hud.toast(`YOUR HOLD IS STILL DOWN THERE — ${m}m`, 'stratum');
       this.audio.stratum();
     }
     this.saveNow();
+  }
+
+  // ---------- a fragment the pod could not bring up ----------
+  /**
+   * A crash or a tow while carrying: the fragment stays where the pod failed.
+   * Neither the salvage crew nor the winch can lift it, so surfacing is not a
+   * way round the climb. Returns its name for the panel, or null.
+   */
+  private dropFragment(): string | null {
+    const st = this.state;
+    const id = st.carrying;
+    if (!id) return null;
+    st.carrying = null;
+    st.fragmentDrops.push({ id, world: st.activeWorld, x: this.ctrl.px, y: this.ctrl.py });
+    this.showDrops();
+    return worldById(id)?.coreName ?? 'THE FRAGMENT';
+  }
+
+  /** raise a beacon over every fragment lying on this world */
+  private showDrops(): void {
+    for (const f of this.fragSites) f.site.hide();
+    const here = this.state.fragmentDrops.filter(d => d.world === this.state.activeWorld);
+    while (this.fragSites.length < here.length) {
+      const claim: SpillClaim = { world: '', x: 0, y: 0, ttl: SPILL_TTL, cargo: [] };
+      this.fragSites.push({ site: new SpillSite(this.scene), claim, drop: here[0] });
+    }
+    here.forEach((drop, i) => {
+      const f = this.fragSites[i];
+      f.drop = drop;
+      Object.assign(f.claim, { world: drop.world, x: drop.x, y: drop.y, ttl: SPILL_TTL,
+        fragment: worldById(drop.id)?.core.shell ?? 0xffffff });
+      f.site.show(f.claim);
+    });
+    this.fragSites.length = here.length;
+  }
+
+  /** keep the beacons on their floors, and fly into one to take it back */
+  private tickDrops(dt: number): void {
+    const st = this.state;
+    for (const f of this.fragSites) {
+      f.site.settle((x, y) => this.terrain.blockedAt(x, y), this.terrain.h);
+      f.site.update(this.time, dt);
+      f.drop.y = f.claim.y;
+    }
+    if (this.mode !== 'play') return;
+    for (const f of this.fragSites) {
+      if (Math.abs(this.ctrl.px - f.drop.x) > SPILL_PICKUP_R) continue;
+      if (Math.abs(this.ctrl.py - f.drop.y) > SPILL_PICKUP_R) continue;
+      if (st.carrying) {
+        if (this.time - this.spillNagAt > 3) {
+          this.spillNagAt = this.time;
+          this.hud.toast('ONE FRAGMENT AT A TIME');
+          this.audio.denied();
+        }
+        return;
+      }
+      // the fragment IS the hold: whatever ore is aboard goes on the floor
+      if (st.cargoCount > 0) {
+        this.fileSpill();
+        this.hud.toast('THE ORE GOES ON THE FLOOR — CLAIM FILED');
+      }
+      st.carrying = f.drop.id;
+      st.fragmentDrops = st.fragmentDrops.filter(d => d !== f.drop);
+      this.showDrops();
+      this.hud.toast(`${worldById(st.carrying)?.coreName ?? 'THE FRAGMENT'} IS IN YOUR HOLD — CLIMB`, 'stratum');
+      this.audio.stratum();
+      this.saveNow();
+      return;
+    }
   }
 
   // ---------- the spill ----------
@@ -1392,6 +1491,7 @@ class Game {
     this.pilot.spawnAt(this.ctrl.px + out, this.ctrl.py - 0.1);
     this.salvaging = null;
     this.mode = 'eva';
+    this.evaSince = this.time;
     // the core walk is the Communion: HUD, clocks and Dispatch all step
     // aside for the rite — nothing on the radio belongs in this room
     if (this.ctrl.coreNear) {
@@ -1709,6 +1809,7 @@ class Game {
     this.cam.reducedMotion = this.reducedMotion || !s.shake;
     this.pad.rumbleOn = s.rumble && !this.reducedMotion;
     this.hud.setFps(s.showFps ? 0 : null);
+    this.post.setBloom(bloomEnabled(s));
     if (this.threats) this.threats.level = this.faunaDead ? 'off' : s.threats;
     saveSettings(s);
   }
@@ -1851,11 +1952,9 @@ class Game {
         if (Math.hypot(dx, dy) > CHARGE_SEAL) continue;
         const tx = cx + dx, ty = cy + dy;
         if (ty < 1 || tx < 0 || tx >= this.terrain.w) continue;
-        if (this.terrain.get(tx, ty) === T.AIR) {
-          this.terrain.data[this.terrain.idx(tx, ty)] = T.RUBBLE;
-          this.terrain.dug.delete(this.terrain.idx(tx, ty));
-          this.chunks.markDirty(tx, ty);
-        }
+        // fill, not overwrite: the tile stays in the dug diff, so a reload
+        // brings back the rubble — not the ore the seed first put there
+        if (this.terrain.get(tx, ty) === T.AIR) this.terrain.fill(tx, ty, T.RUBBLE);
       }
     }
     this.threats.blast(x, y, CHARGE_BLAST);
@@ -2116,7 +2215,7 @@ class Game {
     // inside a stone: the world outside is frozen, the suit stops counting
     if (this.mode === 'vault' && this.vault) {
       this.vault.frame(Math.min(0.05, raw), this.input(), this.lampOn);
-      this.vault.render(this.renderer);
+      this.vault.render(this.post.render);
       if (this.vault.closed) this.closeVault();
       return;
     }
@@ -2147,7 +2246,7 @@ class Game {
         });
         this.particles.update(raw2);
       }
-      this.renderer.render(this.scene, this.cam.camera);
+      this.post.render(this.scene, this.cam.camera);
       return;
     }
 
@@ -2159,8 +2258,12 @@ class Game {
       dt = 0;
     }
 
-    // fluid pulse (shared material)
-    lavaMat.color.setHex(Math.sin(this.time * 2.6) > 0 ? ACTIVE.fluid.pulseA : ACTIVE.fluid.pulseB);
+    // fluid shimmer (shared material): a slow travelling sheen, still when
+    // the player prefers reduced motion
+    lavaMat.color.setHex(ACTIVE.fluid.base);
+    fluidUniforms.uFluidTime.value = this.time;
+    fluidUniforms.uFluidAmp.value = this.reducedMotion ? 0 : 1;
+    fluidUniforms.uFluidLive.value = ACTIVE.husk || ACTIVE !== worldById(ACTIVE.id) ? 0 : 1;
 
     const waking = this.mode === 'eva' && !this.finale.isCommunion
       ? this.glyphStoneNear(this.pilot.px, this.pilot.py, 1.1) : null;
@@ -2171,7 +2274,7 @@ class Game {
       // the fold's last frame IS the cut: render the vault's first frame now
       if (this.mode === 'vault' && this.vault) {
         this.vault.frame(0, this.input(), this.lampOn);
-        this.vault.render(this.renderer);
+        this.vault.render(this.post.render);
         return;
       }
     }
@@ -2212,7 +2315,10 @@ class Game {
     // on raw time, not the simulation's capped step: the panel promises five
     // real minutes, and a slow frame must not quietly hand out six. Capped
     // loosely so an alt-tab does not void a claim in one frame.
-    if (this.mode === 'play' || this.mode === 'eva') this.tickSpill(Math.min(0.25, raw));
+    if (this.mode === 'play' || this.mode === 'eva') {
+      this.tickSpill(Math.min(0.25, raw));
+      this.tickDrops(Math.min(0.25, raw));
+    }
 
     // the unmaking and the ending pages run outside EVA, so they are driven
     // here — and they own the screen until the player says otherwise
@@ -2235,10 +2341,11 @@ class Game {
     this.wrecks.update(this.time, dt, (x, y) => this.bodyOccupies(x, y));
     const camRow = Math.floor(-this.cam.camera.position.y);
     this.ember.update(this.time, camRow);
+    this.chunks.setCoreLit(!this.ember.taken);
     this.finale.frame(dt, this.time, camRow);
     if (this.staging) this.tickSandbox(dt);
     this.cullLights();
-    this.renderer.render(this.scene, this.cam.camera);
+    this.post.render(this.scene, this.cam.camera);
   }
 
   /**
@@ -2314,6 +2421,93 @@ class Game {
   private lightPos = new THREE.Vector3();
   private fillerPts: THREE.PointLight[] = [];
   private fillerSpots: THREE.SpotLight[] = [];
+  /** when the pilot last stepped out — the parked pod's stillness clock */
+  private evaSince = 0;
+  private podHitToastAt = -99;
+
+  /**
+   * The fauna's turn. It runs on foot as well as in the seat: stepping out
+   * is not a pause. With the pilot out (parked) the pod is what they find —
+   * dark, still, on its skids — and what they do to it, it takes.
+   */
+  private tickThreats(dt: number, parked: boolean): void {
+    const st = this.state;
+    this.threats.update({
+      podX: this.ctrl.px, podY: this.ctrl.py,
+      vx: parked ? 0 : this.ctrl.vx, vy: parked ? 0 : this.ctrl.vy,
+      // heat is the whole engine, not just the main nozzle — flying
+      // sideways past a wyrm pool reads as thrust too
+      lampOn: this.lampOn,
+      thrust: parked ? 0 : Math.max(this.ctrl.thrust, Math.abs(this.ctrl.sideThrust) * 0.8),
+      drilling: !parked && this.ctrl.drilling !== null, grounded: parked || this.ctrl.grounded,
+      // the pod keeps counting its stillness while you are out of it
+      still: parked ? this.ctrl.still + (this.time - this.evaSince) : this.ctrl.still,
+      carrying: !!this.state.carrying, facing: this.ctrl.facing, dt, time: this.time,
+      hurt: (a, c) => this.ctrl.hurtFromThreat(a, c),
+      drain: a => { st.fuel = Math.max(0, st.fuel - a); },
+      // a parked pod is sat on its skids: a shove or a grab has nothing to move
+      push: (dx, dy) => { if (!parked) { this.ctrl.vx += dx; this.ctrl.vy += dy; } },
+      hold: s => { if (!parked) this.ctrl.held = Math.max(this.ctrl.held, s); },
+      native: n => {
+        for (let i = 0; i < n; i++) st.addNative();
+        const nat = ACTIVE.native;
+        this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+        this.hud.popup(`+${n} ${nat?.ore ?? 'DEPOSIT'}`, '#' + (nat?.color ?? 0xcfe8ff).toString(16).padStart(6, '0'), this.screen.sx, this.screen.sy);
+        this.audio.chime(2);
+      },
+      steal: () => st.stealCargo(),
+      give: t => {
+        if (st.addCargo(t)) {
+          this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
+          this.hud.popup('RECOVERED', '#' + def(t).gem.toString(16).padStart(6, '0'), this.screen.sx, this.screen.sy);
+          this.audio.chime(def(t).oreTier);
+        }
+      },
+      shake: a => this.cam.addShake(a),
+      onAlert: () => {
+        this.hud.toast(ACTIVE.swarm.alert);
+        this.audio.swarmAlert();
+        // teach the counter once per world, the first time they wake
+        const key = `swarm-taught:${ACTIVE.id}`;
+        if (!st.firedEvents.has(key)) {
+          st.firedEvents.add(key);
+          setTimeout(() => this.hud.toast(ACTIVE.swarm.counter), 1800);
+        }
+      },
+      onEvent: (id, x, y) => this.onFaunaEvent(id, x, y),
+    });
+
+    // the big ones announce themselves through the rock before you see them
+    if (this.threats.rumble > 0.12) {
+      this.rumbleAcc -= dt;
+      if (this.rumbleAcc <= 0) {
+        this.rumbleAcc = 1.1 - this.threats.rumble * 0.6;
+        this.audio.rumbleTick();
+        this.cam.addShake(this.threats.rumble * 0.12);
+      }
+    }
+    // an extracted world answers with nothing — Dispatch says so, once
+    if (this.faunaDead && !ACTIVE.husk) this.teach('fauna-dead');
+    // something unlit is walking at you: your own pulse, getting faster,
+    // and the red wash the field guide always promised
+    this.hud.setDread(this.threats.dread);
+    if (this.threats.dread > 0.1) {
+      this.dreadAcc -= dt;
+      if (this.dreadAcc <= 0) {
+        this.dreadAcc = 1.3 - this.threats.dread * 0.85;
+        this.audio.heartbeat(this.threats.dread);
+      }
+    }
+    // the beam is finding you: the frame whitens and a counter ticks faster
+    this.hud.setScrutiny(this.threats.scrutiny);
+    if (this.threats.scrutiny > 0.05) {
+      this.scrutinyAcc -= dt;
+      if (this.scrutinyAcc <= 0) {
+        this.scrutinyAcc = 0.55 - this.threats.scrutiny * 0.4;
+        this.audio.scrutinyTick(this.threats.scrutiny);
+      }
+    } else this.scrutinyAcc = 0;
+  }
 
   private playFrame(dt: number): void {
     const paused = this.panels.isOpen;
@@ -2404,6 +2598,7 @@ class Game {
       depthRow: this.ctrl.row,
       time: this.time,
       lampOn: this.lampOn,
+      facing: this.ctrl.facing,
       heatFrac: this.ctrl.heatFrac,
       cargoFrac: this.state.cargoCap > 0 ? this.state.cargoCount / this.state.cargoCap : 0,
       // parked with no drill intent, the arm tucks away — airborne it is
@@ -2411,81 +2606,11 @@ class Game {
       stow: this.ctrl.grounded && this.ctrl.drilling === null
         && !stowInp.down && !stowInp.left && !stowInp.right,
     });
+    this.pod.castLamp((tx, ty) => this.terrain.solidAt(tx, ty));
 
     if (!paused && dt > 0) {
       this.updateCharges(dt);
-      this.threats.update({
-        podX: this.ctrl.px, podY: this.ctrl.py,
-        vx: this.ctrl.vx, vy: this.ctrl.vy,
-        // heat is the whole engine, not just the main nozzle — flying
-        // sideways past a wyrm pool reads as thrust too
-        lampOn: this.lampOn, thrust: Math.max(this.ctrl.thrust, Math.abs(this.ctrl.sideThrust) * 0.8),
-        drilling: this.ctrl.drilling !== null, grounded: this.ctrl.grounded,
-        still: this.ctrl.still,
-        carrying: !!this.state.carrying, facing: this.ctrl.facing, dt, time: this.time,
-        hurt: (a, c) => this.ctrl.hurtFromThreat(a, c),
-        drain: a => { st.fuel = Math.max(0, st.fuel - a); },
-        push: (dx, dy) => { this.ctrl.vx += dx; this.ctrl.vy += dy; },
-        hold: s => { this.ctrl.held = Math.max(this.ctrl.held, s); },
-        native: n => {
-          for (let i = 0; i < n; i++) st.addNative();
-          const nat = ACTIVE.native;
-          this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
-          this.hud.popup(`+${n} ${nat?.ore ?? 'DEPOSIT'}`, '#' + (nat?.color ?? 0xcfe8ff).toString(16).padStart(6, '0'), this.screen.sx, this.screen.sy);
-          this.audio.chime(2);
-        },
-        steal: () => st.stealCargo(),
-        give: t => {
-          if (st.addCargo(t)) {
-            this.cam.screenPos(this.ctrl.px, this.ctrl.py + 0.6, this.screen);
-            this.hud.popup('RECOVERED', '#' + def(t).gem.toString(16).padStart(6, '0'), this.screen.sx, this.screen.sy);
-            this.audio.chime(def(t).oreTier);
-          }
-        },
-        shake: a => this.cam.addShake(a),
-        onAlert: () => {
-          this.hud.toast(ACTIVE.swarm.alert);
-          this.audio.swarmAlert();
-          // teach the counter once per world, the first time they wake
-          const key = `swarm-taught:${ACTIVE.id}`;
-          if (!st.firedEvents.has(key)) {
-            st.firedEvents.add(key);
-            setTimeout(() => this.hud.toast(ACTIVE.swarm.counter), 1800);
-          }
-        },
-        onEvent: (id, x, y) => this.onFaunaEvent(id, x, y),
-      });
-
-      // the big ones announce themselves through the rock before you see them
-      if (this.threats.rumble > 0.12) {
-        this.rumbleAcc -= dt;
-        if (this.rumbleAcc <= 0) {
-          this.rumbleAcc = 1.1 - this.threats.rumble * 0.6;
-          this.audio.rumbleTick();
-          this.cam.addShake(this.threats.rumble * 0.12);
-        }
-      }
-      // an extracted world answers with nothing — Dispatch says so, once
-      if (this.faunaDead && !ACTIVE.husk) this.teach('fauna-dead');
-      // something unlit is walking at you: your own pulse, getting faster,
-      // and the red wash the field guide always promised
-      this.hud.setDread(this.threats.dread);
-      if (this.threats.dread > 0.1) {
-        this.dreadAcc -= dt;
-        if (this.dreadAcc <= 0) {
-          this.dreadAcc = 1.3 - this.threats.dread * 0.85;
-          this.audio.heartbeat(this.threats.dread);
-        }
-      }
-      // the beam is finding you: the frame whitens and a counter ticks faster
-      this.hud.setScrutiny(this.threats.scrutiny);
-      if (this.threats.scrutiny > 0.05) {
-        this.scrutinyAcc -= dt;
-        if (this.scrutinyAcc <= 0) {
-          this.scrutinyAcc = 0.55 - this.threats.scrutiny * 0.4;
-          this.audio.scrutinyTick(this.threats.scrutiny);
-        }
-      } else this.scrutinyAcc = 0;
+      this.tickThreats(dt, false);
       // the chamber has residents of its own
       const kh = this.threats.updateChamber(dt, this.time, this.ctrl.px, this.ctrl.py, false, false, (id, x, y) => this.onFaunaEvent(id, x, y));
       if (kh === 'pod') {
@@ -2549,11 +2674,7 @@ class Game {
           const tx = Math.floor(this.ctrl.px) + Math.floor((Math.random() - 0.5) * 16);
           const ty = cy + 6 + Math.floor(Math.random() * 12);
           if (tx < 1 || tx >= this.terrain.w - 1 || ty >= this.terrain.h) continue;
-          if (this.terrain.get(tx, ty) === T.AIR) {
-            this.terrain.data[this.terrain.idx(tx, ty)] = T.RUBBLE;
-            this.terrain.dug.delete(this.terrain.idx(tx, ty));
-            this.chunks.markDirty(tx, ty);
-          }
+          if (this.terrain.get(tx, ty) === T.AIR) this.terrain.fill(tx, ty, T.RUBBLE);
         }
       }
     }
@@ -2921,7 +3042,9 @@ class Game {
       return { kind: 'offer', label: `LAY ${w?.coreName ?? 'THE FRAGMENT'} IN THE CRADLE` };
     }
     if (!st.carrying && st.extractOrderHeard && !st.extracted.has(ACTIVE.id)) {
-      return { kind: 'extract', label: `EXTRACT ${ACTIVE.coreName}` };
+      // the fragment IS the hold: say what it costs before the hold commits
+      const ore = st.cargoCount > 0 ? ` · DUMPS ${fmtMoney(st.cargoValue)} OF ORE` : '';
+      return { kind: 'extract', label: `EXTRACT ${ACTIVE.coreName}${ore}` };
     }
     return null;
   }
@@ -2963,7 +3086,7 @@ class Game {
     if (kind === 'extract') {
       st.carrying = ACTIVE.id;
       st.extracted.add(ACTIVE.id);
-      st.cargo.clear(); // the fragment IS the hold
+      st.cargo.clear(); // the fragment IS the hold — the prompt said so
       this.finale.beginUnmake();
       this.hud.hide();
       this.comms.clear();
@@ -3020,7 +3143,8 @@ class Game {
     const id = st.carrying;
     st.carrying = null;
     st.delivered.add(id);
-    const offer = Math.round(EXTRACT_OFFER * ACTIVE.valueMul);
+    // priced by the world it was cut from, not the one it is sold on
+    const offer = Math.round(EXTRACT_OFFER * (worldById(id)?.valueMul ?? 1));
     // the first delivery closes the book; the figure is kept so the
     // epilogue can say exactly what the fragment bought
     const cleared = st.debtSettled === null ? st.debtOwed : 0;
@@ -3209,6 +3333,10 @@ class Game {
 
       // SITE 297 has no clock: there is nothing here to run out of but time
       if (ACTIVE.husk) this.pilot.o2 = EVA_O2;
+
+      // the Communion's chamber and the fold are the only rooms where the
+      // world holds still; everywhere else it keeps coming for the pod
+      if (!rite && !this.fold) this.tickThreats(dt, true);
 
       // the Kindled: on foot, a touch is the whole suit's air, at once
       const kh = this.threats.updateChamber(dt, this.time, this.pilot.px, this.pilot.py, true, rite, (id, x, y) => this.onFaunaEvent(id, x, y));

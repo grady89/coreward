@@ -1,0 +1,30 @@
+{
+ "creature-glimmerflies": {
+  "calls": 82,
+  "triangles": 47026,
+  "lights": 55,
+  "lightsOn": 8,
+  "programs": 27
+ },
+ "creature-warden": {
+  "calls": 154,
+  "triangles": 35930,
+  "lights": 55,
+  "lightsOn": 8,
+  "programs": 35
+ },
+ "creature-stillwalkers": {
+  "calls": 207,
+  "triangles": 47446,
+  "lights": 54,
+  "lightsOn": 7,
+  "programs": 37
+ },
+ "creature-shellbacks": {
+  "calls": 86,
+  "triangles": 55545,
+  "lights": 54,
+  "lightsOn": 8,
+  "programs": 28
+ }
+}

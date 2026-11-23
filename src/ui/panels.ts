@@ -19,7 +19,7 @@ import { T, def, oreValue } from '../world/tiles';
 import { blurbOf, facts, rarityLabel } from '../game/minerals';
 import { ACTIVE, WORLDS, nextWorld, worldById } from '../world/worlds';
 import { oreIcon, oreGlow } from './icons';
-import { Settings } from '../game/settings';
+import { Settings, bloomEnabled } from '../game/settings';
 import {
   Contract, offers, evaluate, timeLeft, fuelLeft, accept as acceptContract,
 } from '../game/contracts';
@@ -96,6 +96,8 @@ export class Panels {
   private deathBilled = 0;
   private lostCargo = 0;
   private spilled: { value: number; count: number } | null = null;
+  /** the fragment that went down with the pod, if one was aboard */
+  private deathFragment: string | null = null;
   private endingKind: EndingKind = 'extract';
   /** which stone's placard is open, as a tile type */
   private mineralT: number = T.COPPER;
@@ -119,7 +121,7 @@ export class Panels {
     setTimeout(done, 260);
   }
 
-  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind; mineral?: number; spilled?: { value: number; count: number } | null }): void {
+  open(kind: PanelKind, opts?: { cause?: string; ending?: EndingKind; mineral?: number; spilled?: { value: number; count: number } | null; fragment?: string | null }): void {
     // a NEW panel purges the old one at once — the exit choreography is for
     // genuine closes. Exactly one panel's DOM may exist at open time, or a
     // stale fading copy shadows the fresh one's buttons and selectors.
@@ -128,7 +130,7 @@ export class Panels {
     this.current = null;
     for (const n of this.ui.querySelectorAll('.panel-scrim.leaving')) n.remove();
     this.current = kind;
-    if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause, opts.spilled ?? null);
+    if (kind === 'death' && opts?.cause) this.prepareDeath(opts.cause, opts.spilled ?? null, opts.fragment ?? null);
     if (kind === 'finale' && opts?.ending) this.endingKind = opts.ending;
     if (kind === 'mineral' && opts?.mineral !== undefined) this.mineralT = opts.mineral;
     this.scrim = document.createElement('div');
@@ -292,9 +294,11 @@ export class Panels {
       : `<div class="row"><span class="r-sub">Your hold is empty. The crust is not.</span></div>`;
     // Cindral's standing order: posted forever once relayed, so the number
     // sits there every time you sell a load of ordinary ore beside it
-    // the order pays in local scrip: harder worlds price their fragments up,
-    // so the bribe keeps pace with what a driller out here actually earns
-    const offer = Math.round(EXTRACT_OFFER * ACTIVE.valueMul);
+    // harder worlds price their fragments up, so the bribe keeps pace with
+    // what a driller out there earns — priced by the world it was cut from,
+    // never the one it is sold on, and never marked down because its own
+    // world went grey once it left
+    const offer = Math.round(EXTRACT_OFFER * (worldById(st.carrying ?? st.activeWorld)?.valueMul ?? 0));
     // the book, posted beside every sale: what the day's ore did not touch
     const lease = st.debtSettled !== null
       ? `<div class="lease-strip settled"><span>CINDRAL LEASE</span><b>SETTLED · ORDER 9-1-1</b></div>`
@@ -828,9 +832,10 @@ export class Panels {
   }
 
   // ---------- DEATH ----------
-  private prepareDeath(cause: string, spilled: { value: number; count: number } | null): void {
+  private prepareDeath(cause: string, spilled: { value: number; count: number } | null, fragment: string | null): void {
     const st = this.ctx.state;
     this.deathCause = cause;
+    this.deathFragment = fragment;
     // the fee reads the manifest, not just the purse — banking every Lumen at
     // the Ledger before a dive no longer makes dying free (OVERHAUL B5)
     const cargoBasis = spilled?.value ?? st.cargoValue;
@@ -862,7 +867,9 @@ export class Panels {
       <div class="screen-sub">
         Lost to ${this.deathCause}.<br/>
         Salvage fee: <b style="color:var(--magma)">${fmt(this.deathFee)}</b>${this.deathBilled > 0 ? ` · <b style="color:var(--amber)">${fmt(this.deathBilled)}</b> billed to the lease` : ''}<br/>
-        ${cargoLine}
+        ${this.deathFragment
+          ? `${this.deathFragment} would not come up with the wreck. It lies where the pod burst, under a beacon — go down and take it again.`
+          : cargoLine}
       </div>
       <button class="btn primary wide" id="respawn">BACK TO THE SURFACE</button>
     `;
@@ -889,6 +896,7 @@ export class Panels {
       <div class="screen-title bad">OUT OF FUEL</div>
       <div class="screen-sub">
         The pod is dark. Thrusters cold.<br/>
+        ${st.carrying ? `The winch will not lift ${worldById(st.carrying)?.coreName ?? 'the fragment'}. It stays down here, under a beacon.<br/>` : ''}
         ${free ? `The rig crew will tow you up. The winch and the fill go on the lease — <b style="color:var(--amber)">${fmt(billed)}</b>.` : `A recovery tow costs <b style="color:var(--amber)">${fmt(fee)}</b> — the winch, and a 35% fill at pump rates. Cargo stays aboard.${onLease}`}
       </div>
       <button class="btn primary wide" id="rescue">${free ? 'ACCEPT THE TOW' : 'PAY ' + fmt(fee) + ' — TOW ME UP'}</button>
@@ -1480,6 +1488,10 @@ export class Panels {
       </div>
       ${toggle('vaultAssist', 'Vault assist', 'The Nine Stones, gentler: hazards at six-tenths speed')}
       <div class="forge-head">DISPLAY</div>
+      <div class="row">
+        <span><span class="r-name">Bloom</span><div class="r-sub">Soft glow around lava, flames and lights. Turn off on slower machines</div></span>
+        <button class="btn" id="s-bloom">${bloomEnabled(s) ? 'ON' : 'OFF'}</button>
+      </div>
       ${toggle('showFps', 'Performance counter', 'Show frames per second')}
       <button class="btn wide" id="s-close">BACK</button>
     `;
@@ -1489,6 +1501,12 @@ export class Panels {
       this.ctx.audio.click();
       this.ctx.onSettingsChanged();
       this.renderSettings();
+    });
+    this.body().querySelector('#s-bloom')?.addEventListener('click', e => {
+      s.bloom = !bloomEnabled(s);
+      (e.currentTarget as HTMLElement).textContent = s.bloom ? 'ON' : 'OFF';
+      this.ctx.audio.click();
+      this.ctx.onSettingsChanged();
     });
     this.body().querySelectorAll('input[data-vol]').forEach(el => {
       const input = el as HTMLInputElement;

@@ -1,0 +1,58 @@
+{
+ "rock": {
+  "best": 5.8,
+  "candidate": 5.8,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "Rock and terrain materials are pixel-for-pixel equivalent across A and B; the visible differences are in the liquid pools, which belong to another category."
+ },
+ "lighting": {
+  "best": 6.7,
+  "candidate": 6.6,
+  "delta": -0.1,
+  "preferred": "best",
+  "why": "The builds are nearly identical. B's faint back wall in the core chambers adds the midground/haze depth the brief asks for, which slightly outweighs its rectangle artifact and the flatter lava blocks."
+ },
+ "identity": {
+  "best": 7.0,
+  "candidate": 7.1,
+  "delta": 0.1,
+  "preferred": "candidate",
+  "why": "Palettes are effectively identical. B's caustic swirl and lit edges on the world-hued liquid make the pools, the main hue carrier at every depth, read slightly more as material, but the margin is marginal."
+ },
+ "fluids": {
+  "best": 6.3,
+  "candidate": 6.6,
+  "delta": 0.3,
+  "preferred": "candidate",
+  "why": "Nearly identical builds. A keeps the swirl and caustic texture on its fluid bodies. B flattens it and adds a hard rectangular lighter patch behind every core, which hurts the core chambers."
+ },
+ "characters": {
+  "best": 6.2,
+  "candidate": 6.4,
+  "delta": 0.2,
+  "preferred": "candidate",
+  "why": "B removes the red haze that flattened the dark around the glimmerflies and gives the shellback a readable shell. The other shots are nearly identical, so the margin is small."
+ },
+ "vaults": {
+  "best": 5.8,
+  "candidate": 5.8,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "Every A/B pair is visually identical apart from animation phase (bolt positions, lamp swing, rain); there is no difference in lighting, palette or readability."
+ },
+ "ui": {
+  "best": 7.0,
+  "candidate": 7.0,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "The UI is pixel-identical across hud-play, shop-trade, veil3-surface and ending-page. Title B is only marginally darker behind the tagline, which is not enough to separate the two."
+ },
+ "minerals": {
+  "best": 6.5,
+  "candidate": 6.5,
+  "delta": 0.0,
+  "preferred": "same",
+  "why": "The ore meshes, colours and glows look identical in every A/B pair; the only visible differences are on the pod, which is outside this category."
+ }
+}

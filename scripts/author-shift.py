@@ -21,9 +21,10 @@ THE OBSTACLES, to the drawing:
     opposition: four hops across storey 3, one more breath of A on the way
     to the stone.
   * DOWNDRAFTS — the descent shafts blow DOWN (negative current force, the
-    engine's mirror of the famine's road up). Two of them pour onto spiked
-    shelves: the steer out of the wind onto the safe stone beside it is the
-    whole of the landing.
+    engine's mirror of the famine's road up). The first pours onto the safe
+    block, run out wide (v6: the first wind teaches the fall); the last
+    pours onto a spiked shelf, and the steer out of the wind onto the safe
+    stone beside it is the whole of the landing.
 
 Distances are fractions of the MEASURED running jump (5.45 across, 2.68 up —
 docs/movement-metrics.md). Every gap is a crossing of at most 6 tiles.
@@ -56,14 +57,20 @@ def block(x0, x1, y0, y1):
 
 
 # The three descent shafts (x0, x1, y0, y1): each is a downdraft rect and a
-# hole in the kill plane it passes. The first and last pour onto spiked
-# shelves — the safe stone is always one steer to the LEFT. The middle one
-# lands square on storey 3's shelf, which is why that shelf is where its
-# sconce stands.
+# hole in the kill plane it passes. The first lands on the safe block (v6);
+# the last pours onto a spiked shelf, the safe stone one steer to the LEFT.
+# The middle one lands square on storey 3's shelf, which is why that shelf is
+# where its sconce stands.
+# The last wind stops six courses above the finish shelf (v6): a downdraft
+# that reaches the floor crushes any jump begun under it, and from the old
+# safe square at 46 the hop back over the fangs to the sconce died 0/4. The
+# runtime runs a current down to the first stone in its columns, so the
+# stop is a stone: the corbel at (47, 52), on the shaft's east wall, high
+# enough that no jump from the floor bonks it.
 SHAFTS = [
     (39, 42, 11, 24),
     (3, 7, 27, 40),
-    (44, 47, 43, 56),
+    (44, 47, 43, 51),
 ]
 
 # --- storey 1: the walk, watched --------------------------------------------
@@ -83,10 +90,12 @@ run(7, 12, F[1])                            # the far shelf, end of the ride
 put(16, F[1] - 5, '#')                      # censer mounts...
 put(23, F[1] - 5, '#')                      # ...pivots hang one course below
 put(30, F[1] - 5, '#')
-block(34, 38, F[1] - 1, F[1])               # the safe block off the first shaft
-run(39, 43, F[1])                           # the spiked shelf under the wind —
-run(39, 40, F[1] - 1, 'X')                  # fanged both sides of ONE safe
-run(42, 43, F[1] - 1, 'X')                  # square, threaded from above
+# The first shaft pours onto the safe block itself, run out under the whole
+# wind and past where a walk-off's carry lands it (v6). It was a spiked shelf
+# with ONE safe square, and a fang between it and the block that a jump out
+# of the downdraft cannot clear. The first wind teaches the fall; the last
+# one, at the finish, still pours onto fangs.
+block(34, 46, F[1] - 1, F[1])
 put(36, F[1] - 2, 'S')
 
 # --- storey 3: the fading shelves -------------------------------------------
@@ -98,9 +107,13 @@ run(38, 43, F[2], 'b')
 put(5, F[2] - 1, 'S')
 
 # --- the finish storey, right to left ---------------------------------------
-run(44, 48, F[3])                           # spikes under the last shaft —
-run(44, 45, F[3] - 1, 'X')                  # one safe square in the middle,
-run(47, 48, F[3] - 1, 'X')                  # threaded down the wind
+# The spiked shelf under the last shaft: fangs under the wind's west half,
+# where a steer for the sconce that comes too late lands, and stone east of
+# them run out to where a walk-off's carry lands (v6: it was ONE safe square
+# between fang pairs, and the walk-off died on the east pair)
+run(44, 50, F[3])
+run(44, 45, F[3] - 1, 'X')
+put(47, F[3] - 6, '#')                      # the corbel the last wind breaks on
 run(39, 42, F[3])                           # ...or the safe shelf, one steer left
 run(28, 33, F[3], 'A')                      # one more breath of group A
 run(13, 23, F[3])                           # the finish platform
@@ -111,12 +124,21 @@ put(18, F[3] - 1, 'N')                      # kneeling: the shift ended here
 
 # --- the kill planes, eight courses under each storey but the last ----------
 # (below the finish storey the openEdges void is the floor of the world)
+# The first drop's plane is holed over its whole landing, not just the shaft:
+# the plane is unseen, and a steer toward the safe block you CAN see must
+# never die on a floor you can't (v6 — the playtest's "leave the path, die")
+# The last drop's plane is holed the same way, over the sconce shelf, the
+# shaft and the shelf beyond it (it was 44-47, so a steer for the sconce
+# died at row 50 unless it began 20-24 frames after the lip). A body that
+# drops through b's east four columns now lands on the sconce shelf too.
+CATCH = [(34, 46, F[0] + FALL), (39, 49, F[2] + FALL)]
 for f in F[:3]:
     y = f + FALL
     for x in range(LEFT, RIGHT + 1):
         inShaft = any(c0 <= x <= c1 and r0 <= y <= r1
                       for c0, c1, r0, r1 in SHAFTS)
-        if not inShaft:
+        inCatch = any(c0 <= x <= c1 and y == cy for c0, c1, cy in CATCH)
+        if not (inShaft or inCatch):
             put(x, y, '_')
 
 # --- motes: the mouths of the shafts, so the way down reads as a way --------
@@ -174,8 +196,9 @@ defn = """  // 3 · THE LAST SHIFT — the descent, to the drawing. Four storeys
   // walk the watched storey right, pour down, ride the lanterns back left,
   // pour down, cross the fading shelves right, and pour down once more to
   // the stone. The wind that was a road up in THE FAMINE is a fall here,
-  // and two of the three landings are spiked: the steer out of the wind
-  // onto the safe stone beside it is the whole of the landing.
+  // and the last landing is spiked: the steer out of the wind onto the
+  // safe stone beside it is the whole of it. The first wind only teaches
+  // the fall, onto stone run out under all of it.
   //
   // Storey 2 has NO floor — the crossing is ridden censer to censer over
   // the void, which is THE RETURN's coda taught two acts early and made

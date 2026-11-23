@@ -35,6 +35,26 @@ that does not exist:
 | standing + flat spark | 0.85 | 3.86 | 35f | the correction, from rest |
 | wall-jump, per kick | 2.68 | — | — | unlimited, and free |
 
+**The spark rows above fire it six frames in, to go up.** Fired at the END of
+the fall, a 45° spark is the game's true long reach, and it depends on where
+you land. This is the number a gap must beat to be uncrossable; note that
+distance alone never beats it inside a chamber, and three courses of climb do.
+
+| late spark, running jump | farthest landing |
+|---|---|
+| landing 2 courses lower | **13.51** |
+| level | **12.67** |
+| landing 2 courses higher | 11.42 |
+| landing 3 courses higher | 7.91 |
+| landing 4 courses higher | 5.76 |
+| landing 5 courses higher | 5.03 |
+| landing 6 courses higher | 2.59 |
+
+**And none of it matters next to a wall.** Kicks are unlimited, so any wall
+within reach is free height, and a spark off a high kick reaches farther
+than any of these. A route that must not be walked back is closed with a
+one-way gate, not with distance.
+
 | forgiveness | value |
 |---|---|
 | coyote time | 6 frames |

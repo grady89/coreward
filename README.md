@@ -98,6 +98,10 @@ hardware at 60fps the clamp never engages.
 | E | dock at a building · EVA at a wreck or the core · salvage · board pod |
 | F | headlamp on/off — **light attracts what lives down there** |
 | Q | throw a flare · G | place a seismic charge |
+| B | deploy an arrestor (a landing pad that catches a fall) |
+| L | fix a shaftlight (permanent) · N | plant a waystation depot |
+| X | fire the Lumen Lance (forge tech) |
+| Shift | the spark, inside a stone only — the pod has no dash |
 | Tab | survey map (+ / − or scroll to zoom) |
 | R | recall to the pod during EVA |
 | C | Warp Hold remote-sell (forge tech) |

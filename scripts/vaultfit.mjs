@@ -29,7 +29,7 @@ const colsNeeded = Math.max(1, Math.ceil(HW * 2));
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
-await page.goto('http://localhost:4173');
+await page.goto(process.env.COREWARD_URL ?? 'http://localhost:4173');
 await page.waitForTimeout(3200);
 const maps = await page.evaluate(() =>
   [...window.__VAULTS, ...window.__TEST_VAULTS].map(v => ({ glyph: v.glyph, map: v.map })));
@@ -244,11 +244,15 @@ for (const { glyph, map: rows } of maps) {
   const mOk = master.length > 0 && master.every(([x, y]) => covered(x, y));
   const missed = sconces.filter(([x, y]) => !covered(x, y));
   const rowBad = !mOk || missed.length > 0;
+  // the model has one gravity, down; a room with gravity zones is climbed by
+  // falling up, which it cannot see, so a miss there is reported, not failed:
+  // that room is proved by its route (scripts/routes/<glyph>.js, real body)
+  const flips = rows.some(r => /[\^<>]/.test(r));
   const graded = V4_DONE.includes(glyph);
-  if (rowBad && graded) reachBad++;
+  if (rowBad && graded && !flips) reachBad++;
   reachRows.push({
     glyph,
-    v4: graded ? 'graded' : 'report',
+    v4: !graded ? 'report' : rowBad && flips ? 'report (gravity)' : 'graded',
     golden: mOk ? 'proved' : 'NOT REACHED',
     sconces: `${sconces.length - missed.length}/${sconces.length}`,
     doubleSpark: strandedSpark ? 'risk' : '-',

@@ -1,39 +1,100 @@
-"""THE DEBT — the mirror, in open sky. 50 x 52.
+"""THE DEBT -- the ledger, read both ways (v7, 2026-11-21). 66 x 15.
 
-One floating cell of inverted gravity, and the ledger read on both sides of
-it. The normal approach crosses under a piston and a lantern; then the leap
-UP into the cell, where down is up: you fall to the undersides of the
-slabs and climb the mirror by jumping toward the world's floor. The cell
-is CAPPED — a full stone lid, because a body that falls up with nothing
-above it never comes back — and its own piston descends on the same period
-as the approach's, opposite phase: both sides of the ledger paid.
+One course of stone runs the room: THE PAGE (row 7). Over it gravity is down
+(the debit side, a corridor five courses tall under a roof); under it
+gravity is UP (the credit side, `^`, five courses over a floor). Both faces
+are floors. The route reads the page forward along the top, turns at the far
+end, and reads it back along the underside to the stone, which sits under the
+spawn, in plain sight from the first frame. One corridor out, one corridor
+back, and nothing else to choose: every column off the route is stone, or
+lethal on sight.
 
-The door is not a lock. Its price is one sconce lit under EACH gravity —
-the entry's and the one hanging in the mirror — so the sum cannot be paid
-without understanding both halves. It melts open at the end of the fall
-OUT of the cell, with the stone behind it.
+The whole band is 15 courses tall, so the camera holds both faces at once
+from anywhere in the room. Nothing is ever landed on blind, before a flip or
+after one.
 
-Open sky (openEdges): one plane under the normal-gravity route; the cell
-needs none, its lid is the plane.
+Gravity is drawn (src/game/vault.ts, the gravity field): turned air is tinted
+cyan with chevrons crawling up, down air near a seam carries gold chevrons
+pointing down, every seam is a bright line, streaks fall the way each side
+pulls, and crossing a seam turns the body's drawing over, rings it and plays
+a glide. Every flip in the room is visible before the body reaches it.
+
+The route, forward along the top (debit, left to right):
+
+ I . THE FIRST LIFT (columns 0-21)                       -- the rule, safe
+   1  Spawn on the page. A block stands on it three courses high and the roof
+      is too close above it to climb: the corridor is shut except for the
+      cyan band hung under the roof from just before the block to just past
+      it. Jump into the band and it takes you up onto the roof; walk over the
+      block hanging from the roof; walk out of the band and you fall back to
+      the page. Nothing here can kill you; a short jump lands where it left.
+   2  The first light (L1, debit), where the band lets you down.
+   3  T1, a piston out of the roof. Go when it lifts.
+II . THE WOUND (22-43)                                   -- the rule, tested
+   4  Ten columns of fangs stand on the page, too long to jump or spark. The
+      cyan band hangs under the roof again, one column before them to two
+      past. Jump in and cross hanging from the roof, past two plumb bolts
+      (half a beat apart) and one stand of fangs hung from the roof between
+      them: hop it. A short hop stays in the band; a full jump leaves it and
+      falls onto the fangs.
+   5  Walk out of the band and fall to the page. The second light (L2,
+      debit), on the cut.
+III . THE CLOSING (44-65): nothing new, no light (P4)    -- combined
+   6  T2 out of the roof.
+   7  G2, two columns of fangs on the page, straight in front of an ankle
+      bolt's rail: a full jump from the lip lands between them.
+   8  Hop the ankle bolt.
+   9  THE TURN. The page ends at the far wall in a hole, and under the hole a
+      chute of down air (gold) runs three courses into the credit side. Walk
+      in, fall, and the seam at the chute's foot catches you; drift left out
+      of the chute and you fall up onto the underside.
+
+...and back along the underside (credit, right to left), the same page read
+the other way:
+
+III' 10  B1 out of the floor (the drift out of the turn stops short of it).
+     11  B2 out of the floor under T2, half a beat from it.
+II'  12  The third light (C1, credit), on its plinth under L2.
+     13  The wound from beneath. Ten columns of fangs hang under the page, and
+         a band of DOWN air lies along the floor under them, the roof band's
+         mirror: jump away from the page into it and you fall onto the floor.
+         Cross standing on the floor past the same two plumb bolts, met
+         rising instead of falling, and hop a stand of fangs on the floor. A
+         full jump leaves the band and falls up into the fangs.
+     14  Walk out of the band at its far end and fall up to the page.
+I'   15  THE PRICE. The fourth light (C2, credit) sits at a door high in a
+         wall across the underside. The door wants three lights and the room
+         has two on each face, so it can be paid only by reading both. Door
+         masonry carries no gravity of its own, so the paid doorway is a cell
+         of down air: walk into it and you drop into the stone's room, which
+         is down air throughout.
+     16  The stone, a kneeling keeper beside it, under where you came in.
+
+A credit light stands on a plinth because a sconce tile carries no gravity
+either: hung bare in the up field it would be a one-tile hole of down air,
+and a body re-formed there would hover at the hole's foot. On the plinth it
+re-forms standing, and steps off into the field.
+What v7 cut from v6 (docs/vault-debt.md): the hub and its branches (the
+pocket Q over the page, its mirror Q', the pair of pistons in their lids, the
+"either order" choice), the first leaf's two holes, the closing's two
+corridors and their walls, all the open sky above the page and the open
+credit side under it, the walk-in turns that only bobbed, and the tear G1
+and floor piston B3 tried during v7 (both crowded the band's exits). Turns
+are now chutes and bands you can see before you reach them.
 """
 import io
 
-W, HGT = 50, 52
+W, HGT = 66, 15
 PULSE = 0.85
+PAGE = 7           # the page
+ROOF = 1           # the roof's underside course (rows 0-1 are stone)
+FLOOR = 13         # the credit side's floor (rows 13-14 are stone)
 
 g = [['.'] * W for _ in range(HGT)]
-LEFT, RIGHT = 2, W - 3
-
-# The cell: every tile in here falls UP (slabs overwrite with stone). Its
-# floor sits at row 32 — high enough that an ordinary jump on the approach
-# below never grazes it — and the only way in is the THROAT: a narrow
-# chute of inverted air hanging over the launch pad alone, so entering the
-# mirror is a chosen leap, never an accident.
-CELL = (24, 42, 8, 32)
-THROAT = (33, 38, 33, 37)
 
 
 def put(x, y, ch):
+    assert 0 <= x < W and 0 <= y < HGT, (x, y, ch)
     g[y][x] = ch
 
 
@@ -47,94 +108,92 @@ def block(x0, x1, y0, y1, ch='#'):
         run(x0, x1, y, ch)
 
 
-# --- the inverted cell, filled first so stone can overwrite it -------------
-cx0, cx1, cy0, cy1 = CELL
-block(cx0, cx1, cy0, cy1, '^')
-block(*THROAT, '^')
-run(cx0 - 1, cx1 + 1, cy0 - 1)        # the LID: a full stone cap
-# the mirror's slabs, walked on their UNDERSIDES, climbed by jumping down
-run(31, 38, 24)
-run(24, 28, 20)
-put(26, 21, 'S')                      # the sconce hung in the mirror
-run(31, 36, 16)
-run(24, 29, 12)
-# the mirror's piston: housed in the cell's east flank, biting west across
-# the climb between the second and third slabs
-block(41, 42, 20, 21)
+# --- the band: roof, page, floor, the two end walls --------------------------
+block(0, W - 1, 0, ROOF)
+block(0, W - 1, FLOOR, HGT - 1)
+block(0, 0, 0, HGT - 1)
+block(W - 1, W - 1, 0, HGT - 1)
+run(1, W - 2, PAGE)
+block(1, W - 2, PAGE + 1, FLOOR - 1, '^')       # the credit side falls up
 
-# --- the normal approach, left to right under the cell ---------------------
-run(3, 12, 40)
-put(4, 39, '@')
-put(7, 39, 'S')
-run(16, 21, 40)
-# the approach piston's housing, biting down over the pad
-block(24, 25, 35, 36)
-run(24, 29, 40)
-put(32, 35, '#')                      # the lantern's mount stone
-run(33, 38, 40)                       # the launch pad: jump UP into the cell
+TOP = (ROOF + 1, PAGE - 1)                       # rows 2-6
+UNDER = (PAGE + 1, FLOOR - 1)                    # rows 8-12
 
-# --- the way out: off the lid's west edge, down the cell's flank. The
-# collector pad catches the fall (and, for a climber who missed the mirror
-# sconce, a step east off its edge re-enters the cell right beneath it)
-run(16, 23, 30)
-put(20, 29, 'F')                      # fallen: struck from the mirror's side
-run(3, 12, 34)                        # the door's porch, hung over the entry
-block(8, 8, 30, 33, '1')              # the door, priced one sconce per gravity
-block(3, 3, 30, 33)                   # the stone's alcove wall
-put(5, 33, 'M')
-put(6, 33, 'N')                       # kneeling: the ledger closed
+# === I . the first lift (0-21) ===============================================
+put(2, PAGE - 1, '@')
+put(6, PAGE - 1, 'K')                            # reaching up: the answer is above
+block(8, 10, 4, PAGE - 1)                        # the block on the page
+block(5, 11, ROOF + 1, 4, '^')                   # the band under the roof...
+block(8, 10, 4, 4, '#')                          # ...over the block, two deep
+put(14, PAGE - 1, 'S')                           # L1, where the band lets you down
+put(17, PAGE - 1, 'F')                           # fallen short of the piston
+# under it: the stone's room, down air, behind the door
+block(1, 12, UNDER[0], UNDER[1], '.')
+block(13, 13, UNDER[0], UNDER[0] + 1, '1')       # the door, high in its wall: three lights
+block(13, 13, UNDER[0] + 2, UNDER[1])
+put(14, PAGE + 2, 'S')                           # C2, on its plinth, at the door
+put(14, PAGE + 3, '#')
+put(3, FLOOR - 1, 'M')
+put(5, FLOOR - 1, 'N')                           # kneeling: the ledger closed
 
-# --- one plane under the normal route --------------------------------------
-for x in range(LEFT, RIGHT + 1):
-    if g[48][x] == '.':
-        put(x, 48, '_')
+# === II . the wound (22-43) ==================================================
+WOUND = (29, 38)
+run(WOUND[0], WOUND[1], PAGE - 1, 'X')           # fangs up off the page...
+run(WOUND[0], WOUND[1], PAGE + 1, 'X')           # ...and down off its underside
+block(28, 40, ROOF + 1, 4, '^')                  # the roof's band
+block(28, 40, 10, FLOOR - 1, '.')                # the floor's band (down air)
+put(34, ROOF + 1, 'X')                           # a stand hung from the roof
+put(34, FLOOR - 1, 'X')                          # ...and its mirror on the floor
+put(43, PAGE - 1, 'S')                           # L2, past the wound
+put(43, PAGE + 2, 'S')                           # C1, on its plinth, under it
+put(43, PAGE + 3, '#')
 
-# --- motes: the leap into the mirror, and the fall out of it ---------------
-for y in range(35, 40):
-    for x in range(34, 38):
-        if g[y][x] == '.':
-            put(x, y, 'o')
-for y in range(10, 28):
-    if g[y][22] == '.':
-        put(22, y, 'o')
+# === III . the closing (44-65): nothing new, no light ========================
+run(52, 53, PAGE - 1, 'X')                       # G2, on the page only
+run(63, 64, PAGE, '.')                           # the turn's hole...
+block(63, 64, PAGE + 1, PAGE + 3, '.')           # ...and its chute of down air
 
-CENSERS = [
-    # the lantern over the approach's last gap, in the world's own down
-    (32, 36, 2.8, 0.9, 3, 0.0),
-]
 CRUSHERS = [
-    # the mirror's piston, biting west across the inverted climb...
-    (41, 20, 2, 2, -4, 0, 4, 0.0),
-    # ...and the approach's, biting down over the pad: same period,
-    # opposite phase, both sides of the ledger paid
-    (24, 37, 2, 1, 0, 2, 4, 0.5),
+    # (x, y, w, h, dx, dy, pulses, phase)
+    (19, ROOF, 2, 1, 0, 5, 4, 0.0),              # T1, out of the roof
+    (48, ROOF, 2, 1, 0, 5, 4, 0.0),              # T2
+    (48, FLOOR, 2, 1, 0, -5, 4, 0.5),            # B2, out of the floor under it
+    (55, FLOOR, 2, 1, 0, -5, 4, 0.25),           # B1, under the ankle bolt's near end
 ]
 
+SHUTTLES = [
+    # (x0, y0, x1, y1, pulses, phase)
+    (31, ROOF + 1, 31, PAGE - 1, 3, 0.0),        # plumb bolts over the wound, half a beat apart,
+    (38, ROOF + 1, 38, PAGE - 1, 3, 0.5),
+    (31, PAGE + 1, 31, FLOOR - 1, 3, 0.5),       # ...and their mirrors under it: the same
+    (38, PAGE + 1, 38, FLOOR - 1, 3, 0.0),       # bolt read from the other face
+    (56, PAGE - 1, 59, PAGE - 1, 2, 0.0),        # the ankle bolt along the page
+]
 rows = [''.join(r) for r in g]
 for i, r in enumerate(rows):
     assert len(r) == W, f'row {i} is {len(r)}'
 
-censers = ',\n'.join(
-    "      { x: %d, y: %d, len: %.1f, arc: %.2f, period: %.2f, phase: %s }"
-    % (x, y, ln, arc, n * PULSE, ph) for x, y, ln, arc, n, ph in CENSERS)
+shuttles = ',\n'.join(
+    "      { x0: %d, y0: %d, x1: %d, y1: %d, period: %.2f, phase: %s }"
+    % (a, b, c, d, n * PULSE, ph) for a, b, c, d, n, ph in SHUTTLES)
 crushers = ',\n'.join(
     "      { x: %d, y: %d, w: %d, h: %d, dx: %d, dy: %d, period: %.2f, phase: %s }"
     % (x, y, w, h, dx, dy, n * PULSE, ph) for x, y, w, h, dx, dy, n, ph in CRUSHERS)
 
-defn = """  // 7 · THE DEBT — the mirror, in open sky. One floating cell of inverted
-  // gravity with a full stone lid, entered by a leap from the launch pad
-  // beneath it: inside, you land on the UNDERSIDES of the slabs and climb
-  // the mirror by jumping toward the world's floor. The pistons are one
-  // system across the flip — same period, opposite phase — and the door's
-  // price is one sconce lit under EACH gravity, so the sum cannot be paid
-  // without understanding both halves. Out the cell's west flank, down its
-  // own long fall, to the stone behind the melted door.
+defn = """  // 7 · THE DEBT — the ledger, read both ways. One course of stone, the
+  // page, runs a closed band: over it gravity is down, under it up, and both
+  // faces are floors. Forward along the top: a band of up air under the roof
+  // lifts you over a block (the rule, safe), then over the wound, ten columns
+  // of fangs on both faces, past two plumb bolts; a piston, fangs and an ankle
+  // bolt; the turn, a chute of down air at the far wall. Back along the
+  // underside, the same page read the other way: floor pistons, the wound
+  // crossed on a band of down air along the floor, and a door priced in both
+  // sides' lights that drops you onto the stone's floor, under the spawn.
   {
     glyph: 'debt',
-    chambers: [17, 35],
-    openEdges: true,
-    doorNeeds: { '1': 2 },
-    censers: [
+    chambers: [21, 43],
+    doorNeeds: { '1': 3 },
+    shuttles: [
 %s
     ],
     crushers: [
@@ -146,7 +205,7 @@ defn = """  // 7 · THE DEBT — the mirror, in open sky. One floating cell of i
   },
 """
 body = ',\n'.join("      '" + r + "'" for r in rows)
-out = defn % (censers, crushers, body)
+out = defn % (shuttles, crushers, body)
 
 p = 'src/world/vaults.ts'
 s = io.open(p, encoding='utf-8').read()
