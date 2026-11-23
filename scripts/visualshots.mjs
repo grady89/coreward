@@ -262,6 +262,17 @@ for (const f of ['glimmerflies', 'warden', 'stillwalkers', 'shellbacks']) {
     }
   });
   await page.keyboard.press('KeyH'); // hide the sandbox card
+  // keep the pod whole up to the frame and let any damage flash fade (from round 6):
+  // the flash is a hit indicator, not the creature's look, and its strength was luck
+  await page.evaluate(async () => {
+    const g = window.__game, w0 = performance.now();
+    const flash = () => +(getComputedStyle(document.querySelector('#damage-flash') ?? document.body).opacity || 0);
+    while (performance.now() - w0 < 4000) {
+      g.state.hull = g.state.maxHull;
+      if (!document.querySelector('#damage-flash') || flash() < 0.02) break;
+      await new Promise(r => setTimeout(r, 30));
+    }
+  });
   // hold the sandbox's own framing at this instant
   await page.evaluate(() => { const c = window.__game.cam; const { cx, cy, cz } = c; c.follow = () => {}; c.snap(cx, cy, cz); });
   await shot(page, `creature-${f}`, { settle: 0.4 });

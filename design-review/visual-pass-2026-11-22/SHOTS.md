@@ -70,3 +70,5 @@ Perf proxies from `renderer.info` at the frame shot (calls, triangles) and the s
 **Change from round 3:** `vault-*-room` now waits 6 s of vault time (the room's far stone flies in on arrival and read as debris) and caps the camera distance at 26, centred on the pilot's part of the room when the cap crops it. Best and candidate are always shot with the same script; round 3's best was re-shot (`r3/best`).
 
 **Change from round 4:** `*-core` is framed between the pod and the core (camera at their midpoint, distance 15) so the whole fragment is in frame; round 4's best was re-shot with it.
+
+**Change from round 6:** `creature-*` keeps the pod's hull full up to the frame and waits (≤4 s wall) for `#damage-flash` to fade, so a hit flash no longer floods the frame by luck. Round 6's best creature shots were re-shot with it, from the best build plus the dev-only sandbox staging fix d4a0831 (stillwalker staged ahead of the lamp), so best and candidate share framing.
