@@ -178,11 +178,8 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		// low saturation: dark world-tinted stone, not glowing stone
 		acc = mix(vec3(dot(acc, vec3(0.2126, 0.7152, 0.0722))), acc, 0.5);
 		// crisp per-block value over per-bed (three-row) bands
-		// (the topsoil, rows 0..~30, keeps a calmer step so it doesn't read as a pattern)
 		float blk = floor(stHash(vCell) * 4.0) / 3.0;
 		float bed = stHash(vec2(41.0, floor(vCell.y / 3.0)));
-		float tsCalm = 1.0 - 0.65 * (1.0 - smoothstep(18.0, 30.0, row));
-		blk = mix(0.5, blk, tsCalm); bed = mix(0.5, bed, tsCalm);
 		float face = vBoxN.z > 0.5 ? 1.0 : 0.55;
 		totalEmissiveRadiance += acc * face * stShade * (0.14 + 0.12 * blk + 0.1 * bed);
 	}
@@ -232,23 +229,6 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		}
 	}`)
     .replace('#include <aomap_fragment>', `#include <aomap_fragment>
-	// topsoil: the sky's light falls off below the surface line, so the dirt
-	// grades darker a few rows down; the sunlit top row keeps its tops lit
-	// and its fronts a step darker. Gone by row ~30, off in a spent world.
-	{
-		float tsRow = -vWXY.y;
-		float tsW = uStone * (1.0 - smoothstep(18.0, 30.0, tsRow));
-		if (tsW > 0.0) {
-			float tsTop = vBoxN.y > 0.5 ? 1.0 : 0.0;
-			float tsK = mix(mix(0.78, 1.0, tsTop), 0.36, smoothstep(0.5, 5.5, tsRow));
-			// a slow irregular drift per block, low contrast, no parity
-			tsK *= 0.94 + 0.12 * stHash(vCell + vec2(17.0, 5.0));
-			tsK = mix(1.0, tsK, tsW);
-			reflectedLight.directDiffuse *= tsK;
-			reflectedLight.indirectDiffuse *= tsK;
-			reflectedLight.directSpecular *= tsK;
-		}
-	}
 	// stone at and around an ore stays matte and dark so the ore's halo is
 	// the brightest thing there: lamp light on it is soft-capped and greyed
 	// (a top face is footing, so it keeps more of its light)
@@ -260,7 +240,7 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		reflectedLight.directSpecular *= 1.0 - 0.8 * mm;
 	}`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v8';
+rockMat.customProgramCacheKey = () => 'rock-glow-v7';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
@@ -607,13 +587,6 @@ class Chunk {
           terrain.get(x - 1, y) === T.AIR || terrain.get(x + 1, y) === T.AIR ||
           terrain.get(x, y - 1) === T.AIR || terrain.get(x, y + 1) === T.AIR;
         tmpC.setHex(rockColor(t, x, y));
-        // topsoil: pull rockColor's ±14% per-block step most of the way in,
-        // so the dirt near the surface drifts rather than alternates
-        if (!spent && y < 30) {
-          const v = 0.86 + cellHash(x, y) * 0.28;
-          const a = 1 - 0.7 * (1 - Math.min(1, Math.max(0, (y - 18) / 12)));
-          tmpC.multiplyScalar((1 + (v - 1) * a) / v);
-        }
         if (exposed) tmpC.multiplyScalar(1.22);
         this.rock.setColorAt(nr, tmpC);
         this.wash.setXYZ(nr, lit.r[local], lit.g[local], lit.b[local]);
