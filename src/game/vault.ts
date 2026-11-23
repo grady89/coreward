@@ -849,7 +849,6 @@ export class VaultRun {
     // stone that carries them — up off a floor, down off a hung block
     const solidAt = (xx: number, yy: number): boolean =>
       xx >= 0 && yy >= 0 && xx < p.w && yy < p.h && !!p.solid[yy * p.w + xx];
-    const tipAt: THREE.Vector3[] = [];
     for (let y = 0; y < p.h; y++) {
       for (let x = 0; x < p.w; x++) {
         if (!p.kill[y * p.w + x]) continue;
@@ -859,25 +858,7 @@ export class VaultRun {
         stud.group.position.set(x + 0.5, -(y + 0.5), 0);
         this.killMats.push(...stud.mats);
         this.scene.add(stud.group);
-        for (const t of stud.tips) tipAt.push(t.add(stud.group.position));
       }
-    }
-    // the fang tips: a hot glint on every point, one draw for the room, so
-    // a fang bed holds in a room no light reaches — the points, not just the
-    // seam, are what the eye has to find before the jump
-    if (tipAt.length) {
-      const tipMat = new THREE.MeshBasicMaterial({
-        map: softDisc(), color: 0xff8a3a, transparent: true, opacity: 0.75,
-        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-      });
-      const glint = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.13, 0.13), tipMat, tipAt.length);
-      for (let i = 0; i < tipAt.length; i++) {
-        m4.makeTranslation(tipAt[i].x, tipAt[i].y, tipAt[i].z + 0.04);
-        glint.setMatrixAt(i, m4);
-      }
-      glint.instanceMatrix.needsUpdate = true;
-      this.killMats.push(tipMat);
-      this.scene.add(glint);
     }
 
     // sconces. The light-family sheet's fitting: a backplate on the masonry,
