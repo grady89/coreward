@@ -1,0 +1,17 @@
+{
+ "creatures-a": {"name": "Creatures I: the Long One, the Geode Mimic, the Kindled, Rimewings",
+   "refs": ["10-creatures.png", "HOUSE:creature-warden.png", "HOUSE:creature-shellbacks.png", "HOUSE:creature-glimmerflies.png"],
+   "shots": ["creature-longone", "creature-longone-close", "creature-mimic", "creature-mimic-close", "creature-kindled", "creature-kindled-close", "creature-rimewings", "creature-rimewings-close"]},
+ "creatures-b": {"name": "Creatures II: the Brinewyrm, Frostbloom, Pressure Polyps, the Riptide",
+   "refs": ["10-creatures.png", "05-cryos.png", "06-maelis.png", "HOUSE:creature-warden.png", "HOUSE:creature-stillwalkers.png"],
+   "shots": ["creature-brinewyrm", "creature-brinewyrm-close", "creature-frostbloom", "creature-frostbloom-close", "creature-polyps", "creature-polyps-close", "creature-riptide", "creature-riptide-close"]},
+ "quarters-room": {"name": "The Quarters as a room: shell, materials, ceiling, light and mood (stock and furnished)",
+   "refs": ["02-surface.png", "09-pod-pilot.png"],
+   "shots": ["quarters-stock-west", "quarters-stock-mid", "quarters-stock-east", "quarters-full-west", "quarters-full-mid", "quarters-full-east"]},
+ "furnishings": {"name": "Quarters furnishings and wall palettes: does every bought item read as itself and look cared for; is each palette a good distinct room",
+   "refs": ["02-surface.png"],
+   "shots": ["quarters-full-mid", "quarters-close-1", "quarters-close-2", "quarters-close-3", "quarters-close-4", "quarters-palette-slate", "quarters-palette-rose", "quarters-palette-verdant"]},
+ "wings": {"name": "Quarters wings: the Gallery (cut stones on plinths) and the Vivarium (tanks of creatures in light)",
+   "refs": ["07-core.png", "08-vault.png"],
+   "shots": ["quarters-full-east", "quarters-gallery", "quarters-vivarium"]}
+}
