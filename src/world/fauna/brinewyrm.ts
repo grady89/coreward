@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Terrain } from '../terrain';
 import { T } from '../tiles';
 import { ACTIVE } from '../worlds';
@@ -6,16 +7,16 @@ import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
 import {
   Creature, ThreatCtx, ThreatLevel, Chain, lerp,
-  tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC,
+  tmpM, tmpP, tmpQ, tmpS, tmpC, tmpC2, Spill, AXIS_X, AXIS_Z,
 } from './types';
 
 // THE BRINEWYRM — CRYOS-2's hunter tier. Keyed on HEAT.
 //
-// It lives in the cryobrine. You never see it whole: a pale glow cruising
-// under the surface of a pool, a gut-light the colour of the brine itself.
-// Run your engine near a pool and the glow rushes to the surface, the brine
-// churns — and it BREACHES: a milk-white eel with a lamprey's ring of teeth,
-// thrown clear of the pool in an arc at your nozzle. The bite is not what
+// It lives in the cryobrine: a pearl eel cruising the pool, its nacre
+// throwing sea-green and rose off every facet, a line of lights down its
+// flank. Run your engine near a pool and the lights run hot, the brine
+// churns — and it BREACHES: a jawed head with a lit throat and one bright
+// eye, thrown clear of the pool in an arc at your nozzle. The bite is not what
 // kills you. It is the drag back toward the brine.
 //
 // A flare thrown into a pool is heat too. Scout with it.
@@ -26,6 +27,7 @@ const BAND = 230;
 const NOTICE = 7.5;
 const GRAV = 14;
 const BITE = 22;
+const qRoll = new THREE.Quaternion();
 
 type Phase = 'cruise' | 'churn' | 'breach' | 'fall' | 'sinking';
 
@@ -51,85 +53,134 @@ export class Brinewyrm implements Creature {
   private chain = new Chain(SEGS, SPACING);
 
   private body: THREE.InstancedMesh;
-  private bodyMat: THREE.MeshStandardMaterial;
-  private gut: THREE.InstancedMesh;
+  /** the photophores down the flank, two per segment */
+  private spots: THREE.InstancedMesh;
   private head: THREE.Group;
-  private ring: THREE.Mesh;
-  private teeth: THREE.Mesh[] = [];
-  private maw: THREE.Mesh;
+  private jawU: THREE.Group;
+  private jawL: THREE.Group;
+  private throat: THREE.Mesh;
+  private throatMat: THREE.MeshBasicMaterial;
+  private eyeMat: THREE.MeshBasicMaterial;
   private light: THREE.PointLight;
+  /** its light on the pool and the stone: one at the head, one down the body */
+  private spillHead: Spill;
+  private spillBody: Spill;
+  /** strength of the nacre film (it runs brighter as the wyrm heats up) */
+  private nacre = { value: 0.6 };
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
-    const segGeo = new THREE.CylinderGeometry(0.3, 0.26, 0.46, 8, 1);
-    segGeo.rotateZ(-Math.PI / 2);
-    this.bodyMat = new THREE.MeshStandardMaterial({
-      color: 0xe4f4ff, flatShading: true, roughness: 0.2, metalness: 0.05,
-      transparent: true, opacity: 0.3, depthWrite: false,
-      emissive: 0x1a6a80, emissiveIntensity: 0.6,
+    // a segment is a stretched faceted gem, long enough that neighbours
+    // overlap into one solid body; the slow roll turns its facets through
+    // the nacre so the sheen travels
+    const segGeo = new THREE.IcosahedronGeometry(0.34, 0);
+    segGeo.scale(1.3, 0.92, 0.9);
+    // pearl with a thin-film sheen: each flat facet throws a different
+    // tint by its angle to the eye (sea-green, aqua, rose), strongest at
+    // the silhouette, plus a sea-green rim so it separates from dark rock
+    const nacreMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, flatShading: true, roughness: 0.26, metalness: 0.1,
+      emissive: 0x3a4648,
     });
-    this.body = new THREE.InstancedMesh(segGeo, this.bodyMat, SEGS);
+    nacreMat.onBeforeCompile = sh => {
+      sh.uniforms.uNacre = this.nacre;
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uNacre;')
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  float ndv = saturate(abs(dot(normalize(vViewPosition), normal)));
+  float fr = pow(1.0 - ndv, 1.6);
+  vec3 film = 0.5 + 0.5 * cos(6.2832 * (ndv * 1.35 + vec3(0.12, 0.45, 0.78)));
+  film = mix(film, vec3(0.42, 1.0, 0.84), 0.5);
+  totalEmissiveRadiance += film * (0.32 + 0.6 * fr) * uNacre + vec3(0.36, 1.0, 0.84) * fr * fr * 0.9;
+}`);
+    };
+    nacreMat.customProgramCacheKey = () => 'brinewyrm-nacre';
+    this.body = new THREE.InstancedMesh(segGeo, nacreMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.body.frustumCulled = false;
     this.body.count = 0;
     this.body.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.body);
 
-    // the gut-light: a spine of cyan knots you see through the body
-    const gutGeo = new THREE.SphereGeometry(0.1, 6, 5);
-    const gutMat = new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: 0.9 });
-    this.gut = new THREE.InstancedMesh(gutGeo, gutMat, SEGS);
-    this.gut.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.gut.frustumCulled = false;
-    this.gut.count = 0;
-    this.gut.setColorAt(0, tmpC.setHex(0xffffff));
-    scene.add(this.gut);
+    const spotGeo = new THREE.OctahedronGeometry(0.075, 0);
+    const spotMat = new THREE.MeshBasicMaterial({ toneMapped: false });
+    this.spots = new THREE.InstancedMesh(spotGeo, spotMat, SEGS * 2);
+    this.spots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.spots.frustumCulled = false;
+    this.spots.count = 0;
+    this.spots.setColorAt(0, tmpC.setHex(0xffffff));
+    scene.add(this.spots);
 
-    // the head is a mouth: a ring of teeth around a lit throat, no eyes, no jaw
+    // the head: a heavy faceted skull, two wedge jaws that gape in the
+    // plane you see them in, a row of teeth on each, a lit throat between
+    // them and one bright eye on the near side. +X is forward.
     this.head = new THREE.Group();
-    const fleshMat = new THREE.MeshStandardMaterial({
-      color: 0xd8ecf8, flatShading: true, roughness: 0.25, metalness: 0.05,
-      transparent: true, opacity: 0.85,
+    const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.38, 0), nacreMat);
+    skull.scale.set(1.15, 0.92, 0.95);
+    skull.position.x = -0.06;
+    const boneMat = new THREE.MeshStandardMaterial({
+      color: 0xf4fbff, flatShading: true, roughness: 0.2, metalness: 0.05, emissive: 0x3a5a58,
     });
-    this.ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.11, 6, 10), fleshMat);
-    this.ring.rotation.y = Math.PI / 2;
-    this.ring.position.x = 0.2;
-    const toothGeo = new THREE.ConeGeometry(0.05, 0.22, 4);
-    const toothMat = new THREE.MeshStandardMaterial({ color: 0xf8ffff, flatShading: true, roughness: 0.1, metalness: 0.2 });
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      const tooth = new THREE.Mesh(toothGeo, toothMat);
-      tooth.position.set(0.25, Math.cos(a) * 0.24, Math.sin(a) * 0.24);
-      // points inward, toward the throat axis
-      tooth.rotation.x = a + Math.PI / 2;
-      tooth.rotation.z = 0;
-      tooth.userData.a = a;
-      this.teeth.push(tooth);
-      this.head.add(tooth);
-    }
-    this.maw = new THREE.Mesh(
-      new THREE.CircleGeometry(0.22, 10),
-      new THREE.MeshBasicMaterial({ color: 0x5ad8e6, toneMapped: false, side: THREE.DoubleSide }),
-    );
-    this.maw.rotation.y = Math.PI / 2;
-    this.maw.position.x = 0.12;
-    this.light = new THREE.PointLight(0x5ad8e6, 0, 7, 1.6);
-    this.light.position.set(0, 0, 0.4);
-    this.head.add(this.ring, this.maw, this.light);
+    const jaw = (len: number, rad: number, down: number): THREE.Group => {
+      const g = new THREE.Group();
+      // a four-sided wedge, flat face toward the mouth, tip forward
+      const geo = new THREE.ConeGeometry(rad, len, 4);
+      geo.rotateY(Math.PI / 4);
+      geo.rotateZ(-Math.PI / 2);
+      geo.scale(1, 0.62, 1);
+      geo.translate(len / 2, -down * rad * 0.2, 0);
+      g.add(new THREE.Mesh(geo, nacreMat));
+      // teeth along the mouth edge, pointing across the gap
+      const teeth: THREE.BufferGeometry[] = [];
+      const n = Math.round(len / 0.16);
+      for (let i = 0; i < n; i++) {
+        const t = new THREE.ConeGeometry(0.042, 0.15 - i * 0.012, 4);
+        if (down > 0) t.rotateZ(Math.PI);
+        const x = 0.14 + i * (len - 0.22) / Math.max(1, n - 1);
+        // the wedge narrows toward its tip: seat each tooth on its mouth
+        // face (offset + flat-face distance × squash), mostly proud of it
+        const face = rad * 0.2 + rad * 0.707 * 0.62 * (1 - x / len);
+        t.translate(x, -down * (face + 0.03), 0.04);
+        teeth.push(t);
+      }
+      g.add(new THREE.Mesh(mergeGeometries(teeth), boneMat));
+      return g;
+    };
+    this.jawU = jaw(0.74, 0.27, 1);
+    this.jawU.position.set(0.12, 0.05, 0);
+    this.jawL = jaw(0.6, 0.22, -1);
+    this.jawL.position.set(0.1, -0.08, 0);
+    this.throatMat = new THREE.MeshBasicMaterial({ color: 0x8affe0, toneMapped: false });
+    this.throat = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), this.throatMat);
+    this.throat.position.set(0.36, -0.02, 0);
+    this.eyeMat = new THREE.MeshBasicMaterial({ color: 0xe8fff6, toneMapped: false });
+    const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), this.eyeMat);
+    eye.position.set(0.06, 0.12, 0.4);
+    this.light = new THREE.PointLight(0x7af0d8, 0, 7, 1.6);
+    // out in front of the head, not inside it: it lights the pool and the
+    // stone without burning the jaws to white
+    this.light.position.set(0.5, 0, 1.1);
+    this.head.add(skull, this.jawU, this.jawL, this.throat, eye, this.light);
     this.head.visible = false;
     scene.add(this.head);
+
+    this.spillHead = new Spill(scene, 0x7af0d8);
+    this.spillBody = new Spill(scene, 0x6affc8);
   }
 
   reset(): void {
     this.alive = false;
-    this.body.count = 0; this.gut.count = 0;
+    this.body.count = 0; this.spots.count = 0;
     this.head.visible = false;
+    this.spillHead.off(); this.spillBody.off();
     this.rumble = 0;
   }
 
   private die(): void {
     this.alive = false;
-    this.body.count = 0; this.gut.count = 0;
+    this.body.count = 0; this.spots.count = 0;
     this.head.visible = false;
+    this.spillHead.off(); this.spillBody.off();
   }
 
   private brine(x: number, y: number): boolean { return this.terrain.get(x, y) === T.LAVA; }
@@ -373,9 +424,12 @@ export class Brinewyrm implements Creature {
     // ---- body ----
     this.chain.follow(this.x, this.y, this.phase === 'breach' ? 0.85 : 1);
     const inWater = this.phase === 'cruise' || this.phase === 'sinking' || this.phase === 'churn';
-    this.bodyMat.opacity = lerp(this.bodyMat.opacity, inWater ? 0.28 : 0.78, Math.min(1, dt * 4));
     const glow = this.phase === 'churn' ? 1 : this.phase === 'cruise' ? 0.35 + this.alert * 0.5 : 0.75;
     const swim = this.phase === 'cruise' ? 0.12 : 0.06;
+    this.nacre.value = 0.55 + glow * 0.5;
+    // the accents lean sea-green whatever brine it swims in
+    const spotHue = tmpC2.setHex(0x7affd8).lerp(tmpC.setHex(ACTIVE.fluid.pulseA), 0.25).getHex();
+    let midX = 0, midY = 0;
     for (let i = 0; i < SEGS; i++) {
       const h = this.chain.heading(i);
       const wave = Math.sin(time * 6 - i * 0.6) * swim * (0.2 + i / SEGS);
@@ -385,43 +439,64 @@ export class Brinewyrm implements Creature {
       if (i === 0) {
         this.head.position.set(px, py, z);
         this.head.rotation.set(0, 0, h);
-        for (const t of this.teeth) {
-          const a = t.userData.a as number;
-          const r = 0.24 + this.gape * 0.1;
-          t.position.set(0.25 + this.gape * 0.12, Math.cos(a) * r, Math.sin(a) * r);
-          t.rotation.x = a + Math.PI / 2 - this.gape * 0.5;
-        }
-        this.ring.scale.setScalar(1 + this.gape * 0.35);
-        this.maw.scale.setScalar(0.5 + this.gape * 0.9 + glow * 0.3);
-        this.light.intensity = 1.5 + glow * 7 + this.gape * 2;
+        // keep the skull on top and the eye on the near side whichever way it swims
+        // (and a size up on the body: the dangerous end reads at play scale)
+        this.head.scale.set(1.4, Math.cos(h) < 0 ? -1.4 : 1.4, 1.4);
+        // never quite shut: a lit seam of throat shows between the jaws
+        this.jawU.rotation.z = 0.15 + this.gape * 0.5;
+        this.jawL.rotation.z = -(0.2 + this.gape * 0.6);
+        this.throat.scale.set(1.5 + this.gape * 0.4, 0.7 + this.gape * 1.4, 1.25);
+        this.throatMat.color.setHex(0x8affe0).multiplyScalar(1.6 + glow * 0.9 + this.gape * 1.6);
+        this.eyeMat.color.setHex(0xd8fff0).multiplyScalar(2.2 + glow * 0.8 + this.gape);
+        this.light.intensity = 1 + glow * 4 + this.gape * 2;
+        this.spillHead.set(px, py, 3.2, 3.2, 0.28 + glow * 0.2 + this.gape * 0.3, 0x7af0d8, 1.2);
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
-        this.gut.setMatrixAt(0, tmpM);
+        this.spots.setMatrixAt(0, tmpM);
+        this.spots.setMatrixAt(1, tmpM);
         continue;
       }
+      if (i === SEGS >> 1) { midX = px; midY = py; }
       const t = i / SEGS;
       const taper = 1.05 - t * 0.7;
       tmpP.set(px, py, z);
-      tmpE.set(time * 0.8 + i * 0.3, 0, h);
-      tmpQ.setFromEuler(tmpE);
-      tmpS.set(1, taper, taper);
+      // heading, then the roll about the segment's OWN long axis (an XYZ
+      // Euler rolls about world X instead, which tips any segment that is
+      // not horizontal edge-on to the camera and breaks the body into beads)
+      tmpQ.setFromAxisAngle(AXIS_Z, h).multiply(qRoll.setFromAxisAngle(AXIS_X, time * 0.5 + i * 0.5));
+      // a breach stretches the chain past its spacing: stretch the segment
+      // with it, so the body stays one body and never flies apart in chunks
+      const gap = Math.hypot(this.chain.x[i] - this.chain.x[i - 1], this.chain.y[i] - this.chain.y[i - 1]);
+      tmpS.set(Math.min(2.5, Math.max(1, gap / SPACING)), taper, taper);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.body.setMatrixAt(i, tmpM);
-      tmpC.setHex(0xe8f6ff).multiplyScalar(0.7 + glow * 0.5);
+      // pearl that drifts rose → white → sea-green along the body; in the
+      // pool it takes a little of the brine's colour but stays solid
+      const tint = 0.5 + 0.5 * Math.sin(i * 0.9 - time * 1.2);
+      tmpC.setHex(0xf3e6ee).lerp(tmpC2.setHex(0xd6f7ec), tint);
+      if (inWater) tmpC.lerp(tmpC2.setHex(ACTIVE.fluid.base), 0.2);
       this.body.setColorAt(i, tmpC);
-      // the gut pulses head → tail, the opposite way to a Long One's spine
+      // the flank lights pulse head → tail, the opposite way to a Long One's spine
       const pulse = Math.pow(Math.max(0, Math.sin(time * 3.5 - i * 0.7)), 2);
-      tmpP.z += 0.02;
-      tmpS.setScalar((0.7 + pulse * 0.6) * (1 - t * 0.4));
-      tmpM.compose(tmpP, tmpQ, tmpS);
-      this.gut.setMatrixAt(i, tmpM);
-      tmpC.setHex(ACTIVE.fluid.pulseA).multiplyScalar(0.4 + pulse * 0.8 + glow * 1.2);
-      this.gut.setColorAt(i, tmpC);
+      const ch = Math.cos(h), sh = Math.sin(h);
+      for (let k = 0; k < 2; k++) {
+        // two rows on the near flank: a lateral line and a smaller belly row
+        const off = k === 0 ? 0.1 : -0.15;
+        tmpP.set(px - sh * off * taper, py + ch * off * taper, z + 0.27 * taper);
+        tmpS.setScalar((k === 0 ? 1 : 0.7) * (0.8 + pulse * 0.5) * (1.1 - t * 0.5));
+        tmpM.compose(tmpP, tmpQ.identity(), tmpS);
+        this.spots.setMatrixAt(i * 2 + k, tmpM);
+        tmpC.setHex(spotHue).multiplyScalar(0.7 + pulse * 1.3 + glow * 1.3);
+        this.spots.setColorAt(i * 2 + k, tmpC);
+      }
     }
-    this.body.count = SEGS; this.gut.count = SEGS;
+    // the body's light on the pool floor and the walls, out along its length
+    const hx = this.chain.x[0], hy = this.chain.y[0];
+    this.spillBody.set((midX + hx) / 2, (midY + hy) / 2, 5.6, 4, 0.3 + glow * 0.3, 0x6affc8, 1.2);
+    this.body.count = SEGS; this.spots.count = SEGS * 2;
     this.body.instanceMatrix.needsUpdate = true;
-    this.gut.instanceMatrix.needsUpdate = true;
+    this.spots.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;
-    if (this.gut.instanceColor) this.gut.instanceColor.needsUpdate = true;
+    if (this.spots.instanceColor) this.spots.instanceColor.needsUpdate = true;
   }
 }

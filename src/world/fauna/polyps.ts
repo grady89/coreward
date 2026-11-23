@@ -4,12 +4,13 @@ import { oreValue } from '../tiles';
 import { ACTIVE } from '../worlds';
 import { Particles } from '../../fx/particles';
 import { FlareField } from './flares';
-import { Creature, ThreatCtx, ThreatLevel, onWall, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2 } from './types';
+import { Creature, ThreatCtx, ThreatLevel, onWall, tmpM, tmpP, tmpQ, tmpS, tmpE, tmpC, tmpC2, Spill } from './types';
 
 // PRESSURE POLYPS — MAELIS-6's swarm tier. Keyed on SPACE.
 //
-// Not flies. Sacs. They grow on cave walls in clusters, translucent, with a
-// dark nucleus and a slow breathing pulse. They never move. What they do is
+// Not flies. Sacs. They grow on cave walls in clusters: chunky faceted domes
+// of nacre with a sea-green heart set in the front that breathes, and the
+// light of it washes the rock they cling to. They never move. What they do is
 // notice you: come within a few tiles and they inflate — faster the faster
 // you move — the green draining to white, the sac trembling, until they
 // burst: a hull hit and a shove, and the neighbours catch it. Thread past
@@ -48,20 +49,35 @@ export class Polyps implements Creature {
   private sacs: THREE.InstancedMesh;
   private cores: THREE.InstancedMesh;
   private glow: THREE.PointLight;
+  /** each cluster's light on its wall */
+  private spills: Spill[] = [];
+  /** per cluster, rebuilt every frame: Σx, Σy, count, peak inflate, Σnx, Σny */
+  private acc = new Float32Array(MAX_CLUSTERS * 6);
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private flares: FlareField, private particles: Particles) {
-    const sacGeo = new THREE.SphereGeometry(0.5, 12, 9);
+    // a dome, not a ball: a low-poly cap whose open rim sits in the rock and
+    // whose crown leans out along the wall normal (+Y), so in profile it is
+    // a chunky faceted blister on the stone
+    const sacGeo = new THREE.SphereGeometry(0.5, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.62);
+    sacGeo.translate(0, -0.5 * Math.cos(Math.PI * 0.62), 0);
+    // nacre shell. The instance colour drives ONLY the glow (the diffuse stays
+    // pearl): a dim sea-green body and a rim that runs hot toward white as the
+    // pressure builds, so a sac about to go is ringed in light
     const sacMat = new THREE.MeshStandardMaterial({
-      flatShading: false, roughness: 0.3, metalness: 0,
-      transparent: true, opacity: 0.62, depthWrite: false,
-      emissive: 0xffffff, emissiveIntensity: 0.5,
+      color: 0xa9c9c0, flatShading: true, roughness: 0.36, metalness: 0.12,
     });
     sacMat.onBeforeCompile = sh => {
-      sh.fragmentShader = sh.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;'
-      );
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <color_fragment>', '')
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  float ndv = saturate(abs(dot(normalize(vViewPosition), normal)));
+  float fr = pow(1.0 - ndv, 1.8);
+  // the glow, plus a pearl sheen catching on the outermost facets
+  totalEmissiveRadiance += vColor.rgb * (0.12 + 1.4 * fr) + vec3(0.86, 0.82, 0.95) * 0.3 * fr * fr;
+}`);
     };
+    sacMat.customProgramCacheKey = () => 'polyp-sac-v2';
     this.sacs = new THREE.InstancedMesh(sacGeo, sacMat, MAX_POLYPS);
     this.sacs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.sacs.frustumCulled = false;
@@ -69,8 +85,9 @@ export class Polyps implements Creature {
     this.sacs.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.sacs);
 
-    // the nucleus: a dark knot that goes white as the pressure builds
-    const coreGeo = new THREE.IcosahedronGeometry(0.16, 1);
+    // the heart: a faceted gem set in the front of the dome, breathing
+    // sea-green, swelling and whitening as the pressure builds
+    const coreGeo = new THREE.OctahedronGeometry(0.2, 0);
     const coreMat = new THREE.MeshBasicMaterial({ toneMapped: false });
     this.cores = new THREE.InstancedMesh(coreGeo, coreMat, MAX_POLYPS);
     this.cores.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -81,7 +98,10 @@ export class Polyps implements Creature {
 
     this.glow = new THREE.PointLight(0x6affc8, 0, 7, 1.8);
     scene.add(this.glow);
-    for (let i = 0; i < MAX_CLUSTERS; i++) this.clusters.push({ alive: false, ax: 0, ay: 0, life: 0, seen: false, noticed: false });
+    for (let i = 0; i < MAX_CLUSTERS; i++) {
+      this.clusters.push({ alive: false, ax: 0, ay: 0, life: 0, seen: false, noticed: false });
+      this.spills.push(new Spill(scene, 0x6affc8));
+    }
     for (let i = 0; i < MAX_POLYPS; i++) {
       this.polyps.push({ alive: false, x: 0, y: 0, nx: 0, ny: 1, inflate: 0, phase: 0, size: 1, cluster: 0 });
     }
@@ -94,6 +114,7 @@ export class Polyps implements Creature {
     for (const c of this.clusters) c.alive = false;
     this.sacs.count = 0; this.cores.count = 0;
     this.glow.intensity = 0;
+    for (const sp of this.spills) sp.off();
     this.menace = 0;
   }
 
@@ -239,6 +260,7 @@ export class Polyps implements Creature {
 
     let n = 0;
     let peak = 0, gx = 0, gy = 0, gw = 0;
+    this.acc.fill(0);
     for (const p of this.polyps) {
       if (!p.alive) continue;
       const c = this.clusters[p.cluster];
@@ -278,30 +300,41 @@ export class Polyps implements Creature {
       const f = p.inflate;
       const breath = Math.sin(p.phase * (1.4 + f * 4) + p.phase) * 0.035;
       const tremble = f > 0.6 ? (f - 0.6) * 0.14 : 0;
-      const s = (0.5 + f * 0.42 + breath) * p.size;
-      tmpP.set(
-        p.x + (Math.random() - 0.5) * tremble,
-        p.y + (Math.random() - 0.5) * tremble,
-        0.2 + f * 0.1,
-      );
-      // a sac sits proud of its wall: squash along the normal, stretch out of it
+      // chunky at rest, near a tile across when it is about to go
+      const s = (0.8 + f * 0.5 + breath) * p.size;
+      // the dome's rim sits on the wall face, its crown leans out of it
+      const bx = p.x - p.nx * 0.24 + (Math.random() - 0.5) * tremble;
+      const by = p.y - p.ny * 0.24 + (Math.random() - 0.5) * tremble;
+      tmpP.set(bx, by, 0.12 + f * 0.08);
       tmpE.set(0, 0, Math.atan2(p.ny, p.nx) - Math.PI / 2);
       tmpQ.setFromEuler(tmpE);
-      tmpS.set(s * (1 - f * 0.1), s * (1.2 + f * 0.25), s * 0.9);
+      const lean = 1.05 + f * 0.4;
+      tmpS.set(s * (1 - f * 0.08), s * lean, s * 0.95);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.sacs.setMatrixAt(n, tmpM);
-      // green sac → white sac; instance color scales the emissive
-      tmpC.setHex(ACTIVE.swarm.color).lerp(tmpC2.setHex(0xffffff), f * f).multiplyScalar(0.6 + f * 1.6);
+      // the heartbeat: a slow swell of light that quickens with the pressure
+      const beat = 0.5 + 0.5 * Math.sin(p.phase * (1.6 + f * 7));
+      // sea-green glow → white-hot rim; the instance colour drives the glow only
+      tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xffffff), f * f)
+        .multiplyScalar(0.32 + beat * 0.1 + f * 1.5 + (f > 0.6 ? (f - 0.6) * 2.5 * beat : 0));
       this.sacs.setColorAt(n, tmpC);
 
-      tmpP.z += 0.25;
-      tmpS.setScalar((0.6 + f * 1.1) * p.size);
+      // the heart sits mid-dome along the normal, proud of its front face
+      const h = 0.5 * s * lean * 0.62;
+      tmpP.set(bx + p.nx * h, by + p.ny * h, tmpP.z + 0.5 * s * 0.95 * 0.72);
+      tmpS.setScalar((0.85 + f * 0.9 + beat * 0.12) * p.size);
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.cores.setMatrixAt(n, tmpM);
-      tmpC.setHex(0x061a14).lerp(tmpC2.setHex(ACTIVE.swarm.hunting), Math.min(1, f * 1.4)).multiplyScalar(0.5 + f * 1.5);
+      // pearl-green at rest (nacre over sea-glow), white-hot when it is about to go
+      tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xe6fff6), 0.25 + beat * 0.2)
+        .lerp(tmpC2.setHex(0xffffff), Math.min(1, f * 1.2))
+        .multiplyScalar(0.95 + beat * 0.6 + f * 2.2);
       this.cores.setColorAt(n, tmpC);
       n++;
 
+      const a = this.acc, k = p.cluster * 6;
+      a[k] += p.x; a[k + 1] += p.y; a[k + 2] += 1; a[k + 3] = Math.max(a[k + 3], f);
+      a[k + 4] += p.nx; a[k + 5] += p.ny;
       if (d < 6) { peak = Math.max(peak, f); gx += p.x * f; gy += p.y * f; gw += f; }
     }
     this.sacs.count = n; this.cores.count = n;
@@ -311,9 +344,31 @@ export class Polyps implements Creature {
       if (this.sacs.instanceColor) this.sacs.instanceColor.needsUpdate = true;
       if (this.cores.instanceColor) this.cores.instanceColor.needsUpdate = true;
     }
+    // each cluster's glow lands on its wall: a soft sea-green pool that
+    // breathes at rest and flares toward white as the sacs swell
+    let nearC = -1, nearD = Infinity;
+    for (let ci = 0; ci < MAX_CLUSTERS; ci++) {
+      const a = this.acc, k = ci * 6;
+      if (a[k + 2] <= 0) { this.spills[ci].off(); continue; }
+      const cx = a[k] / a[k + 2], cy = a[k + 1] / a[k + 2], cf = a[k + 3];
+      // centred a little into the wall they grow on, so most of it lands on stone
+      const sx = cx - a[k + 4] / a[k + 2] * 0.7, sy = cy - a[k + 5] / a[k + 2] * 0.7;
+      const w = 3.6 + Math.min(4, a[k + 2]) * 0.35 + cf * 1.6;
+      const beat = 0.5 + 0.5 * Math.sin(ctx.time * 1.7 + ci * 2.1);
+      tmpC.setHex(ACTIVE.swarm.hunting).lerp(tmpC2.setHex(0xffffff), cf * cf * 0.7);
+      this.spills[ci].set(sx, sy, w, w, 0.5 + beat * 0.12 + cf * 0.45, tmpC.getHex(), 1.3);
+      const cd = Math.hypot(podX - cx, podY - cy);
+      if (cd < nearD) { nearD = cd; nearC = ci; }
+    }
     if (gw > 0.05) {
       this.glow.position.set(gx / gw, gy / gw, 0.5);
       this.glow.intensity = 1 + peak * 9;
+      this.glow.color.setHex(ACTIVE.swarm.hunting);
+    } else if (nearC >= 0 && nearD < 16) {
+      // at rest the nearest cluster still lights its stone, faintly
+      const k = nearC * 6;
+      this.glow.position.set(this.acc[k] / this.acc[k + 2], this.acc[k + 1] / this.acc[k + 2], 0.6);
+      this.glow.intensity = 1.2 + Math.sin(ctx.time * 1.7) * 0.25;
       this.glow.color.setHex(ACTIVE.swarm.hunting);
     } else {
       this.glow.intensity = 0;
