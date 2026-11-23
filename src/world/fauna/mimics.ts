@@ -61,38 +61,47 @@ export class Mimics implements Creature {
     // violet crystal light caught on the facet edges
     rimLight(bodyMat, 0x9a6aff, 1.1);
     const gemGeo = new THREE.OctahedronGeometry(0.2, 0);
-    const legGeo = new THREE.BoxGeometry(1, 1, 1);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x4a3876, emissive: 0x1e1040, roughness: 0.5, flatShading: true });
-    rimLight(legMat, 0x9a6aff, 0.8);
+    // a four-faceted tapering crystal: stout at the hip and knee, to a point at the foot
+    const legGeo = new THREE.CylinderGeometry(0.2, 0.5, 1, 4);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x55408a, emissive: 0x281650, roughness: 0.5, flatShading: true });
+    rimLight(legMat, 0x9a6aff, 1.1);
     // the setting: three crystal prongs grown up around the trophy
     const prongGeo = new THREE.OctahedronGeometry(0.07, 0);
     prongGeo.scale(0.8, 2.2, 0.8);
     // the bite: a split crack-mouth burning violet across the front of the
     // shell, facing the camera, crystal fangs over and under it, and two
     // mandibles behind its front corner
-    const jawGeo = new THREE.ConeGeometry(0.09, 0.36, 4);
-    jawGeo.translate(0, 0.18, 0);
+    // mandibles: big hooked wedges, so the biting end reads at play size
+    const jawGeo = new THREE.ConeGeometry(0.15, 0.5, 4);
+    jawGeo.translate(0, 0.25, 0);
     jawGeo.rotateZ(-Math.PI / 2);
+    // a pale crystal fang on each mandible's tip
+    const fangGeo = new THREE.ConeGeometry(0.06, 0.2, 4);
+    fangGeo.translate(0, 0.1, 0);
     const mawMat = new THREE.MeshBasicMaterial({ color: 0x9a4cff, toneMapped: false });
     hdrBasic(mawMat, 2.3);
     const mawGeo = new THREE.OctahedronGeometry(0.1, 0);
-    mawGeo.scale(1.9, 0.6, 0.4);
+    mawGeo.scale(2.5, 0.85, 0.45);
     const mawCoreMat = new THREE.MeshBasicMaterial({ color: 0xf4d8ff, toneMapped: false });
     hdrBasic(mawCoreMat, 2.0);
     const mawCoreGeo = new THREE.OctahedronGeometry(0.1, 0);
-    mawCoreGeo.scale(1.5, 0.18, 0.3);
+    mawCoreGeo.scale(2.0, 0.24, 0.3);
     mawCoreGeo.translate(0.01, 0, 0.03);
     // pale violet crystal, lit from the maw — not white, or they read as bone
     const toothMat = new THREE.MeshBasicMaterial({ color: 0xc8b4ff, toneMapped: false });
-    // one row of four fangs per lip, a single mesh each
+    // one row of four fangs per lip, a single mesh each: long at the front
+    // corner, a wedge of teeth that grows toward the bite
     const row = (y0: number, down: boolean): THREE.BufferGeometry => mergeGeometries([0, 1, 2, 3].map(t => {
-      const g = new THREE.ConeGeometry(0.02, 0.085 - Math.abs(t - 1.5) * 0.015, 3);
-      g.rotateZ((down ? Math.PI : 0) + (t - 1.5) * 0.12);
-      g.translate(0.14 + t * 0.07, y0, 0.26);
+      const h = 0.09 + t * 0.03;
+      const g = new THREE.ConeGeometry(0.034, h, 3);
+      if (down) g.rotateZ(Math.PI);
+      g.translate(0, down ? -h / 2 : h / 2, 0);
+      g.rotateZ(-(t - 1.5) * 0.12);
+      g.translate(0.1 + t * 0.085, y0, 0.27);
       return g;
     }))!;
-    const upperTeeth = row(-0.03, true);
-    const lowerTeeth = row(-0.105, false);
+    const upperTeeth = row(0.0, true);
+    const lowerTeeth = row(-0.14, false);
     for (let i = 0; i < MAX; i++) {
       const group = new THREE.Group();
       const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -115,13 +124,20 @@ export class Mimics implements Creature {
       // each frame (scale.z = facing), so the mouth never ends up behind it
       const mouth = new THREE.Group();
       const maw = new THREE.Mesh(mawGeo, mawMat);
-      maw.position.set(0.25, -0.068, 0.22);
+      maw.position.set(0.25, -0.07, 0.22);
       maw.add(new THREE.Mesh(mawCoreGeo, mawCoreMat));
       const lipU = new THREE.Mesh(upperTeeth, toothMat), lipD = new THREE.Mesh(lowerTeeth, toothMat);
       const jawU = new THREE.Mesh(jawGeo, legMat);
       const jawD = new THREE.Mesh(jawGeo, legMat);
-      jawU.position.set(0.38, -0.02, 0.1);
-      jawD.position.set(0.38, -0.12, 0.1);
+      jawU.position.set(0.36, 0.0, 0.12);
+      jawD.position.set(0.36, -0.14, 0.12);
+      for (const [jaw, s] of [[jawU, -1], [jawD, 1]] as const) {
+        const fang = new THREE.Mesh(fangGeo, toothMat);
+        fang.position.set(0.46, 0, 0);
+        // hooked in toward the bite
+        fang.rotation.z = -Math.PI / 2 + s * 0.9;
+        jaw.add(fang);
+      }
       mouth.add(maw, lipU, lipD, jawU, jawD);
       const light = new THREE.PointLight(0xffffff, 0, 4.5, 1.8);
       light.position.set(0, 0.4, 0.6);
@@ -281,7 +297,7 @@ export class Mimics implements Creature {
       const pop = ease(clamp01(c.born / 0.3));
       g.position.set(c.x, c.y, 0.25);
       // a size up on the stone it hid as, so the bite reads at play size
-      g.scale.setScalar(pop * 1.15);
+      g.scale.setScalar(pop * 1.3);
       const facing = c.dirX >= 0 ? 1 : -1;
       c.mouth.scale.z = facing;
       g.rotation.z = lerp(g.rotation.z, c.burstT > 0 ? Math.atan2(c.dirY, c.dirX * facing) * 0.4 * facing : 0, Math.min(1, dt * 10));
@@ -316,8 +332,9 @@ export class Mimics implements Creature {
         const lift = Math.max(0, Math.cos(ph)) * 0.12 * moving;
         const fx = along * 0.42 + stride, fy = -0.36 + lift, fz = side * 0.42;
         const kx = (hipX + fx) / 2, ky = (hipY + fy) / 2 + 0.22, kz = (hipZ + fz) / 2 + side * 0.06;
-        limb(c.upper[k], hipX, hipY, hipZ, kx, ky, kz, 0.07);
-        limb(c.lower[k], kx, ky, kz, fx, fy, fz, 0.05);
+        // stout crystal legs: thin ones vanish at play size
+        limb(c.upper[k], hipX, hipY, hipZ, kx, ky, kz, 0.19);
+        limb(c.lower[k], kx, ky, kz, fx, fy, fz, 0.15);
       }
     }
   }

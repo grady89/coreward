@@ -28,6 +28,7 @@ const SPEED = 4.8;
 const HUNT = 17;
 const DAMAGE = 26;
 const STILL_TO_LOSE = 1.6;
+const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
 type Phase = 'emerging' | 'hunting' | 'searching' | 'burrowing';
 
@@ -52,6 +53,7 @@ export class LongOne implements Creature {
   private chain = new Chain(SEGS, SPACING);
 
   private body: THREE.InstancedMesh;
+  private sinew: THREE.InstancedMesh;
   private lights: THREE.InstancedMesh;
   /** the fissure's white-hot core line, inside the amber */
   private lightCore: THREE.InstancedMesh;
@@ -68,10 +70,12 @@ export class LongOne implements Creature {
   private headSpill: Spill;
 
   constructor(scene: THREE.Scene, private terrain: Terrain, private particles: Particles) {
-    // a plated ring segment, axis along +X so it lies along the spine. Longer
-    // than the link spacing, so the plates overlap into one body even round
-    // a bend
-    const segGeo = new THREE.CylinderGeometry(0.43, 0.33, 0.76, 7, 1);
+    // a chunky plate, axis along +X so it lies along the spine: one on every
+    // other link, so seven big plates read at play size instead of thirteen
+    // small ones. A hex wedge, flared toward the head like a scale, turned so
+    // a flat face meets the camera
+    const segGeo = new THREE.CylinderGeometry(0.52, 0.3, 0.88, 6, 1);
+    segGeo.rotateY(Math.PI / 6);
     segGeo.rotateZ(-Math.PI / 2);
     const segMat = new THREE.MeshStandardMaterial({
       flatShading: true, roughness: 0.55, metalness: 0.2,
@@ -80,17 +84,36 @@ export class LongOne implements Creature {
     // the fissure's heat caught on every plate edge: out of the wall it reads
     // as a body, not a hole in the dark
     rimLight(segMat, 0xff8a40, 1.6);
+    // ...graded by the plate's own colour, so the rim cools toward the tail
+    // with the plates and the head keeps the brightest edges
+    const rimBase = segMat.onBeforeCompile;
+    segMat.onBeforeCompile = (sh, r) => {
+      rimBase.call(segMat, sh, r);
+      sh.fragmentShader = sh.fragmentShader.replace('totalEmissiveRadiance += uRim *', 'totalEmissiveRadiance += vColor.r * 5.5 * uRim *');
+    };
+    segMat.customProgramCacheKey = () => 'longone-plate';
     this.body = new THREE.InstancedMesh(segGeo, segMat, SEGS);
     this.body.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.body.frustumCulled = false;
     this.body.count = 0;
     this.body.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.body);
+    // the sinew between plates: narrower, dark, unrimmed, so each plate
+    // stands apart across a dark gap and the curve still reads as one body
+    const sinewGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.5, 6, 1);
+    sinewGeo.rotateZ(-Math.PI / 2);
+    this.sinew = new THREE.InstancedMesh(sinewGeo, new THREE.MeshStandardMaterial({
+      color: 0x34180f, flatShading: true, roughness: 0.8, emissive: 0x160503,
+    }), SEGS);
+    this.sinew.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.sinew.frustumCulled = false;
+    this.sinew.count = 0;
+    scene.add(this.sinew);
 
     // the dorsal fissure: one molten sliver per plate, end to end along the
     // spine, pulsing tail-to-head — VEIL's glowing crack, alive
     const fisGeo = new THREE.OctahedronGeometry(0.1, 0);
-    fisGeo.scale(3.4, 0.85, 1.1);
+    fisGeo.scale(3.9, 0.85, 1.1);
     const fisMat = new THREE.MeshBasicMaterial({ toneMapped: false });
     hdrBasic(fisMat, 2.3);
     this.lights = new THREE.InstancedMesh(fisGeo, fisMat, SEGS);
@@ -102,7 +125,7 @@ export class LongOne implements Creature {
     // a thinner, hotter line down the middle of each sliver: the amber stays
     // the hue, the core is what blooms
     const fisCoreGeo = new THREE.OctahedronGeometry(0.1, 0);
-    fisCoreGeo.scale(2.9, 0.32, 0.6);
+    fisCoreGeo.scale(3.3, 0.32, 0.6);
     fisCoreGeo.translate(0, 0, 0.06);
     const fisCoreMat = new THREE.MeshBasicMaterial({ toneMapped: false });
     hdrBasic(fisCoreMat, 2.5);
@@ -182,6 +205,7 @@ export class LongOne implements Creature {
   reset(): void {
     this.alive = false;
     this.body.count = 0;
+    this.sinew.count = 0;
     this.lights.count = 0;
     this.lightCore.count = 0;
     this.head.visible = false;
@@ -192,6 +216,7 @@ export class LongOne implements Creature {
   private die(): void {
     this.alive = false;
     this.body.count = 0;
+    this.sinew.count = 0;
     this.lights.count = 0;
     this.lightCore.count = 0;
     this.head.visible = false;
@@ -444,6 +469,7 @@ export class LongOne implements Creature {
         // instance 0 belongs to the head group — collapse it
         tmpM.makeScale(0, 0, 0);
         this.body.setMatrixAt(0, tmpM);
+        this.sinew.setMatrixAt(0, tmpM);
         this.lights.setMatrixAt(0, tmpM);
         this.lightCore.setMatrixAt(0, tmpM);
         continue;
@@ -451,21 +477,31 @@ export class LongOne implements Creature {
       // plates bulge behind the head then taper to the tail
       const t = i / SEGS;
       const taper = (i < 4 ? 1.05 : 1.08 - t * 0.62);
+      const plate = i % 2 === 1;
       tmpP.set(px, py, 0.1);
-      // plates set at a stagger and rocking, not spinning: a fixed spine the
-      // fissure can run along
-      tmpE.set(i * 0.45 + Math.sin(time * 1.6 + i * 0.5) * 0.25, 0, h);
+      // a fixed spine with only a slow rock, so every plate shows the same
+      // face and the body reads as one curve, not a scatter of facets
+      tmpE.set(Math.sin(time * 1.6 + i * 0.5) * 0.08, 0, h);
       tmpQ.setFromEuler(tmpE);
       tmpS.set(1, taper, taper);
       tmpM.compose(tmpP, tmpQ, tmpS);
-      this.body.setMatrixAt(i, tmpM);
-      // alternating plates, a shade apart, darker toward the tail
-      tmpC.setHex(i % 2 ? 0x7e3e2c : 0x5c2c20).multiplyScalar(1 - t * 0.25);
+      // plates on odd links, sinew on even: each instance collapses in the other
+      this.body.setMatrixAt(i, plate ? tmpM : ZERO);
+      this.sinew.setMatrixAt(i, plate ? ZERO : tmpM);
+      // darker toward the tail
+      tmpC.setHex(0x763a2a).multiplyScalar(1 - t * 0.6);
       this.body.setColorAt(i, tmpC);
+      if (!plate) {
+        this.lights.setMatrixAt(i, ZERO);
+        this.lightCore.setMatrixAt(i, ZERO);
+        continue;
+      }
 
-      // the dorsal wave runs tail → head while it hunts; banked low when lost
-      const pulse = hunting ? Math.pow(Math.max(0, Math.sin(time * 5 + i * 0.9)), 3) : 0.12;
+      // the dorsal wave runs tail → head while it hunts; banked low when lost.
+      // The line cools toward the tail: the head is the brightest thing on it
+      const pulse = (hunting ? Math.pow(Math.max(0, Math.sin(time * 5 + i * 0.9)), 3) : 0.12) * (1 - t * 0.6);
       const stun = this.stunT > 0 ? 1 : 0;
+      const cool = 1 - t * 0.72;
       // along the upper flank, on the face toward the camera
       const off = 0.3 * taper;
       tmpP.set(px - Math.sin(h) * off, py + Math.cos(h) * off, 0.1 + 0.3 * taper);
@@ -475,18 +511,19 @@ export class LongOne implements Creature {
       tmpM.compose(tmpP, tmpQ, tmpS);
       this.lights.setMatrixAt(i, tmpM);
       this.lightCore.setMatrixAt(i, tmpM);
-      tmpC.setHex(stun ? 0xffffff : 0xff8a3c).multiplyScalar(0.9 + pulse * 1.4 + stun);
+      tmpC.setHex(stun ? 0xffffff : 0xff8a3c).multiplyScalar((0.75 + pulse * 1.2 + stun) * cool);
       this.lights.setColorAt(i, tmpC);
-      tmpC.setHex(stun ? 0xffffff : 0xffd890).multiplyScalar(0.7 + pulse * 0.8 + stun);
+      tmpC.setHex(stun ? 0xffffff : 0xffd890).multiplyScalar((0.55 + pulse * 0.7 + stun) * cool * cool);
       this.lightCore.setColorAt(i, tmpC);
     }
-    this.body.count = SEGS; this.lights.count = SEGS; this.lightCore.count = SEGS;
+    this.body.count = SEGS; this.sinew.count = SEGS; this.lights.count = SEGS; this.lightCore.count = SEGS;
     // its own light on the rock: the fissure line along the body, the maw at the head
     const mid = SEGS >> 1;
     const stunGlow = this.stunT > 0 ? 0.3 : 0;
     this.bodySpill.set(this.chain.x[mid], this.chain.y[mid], 8.5, 6, (hunting ? 0.68 : 0.45) + stunGlow, 0xff6a2a, 1.3);
     this.headSpill.set(this.head.position.x, this.head.position.y, 5, 5, 0.5 + this.gape * 0.4 + stunGlow, 0xffa050, 1.4);
     this.body.instanceMatrix.needsUpdate = true;
+    this.sinew.instanceMatrix.needsUpdate = true;
     this.lights.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;
     if (this.lights.instanceColor) this.lights.instanceColor.needsUpdate = true;

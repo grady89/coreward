@@ -65,6 +65,8 @@ export class Rimewings implements Creature {
   private glow: THREE.PointLight;
   /** each cluster's cold light on the rock it hangs against */
   private spills: Spill[] = [];
+  /** and on the floor or ledge under it, travelling with the flock */
+  private washes: Spill[] = [];
   private sumX = new Float32Array(MAX_CLUSTERS);
   private sumY = new Float32Array(MAX_CLUSTERS);
   private sumN = new Float32Array(MAX_CLUSTERS);
@@ -102,11 +104,12 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     this.mesh.count = 0;
     this.mesh.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.mesh);
-    this.glow = new THREE.PointLight(0xbfe0ff, 0, 8, 1.8);
+    this.glow = new THREE.PointLight(0xbfe0ff, 0, 9, 1.6);
     scene.add(this.glow);
     for (let i = 0; i < MAX_CLUSTERS; i++) {
       this.clusters.push({ alive: false, phase: 'frozen', t: 0, coldFor: 0, ax: 0, ay: 0, life: 0, dazedT: 0, woke: false });
       this.spills.push(new Spill(scene, 0xbfe0ff));
+      this.washes.push(new Spill(scene, ICE));
     }
   }
 
@@ -118,6 +121,7 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     this.mesh.count = 0;
     this.glow.intensity = 0;
     for (const sp of this.spills) sp.off();
+    for (const sp of this.washes) sp.off();
     this.menace = 0;
   }
 
@@ -386,10 +390,21 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
     }
     for (let ci = 0; ci < MAX_CLUSTERS; ci++) {
       const k = this.sumN[ci];
-      if (!this.clusters[ci].alive || k === 0) { this.spills[ci].off(); continue; }
+      if (!this.clusters[ci].alive || k === 0) { this.spills[ci].off(); this.washes[ci].off(); continue; }
       const heat = this.sumHeat[ci] / k;
+      const cx = this.sumX[ci] / k, cy = this.sumY[ci] / k;
       // ice-cyan, not the lamp's white, so it reads as their own light
-      this.spills[ci].set(this.sumX[ci] / k, this.sumY[ci] / k, 5.5, 4.6, 0.42 + heat * 0.3, ICE, 1.5);
+      this.spills[ci].set(cx, cy, 5.5, 4.6, 0.42 + heat * 0.3, ICE, 1.5);
+      // the first rock under the flock takes a cold pool that slides along
+      // with it, fading the higher they fly
+      const col = Math.floor(cx);
+      let floor = -1;
+      for (let r = Math.floor(-cy) + 1; r <= Math.floor(-cy) + 5; r++) {
+        if (this.terrain.solidAt(col, r)) { floor = r; break; }
+      }
+      if (floor < 0) { this.washes[ci].off(); continue; }
+      const drop = floor + cy;   // tiles from the flock down to the floor's top
+      this.washes[ci].set(cx, -floor - 0.3, 6, 2.2, (0.6 + heat * 0.3) * (1 - drop / 8), ICE, 2);
     }
     this.mesh.count = n;
     if (n > 0) {
@@ -397,9 +412,11 @@ totalEmissiveRadiance += uIce * (max(vGlow - 2.0, 0.0) * 0.9 + max(vGlow - 1.0, 
       if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     }
     if (gc > 0) {
+      // the flock's own cold light, not the lamp's white: the rock round
+      // the centroid turns ice-cyan as they move
       this.glow.position.set(gx / gc, gy / gc, 0.4);
-      this.glow.intensity = 6;
-      this.glow.color.setHex(ACTIVE.swarm.hunting);
+      this.glow.intensity = 8;
+      this.glow.color.setHex(ICE);
     } else {
       // none hunting: the cluster nearest the pod keeps a cold glow on its rock
       let best = -1, bd = 1e9;
@@ -452,8 +469,8 @@ function mothGeometry(): THREE.BufferGeometry {
       const ridge: V = [-0.01, 0.19 * s, z];
       tri(r1, elbow, ridge, 1.5);     // leading edge: the ice-cyan glow
       tri(elbow, tip, ridge, 1.3);
-      tri(tip, r2, ridge, 0.5);       // trailing membrane: glass
-      tri(r2, r1, ridge, 0.65);
+      tri(tip, r2, ridge, 0.7);       // trailing membrane: glass, faintly lit
+      tri(r2, r1, ridge, 0.85);
     }
     // a burning strip along the leading edge, root to elbow to tip, proud
     // of both faces: the moth's outline in ice-cyan even out of the beam
