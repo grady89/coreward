@@ -88,7 +88,9 @@ const paint = await page.evaluate(() => {
   g.panels.close();
   return { palette: g.meta.palette, wall: g.interior.wallMat.color.getHex() };
 });
-ok('repaint', paint, paint.palette === 'slate' && paint.wall === 0x64707c);
+// the palette's mood pushes its hue, so check the wall left the stock dusk
+// colour and went cool (blue above red), not one exact hex
+ok('repaint', paint, paint.palette === 'slate' && paint.wall !== 0x8d8474 && (paint.wall & 0xff) > (paint.wall >> 16));
 
 // --- a furnishing appears at its home ---
 const bunk = await page.evaluate(() => {
