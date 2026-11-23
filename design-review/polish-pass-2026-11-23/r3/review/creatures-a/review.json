@@ -1,0 +1,57 @@
+{
+  "A": {
+    "category": "creatures-a",
+    "score": 6.0,
+    "per_shot": [
+      {"shot": "creature-longone.png", "score": 5, "note": "Warm glow lands on the shaft walls, but the serpent is a blown-out tangle of shards; head, body and tail do not separate at play size."},
+      {"shot": "creature-longone-close.png", "score": 5, "note": "Bloom swallows the head; it reads as a burning crystal cluster with a short tail, not a burrowing serpent with a dangerous end."},
+      {"shot": "creature-mimic.png", "score": 6, "note": "Violet crystal crab is a good accent against VEIL amber and the cold spill lands on the rock, but it is small and the jaws barely read."},
+      {"shot": "creature-mimic-close.png", "score": 7, "note": "Faceted body, legs and white teeth read; the jaw is narrow, so the bite is under-sold."},
+      {"shot": "creature-kindled.png", "score": 7, "note": "Two white-hot figures are the brightest thing in the chamber and pool light on the floor; clearly made of light."},
+      {"shot": "creature-kindled-close.png", "score": 7, "note": "Strong glow that lands and nice ember sparks, but the upright mannequin pose reads as a benign ghost, not a pursuer."},
+      {"shot": "creature-rimewings.png", "score": 6, "note": "Ice-cyan flock sits in the CRYOS palette and reads as small winged things, but its own light is lost inside the headlamp beam."},
+      {"shot": "creature-rimewings-close.png", "score": 7, "note": "Clean faceted bird silhouettes with glowing cores; spill on the surroundings is indistinguishable from the beam."}
+    ],
+    "top_issues": [
+      {"issue": "Long One silhouette collapses into a blown-out clump", "shots": ["creature-longone.png", "creature-longone-close.png"], "why": "Readable at play size is the first test for a threat; the head is overexposed and the body coils into itself, so it does not read as a serpent.", "suggested_direction": "Lay the body out as a long, spaced chain of segments with the head as a distinct wedge; cap head bloom so the jaw and fangs keep their shape."},
+      {"issue": "Kindled pose reads as friendly, not hunting", "shots": ["creature-kindled.png", "creature-kindled-close.png"], "why": "A pursuer must read as a threat; standing straight with arms down, they look like idle statues of light.", "suggested_direction": "Keep the white-hot body and floor pooling, but lean the figures forward into a stalking, reaching stance."},
+      {"issue": "Mimic is small and its bite is understated", "shots": ["creature-mimic.png"], "why": "In the play frame it is a little violet blob; the dangerous end, its jaws, does not register.", "suggested_direction": "Widen the jaw gape and push the tooth highlights so the mouth reads first at play scale."},
+      {"issue": "Rimewing light does not visibly land", "shots": ["creature-rimewings.png", "creature-rimewings-close.png"], "why": "The flock is only seen inside the headlamp cone, so its own glow on the ice is indistinguishable from the beam.", "suggested_direction": "Give each wing a small cyan point light that tints nearby ice, visible when the flock is outside the beam."}
+    ],
+    "protect": [
+      "Kindled as pure white-hot light pooling on the chamber floor",
+      "Mimic violet as a deliberate accent against VEIL amber",
+      "Rimewings' ice-cyan faceted look inside the CRYOS palette",
+      "Long One's warm glow washing the surrounding rock"
+    ]
+  },
+  "B": {
+    "category": "creatures-a",
+    "score": 6.9,
+    "per_shot": [
+      {"shot": "creature-longone.png", "score": 7, "note": "Clear segmented serpent with a pointed, fanged head spanning the gap; the orange glow lands on the rock behind it and it reads at play size."},
+      {"shot": "creature-longone-close.png", "score": 8, "note": "Chunky faceted segments, a glowing seam per plate and a bright fanged head: low-poly, threatening, very VEIL."},
+      {"shot": "creature-mimic.png", "score": 7, "note": "Same violet crab but larger, with open spiked jaws that read in the play frame; cold spill pools on the rock."},
+      {"shot": "creature-mimic-close.png", "score": 7, "note": "Wider gaping jaw with white teeth and a crest spike; a clear biter, though its glow is cold white rather than violet."},
+      {"shot": "creature-kindled.png", "score": 6, "note": "Hunched stalkers read as hunters, but their rust-coloured bodies blend into the amber chamber and a dark smudge sits behind them."},
+      {"shot": "creature-kindled-close.png", "score": 7, "note": "Predatory forward lean, crystal hearts and spark trails; the body is matte, not light, so 'made of light' and floor pooling weaken."},
+      {"shot": "creature-rimewings.png", "score": 6, "note": "Essentially the same as A; the shard-star wings are a touch spikier and the flock's own light is still lost in the beam."},
+      {"shot": "creature-rimewings-close.png", "score": 7, "note": "Spiky crystalline wings read as icy and faintly hostile; spill on the ice still comes only from the beam."}
+    ],
+    "top_issues": [
+      {"issue": "Kindled are no longer made of light", "shots": ["creature-kindled.png", "creature-kindled-close.png"], "why": "The brief calls it a pursuer made of light; matte rust bodies with a single heart glow lose legibility against the amber core chamber and stop lighting the floor.", "suggested_direction": "Keep the hunched stalking pose, but make the body emissive white-gold like A's so it blooms and pools on the floor; remove the dark halo behind them."},
+      {"issue": "Rimewing light does not visibly land", "shots": ["creature-rimewings.png", "creature-rimewings-close.png"], "why": "Their glow on the ice cannot be told from the headlamp cone, so 'lit by itself in the dark' is unproven.", "suggested_direction": "Add small cyan point lights per wing that tint nearby ice, and stage them partly outside the beam."},
+      {"issue": "Mimic spill is cold white, not its own violet", "shots": ["creature-mimic.png", "creature-mimic-close.png"], "why": "The pool under it looks like a generic lamp rather than the creature's own light, which weakens the glow-that-lands rule.", "suggested_direction": "Tint the mimic's light toward violet so its pool on the rock matches its body."},
+      {"issue": "Long One head glow is close to clipping", "shots": ["creature-longone.png"], "why": "At play scale the head is a white-hot point; the fangs survive here, but a little more bloom would lose them.", "suggested_direction": "Hold the head emissive below clipping and let the fang tips carry the brightest value."}
+    ],
+    "protect": [
+      "Long One as a long chain of chunky glowing segments with a fanged wedge head",
+      "Mimic's wide open jaw that reads at play size",
+      "Kindled's hunched, forward-leaning stalker pose",
+      "Rimewings' ice-cyan faceted shards inside the CRYOS palette",
+      "Orange Long One glow washing the shaft rock"
+    ]
+  },
+  "preference": "B",
+  "why": "B turns the Long One from an unreadable blown-out clump into a clear fanged serpent and sharpens the Mimic's bite. It loses some Kindled glow, which should be taken from A."
+}

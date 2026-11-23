@@ -1,0 +1,32 @@
+{
+ "creatures-a": {
+  "best": 6.0,
+  "candidate": 6.9,
+  "delta": 0.9,
+  "why": "B turns the Long One from an unreadable blown-out clump into a clear fanged serpent and sharpens the Mimic's bite. It loses some Kindled glow, which should be taken from A."
+ },
+ "creatures-b": {
+  "best": 5.0,
+  "candidate": 6.4,
+  "delta": 1.4,
+  "why": "B fixes the two weakest creatures: the Polyps become readable spined animals and the Riptide gains its eye and loses the space-like starfield; the Brinewyrm's threat end also reads better. Frostbloom is identical in both."
+ },
+ "quarters-room": {
+  "best": 6.6,
+  "candidate": 7.2,
+  "delta": 0.6,
+  "why": "Same room, but B replaces A's wet-mirror floor streaks with satin pools, varies the wall bays, and lights the furnishings (star chart, bunk sconce, galley, shelf), so light lands warmly and bought things look cared for."
+ },
+ "furnishings": {
+  "best": 6.4,
+  "candidate": 7.0,
+  "delta": 0.6,
+  "why": "A's items are better lit and read better: star chart, books and bunk sconce. Its palettes have real structural differences, not just a tint. B only wins on the kettle material and the rug profile."
+ },
+ "wings": {
+  "best": 6.9,
+  "candidate": 6.6,
+  "delta": -0.3,
+  "why": "B's crisper stones and glinting creatures make both wings read more as showpieces; A is warmer and cozier in the hall but its bloom swallows the specimens. The margin is small."
+ }
+}
