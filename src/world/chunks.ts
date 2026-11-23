@@ -74,8 +74,6 @@ const strataUniforms = {
   uStone: { value: 1 },
   /** a heat fissure's light on its stone: the seam hue at the wash's even brightness */
   uSeam: { value: new THREE.Color(0) },
-  /** per-world surface character on lamp-lit stone: x = CRYOS crystal glints, y = MAELIS nacre */
-  uRockFx: { value: new THREE.Vector2() },
 };
 /**
  * Where the headlamp lands: the pod casts LAMP_RAYS rays across the beam's
@@ -104,8 +102,6 @@ function syncStrata(): void {
   const c = strataUniforms.uSeam.value.setHex(spentWorld() ? 0 : fissureHue());
   const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
   c.multiplyScalar(Math.min(1, 0.26 / Math.max(lum, 1e-3)));
-  const id = spentWorld() ? '' : ACTIVE.id;
-  strataUniforms.uRockFx.value.set(id === 'cryos2' ? 1 : 0, id === 'maelis6' ? 1 : 0);
 }
 /** the haze carries the world's fluid hue at the wash's even brightness */
 let hazeFor: unknown = null;
@@ -123,7 +119,6 @@ rockMat.onBeforeCompile = shader => {
   shader.uniforms.uStrata = strataUniforms.uStrata;
   shader.uniforms.uStone = strataUniforms.uStone;
   shader.uniforms.uSeam = strataUniforms.uSeam;
-  shader.uniforms.uRockFx = strataUniforms.uRockFx;
   shader.uniforms.uLampO = lampUniforms.uLampO;
   shader.uniforms.uLampHit = lampUniforms.uLampHit;
   shader.uniforms.uLampTile = lampUniforms.uLampTile;
@@ -159,7 +154,6 @@ uniform float uFluidTime;
 uniform float uFluidAmp;
 uniform float uStone;
 uniform vec3 uSeam;
-uniform vec2 uRockFx;
 varying vec4 vHeat;
 varying vec2 vSeam;
 varying vec3 vGlow;
@@ -186,25 +180,7 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		* mix(0.84, 1.0, smoothstep(0.045, 0.3, stD));
 	stShade = mix(1.0, stShade, uStone);
 	vec3 stAlbedo = diffuseColor.rgb;
-	diffuseColor.rgb *= stShade;
-	// MAELIS: nacre. Lit stone's hue drifts pink / teal / violet with the
-	// angle between the lamp, the eye and a per-block sheen normal, and in
-	// slow bands across the face; luminance kept, sea-green still the bulk
-	// of it, none at or beside an ore. Multiplies only light that lands.
-	vec3 rfxNacre = vec3(1.0);
-	if (uRockFx.y > 0.0 && vMatte < 0.99) {
-		vec3 fn = vBoxN;
-		vec2 fuv = fn.z > 0.5 ? vBox.xy : (abs(fn.y) > 0.5 ? vBox.xz : vBox.zy);
-		vec3 fL = normalize(vec3(uLampO.xy - vWXY, 1.5));
-		vec3 fV = normalize(cameraPosition - vec3(vWXY, vBox.z));
-		vec3 nb = normalize(fn + (vec3(stHash(vCell + 1.3), stHash(vCell + 5.1), 0.5) - 0.5) * 0.6);
-		float ph = dot(nb, normalize(fL + fV)) * 2.4 + stHash(vCell) * 0.9 + dot(fuv, vec2(0.8, 0.55));
-		vec3 w = 0.5 + 0.5 * cos(6.2832 * (ph + vec3(0.0, 0.333, 0.667)));
-		w /= w.x + w.y + w.z;
-		vec3 pal = w.x * vec3(1.0, 0.38, 0.72) + w.y * vec3(0.3, 1.0, 0.92) + w.z * vec3(0.62, 0.42, 1.0);
-		pal /= dot(pal, vec3(0.2126, 0.7152, 0.0722));
-		rfxNacre = mix(vec3(1.0), pal, 0.6 * uRockFx.y * (1.0 - vMatte));
-	}`)
+	diffuseColor.rgb *= stShade;`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	{
 		float row = -vWXY.y;
@@ -276,36 +252,7 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 			// can catch the light at all), soft-capped so pale ice or a hotspot
 			// never goes to a flat white square
 			vec3 lE = uLampCol * (stAlbedo + 0.02) * lk * (1.0 - 0.75 * vMatte);
-			// per-world surface character, on lamp-lit stone only and never
-			// at or beside an ore (matte): the lamp sits a little in front of
-			// the wall, the eye at the camera, so what catches moves as they do
-			vec3 glint = vec3(0.0);
-			if (uRockFx.x + uRockFx.y > 0.0 && vMatte < 0.99) {
-				vec3 fn = vBoxN;
-				vec2 fuv = fn.z > 0.5 ? vBox.xy : (abs(fn.y) > 0.5 ? vBox.xz : vBox.zy);
-				vec3 fL = normalize(vec3(-ld, 1.5));
-				vec3 fV = normalize(cameraPosition - vec3(vWXY, vBox.z));
-				vec3 fH = normalize(fL + fV);
-				float fOn = 1.0 - vMatte;
-				lE *= rfxNacre;
-				// CRYOS: crystal facets, a few small cold catch-lights per lit
-				// face; each facet's tilted normal flashes only when the lamp
-				// and the eye line up on it (the diffuse is untouched)
-				if (uRockFx.x > 0.0) {
-					vec2 g = fuv * 3.0 + 1.5;
-					vec2 gi = floor(g), gf = fract(g);
-					vec2 sd = vCell * 7.0 + gi + dot(fn, vec3(1.0, 2.0, 3.0)) * 13.0;
-					vec3 hh = vec3(stHash(sd), stHash(sd + 3.7), stHash(sd + 9.1));
-					vec3 tl = (hh - 0.5) * 1.2;
-					vec3 n = normalize(fn + tl - fn * dot(tl, fn));
-					float sp = pow(max(dot(n, fH), 0.0), 70.0) * step(0.35, stHash(sd + 17.3));
-					vec2 d = gf - (0.12 + 0.76 * hh.yx);
-					float pt = exp(-dot(d, d) / 0.014)
-						+ 0.5 * exp(-abs(d.x) * 60.0 - abs(d.y) * 9.0) + 0.5 * exp(-abs(d.y) * 60.0 - abs(d.x) * 9.0);
-					glint = vec3(0.72, 0.93, 1.0) * sp * pt * inC * face * fall * reach * 2.6 * uRockFx.x * fOn;
-				}
-			}
-			totalEmissiveRadiance += lE / (1.0 + 2.0 * dot(lE, vec3(0.2126, 0.7152, 0.0722))) + glint;
+			totalEmissiveRadiance += lE / (1.0 + 2.0 * dot(lE, vec3(0.2126, 0.7152, 0.0722)));
 		}
 	}`)
     .replace('#include <aomap_fragment>', `#include <aomap_fragment>
@@ -318,10 +265,9 @@ float stHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453
 		float mk = 1.0 / (1.0 + mm * ml / 0.05);
 		reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, vec3(ml), 0.5 * mm) * mk;
 		reflectedLight.directSpecular *= 1.0 - 0.8 * mm;
-	}
-	reflectedLight.directDiffuse *= rfxNacre;`);
+	}`);
 };
-rockMat.customProgramCacheKey = () => 'rock-glow-v9';
+rockMat.customProgramCacheKey = () => 'rock-glow-v8';
 
 // Each gem geometry bakes its own albedo and a per-vertex (emit, roughness,
 // metalness), read by gemMaterial(): a matte rock husk, a mirror needle and a
