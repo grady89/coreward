@@ -71,10 +71,10 @@ export class Shellbacks implements Creature {
     // black, so it is a pale dielectric with a faint banked glow of its own
     const plateMat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.34, metalness: 0.15, flatShading: true,
-      emissive: 0x10161e,
+      emissive: 0x1e2a3a,
     });
     // MAELIS sea-glow on the shell's edges: an isopod, not a crate in the dark
-    rimLight(plateMat, 0x5af0d8, 1.2);
+    rimLight(plateMat, 0x5af0d8, 1.6);
     this.plates = new THREE.InstancedMesh(plateGeo, plateMat, MAX * SEGS);
     this.plates.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.plates.frustumCulled = false;
@@ -83,10 +83,8 @@ export class Shellbacks implements Creature {
     scene.add(this.plates);
 
     const legGeo = new THREE.BoxGeometry(1, 1, 1);
-    // legs darker than the shell, edged in sea-glow: fourteen separate
-    // strokes against the lit floor rather than a pale fringe
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x5e5672, roughness: 0.5, metalness: 0.3 });
-    rimLight(legMat, 0x5af0d8, 0.9);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0xcfc2dc, roughness: 0.5, metalness: 0.3 });
+    rimLight(legMat, 0x5af0d8, 0.5);
     this.legs = new THREE.InstancedMesh(legGeo, legMat, MAX * LEGS);
     this.legs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.legs.frustumCulled = false;
@@ -107,15 +105,6 @@ export class Shellbacks implements Creature {
     this.beads.count = 0;
     this.beads.setColorAt(0, tmpC.setHex(0xffffff));
     scene.add(this.beads);
-
-    // the body draws AFTER its own pool of light: the spill is an additive
-    // quad in front of everything, and laid over the shell it washed the
-    // plates and legs into one glowing clump. Drawn last and opaque, the
-    // isopod stands as a dark segmented form against the light it throws.
-    for (const m of [plateMat, legMat]) { m.transparent = true; m.opacity = 1; }
-    this.plates.renderOrder = this.legs.renderOrder = this.feelers.renderOrder = 2;
-    beadMat.transparent = true;
-    this.beads.renderOrder = 3;
 
     for (let i = 0; i < MAX; i++) {
       const l = new THREE.PointLight(0xe8dcff, 0, 6.5, 1.8);
@@ -384,7 +373,7 @@ export class Shellbacks implements Creature {
         tmpM.compose(tmpP, tmpQ, tmpS);
         this.plates.setMatrixAt(nP, tmpM);
         // mother-of-pearl: hue slides along the body and with time
-        tmpC.setHSL((0.72 + t * 0.14 + iris) % 1, 0.3, 0.74);
+        tmpC.setHSL((0.72 + t * 0.14 + iris) % 1, 0.32, 0.86);
         this.plates.setColorAt(nP, tmpC);
         // the bead rides the plate's crown; a pulse runs head to tail, and a
         // curled ball banks its light
